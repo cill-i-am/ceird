@@ -5,6 +5,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import type { Input, InputProps } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Array from "effect/Array";
+import type * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
@@ -16,8 +17,11 @@ import { makeApiWorker } from "../apps/api/infra/cloudflare-worker.ts";
 import { makeAppWorker } from "../apps/app/infra/cloudflare-vite.ts";
 import { makeDomainWorker } from "../apps/domain/infra/cloudflare-worker.ts";
 import { makeMcpWorker } from "../apps/mcp/infra/cloudflare-worker.ts";
-import { makeSyncWorker } from "../apps/sync/infra/cloudflare-worker.ts";
-import type { ElectricContainerStorageConfig } from "../apps/sync/infra/cloudflare-worker.ts";
+import {
+  makeElectricContainerEnv,
+  makeSyncWorker,
+} from "../apps/sync/infra/cloudflare-worker.ts";
+import type { ElectricContainerConfig } from "../apps/sync/infra/cloudflare-worker.ts";
 import {
   makeCloudflareR2BucketResourceKey,
   makeR2SecretAccessKey,
@@ -28,7 +32,7 @@ import {
 } from "./cloudflare-tenant-routing.ts";
 import type { NeonPostgresResources } from "./neon.ts";
 import type { InfraStageConfig } from "./stages.ts";
-import { makeAlchemyStageIdentity, resourceName } from "./stages.ts";
+import { makeInfraConfigSourceError, resourceName } from "./stages.ts";
 
 export interface CloudflareStackInput {
   readonly config: InfraStageConfig;
@@ -156,14 +160,11 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   const electricSourceSecret = yield* Alchemy.Random("ElectricSourceSecret", {
     bytes: 32,
   });
-  const electricSourceSecretValue = electricSourceSecret.text.pipe(
-    Output.map(Redacted.value)
-  );
   const electricStorageBucketName = resourceName(
     input.config,
     "electric-storage"
   );
-  const electricStorageProvisioned = shouldProvisionElectricStorage({
+  const electricStorageProvisioned = yield* shouldProvisionElectricStorage({
     config: input.config,
     localDev,
   });
@@ -185,9 +186,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
           ],
         })
       : undefined;
-  let electricStorageCredentials:
-    | Pick<ElectricContainerStorageConfig, "accessKeyId" | "secretAccessKey">
-    | undefined;
+  let electricStorageCredentials: ElectricStorageCredentialValues | undefined;
 
   if (electricStorageProvisioned && localDev) {
     electricStorageCredentials = yield* makeLocalElectricStorageCredentials({
@@ -196,9 +195,8 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
       config: input.config,
     });
   } else if (electricStorageProvisioned) {
-    electricStorageCredentials = readConfiguredElectricStorageCredentials(
-      input.config
-    );
+    electricStorageCredentials =
+      yield* readConfiguredElectricStorageCredentials(input.config);
   }
   const localOrigins = {
     agent: makeAlchemyLocalWorkerOrigin("agent"),
@@ -339,30 +337,31 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     )
   );
 
+  const electricContainer =
+    electricStorageCredentials === undefined
+      ? undefined
+      : yield* makeElectricContainerConfig({
+          accountId: cloudflareAccountId,
+          bucketName: electricStorageBucketName,
+          databaseConnectionUri: input.database.branch.connectionUri,
+          electricSourceSecret: electricSourceSecret.text,
+          name: resourceName(input.config, "electric"),
+          storageCredentials: electricStorageCredentials,
+        });
+
   const sync = yield* makeSyncWorker({
     analytics: workerAnalytics,
     config: input.config,
-    database: input.database,
     domain,
-    electricContainerName: resourceName(input.config, "electric"),
+    electricContainer,
     electricSqlLocationHint: makeDurableObjectLocationHintForNeonRegion(
       input.config.neonRegion
     ),
     electricSourceSecret: electricSourceSecret.text,
-    electricSourceSecretValue,
     hostname: input.config.syncHostname,
     localDev,
     localAppOrigin: localOrigins.app,
     name: resourceName(input.config, "sync"),
-    storage:
-      electricStorageCredentials === undefined
-        ? undefined
-        : {
-            accessKeyId: electricStorageCredentials.accessKeyId,
-            accountId: cloudflareAccountId,
-            bucketName: electricStorageBucketName,
-            secretAccessKey: electricStorageCredentials.secretAccessKey,
-          },
   });
 
   const syncOrigin = Output.all(sync.domains, sync.url).pipe(
@@ -463,6 +462,51 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   } as const;
 });
 
+interface ElectricStorageCredentialValues {
+  readonly accessKeyId: SecretStringInput;
+  readonly secretAccessKey: SecretStringInput;
+}
+
+type SecretStringInput = string | Output.Output<string>;
+
+function redactInput(
+  value: SecretStringInput
+): Input<Redacted.Redacted<string>> {
+  return typeof value === "string"
+    ? Redacted.make(value)
+    : value.pipe(Output.map(Redacted.make));
+}
+
+function makeElectricContainerConfig(input: {
+  readonly accountId: string;
+  readonly bucketName: string;
+  readonly databaseConnectionUri: SecretStringInput;
+  readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
+  readonly name: string;
+  readonly storageCredentials: ElectricStorageCredentialValues;
+}): Effect.Effect<ElectricContainerConfig, never, Cloudflare.Providers> {
+  return Effect.gen(function* () {
+    // Preserve the previously declared account store so Alchemy state reads keep working after deploy.
+    yield* Cloudflare.SecretsStore("ElectricContainerSecrets");
+
+    return {
+      env: makeElectricContainerEnv({
+        databaseUrl: redactInput(input.databaseConnectionUri),
+        electricSecret: input.electricSourceSecret,
+        storage: {
+          accessKeyId: redactInput(input.storageCredentials.accessKeyId),
+          accountId: input.accountId,
+          bucketName: input.bucketName,
+          awsSecretAccessKey: redactInput(
+            input.storageCredentials.secretAccessKey
+          ),
+        },
+      }),
+      name: input.name,
+    } satisfies ElectricContainerConfig;
+  });
+}
+
 function makeLocalElectricStorageCredentials(input: {
   readonly accountId: string;
   readonly bucketName: string;
@@ -493,25 +537,19 @@ function makeLocalElectricStorageCredentials(input: {
     return {
       accessKeyId: token.tokenId,
       secretAccessKey: token.value.pipe(Output.map(makeR2SecretAccessKey)),
-    } satisfies Pick<
-      ElectricContainerStorageConfig,
-      "accessKeyId" | "secretAccessKey"
-    >;
+    } satisfies ElectricStorageCredentialValues;
   });
 }
 
 export function shouldProvisionElectricStorage(input: {
   readonly config: Pick<
     InfraStageConfig,
-    | "appName"
-    | "electricStorageAccessKeyId"
-    | "electricStorageSecretAccessKey"
-    | "stage"
+    "electricStorageAccessKeyId" | "electricStorageSecretAccessKey"
   >;
   readonly localDev: boolean;
 }) {
   if (input.localDev) {
-    return true;
+    return Effect.succeed(true);
   }
 
   const hasAccessKey = input.config.electricStorageAccessKeyId !== undefined;
@@ -519,43 +557,40 @@ export function shouldProvisionElectricStorage(input: {
     input.config.electricStorageSecretAccessKey !== undefined;
 
   if (hasAccessKey && hasSecretKey) {
-    return true;
+    return Effect.succeed(true);
   }
 
   if (hasAccessKey !== hasSecretKey) {
-    throw new Error(
-      "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY must be configured together"
+    return Effect.fail(
+      makeInfraConfigSourceError(
+        "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY must be configured together"
+      )
     );
   }
 
-  const identity = makeAlchemyStageIdentity({
-    appName: input.config.appName,
-    stage: input.config.stage,
-  });
-
-  if (identity.isPullRequestPreview) {
-    return false;
-  }
-
-  throw new Error(
-    "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
+  return Effect.fail(
+    makeInfraConfigSourceError(
+      "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
+    )
   );
 }
 
 function readConfiguredElectricStorageCredentials(
   config: InfraStageConfig
-): Pick<ElectricContainerStorageConfig, "accessKeyId" | "secretAccessKey"> {
+): Effect.Effect<ElectricStorageCredentialValues, Config.ConfigError> {
   if (
     config.electricStorageAccessKeyId === undefined ||
     config.electricStorageSecretAccessKey === undefined
   ) {
-    throw new Error(
-      "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
+    return Effect.fail(
+      makeInfraConfigSourceError(
+        "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
+      )
     );
   }
 
-  return {
+  return Effect.succeed({
     accessKeyId: Redacted.value(config.electricStorageAccessKeyId),
     secretAccessKey: Redacted.value(config.electricStorageSecretAccessKey),
-  };
+  });
 }

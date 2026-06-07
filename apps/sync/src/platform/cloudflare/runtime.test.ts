@@ -448,6 +448,52 @@ describe("Sync Worker runtime", () => {
     expect(response.headers.get("access-control-allow-credentials")).toBeNull();
   });
 
+  it("strips upstream CORS headers before applying the sync Worker policy", async () => {
+    const requests = [
+      {
+        expectedOrigin: "https://app.example.com",
+        origin: "https://app.example.com",
+      },
+      {
+        expectedOrigin: null,
+        origin: "https://evil.example.com",
+      },
+    ];
+
+    for (const requestInput of requests) {
+      const response = await handleSyncWorkerFetch(
+        new Request("https://sync.example.com/v1/shapes/jobs?offset=-1", {
+          headers: {
+            origin: requestInput.origin,
+          },
+        }),
+        baseEnv,
+        makeExecutionContext(),
+        {
+          authorizeShape: () => Effect.succeed(makeJobsAuthorization()),
+          fetchElectric: () =>
+            Effect.succeed(
+              Response.json([{ headers: { control: "up-to-date" } }], {
+                headers: {
+                  "access-control-allow-credentials": "true",
+                  "access-control-allow-origin": "*",
+                  "access-control-expose-headers": "unsafe-upstream",
+                },
+              })
+            ),
+        }
+      ).pipe(Effect.runPromise);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBe(
+        requestInput.expectedOrigin
+      );
+      expect(response.headers.get("access-control-expose-headers")).not.toBe(
+        "unsafe-upstream"
+      );
+    }
+  });
+
   it("rejects malformed encoded shape path segments without throwing", async () => {
     const fetchElectric = vi.fn<() => Effect.Effect<Response>>();
     const response = await handleSyncWorkerFetch(

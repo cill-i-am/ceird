@@ -194,6 +194,30 @@ test("state audit flags legacy migration state and validates expected managed re
         env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
       },
     },
+    Sync: {
+      resourceType: "Cloudflare.Worker",
+      props: {
+        bindings: {
+          ANALYTICS: { name: "ANALYTICS" },
+          DOMAIN: { name: "DOMAIN" },
+          ElectricSql: { name: "ElectricSql" },
+        },
+        env: {
+          AUTH_APP_ORIGIN: "https://app.ceird.app",
+          CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+          ELECTRIC_SOURCE_SECRET: "secret",
+          ELECTRIC_SQL_LOCATION_HINT: "weur",
+        },
+      },
+    },
+    ElectricSql: {
+      resourceType: "Cloudflare.Container",
+      props: {},
+    },
+    ElectricStorageBucket: {
+      resourceType: "Cloudflare.R2Bucket",
+      props: {},
+    },
     PostgresBranch: {
       resourceType: "Neon.Branch",
       attr: {
@@ -260,6 +284,9 @@ test("state audit flags legacy migration state and validates expected managed re
       "api_worker",
       "mcp_worker",
       "agent_worker",
+      "sync_worker",
+      "electric_storage_bucket",
+      "electric_container",
       "tenant_route_pattern",
       "tenant_wildcard_dns_record",
     ]
@@ -310,6 +337,61 @@ test("state audit flags legacy migration state and validates expected managed re
     }).checks.find((check) => check.name === "domain_worker_runtime_config")
       ?.status,
     "fail"
+  );
+  assert.equal(
+    analyzeAlchemyStateResources({
+      resources: {
+        ...healthyResources,
+        Sync: {
+          resourceType: "Cloudflare.Worker",
+          attr: {
+            bindings: {
+              ANALYTICS: { name: "ANALYTICS" },
+              DOMAIN: { name: "DOMAIN" },
+            },
+            env: {
+              AUTH_APP_ORIGIN: "https://app.ceird.app",
+              CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+              ELECTRIC_SOURCE_SECRET: "secret",
+              ELECTRIC_SQL_LOCATION_HINT: "weur",
+            },
+          },
+        },
+      },
+      stage: "main",
+      tenantRoutingRequired: true,
+    }).checks.find((check) => check.name === "sync_worker_bindings")?.status,
+    "fail"
+  );
+  assert.equal(
+    analyzeAlchemyStateResources({
+      resources: {
+        ...healthyResources,
+        ElectricSql: undefined,
+        ElectricStorageBucket: undefined,
+        TenantWildcardDnsRecord: undefined,
+        TenantWorkerRoute: undefined,
+      },
+      stage: "pr-104",
+      tenantRoutingRequired: false,
+    }).ok,
+    true
+  );
+  assert.equal(
+    analyzeAlchemyStateResources({
+      resources: {
+        ...healthyResources,
+        ElectricSql: undefined,
+        ElectricStorageBucket: undefined,
+        TenantWorkerRoute: {
+          resourceType: "Ceird.CloudflareTenantWorkerRoute",
+          attr: { pattern: "*--pr-104.ceird.app/*" },
+        },
+      },
+      stage: "pr-104",
+      tenantRoutingRequired: true,
+    }).ok,
+    false
   );
   assert.equal(
     analyzeAlchemyStateResources({

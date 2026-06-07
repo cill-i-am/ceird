@@ -24,6 +24,18 @@ function getWorkflowJob(workflow, jobName) {
   return match[0];
 }
 
+function getWorkflowStep(job, stepName) {
+  const escapedStepName = stepName.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = job.match(
+    new RegExp(
+      `(?:^|\\n)      - name: ${escapedStepName}\\n[\\s\\S]*?(?=\\n      - name: |\\n  [A-Za-z0-9_-]+:\\n|\\n*$)`
+    )
+  );
+
+  assert.notEqual(match, null, `workflow job should define step ${stepName}`);
+  return match[0];
+}
+
 function assertContainsInOrder(text, orderedSnippets) {
   let previousIndex = -1;
 
@@ -37,6 +49,17 @@ function assertContainsInOrder(text, orderedSnippets) {
     );
     previousIndex = index;
   }
+}
+
+function assertElectricStorageCredentialsEnv(text) {
+  assert.match(
+    text,
+    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
+  );
+  assert.match(
+    text,
+    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
+  );
 }
 
 const activeTextFileExtensions = new Set([
@@ -670,6 +693,11 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   const ciDeployJob = getWorkflowJob(buildWorkflow, "cloud-e2e-deploy");
   const ciE2eJob = getWorkflowJob(buildWorkflow, "cloud-e2e");
   const ciDestroyJob = getWorkflowJob(buildWorkflow, "cloud-e2e-destroy");
+  const ciAuditStep = getWorkflowStep(ciDeployJob, "Audit CI Alchemy state");
+  const ciDatabaseExportStep = getWorkflowStep(
+    ciE2eJob,
+    "Export Playwright database URL"
+  );
   const playwrightConfig = readFileSync(
     path.join(repoRoot, "apps/app/playwright.config.ts"),
     "utf8"
@@ -732,6 +760,10 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   );
   assert.match(
     buildWorkflow,
+    /CEIRD_SYNC_HOSTNAME: sync-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
     /PLAYWRIGHT_BASE_URL: https:\/\/app-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
   );
   assert.match(
@@ -741,6 +773,10 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   assert.match(
     buildWorkflow,
     /PLAYWRIGHT_AGENT_URL: https:\/\/agent-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
+    /PLAYWRIGHT_SYNC_URL: https:\/\/sync-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
   );
   assert.match(
     buildWorkflow,
@@ -773,6 +809,16 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
     /pnpm --silent alchemy state get ceird "\$CI_STAGE" PostgresBranch --stage "\$CI_STAGE"/
   );
   assert.match(ciDeployJob, /Wait for CI deploy health/);
+  assert.match(ciDeployJob, /"\$PLAYWRIGHT_SYNC_URL\/health"/);
+  assert.match(ciDeployJob, /wait_for_sync_authorization/);
+  assert.match(
+    ciDeployJob,
+    /"\$PLAYWRIGHT_SYNC_URL\/v1\/shapes\/jobs\?offset=-1"/
+  );
+  assertElectricStorageCredentialsEnv(ciDeployJob);
+  assertElectricStorageCredentialsEnv(ciAuditStep);
+  assertElectricStorageCredentialsEnv(ciDatabaseExportStep);
+  assertElectricStorageCredentialsEnv(ciDestroyJob);
   assert.match(
     buildWorkflow,
     /\[\[ ! "\$CI_STAGE" =~ \^ci-\[0-9\]\+-\[0-9\]\+\$ \]\]/
@@ -813,6 +859,10 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   assert.match(
     cloudflareCiGuide,
     /cloud E2E path uses `preview-deploy` with an\s+ephemeral `ci-<run-number>-<attempt>` stage/
+  );
+  assert.match(
+    cloudflareCiGuide,
+    /Cloud E2E and preview deploys pass\s+Electric storage credentials/
   );
   assert.match(
     developmentGuide,
@@ -867,6 +917,15 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
     path.join(repoRoot, ".github/workflows/preview.yml"),
     "utf8"
   );
+  const previewDeployJob = getWorkflowJob(previewWorkflow, "deploy-e2e");
+  const previewAuditStep = getWorkflowStep(
+    previewDeployJob,
+    "Audit preview Alchemy state"
+  );
+  const previewDatabaseExportStep = getWorkflowStep(
+    previewDeployJob,
+    "Export Playwright database URL"
+  );
 
   assert.match(previewWorkflow, /^name: Preview$/m);
   assert.match(previewWorkflow, /pull_request:/);
@@ -917,6 +976,10 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   );
   assert.match(
     previewWorkflow,
+    /PLAYWRIGHT_SYNC_URL: https:\/\/sync\.pr-\$\{\{ github\.event\.pull_request\.number \}\}\.ceird\.app/
+  );
+  assert.match(
+    previewWorkflow,
     /pnpm alchemy deploy --stage "\$PREVIEW_STAGE" --yes/
   );
   assert.match(
@@ -957,6 +1020,12 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assert.match(previewWorkflow, /waiting for service binding propagation/);
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_AGENT_URL\/health"/);
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_BASE_URL\/health"/);
+  assert.match(previewWorkflow, /"\$PLAYWRIGHT_SYNC_URL\/health"/);
+  assert.match(previewWorkflow, /wait_for_sync_authorization/);
+  assert.match(
+    previewWorkflow,
+    /"\$PLAYWRIGHT_SYNC_URL\/v1\/shapes\/jobs\?offset=-1"/
+  );
   assert.match(previewWorkflow, /wait_for_app_authenticated_navigation/);
   assert.match(previewWorkflow, /preview-app-health-%s@example\.com/);
   assert.match(previewWorkflow, /\^location: \/create-organization/);
@@ -965,6 +1034,10 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assert.match(previewWorkflow, /ceird-preview-environment/);
   assert.match(previewWorkflow, /Preview environment is ready/);
   assert.match(previewWorkflow, /Agent \|/);
+  assert.match(previewWorkflow, /Sync \|/);
+  assertElectricStorageCredentialsEnv(previewDeployJob);
+  assertElectricStorageCredentialsEnv(previewAuditStep);
+  assertElectricStorageCredentialsEnv(previewDatabaseExportStep);
   assert.match(previewWorkflow, /pnpm --filter app e2e/);
 });
 
@@ -973,10 +1046,12 @@ test("preview workflow destroys PR stages from the default branch on close", () 
     path.join(repoRoot, ".github/workflows/preview.yml"),
     "utf8"
   );
+  const previewCleanupJob = getWorkflowJob(previewWorkflow, "cleanup");
 
   assert.match(previewWorkflow, /github\.event\.action == 'closed'/);
   assert.match(previewWorkflow, /github\.event_name == 'workflow_dispatch'/);
   assert.match(previewWorkflow, /environment: preview-cleanup/);
+  assertElectricStorageCredentialsEnv(previewCleanupJob);
   assert.match(
     previewWorkflow,
     /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/

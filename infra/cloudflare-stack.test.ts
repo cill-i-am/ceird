@@ -277,7 +277,16 @@ type SyncWorkerStackRuntimeConfigEnv = Required<
     | "ELECTRIC_SOURCE_SECRET"
     | "NODE_ENV"
   >
->;
+> &
+  Pick<
+    SyncWorkerConfigEnv,
+    | "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
+    | "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
+    | "ELECTRIC_CONTAINER_DATABASE_URL"
+    | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
+    | "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
+    | "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+  >;
 type ApiWorkerStackEnv = ApiWorkerConfiguredEnv & AlchemyInjectedWorkerEnv;
 type DomainWorkerStackEnv = DomainWorkerConfiguredEnv &
   AlchemyInjectedWorkerEnv;
@@ -625,45 +634,69 @@ describe("Cloudflare stack", () => {
     ).toBe(false);
   });
 
-  it("bootstraps PR previews without Electric R2 credentials but fails closed elsewhere", () => {
+  it("bootstraps local Electric storage and fails closed for deployed stage credentials", () => {
     expect(
-      shouldProvisionElectricStorage({
-        config: configWithoutCloudflareBootstrapSecrets,
-        localDev: true,
-      })
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: configWithoutCloudflareBootstrapSecrets,
+          localDev: true,
+        })
+      )
     ).toBe(true);
     expect(
-      shouldProvisionElectricStorage({
-        config: {
-          ...previewTenantConfig,
-          electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
-          electricStorageSecretAccessKey: Redacted.make(
-            "electric-secret-access-key"
-          ),
-        },
-        localDev: false,
-      })
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: {
+            ...previewTenantConfig,
+            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
+            electricStorageSecretAccessKey: Redacted.make(
+              "electric-secret-access-key"
+            ),
+          },
+          localDev: false,
+        })
+      )
     ).toBe(true);
-    expect(
-      shouldProvisionElectricStorage({
-        config: previewTenantConfig,
-        localDev: false,
-      })
-    ).toBe(false);
     expect(() =>
-      shouldProvisionElectricStorage({
-        config: {
-          ...previewTenantConfig,
-          electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
-        },
-        localDev: false,
-      })
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: previewTenantConfig,
+          localDev: false,
+        })
+      )
+    ).toThrow(/required outside local Alchemy dev/);
+    expect(
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: {
+            ...configWithoutCloudflareBootstrapSecrets,
+            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
+            electricStorageSecretAccessKey: Redacted.make(
+              "electric-secret-access-key"
+            ),
+          },
+          localDev: false,
+        })
+      )
+    ).toBe(true);
+    expect(() =>
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: {
+            ...configWithoutCloudflareBootstrapSecrets,
+            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
+          },
+          localDev: false,
+        })
+      )
     ).toThrow(/must be configured together/);
     expect(() =>
-      shouldProvisionElectricStorage({
-        config: configWithoutCloudflareBootstrapSecrets,
-        localDev: false,
-      })
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: configWithoutCloudflareBootstrapSecrets,
+          localDev: false,
+        })
+      )
     ).toThrow(/required outside local Alchemy dev/);
   });
 
@@ -850,10 +883,24 @@ describe("Cloudflare stack", () => {
       analytics: workerAnalytics,
       domain,
     });
+    const electricContainerEnv = makeElectricContainerEnv({
+      databaseUrl: Redacted.make("postgres://electric.example/db"),
+      electricSecret: electricSourceSecret,
+      storage: {
+        accessKeyId: Redacted.make("r2-access-key-id"),
+        accountId: "cloudflare-account-id",
+        bucketName: "ceird-main-electric-storage",
+        awsSecretAccessKey: Redacted.make("r2-secret-access-key"),
+      },
+    });
     const syncWorkerProps = makeSyncWorkerProps({
       analytics: workerAnalytics,
       config: configWithoutCloudflareBootstrapSecrets,
       domain,
+      electricContainer: {
+        env: electricContainerEnv,
+        name: "ceird-main-electric",
+      },
       electricSqlLocationHint: "weur",
       electricSourceSecret,
       hostname: "sync.example.com",
@@ -861,15 +908,7 @@ describe("Cloudflare stack", () => {
     });
     const electricContainerProps = makeElectricContainerProps({
       config: configWithoutCloudflareBootstrapSecrets,
-      databaseConnectionUri: "postgresql://ceird:secret@db.example.com/ceird",
-      electricSourceSecret: Redacted.value(electricSourceSecret),
       name: "ceird-main-electric",
-      storage: {
-        accessKeyId: "electric-storage-access-key",
-        accountId: "cloudflare-account-id",
-        bucketName: "ceird-main-electric-storage",
-        secretAccessKey: "electric-storage-secret-key",
-      },
     });
     const authEmailBinding = domainBindings.AUTH_EMAIL;
 
@@ -953,6 +992,15 @@ describe("Cloudflare stack", () => {
         AUTH_TRUSTED_ORIGINS:
           "https://app.example.com,https://*--main.example.com",
         CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+        ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID:
+          electricContainerEnv.AWS_ACCESS_KEY_ID,
+        ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY:
+          electricContainerEnv.AWS_SECRET_ACCESS_KEY,
+        ELECTRIC_CONTAINER_DATABASE_URL: electricContainerEnv.DATABASE_URL,
+        ELECTRIC_CONTAINER_ELECTRIC_SECRET:
+          electricContainerEnv.ELECTRIC_SECRET,
+        ELECTRIC_CONTAINER_R2_ACCOUNT_ID: "cloudflare-account-id",
+        ELECTRIC_CONTAINER_R2_BUCKET_NAME: "ceird-main-electric-storage",
         ELECTRIC_SQL_LOCATION_HINT: "weur",
         ELECTRIC_SOURCE_SECRET: electricSourceSecret,
         NODE_ENV: "production",
@@ -965,14 +1013,7 @@ describe("Cloudflare stack", () => {
     expect(syncWorkerProps.bindings.ElectricSql).toMatchObject({
       className: "ElectricSql",
     });
-    expect(
-      makeElectricContainerEnv({
-        storage: {
-          accountId: "cloudflare-account-id",
-          bucketName: "ceird-main-electric-storage",
-        },
-      })
-    ).toStrictEqual({
+    expect(electricContainerEnv).toMatchObject({
       CEIRD_ELECTRIC_STORAGE_BACKEND: "r2",
       CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric",
       ELECTRIC_INSECURE: "false",
@@ -985,6 +1026,26 @@ describe("Cloudflare stack", () => {
       R2_ACCOUNT_ID: "cloudflare-account-id",
       R2_BUCKET_NAME: "ceird-main-electric-storage",
     });
+    expect(
+      Redacted.value(
+        electricContainerEnv.AWS_ACCESS_KEY_ID as Redacted.Redacted<string>
+      )
+    ).toBe("r2-access-key-id");
+    expect(
+      Redacted.value(
+        electricContainerEnv.AWS_SECRET_ACCESS_KEY as Redacted.Redacted<string>
+      )
+    ).toBe("r2-secret-access-key");
+    expect(
+      Redacted.value(
+        electricContainerEnv.DATABASE_URL as Redacted.Redacted<string>
+      )
+    ).toBe("postgres://electric.example/db");
+    expect(
+      Redacted.value(
+        electricContainerEnv.ELECTRIC_SECRET as Redacted.Redacted<string>
+      )
+    ).toBe("electric-secret");
     expect(
       makeCloudflareR2BucketResourceKey({
         accountId: "cloudflare-account-id",
@@ -1014,6 +1075,7 @@ describe("Cloudflare stack", () => {
     ).toBe("apac");
     expect(electricContainerProps).toMatchObject({
       autoInstallExternals: false,
+      isExternal: true,
       instanceType: "basic",
       instances: 1,
       maxInstances: 1,
@@ -1024,52 +1086,24 @@ describe("Cloudflare stack", () => {
     expect(electricContainerProps.main).toContain(
       "/apps/sync/src/platform/cloudflare/electric-container-runtime.ts"
     );
+    expect(electricContainerProps).not.toHaveProperty("checks");
     expect(electricContainerDockerfile).toContain(
       "FROM --platform=linux/amd64 golang:1.25-bookworm AS tigrisfs-build"
     );
+    const tigrisfsVersionReference = `$${"{TIGRISFS_VERSION}"}`;
     expect(electricContainerDockerfile).toContain(
-      "go install github.com/tigrisdata/tigrisfs@v"
+      `git clone --depth=1 --branch v${tigrisfsVersionReference} https://github.com/tigrisdata/tigrisfs.git`
+    );
+    expect(electricContainerDockerfile).toContain(
+      "GOBIN=/out /usr/local/go/bin/go install ."
     );
     expect(electricContainerDockerfile).toContain("TIGRISFS_VERSION");
     expect(electricContainerDockerfile).not.toContain("curl");
     expect(electricContainerDockerfile).not.toContain(
       "github.com/tigrisdata/tigrisfs/releases/download"
     );
-    expect(electricContainerProps.environmentVariables).toStrictEqual([
-      { name: "CEIRD_ELECTRIC_STORAGE_BACKEND", value: "r2" },
-      { name: "CEIRD_ELECTRIC_STORAGE_MOUNT", value: "/var/lib/electric" },
-      { name: "ELECTRIC_INSECURE", value: "false" },
-      { name: "ELECTRIC_LOG_LEVEL", value: "info" },
-      { name: "ELECTRIC_PERSISTENT_STATE", value: "file" },
-      { name: "ELECTRIC_PORT", value: "3000" },
-      { name: "ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE", value: "true" },
-      { name: "ELECTRIC_STORAGE", value: "fast_file" },
-      { name: "ELECTRIC_STORAGE_DIR", value: "/var/lib/electric" },
-      { name: "R2_ACCOUNT_ID", value: "cloudflare-account-id" },
-      { name: "R2_BUCKET_NAME", value: "ceird-main-electric-storage" },
-    ]);
-    expect(electricContainerProps.secrets).toStrictEqual([
-      {
-        name: "AWS_ACCESS_KEY_ID",
-        secret: "electric-storage-access-key",
-        type: "env",
-      },
-      {
-        name: "AWS_SECRET_ACCESS_KEY",
-        secret: "electric-storage-secret-key",
-        type: "env",
-      },
-      {
-        name: "DATABASE_URL",
-        secret: "postgresql://ceird:secret@db.example.com/ceird",
-        type: "env",
-      },
-      {
-        name: "ELECTRIC_SECRET",
-        secret: Redacted.value(electricSourceSecret),
-        type: "env",
-      },
-    ]);
+    expect(electricContainerProps).not.toHaveProperty("environmentVariables");
+    expect(electricContainerProps).not.toHaveProperty("secrets");
     expect(Cloudflare.isSendEmail(authEmail)).toBeTruthy();
     expect(authEmail).toMatchObject({
       allowedSenderAddresses: ["no-reply@example.com"],

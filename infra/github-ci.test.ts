@@ -57,7 +57,7 @@ describe("GitHub CI credentials stack", () => {
     });
   });
 
-  it("keeps Electric runtime R2 credentials in a separate object-scoped token", () => {
+  it("keeps Electric runtime R2 credentials in a separate account-scoped token", () => {
     expect(
       makeCloudflareElectricStorageTokenProps({
         cloudflareAccountId: "account-id",
@@ -69,13 +69,11 @@ describe("GitHub CI credentials stack", () => {
         {
           effect: "allow",
           permissionGroups: [
-            "Workers R2 Storage Bucket Item Read",
-            "Workers R2 Storage Bucket Item Write",
+            "Workers R2 Storage Read",
+            "Workers R2 Storage Write",
           ],
           resources: {
-            "com.cloudflare.api.account.account-id": {
-              "com.cloudflare.edge.r2.bucket.*": "*",
-            },
+            "com.cloudflare.api.account.account-id": "*",
           },
         },
       ],

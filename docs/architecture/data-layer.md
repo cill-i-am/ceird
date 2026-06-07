@@ -171,28 +171,36 @@ Worker are reconciled.
 
 Electric SQL is deployed as a Cloudflare Container owned by `apps/sync`. The
 container reads the same stage Neon branch as the domain Worker through a
-container `DATABASE_URL` secret, while the public sync Worker holds the
-matching `ELECTRIC_SOURCE_SECRET`. Both secrets are generated or supplied
+`DATABASE_URL` supplied at container start, while the public sync Worker holds
+the matching `ELECTRIC_SOURCE_SECRET`. Both secrets are generated or supplied
 through the Alchemy stack and are not emitted as stack outputs.
 
 Electric stores shape logs and metadata on a filesystem that must survive sync
 service restarts. Cloudflare Container disks are ephemeral, so the Alchemy stack
 provisions a stage-scoped R2 bucket for Electric storage. In local
 `alchemy dev` stages, the stack also mints a bucket-scoped R2 API token so the
-local cloud-backed loop stays self-contained. In CI and deployed stages, the
-separate GitHub credential stack owns the long-lived Electric R2 API token and
-stores `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
-`CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` as GitHub environment secrets. The
-main app stack consumes those values instead of creating API tokens during
-routine deploys, so the deploy token does not need `API Tokens Write`.
+local cloud-backed loop stays self-contained. In deployed stages, the separate
+GitHub credential stack owns an account-scoped Electric R2 API token with R2
+read/write permissions and stores `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
+`CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` in the GitHub environments that
+deploy or destroy app stacks. The app stack consumes those values instead of
+creating API tokens during routine deploys, so the deploy token does not need
+`API Tokens Write`. Production, pull-request previews, and push-to-main cloud
+E2E stages all provision the Electric Container and stage-scoped R2 bucket; a
+deployed stack fails closed when either Electric storage credential is absent.
+During reconciliation, the app stack passes the R2 credentials, stage Neon
+connection URL, and generated Electric source secret into the Sync Worker as
+secrets. The `ElectricSql` Durable Object passes those values to the Cloudflare
+Container as startup environment variables, so the Containers application
+configuration does not need account-secret references.
 
-The token id is passed to the container as `AWS_ACCESS_KEY_ID`; the SHA-256 hash
-of the token value is passed as `AWS_SECRET_ACCESS_KEY`, which matches
+The token id is exposed to the container as `AWS_ACCESS_KEY_ID`; the SHA-256
+hash of the token value is exposed as `AWS_SECRET_ACCESS_KEY`, which matches
 Cloudflare R2's S3 credential derivation. The container mounts the R2 bucket at
 `/var/lib/electric` with TigrisFS, verifies the mountpoint is active and
-writable with a startup probe, and only then starts Electric. Electric runs with
-`ELECTRIC_STORAGE=fast_file`, `ELECTRIC_PERSISTENT_STATE=file`, and
-`ELECTRIC_STORAGE_DIR=/var/lib/electric`. It also sets
+writable before starting Electric, and runs with `ELECTRIC_STORAGE=fast_file`,
+`ELECTRIC_PERSISTENT_STATE=file`, and `ELECTRIC_STORAGE_DIR=/var/lib/electric`.
+It also sets
 `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true` so Electric's active-shape SQLite
 database is configured for the R2-backed network filesystem. The sync Worker
 resolves the singleton `ElectricSql` Durable Object with a stage-derived

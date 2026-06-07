@@ -4,15 +4,21 @@
 
 import { Duration, Effect } from "effect";
 
+import {
+  ELECTRIC_SQL_CONTAINER_ERROR_TAG,
+  ElectricSqlContainerError,
+} from "./electric-sql-do-errors.js";
 import type { SyncWorkerEnv } from "./env.js";
 
 const electricPort = 3000;
 const electricReadinessAttempts = 45;
+const electricReadinessFetchTimeoutMs = 1000;
 const maxElectricReadinessDelayMs = 1000;
 const containerReadinessByState = new WeakMap<
   DurableObjectState,
   Promise<void>
 >();
+const monitoredContainerStates = new WeakSet<DurableObjectState>();
 const readyContainerStates = new WeakSet<DurableObjectState>();
 
 export class ElectricSql {
@@ -25,13 +31,16 @@ export class ElectricSql {
   }
 
   async fetch(request: Request): Promise<Response> {
-    return await Effect.runPromise(handleElectricSqlFetch(request, this.ctx));
+    return await Effect.runPromise(
+      handleElectricSqlFetch(request, this.ctx, this.env)
+    );
   }
 }
 
 export function handleElectricSqlFetch(
   request: Request,
-  state: DurableObjectState
+  state: DurableObjectState,
+  env: SyncWorkerEnv
 ) {
   return Effect.gen(function* () {
     const { container } = state;
@@ -49,17 +58,19 @@ export function handleElectricSqlFetch(
 
     const ready = yield* Effect.tryPromise({
       catch: (cause) =>
-        cause instanceof Error
-          ? cause
-          : new Error("Electric container readiness failed", { cause }),
-      try: () => ensureElectricContainerReady(state, container, request),
+        new ElectricSqlContainerError({
+          failureCause: formatUnknownError(cause),
+          failureTag: "ReadinessFailed",
+          message: "Electric container readiness failed",
+        }),
+      try: () => ensureElectricContainerReady(state, container, env, request),
     }).pipe(
       Effect.as(true),
-      Effect.catch((error: Error) =>
+      Effect.catchTag(ELECTRIC_SQL_CONTAINER_ERROR_TAG, (error) =>
         Effect.logWarning("Electric container readiness failed").pipe(
           Effect.annotateLogs({
             ...makeElectricSqlRequestAnnotations(request),
-            "electric.error": formatUnknownError(error),
+            "electric.error": error.failureCause,
           }),
           Effect.as(false)
         )
@@ -87,16 +98,18 @@ export function handleElectricSqlFetch(
 
     return yield* Effect.tryPromise({
       catch: (cause) =>
-        cause instanceof Error
-          ? cause
-          : new Error("Electric container forwarding failed", { cause }),
+        new ElectricSqlContainerError({
+          failureCause: formatUnknownError(cause),
+          failureTag: "ForwardingFailed",
+          message: "Electric container forwarding failed",
+        }),
       try: () => container.getTcpPort(electricPort).fetch(containerRequest),
     }).pipe(
-      Effect.catch((error: Error) =>
+      Effect.catchTag(ELECTRIC_SQL_CONTAINER_ERROR_TAG, (error) =>
         Effect.logWarning("Electric container forwarding failed").pipe(
           Effect.annotateLogs({
             ...makeElectricSqlRequestAnnotations(request),
-            "electric.error": formatUnknownError(error),
+            "electric.error": error.failureCause,
           }),
           Effect.as(
             Response.json(
@@ -113,6 +126,7 @@ export function handleElectricSqlFetch(
 function ensureElectricContainerReady(
   state: DurableObjectState,
   container: NonNullable<DurableObjectState["container"]>,
+  env: SyncWorkerEnv,
   request: Request
 ) {
   const existingReadiness = containerReadinessByState.get(state);
@@ -125,13 +139,13 @@ function ensureElectricContainerReady(
     return Promise.resolve();
   }
 
-  const readiness = state
-    .blockConcurrencyWhile(async () => {
-      if (!container.running) {
-        container.start();
-        state.waitUntil(monitorElectricContainer(state, container, request));
-      }
-
+  const readiness = ensureElectricContainerStarted(
+    state,
+    container,
+    env,
+    request
+  )
+    .then(async () => {
       await waitForElectricContainerPort(container);
       readyContainerStates.add(state);
     })
@@ -144,6 +158,88 @@ function ensureElectricContainerReady(
   return readiness;
 }
 
+function ensureElectricContainerStarted(
+  state: DurableObjectState,
+  container: NonNullable<DurableObjectState["container"]>,
+  env: SyncWorkerEnv,
+  request: Request
+) {
+  return state.blockConcurrencyWhile(() => {
+    if (!container.running) {
+      container.start({
+        enableInternet: true,
+        env: makeElectricContainerStartupEnv(env),
+      });
+    }
+
+    if (!monitoredContainerStates.has(state)) {
+      monitoredContainerStates.add(state);
+      state.waitUntil(monitorElectricContainer(state, container, request));
+    }
+
+    return Promise.resolve();
+  });
+}
+
+function makeElectricContainerStartupEnv(env: SyncWorkerEnv) {
+  return {
+    AWS_ACCESS_KEY_ID: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
+    ),
+    AWS_SECRET_ACCESS_KEY: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
+    ),
+    CEIRD_ELECTRIC_STORAGE_BACKEND: "r2",
+    CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric",
+    DATABASE_URL: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_DATABASE_URL"
+    ),
+    ELECTRIC_INSECURE: "false",
+    ELECTRIC_LOG_LEVEL: "info",
+    ELECTRIC_PERSISTENT_STATE: "file",
+    ELECTRIC_PORT: "3000",
+    ELECTRIC_SECRET: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
+    ),
+    ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true",
+    ELECTRIC_STORAGE: "fast_file",
+    ELECTRIC_STORAGE_DIR: "/var/lib/electric",
+    R2_ACCOUNT_ID: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
+    ),
+    R2_BUCKET_NAME: readRequiredElectricContainerEnv(
+      env,
+      "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+    ),
+  } satisfies Record<string, string>;
+}
+
+function readRequiredElectricContainerEnv(
+  env: SyncWorkerEnv,
+  key:
+    | "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
+    | "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
+    | "ELECTRIC_CONTAINER_DATABASE_URL"
+    | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
+    | "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
+    | "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+) {
+  const value = env[key]?.trim();
+
+  if (value === undefined || value.length === 0) {
+    throw new Error(
+      `Missing required Electric container startup env var: ${key}`
+    );
+  }
+
+  return value;
+}
+
 async function waitForElectricContainerPort(
   container: NonNullable<DurableObjectState["container"]>
 ) {
@@ -152,7 +248,7 @@ async function waitForElectricContainerPort(
 
   for (let attempt = 0; attempt < electricReadinessAttempts; attempt += 1) {
     try {
-      const response = await port.fetch("http://electric/v1/health");
+      const response = await fetchElectricHealth(port);
 
       await response.body?.cancel();
       if (response.status === 200) {
@@ -174,6 +270,22 @@ async function waitForElectricContainerPort(
   });
 }
 
+async function fetchElectricHealth(port: Fetcher) {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    electricReadinessFetchTimeoutMs
+  );
+
+  try {
+    return await port.fetch("http://electric/v1/health", {
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function monitorElectricContainer(
   state: DurableObjectState,
   container: NonNullable<DurableObjectState["container"]>,
@@ -182,17 +294,24 @@ function monitorElectricContainer(
   return Effect.runPromise(
     Effect.tryPromise({
       catch: (cause) =>
-        cause instanceof Error
-          ? cause
-          : new Error("Electric container monitor failed", { cause }),
+        new ElectricSqlContainerError({
+          failureCause: formatUnknownError(cause),
+          failureTag: "MonitorFailed",
+          message: "Electric container monitor failed",
+        }),
       try: () => container.monitor(),
     }).pipe(
-      Effect.ensuring(Effect.sync(() => readyContainerStates.delete(state))),
-      Effect.catch((error: Error) =>
+      Effect.ensuring(
+        Effect.sync(() => {
+          monitoredContainerStates.delete(state);
+          readyContainerStates.delete(state);
+        })
+      ),
+      Effect.catchTag(ELECTRIC_SQL_CONTAINER_ERROR_TAG, (error) =>
         Effect.logError("Electric container monitor failed").pipe(
           Effect.annotateLogs({
             ...makeElectricSqlRequestAnnotations(request),
-            "electric.error": formatUnknownError(error),
+            "electric.error": error.failureCause,
           })
         )
       )
