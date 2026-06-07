@@ -153,6 +153,24 @@ the Agent Worker. Later reconnects refresh the token through the thread
 authorization endpoint. Product mutations still execute only through the Agent
 Worker and private domain action registry; the app chat surface owns
 presentation, approval review, thread selection, and connection setup.
+When a chat prompt is clearly asking for "near me", closest jobs/sites, or
+directions, the drawer preflights browser geolocation and sends the current
+origin through an ephemeral Agent WebSocket frame. The following chat request
+body contains only an opaque `ceirdProximityOriginContextId` so the Agent can
+match the turn to the in-memory origin without persisting raw coordinates in the
+AI chat runtime's latest-body request context. The id uses the
+`agent-origin-<uuid>` shape; the Agent strips any unsupported custom body fields
+before handing the chat request to the AI chat runtime. The Agent cache prunes
+stale sideband origins after a short TTL, so abandoned sends do not keep precise
+coordinates indefinitely. The visible user message is not rewritten with
+coordinates. If the browser cannot provide current location, the composer blocks
+the send, keeps the draft, and shows an inline recovery message asking the user
+to allow location access or provide a typed origin in the conversation.
+Route-aware Agent tool outputs render typed result rows and route preview cards
+inline instead of raw JSON; route-preview cards lazy-load the existing MapLibre
+map only when route geometry and browser map support are available. Stored chat
+messages and resumable stream chunks redact proximity origins, route geometry,
+and exact current-location coordinate strings.
 
 Shared mutation feedback uses a short minimum pending duration in
 `apps/app/src/lib/mutation-feedback.ts`. Keep that default below a perceptual

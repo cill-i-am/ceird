@@ -135,6 +135,25 @@ and an initial short-lived connect token in one authenticated request. It uses
 reconnecting to the Agent Worker. The Agent Worker HTTP/WebSocket path owns chat
 transport, while all product reads, writes, destructive operations,
 idempotency, and audit still flow through private domain action execution.
+For route-aware chat prompts, the app sends current-location coordinates through
+an ephemeral Ceird WebSocket frame before the chat request and includes only an
+opaque `ceirdProximityOriginContextId` in the chat request body. Cloudflare's AI
+chat runtime persists the latest custom request body for continuations, so raw
+coordinates must not travel through that body path. The Agent Worker sanitizes
+incoming AI chat request bodies before the AI chat runtime handles them:
+`messages`, `trigger`, and a valid `agent-origin-<uuid>`
+`ceirdProximityOriginContextId` are preserved, while other custom/request body
+fields are dropped. `CeirdAgent` resolves the id against its in-memory sideband
+cache, prunes entries after a short TTL, deletes the entry as the turn starts,
+and adds turn-scoped system guidance so nearby and route-preview tools use that
+explicit origin instead of asking the user to type one. If the Durable Object is
+evicted between the sideband frame and the chat turn, the id is harmless and the
+Agent behaves as if no current location was supplied.
+Because AI chat messages and resumable stream chunks are also persisted,
+`CeirdAgent` redacts proximity tool `origin` payloads, route display lines, and
+exact current-location coordinate strings before those records are stored; live
+responses can still render inline route maps, but stored chat history and stream
+recovery chunks must not retain precise request-origin coordinates.
 
 The instance name is `org:{orgId}:user:{userId}:thread:{threadId}`. The public
 Agent route accepts a short-lived connect token as a bearer token or `token`
@@ -238,6 +257,10 @@ Job proximity defaults to active jobs; site proximity ranks mapped sites and
 includes active-job summary fields for the returned rows. When more than 100
 route-eligible records match, response metadata marks the candidate cap so
 clients can explain that the route ranking was limited.
+Agent proximity list tools deliberately omit route display lines to avoid route
+geometry cost in ranked lists. Specific job/site route-preview tools can request
+route geometry so the app can render an inline map indication and maps handoff
+links in the chat drawer.
 
 The domain Google Routes provider lives under
 `apps/domain/src/domains/proximity/route-provider.ts`. It uses

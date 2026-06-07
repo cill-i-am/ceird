@@ -47,6 +47,20 @@ export type {
   AgentActionKind,
   AgentActionSpec,
 } from "./action-registry.js";
+export {
+  AGENT_PROXIMITY_ORIGIN_CONTEXT_ID_BODY_KEY,
+  AGENT_PROXIMITY_ORIGIN_CONTEXT_MESSAGE_TYPE,
+  AgentProximityOriginContextFrameSchema,
+  AgentProximityOriginContextId,
+  makeAgentProximityOriginContextBody,
+  makeAgentProximityOriginContextFrame,
+  readAgentProximityOriginContextFrame,
+  readAgentProximityOriginContextIdFromBody,
+} from "./proximity-context.js";
+export type {
+  AgentProximityOriginContextFrame,
+  AgentProximityOriginContextId as AgentProximityOriginContextIdType,
+} from "./proximity-context.js";
 
 const ISO_DATE_TIME_UTC_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;

@@ -562,6 +562,9 @@ importers:
       '@ceird/labels-core':
         specifier: workspace:*
         version: link:../labels-core
+      '@ceird/proximity-core':
+        specifier: workspace:*
+        version: link:../proximity-core
       '@ceird/sites-core':
         specifier: workspace:*
         version: link:../sites-core

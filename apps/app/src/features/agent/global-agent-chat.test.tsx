@@ -1,4 +1,18 @@
-import { AGENT_ACTIONS_MANIFEST } from "@ceird/agents-core";
+import {
+  AGENT_ACTIONS_MANIFEST,
+  AGENT_PROXIMITY_ORIGIN_CONTEXT_ID_BODY_KEY,
+  AGENT_PROXIMITY_ORIGIN_CONTEXT_MESSAGE_TYPE,
+} from "@ceird/agents-core";
+import type {
+  JobProximityResponse,
+  JobRoutePreviewResponse,
+  WorkItemIdType,
+} from "@ceird/jobs-core";
+import type {
+  GooglePlaceIdType,
+  SiteIdType,
+  SiteProximityResponse,
+} from "@ceird/sites-core";
 import type * as AiChatReactModule from "@cloudflare/ai-chat/react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -18,6 +32,7 @@ type TestAgentThread = Awaited<
 type TestPreparedAgentSession = Awaited<
   ReturnType<typeof AgentClientModule.prepareCurrentAgentSession>
 >;
+type UseAgentChatOptions = Parameters<typeof AiChatReactModule.useAgentChat>[0];
 
 const thread: TestAgentThread = {
   agentInstanceName:
@@ -30,6 +45,101 @@ const thread: TestAgentThread = {
   updatedAt: "2026-05-21T09:00:00.000Z",
 };
 
+const routeSummary = {
+  computedAt: "2026-06-06T10:00:00.000Z",
+  distanceMeters: 4200,
+  durationSeconds: 840,
+  provider: "google_routes",
+  providerRequestKind: "matrix",
+  routeStatus: "ok",
+  trafficAware: true,
+} as const;
+
+const originSummary = {
+  computedAt: "2026-06-06T10:00:00.000Z",
+  coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+  displayText: "Current location",
+  mode: "current_location",
+} as const;
+
+const mappedSite = {
+  addressLine1: "1 Custom House Quay",
+  county: "Dublin",
+  country: "IE",
+  displayLocation: "1 Custom House Quay, Dublin, D01 X2X2",
+  eircode: "D01 X2X2",
+  formattedAddress: "1 Custom House Quay, Dublin, D01 X2X2, Ireland",
+  googlePlaceId: "ChIJdocklands" as GooglePlaceIdType,
+  hasUsableCoordinates: true,
+  id: "33333333-3333-4333-8333-333333333333" as SiteIdType,
+  labels: [],
+  latitude: 53.3498,
+  locationProvider: "google_places",
+  locationResolvedAt: "2026-04-27T10:00:00.000Z",
+  locationStatus: "google_resolved",
+  longitude: -6.2603,
+  name: "Docklands Campus",
+  town: "Dublin",
+} satisfies SiteProximityResponse["rows"][number]["site"];
+
+const nearbyJobResponse: JobProximityResponse = {
+  meta: {
+    candidateCount: 1,
+    candidateLimitApplied: false,
+    excluded: [],
+    rankedCandidateLimit: 100,
+  },
+  origin: originSummary,
+  rows: [
+    {
+      job: {
+        createdAt: "2026-04-23T11:00:00.000Z",
+        id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
+        kind: "job",
+        labels: [],
+        priority: "urgent",
+        status: "new",
+        title: "Inspect boiler",
+        updatedAt: "2026-04-23T12:00:00.000Z",
+      },
+      routeSummary,
+      site: mappedSite,
+    },
+  ],
+};
+
+const nearbySiteResponse: SiteProximityResponse = {
+  meta: {
+    candidateCount: 1,
+    candidateLimitApplied: false,
+    excluded: [],
+    rankedCandidateLimit: 100,
+  },
+  origin: originSummary,
+  rows: [
+    {
+      activeJobCount: 2,
+      highestActiveJobPriority: "urgent",
+      routeSummary,
+      site: mappedSite,
+    },
+  ],
+};
+
+const jobRoutePreviewResponse: JobRoutePreviewResponse = {
+  job: nearbyJobResponse.rows[0].job,
+  origin: originSummary,
+  routeLine: {
+    coordinates: [
+      { latitude: 53.349_805, longitude: -6.260_31 },
+      { latitude: 53.3498, longitude: -6.2603 },
+    ],
+    format: "geojson_linestring",
+  },
+  routeSummary,
+  site: mappedSite,
+};
+
 function missingAgentHost(): string | undefined {
   return undefined;
 }
@@ -37,6 +147,7 @@ function missingAgentHost(): string | undefined {
 const {
   mockedAuthorizeCurrentAgentThread,
   mockedAddToolApprovalResponse,
+  mockedAgentSend,
   mockedEnsureCurrentAgentThread,
   mockedPrepareCurrentAgentSession,
   mockedResolveAgentHost,
@@ -50,6 +161,7 @@ const {
     vi.fn<
       (response: { readonly approved: boolean; readonly id: string }) => void
     >(),
+  mockedAgentSend: vi.fn<(data: string) => void>(),
   mockedEnsureCurrentAgentThread:
     vi.fn<typeof AgentClientModule.ensureCurrentAgentThread>(),
   mockedPrepareCurrentAgentSession:
@@ -150,7 +262,10 @@ vi.mock(import("#/components/ui/drawer"), async (importActual) => {
 });
 
 describe("global agent chat", () => {
+  let originalGeolocation: Geolocation | undefined;
+
   beforeEach(() => {
+    originalGeolocation = navigator.geolocation;
     const preparedSession = {
       authorization: {
         agentInstanceName: thread.agentInstanceName,
@@ -169,6 +284,7 @@ describe("global agent chat", () => {
     mockedPrepareCurrentAgentSession.mockResolvedValue(preparedSession);
     mockedResolveAgentHost.mockReturnValue("agent.example.com");
     mockedSendMessage.mockImplementation(async () => {});
+    mockedAgentSend.mockImplementation(() => {});
     mockedUseAgent.mockReturnValue({
       addEventListener: () => {},
       agent: "ceird-agent",
@@ -176,7 +292,7 @@ describe("global agent chat", () => {
       name: thread.agentInstanceName,
       path: [{ agent: "ceird-agent", name: thread.agentInstanceName }],
       removeEventListener: () => {},
-      send: () => {},
+      send: mockedAgentSend,
     } as unknown as ReturnType<typeof AgentsReactModule.useAgent>);
     mockedUseAgentChat.mockReturnValue({
       clearHistory: () => {},
@@ -204,6 +320,10 @@ describe("global agent chat", () => {
   });
 
   afterEach(() => {
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: originalGeolocation,
+    });
     vi.clearAllMocks();
   });
 
@@ -401,6 +521,320 @@ describe("global agent chat", () => {
     ).toHaveValue("");
   });
 
+  it("attaches current location metadata to near-me prompts without changing visible text", async () => {
+    const user = userEvent.setup();
+    const getCurrentPosition = mockGeolocationSuccess({
+      accuracy: 12,
+      latitude: 53.349_805,
+      longitude: -6.260_31,
+    });
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    const textbox = within(drawer).getByRole("textbox", {
+      name: /message ask ceird/i,
+    });
+    await user.type(textbox, "What are the closest jobs to me?");
+    await user.click(within(drawer).getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(mockedSendMessage).toHaveBeenCalledWith({
+        text: "What are the closest jobs to me?",
+      });
+    });
+    expect(getCurrentPosition).toHaveBeenCalledOnce();
+    expect(mockedAgentSend).toHaveBeenCalledOnce();
+    const frame = getLastProximityOriginContextFrame();
+    expect(frame).toStrictEqual({
+      contextId: expect.stringMatching(/^agent-origin-/),
+      origin: {
+        accuracyMeters: 12,
+        coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+        mode: "current_location",
+      },
+      type: AGENT_PROXIMITY_ORIGIN_CONTEXT_MESSAGE_TYPE,
+    });
+    const request = await getLastPrepareSendMessagesRequest()({
+      id: "chat-id",
+      messages: [],
+      trigger: "submit-message",
+    });
+    expect(request).toStrictEqual({
+      body: {
+        [AGENT_PROXIMITY_ORIGIN_CONTEXT_ID_BODY_KEY]: frame.contextId,
+      },
+    });
+    expect(JSON.stringify(request)).not.toContain("53.349805");
+    expect(textbox).toHaveValue("");
+  });
+
+  it("attaches current location metadata to direct route prompts", async () => {
+    const user = userEvent.setup();
+    const getCurrentPosition = mockGeolocationSuccess({
+      accuracy: 18,
+      latitude: 53.349_805,
+      longitude: -6.260_31,
+    });
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    const textbox = within(drawer).getByRole("textbox", {
+      name: /message ask ceird/i,
+    });
+    await user.type(textbox, "Directions to Docklands Campus");
+    await user.click(within(drawer).getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(mockedSendMessage).toHaveBeenCalledWith({
+        text: "Directions to Docklands Campus",
+      });
+    });
+    expect(getCurrentPosition).toHaveBeenCalledOnce();
+    expect(mockedAgentSend).toHaveBeenCalledOnce();
+    expect(getLastProximityOriginContextFrame().origin).toStrictEqual({
+      accuracyMeters: 18,
+      coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+      mode: "current_location",
+    });
+  });
+
+  it("keeps a near-me draft when current location cannot be read", async () => {
+    const user = userEvent.setup();
+    const getCurrentPosition = mockGeolocationFailure({
+      code: 1,
+      message: "Permission denied",
+    });
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    const textbox = within(drawer).getByRole("textbox", {
+      name: /message ask ceird/i,
+    });
+    await user.type(textbox, "nearest sites");
+    await user.click(within(drawer).getByRole("button", { name: /^send$/i }));
+
+    await expect(
+      within(drawer).findByText(/current location unavailable/i)
+    ).resolves.toBeVisible();
+    expect(getCurrentPosition).toHaveBeenCalledOnce();
+    expect(mockedAgentSend).not.toHaveBeenCalled();
+    expect(mockedSendMessage).not.toHaveBeenCalled();
+    expect(textbox).toHaveValue("nearest sites");
+  });
+
+  it("does not send stale near-me prompts after the chat unmounts during geolocation", async () => {
+    const user = userEvent.setup();
+    const geolocation = mockGeolocationDeferredSuccess({
+      latitude: 53.349_805,
+      longitude: -6.260_31,
+    });
+    const { rerender } = render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    await user.type(
+      within(drawer).getByRole("textbox", { name: /message ask ceird/i }),
+      "nearest jobs to me"
+    );
+    await user.click(within(drawer).getByRole("button", { name: /^send$/i }));
+
+    expect(geolocation.getCurrentPosition).toHaveBeenCalledOnce();
+    rerender(<GlobalAgentChat activeOrganizationId={null} />);
+
+    act(() => {
+      geolocation.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockedSendMessage).not.toHaveBeenCalled();
+    });
+    expect(mockedAgentSend).not.toHaveBeenCalled();
+  });
+
+  it("sends non-proximity prompts without requesting location metadata", async () => {
+    const user = userEvent.setup();
+    const getCurrentPosition = mockGeolocationSuccess({
+      latitude: 53.349_805,
+      longitude: -6.260_31,
+    });
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    await user.type(
+      within(drawer).getByRole("textbox", { name: /message ask ceird/i }),
+      "List open labels"
+    );
+    await user.click(within(drawer).getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(mockedSendMessage).toHaveBeenCalledWith({
+        text: "List open labels",
+      });
+    });
+    expect(getCurrentPosition).not.toHaveBeenCalled();
+    expect(
+      getLastPrepareSendMessagesRequest()({
+        id: "chat-id",
+        messages: [],
+        trigger: "submit-message",
+      })
+    ).toStrictEqual({});
+  });
+
+  it("does not attach current location metadata when a route prompt has a typed origin", async () => {
+    const user = userEvent.setup();
+    const getCurrentPosition = mockGeolocationSuccess({
+      latitude: 53.349_805,
+      longitude: -6.260_31,
+    });
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    await user.type(
+      within(drawer).getByRole("textbox", { name: /message ask ceird/i }),
+      "Directions from the depot to Docklands Campus"
+    );
+    await user.click(within(drawer).getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(mockedSendMessage).toHaveBeenCalledWith({
+        text: "Directions from the depot to Docklands Campus",
+      });
+    });
+    expect(getCurrentPosition).not.toHaveBeenCalled();
+    expect(mockedAgentSend).not.toHaveBeenCalled();
+    expect(
+      getLastPrepareSendMessagesRequest()({
+        id: "chat-id",
+        messages: [],
+        trigger: "submit-message",
+      })
+    ).toStrictEqual({});
+  });
+
+  it("renders nearby job tool output as compact route rows", async () => {
+    const user = userEvent.setup();
+    mockedUseAgentChat.mockReturnValue(
+      makeChatReturnValue([
+        {
+          id: "message-nearby-jobs",
+          parts: [
+            {
+              output: nearbyJobResponse,
+              state: "output-available",
+              toolName: "rankNearbyJobs",
+              type: "tool-rankNearbyJobs",
+            },
+          ],
+          role: "assistant",
+        },
+      ])
+    );
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    expect(within(drawer).getByText("Closest jobs")).toBeVisible();
+    expect(within(drawer).getByText("Inspect boiler")).toBeVisible();
+    expect(within(drawer).getByText("14 min")).toBeVisible();
+    expect(within(drawer).getByText("4.2 km")).toBeVisible();
+    expect(
+      within(drawer).queryByText(/durationSeconds/)
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders nearby site and route preview tool output inline", async () => {
+    const user = userEvent.setup();
+    mockedUseAgentChat.mockReturnValue(
+      makeChatReturnValue([
+        {
+          id: "message-route-preview",
+          parts: [
+            {
+              output: nearbySiteResponse,
+              state: "output-available",
+              toolName: "rankNearbySites",
+              type: "tool-rankNearbySites",
+            },
+            {
+              output: jobRoutePreviewResponse,
+              state: "output-available",
+              toolName: "getJobRoutePreview",
+              type: "tool-getJobRoutePreview",
+            },
+          ],
+          role: "assistant",
+        },
+      ])
+    );
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    expect(within(drawer).getByText("Closest sites")).toBeVisible();
+    expect(
+      within(drawer).getAllByText("Docklands Campus").length
+    ).toBeGreaterThan(0);
+    expect(within(drawer).getByText("Route preview")).toBeVisible();
+    expect(
+      within(drawer).getAllByRole("link", { name: /open in maps/i }).length
+    ).toBeGreaterThan(0);
+    expect(within(drawer).queryByText(/routeLine/)).not.toBeInTheDocument();
+  });
+
   it("lets users approve or reject approval-gated tool calls", async () => {
     const user = userEvent.setup();
     mockedUseAgentChat.mockReturnValue({
@@ -496,3 +930,132 @@ describe("global agent chat", () => {
     expect(within(drawer).getByText(/label_123/)).toBeVisible();
   });
 });
+
+function makeChatReturnValue(
+  messages: readonly {
+    readonly id: string;
+    readonly parts: readonly Record<string, unknown>[];
+    readonly role: "assistant" | "user";
+  }[]
+) {
+  return {
+    clearHistory: () => {},
+    error: undefined,
+    isStreaming: false,
+    messages,
+    addToolApprovalResponse: mockedAddToolApprovalResponse,
+    sendMessage: mockedSendMessage,
+    status: "ready",
+  } as unknown as ReturnType<typeof AiChatReactModule.useAgentChat>;
+}
+
+function getLastPrepareSendMessagesRequest() {
+  const options = mockedUseAgentChat.mock.calls.at(-1)?.[0] as
+    | UseAgentChatOptions
+    | undefined;
+
+  if (options?.prepareSendMessagesRequest === undefined) {
+    throw new Error("Expected prepareSendMessagesRequest option.");
+  }
+
+  return options.prepareSendMessagesRequest;
+}
+
+function getLastProximityOriginContextFrame() {
+  const payload = mockedAgentSend.mock.calls.at(-1)?.[0];
+
+  if (payload === undefined) {
+    throw new Error("Expected agent proximity origin context frame.");
+  }
+
+  return JSON.parse(payload) as {
+    readonly contextId: string;
+    readonly origin: unknown;
+    readonly type: string;
+  };
+}
+
+function mockGeolocationSuccess({
+  accuracy,
+  latitude,
+  longitude,
+}: {
+  readonly accuracy?: number;
+  readonly latitude: number;
+  readonly longitude: number;
+}) {
+  const getCurrentPosition = vi.fn<Geolocation["getCurrentPosition"]>(
+    (success) => {
+      success({
+        coords: {
+          accuracy,
+          latitude,
+          longitude,
+        },
+      } as GeolocationPosition);
+    }
+  );
+
+  Object.defineProperty(navigator, "geolocation", {
+    configurable: true,
+    value: { getCurrentPosition },
+  });
+
+  return getCurrentPosition;
+}
+
+function mockGeolocationDeferredSuccess({
+  accuracy,
+  latitude,
+  longitude,
+}: {
+  readonly accuracy?: number;
+  readonly latitude: number;
+  readonly longitude: number;
+}) {
+  let onSuccess: PositionCallback | null = null;
+  const getCurrentPosition = vi.fn<Geolocation["getCurrentPosition"]>(
+    (success) => {
+      onSuccess = success;
+    }
+  );
+
+  Object.defineProperty(navigator, "geolocation", {
+    configurable: true,
+    value: { getCurrentPosition },
+  });
+
+  return {
+    getCurrentPosition,
+    resolve: () => {
+      onSuccess?.({
+        coords: {
+          accuracy,
+          latitude,
+          longitude,
+        },
+      } as GeolocationPosition);
+    },
+  };
+}
+
+function mockGeolocationFailure({
+  code,
+  message,
+}: {
+  readonly code: number;
+  readonly message: string;
+}) {
+  const getCurrentPosition = vi.fn<Geolocation["getCurrentPosition"]>(
+    (_success, error) => {
+      error?.({ code, message } as GeolocationPositionError);
+    }
+  );
+
+  Object.defineProperty(navigator, "geolocation", {
+    configurable: true,
+    value: { getCurrentPosition },
+  });
+
+  return getCurrentPosition;
+}
