@@ -3,9 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { readConfiguredServerApiOrigin } from "#/lib/api-origin.server";
 import { readServerApiForwardedHeaders } from "#/lib/server-api-forwarded-headers";
 
-type AuthProxyHandlerInput = {
+interface AuthProxyHandlerInput {
   readonly request: Request;
-};
+}
 
 const bodylessMethods = new Set(["GET", "HEAD"]);
 
@@ -27,10 +27,7 @@ async function handleAuthProxyRequest({ request }: AuthProxyHandlerInput) {
   const apiOrigin = readConfiguredServerApiOrigin();
 
   if (!apiOrigin) {
-    return Response.json(
-      { error: "api_origin_unavailable" },
-      { status: 503 }
-    );
+    return Response.json({ error: "api_origin_unavailable" }, { status: 503 });
   }
 
   const apiUrl = new URL(apiOrigin);

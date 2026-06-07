@@ -30,9 +30,8 @@ const {
       error: null;
     }>
   >(),
-  mockedMirrorLocalAlchemyAuthSession: vi.fn<
-    (input: { email: string; password: string }) => Promise<boolean>
-  >(),
+  mockedMirrorLocalAlchemyAuthSession:
+    vi.fn<(input: { email: string; password: string }) => Promise<boolean>>(),
   mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
   mockedSignInEmail: vi.fn<
     (input: { email: string; password: string }) => Promise<{

@@ -1,3 +1,5 @@
+import { setTimeout as sleep } from "node:timers/promises";
+
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 import { act, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
@@ -148,7 +150,7 @@ describe("sites coverage map", () => {
 
 async function flushScrollAreaEffects() {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await sleep(0);
   });
 }
 

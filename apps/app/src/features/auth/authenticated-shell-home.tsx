@@ -275,9 +275,7 @@ function HomeJobRow({ job }: { readonly job: AuthenticatedHomeJobItem }) {
         )}
       >
         <div className="min-w-0 font-medium">
-          <span className="line-clamp-2 md:line-clamp-1">
-          {job.title}
-          </span>
+          <span className="line-clamp-2 md:line-clamp-1">{job.title}</span>
         </div>
         <DashboardGridCell label="Site">
           <span>{job.siteName ?? "No site"}</span>

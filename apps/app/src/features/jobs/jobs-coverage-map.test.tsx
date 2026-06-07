@@ -1,3 +1,5 @@
+import { setTimeout as sleep } from "node:timers/promises";
+
 import type { JobListItem, WorkItemIdType } from "@ceird/jobs-core";
 import type { SiteIdType } from "@ceird/sites-core";
 import { act, render, screen } from "@testing-library/react";
@@ -273,7 +275,7 @@ describe("jobs coverage map", () => {
 
 async function flushScrollAreaEffects() {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await sleep(0);
   });
 }
 

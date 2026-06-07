@@ -13,8 +13,8 @@ import {
 } from "better-auth/plugins/organization/access";
 import { createAuthClient } from "better-auth/react";
 
-import { toURL } from "./app-service-origin";
 import { readConfiguredApiOrigin, resolveApiOrigin } from "./api-origin";
+import { toURL } from "./app-service-origin";
 
 export const API_BASE_PATH = "/api";
 export const AUTH_BASE_PATH = "/api/auth";
