@@ -1,5 +1,11 @@
 import { Schema } from "effect";
 
+import {
+  ACCOUNT_PASSWORD_LENGTH_MESSAGE,
+  ACCOUNT_PASSWORD_MAX_LENGTH,
+  ACCOUNT_PASSWORD_MIN_LENGTH,
+} from "./auth-schemas";
+
 export function getErrorText(
   errors: readonly unknown[] | undefined
 ): string | undefined {
@@ -28,12 +34,15 @@ export function getErrorText(
 
 function normalizeValidationMessage(message: string): string {
   const normalized = message.toLowerCase();
+  const minimumPasswordLength = ACCOUNT_PASSWORD_MIN_LENGTH.toString();
+  const maximumPasswordLength = ACCOUNT_PASSWORD_MAX_LENGTH.toString();
+  const lengthAtLeastOnePattern = /length of at least 1(?!\d)/;
 
   if (
     normalized.includes("expected a non empty string") ||
     normalized.includes("non-empty string") ||
     normalized.includes("non empty string") ||
-    normalized.includes("length of at least 1")
+    lengthAtLeastOnePattern.test(normalized)
   ) {
     return "This field is required.";
   }
@@ -53,10 +62,15 @@ function normalizeValidationMessage(message: string): string {
   }
 
   if (
-    normalized.includes("at least 8") ||
-    normalized.includes("minimum of 8")
+    normalized.includes(ACCOUNT_PASSWORD_LENGTH_MESSAGE.toLowerCase()) ||
+    normalized.includes(`at least ${minimumPasswordLength}`) ||
+    normalized.includes(`minimum of ${minimumPasswordLength}`) ||
+    normalized.includes(`min ${minimumPasswordLength}`) ||
+    normalized.includes(`at most ${maximumPasswordLength}`) ||
+    normalized.includes(`maximum of ${maximumPasswordLength}`) ||
+    normalized.includes(`max ${maximumPasswordLength}`)
   ) {
-    return "Use at least 8 characters.";
+    return ACCOUNT_PASSWORD_LENGTH_MESSAGE;
   }
 
   if (
@@ -71,8 +85,32 @@ function normalizeValidationMessage(message: string): string {
 
 type AuthFailureAction = "signIn" | "signUp";
 type SettingsFailureAction = "email" | "password" | "profile";
+const COMPROMISED_PASSWORD_MESSAGE =
+  "Choose a different password; this one appears in known data breaches.";
+const CAPTCHA_FAILURE_MESSAGE = "Complete the security check and try again.";
+const RATE_LIMIT_UNAVAILABLE_MESSAGE =
+  "We couldn't verify this request right now. Please try again in a moment.";
+const COMPROMISED_PASSWORD_NEEDLES = [
+  "PASSWORD_COMPROMISED",
+  "compromised",
+] as const;
+const CAPTCHA_FAILURE_NEEDLES = ["CAPTCHA", "Captcha", "captcha"] as const;
+const RATE_LIMIT_UNAVAILABLE_NEEDLES = [
+  "AUTH_RATE_LIMIT_UNAVAILABLE",
+  "Authentication protection is temporarily unavailable",
+] as const;
+const PASSWORD_RESET_INVALID_TOKEN_NEEDLES = [
+  "INVALID_TOKEN",
+  "invalid token",
+  "invalid or expired",
+  "token expired",
+  "expired token",
+] as const;
 const AuthFailureError = Schema.Struct({
+  code: Schema.optional(Schema.String),
+  message: Schema.optional(Schema.String),
   status: Schema.optional(Schema.Number),
+  statusText: Schema.optional(Schema.String),
 });
 const isAuthFailureError = Schema.is(AuthFailureError);
 
@@ -82,8 +120,20 @@ export function getAuthFailureMessage(
 ): string {
   const authFailureError = isAuthFailureError(error) ? error : undefined;
 
+  if (isRateLimitUnavailableFailure(authFailureError)) {
+    return RATE_LIMIT_UNAVAILABLE_MESSAGE;
+  }
+
   if (authFailureError?.status === 429) {
     return "Too many attempts. Please wait and try again.";
+  }
+
+  if (isCaptchaFailure(authFailureError)) {
+    return CAPTCHA_FAILURE_MESSAGE;
+  }
+
+  if (action === "signUp" && isCompromisedPasswordFailure(authFailureError)) {
+    return COMPROMISED_PASSWORD_MESSAGE;
   }
 
   if (action === "signIn") {
@@ -99,8 +149,37 @@ function getRateLimitedFailureMessage(
 ): string {
   const authFailureError = isAuthFailureError(error) ? error : undefined;
 
+  if (isRateLimitUnavailableFailure(authFailureError)) {
+    return RATE_LIMIT_UNAVAILABLE_MESSAGE;
+  }
+
   if (authFailureError?.status === 429) {
     return "Too many attempts. Please wait and try again.";
+  }
+
+  if (isCaptchaFailure(authFailureError)) {
+    return CAPTCHA_FAILURE_MESSAGE;
+  }
+
+  return fallbackMessage;
+}
+
+function getPasswordMutationFailureMessage(
+  error: unknown,
+  fallbackMessage: string
+): string {
+  const authFailureError = isAuthFailureError(error) ? error : undefined;
+
+  if (isRateLimitUnavailableFailure(authFailureError)) {
+    return RATE_LIMIT_UNAVAILABLE_MESSAGE;
+  }
+
+  if (authFailureError?.status === 429) {
+    return "Too many attempts. Please wait and try again.";
+  }
+
+  if (isCompromisedPasswordFailure(authFailureError)) {
+    return COMPROMISED_PASSWORD_MESSAGE;
   }
 
   return fallbackMessage;
@@ -121,7 +200,7 @@ export function getEmailVerificationFailureMessage(error: unknown): string {
 }
 
 export function getPasswordResetFailureMessage(error: unknown): string {
-  return getRateLimitedFailureMessage(
+  return getPasswordMutationFailureMessage(
     error,
     "We couldn't reset your password. Please try again."
   );
@@ -142,13 +221,90 @@ export function getSettingsFailureMessage(
       "We couldn't update your password. Check your current password and try again.";
   }
 
-  return getRateLimitedFailureMessage(error, fallbackMessage);
+  return action === "password"
+    ? getPasswordMutationFailureMessage(error, fallbackMessage)
+    : getRateLimitedFailureMessage(error, fallbackMessage);
+}
+
+function isCompromisedPasswordFailure(
+  error: Schema.Schema.Type<typeof AuthFailureError> | undefined
+) {
+  if (!error) {
+    return false;
+  }
+
+  return [error.code, error.message, error.statusText].some((field) => {
+    if (typeof field !== "string") {
+      return false;
+    }
+
+    return COMPROMISED_PASSWORD_NEEDLES.some((needle) =>
+      field.toLowerCase().includes(needle.toLowerCase())
+    );
+  });
+}
+
+function isCaptchaFailure(
+  error: Schema.Schema.Type<typeof AuthFailureError> | undefined
+) {
+  if (!error) {
+    return false;
+  }
+
+  return [error.code, error.message, error.statusText].some((field) => {
+    if (typeof field !== "string") {
+      return false;
+    }
+
+    return CAPTCHA_FAILURE_NEEDLES.some((needle) => field.includes(needle));
+  });
+}
+
+function isRateLimitUnavailableFailure(
+  error: Schema.Schema.Type<typeof AuthFailureError> | undefined
+) {
+  if (!error) {
+    return false;
+  }
+
+  return [error.code, error.message, error.statusText].some((field) => {
+    if (typeof field !== "string") {
+      return false;
+    }
+
+    return RATE_LIMIT_UNAVAILABLE_NEEDLES.some((needle) =>
+      field.toLowerCase().includes(needle.toLowerCase())
+    );
+  });
 }
 
 export function isInvalidPasswordResetTokenError(error: unknown): boolean {
   const authFailureError = isAuthFailureError(error) ? error : undefined;
 
-  return authFailureError?.status === 400 || authFailureError?.status === 401;
+  if (authFailureError?.status !== 400 && authFailureError?.status !== 401) {
+    return false;
+  }
+
+  if (
+    isCompromisedPasswordFailure(authFailureError) ||
+    isCaptchaFailure(authFailureError)
+  ) {
+    return false;
+  }
+
+  return [
+    authFailureError.code,
+    authFailureError.message,
+    authFailureError.statusText,
+  ].some((field) => {
+    if (typeof field !== "string") {
+      return false;
+    }
+
+    return PASSWORD_RESET_INVALID_TOKEN_NEEDLES.some((needle) =>
+      field.toLowerCase().includes(needle.toLowerCase())
+    );
+  });
 }
 
 export function getFormErrorText(error: unknown): string | undefined {

@@ -15,10 +15,16 @@ export const Route = createFileRoute("/_app/settings")({
 });
 
 function SettingsRoute() {
-  const { session } = useRouteContext({ from: "/_app" });
+  const { currentOrganizationRole, session } = useRouteContext({
+    from: "/_app",
+  });
   const { emailChange } = Route.useSearch();
 
   return (
-    <UserSettingsPage user={session.user} emailChangeStatus={emailChange} />
+    <UserSettingsPage
+      user={session.user}
+      currentOrganizationRole={currentOrganizationRole}
+      emailChangeStatus={emailChange}
+    />
   );
 }

@@ -6,7 +6,14 @@ describe("app navigation", () => {
     (role) => {
       expect(
         getPrimaryNavItemsForRole(role).map((item) => item.url)
-      ).toStrictEqual(["/", "/jobs", "/sites", "/activity", "/members"]);
+      ).toStrictEqual([
+        "/",
+        "/jobs",
+        "/sites",
+        "/activity",
+        "/organization/security",
+        "/members",
+      ]);
     },
     1000
   );

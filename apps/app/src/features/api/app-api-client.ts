@@ -1,4 +1,5 @@
 import { AgentActionsApiGroup, AgentThreadsApiGroup } from "@ceird/agents-core";
+import { IdentityApiGroup } from "@ceird/identity-core";
 import { JobsApiGroup } from "@ceird/jobs-core";
 import { LabelsApiGroup } from "@ceird/labels-core";
 import { SitesApiGroup } from "@ceird/sites-core";
@@ -22,6 +23,7 @@ import type { AppApiError } from "./app-api-errors";
 const CeirdApi = HttpApi.make("CeirdApi")
   .add(AgentThreadsApiGroup)
   .add(AgentActionsApiGroup)
+  .add(IdentityApiGroup)
   .add(JobsApiGroup)
   .add(LabelsApiGroup)
   .add(SitesApiGroup);

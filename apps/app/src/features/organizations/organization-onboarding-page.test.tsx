@@ -37,6 +37,7 @@ const {
         id: string;
       } | null;
       error: {
+        code?: string;
         message: string;
         status: number;
         statusText: string;
@@ -432,6 +433,40 @@ describe("organization onboarding page", () => {
     ).toBeInTheDocument();
   }, 10_000);
 
+  it("shows targeted email verification copy when sending an invite is blocked", async () => {
+    mockedInviteMember.mockResolvedValue({
+      data: null,
+      error: {
+        code: "EMAIL_NOT_VERIFIED",
+        message: "Verify your email before inviting organization members.",
+        status: 403,
+        statusText: "Forbidden",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(<OrganizationOnboardingPage />);
+
+    await user.type(screen.getByLabelText("Team name"), "Acme Field Ops");
+    await user.click(screen.getByRole("button", { name: "Create team" }));
+    await screen.findByRole("heading", { name: "Invite members" });
+
+    await user.type(screen.getByLabelText("Email"), "foreman@example.com");
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /send invite/i }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByText(
+        "Verify your email before inviting teammates. Check your inbox, then try again."
+      )
+    ).toBeInTheDocument();
+  }, 10_000);
+
   it("shows an inline error when org creation fails", async () => {
     mockedCreateOrganization.mockRejectedValue(new Error("Create failed"));
 
@@ -444,6 +479,44 @@ describe("organization onboarding page", () => {
 
     await expect(
       screen.findByText("We couldn't create your team. Please try again.")
+    ).resolves.toBeInTheDocument();
+  }, 10_000);
+
+  it("shows targeted email verification copy when organization creation is blocked", async () => {
+    mockedCreateOrganization.mockRejectedValue(new Error("EMAIL_NOT_VERIFIED"));
+
+    const user = userEvent.setup();
+
+    render(<OrganizationOnboardingPage />);
+
+    await user.type(screen.getByLabelText("Team name"), "Acme Field Ops");
+    await user.click(screen.getByRole("button", { name: "Create team" }));
+
+    await expect(
+      screen.findByText(
+        "Verify your email before creating a team. Check your inbox, then try again."
+      )
+    ).resolves.toBeInTheDocument();
+  }, 10_000);
+
+  it("preserves targeted email verification copy from the server function", async () => {
+    mockedCreateOrganization.mockRejectedValue(
+      new Error(
+        "Verify your email before creating a team. Check your inbox, then try again."
+      )
+    );
+
+    const user = userEvent.setup();
+
+    render(<OrganizationOnboardingPage />);
+
+    await user.type(screen.getByLabelText("Team name"), "Acme Field Ops");
+    await user.click(screen.getByRole("button", { name: "Create team" }));
+
+    await expect(
+      screen.findByText(
+        "Verify your email before creating a team. Check your inbox, then try again."
+      )
     ).resolves.toBeInTheDocument();
   }, 10_000);
 });

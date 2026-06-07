@@ -93,6 +93,39 @@ describe("mcp http handler", () => {
     );
   }, 10_000);
 
+  it("rejects Ceird-scoped bearer tokens without a consented workspace claim", async () => {
+    mcpHandlerMock.mockImplementation(
+      (_verifyOptions, handler) => (request: Request) =>
+        Promise.resolve(
+          handler(request, {
+            client_id: "mcp-client",
+            exp: Math.floor(Date.now() / 1000) + 300,
+            scope: "ceird:read",
+            sid: "session_abc",
+            sub: "user_abc",
+          })
+        )
+    );
+    const authConfig = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+    const handler = makeMcpWebHandler({ authConfig });
+
+    const response = await handler(
+      new Request("http://127.0.0.1:3000/mcp", {
+        headers: makeAuthorizedMcpHeaders(),
+        method: "POST",
+      })
+    );
+
+    expect(response?.status).toBe(401);
+    expect(response?.headers.get("WWW-Authenticate")).toContain(
+      'error="invalid_token"'
+    );
+  }, 10_000);
+
   it("falls back when the path is not owned by mcp", async () => {
     const authConfig = makeAuthenticationConfig({
       baseUrl: "http://127.0.0.1:3000/api/auth",
@@ -180,6 +213,7 @@ describe("mcp http handler", () => {
         Promise.resolve(
           handler(request, {
             client_id: "mcp-client",
+            ceird_org_id: "org_123",
             exp: Math.floor(Date.now() / 1000) + 300,
             scope: "ceird:read",
             sid: "session_abc",
@@ -237,6 +271,7 @@ describe("mcp http handler", () => {
         Promise.resolve(
           handler(request, {
             client_id: "mcp-client",
+            ceird_org_id: "org_123",
             exp: Math.floor(Date.now() / 1000) + 300,
             scope: "ceird:read",
             sid: "session_abc",
@@ -298,6 +333,7 @@ describe("mcp http handler", () => {
         Promise.resolve(
           handler(request, {
             client_id: "mcp-client",
+            ceird_org_id: "org_123",
             exp: Math.floor(Date.now() / 1000) + 300,
             scope: "ceird:read",
             sid: "session_abc",
@@ -364,6 +400,7 @@ describe("mcp http handler", () => {
         Promise.resolve(
           handler(request, {
             client_id: "mcp-client",
+            ceird_org_id: "org_123",
             exp: Math.floor(Date.now() / 1000) + 300,
             scope: "ceird:read",
             sid: "session_abc",
@@ -488,6 +525,7 @@ describe("mcp http handler", () => {
         Promise.resolve(
           handler(request, {
             client_id: "mcp-client",
+            ceird_org_id: "org_123",
             exp: Math.floor(Date.now() / 1000) + 300,
             scope: "ceird:read",
             sid: "session_abc",
@@ -561,6 +599,7 @@ describe("mcp http handler", () => {
         Promise.resolve(
           handler(request, {
             client_id: "mcp-client",
+            ceird_org_id: "org_123",
             exp: Math.floor(Date.now() / 1000) + 300,
             scope: "ceird:read",
             sub: "user_abc",
@@ -602,6 +641,7 @@ describe("mcp http handler", () => {
       (_verifyOptions, handler) => (request: Request) =>
         Promise.resolve(
           handler(request, {
+            ceird_org_id: "org_123",
             exp: Math.floor(Date.now() / 1000) + 300,
             scope: "ceird:read",
             sid: "session_abc",
@@ -701,6 +741,7 @@ describe("mcp http handler", () => {
         Promise.resolve(
           handler(request, {
             client_id: request.headers.get("x-test-client-id") ?? "mcp-client",
+            ceird_org_id: "org_123",
             exp: Math.floor(Date.now() / 1000) + 300,
             scope: "ceird:read",
             sid: "session_abc",

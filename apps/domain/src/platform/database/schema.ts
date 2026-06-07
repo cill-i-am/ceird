@@ -18,6 +18,7 @@ export {
 } from "../../domains/comments/schema.js";
 export {
   account,
+  authSecurityAuditEvent,
   authSchema,
   invitation,
   jwks,
@@ -29,6 +30,7 @@ export {
   organization,
   rateLimit,
   session,
+  twoFactor,
   user,
   verification,
 } from "../../domains/identity/authentication/schema.js";

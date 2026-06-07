@@ -1,5 +1,10 @@
 import { Schema } from "effect";
 
+export const ACCOUNT_PASSWORD_MIN_LENGTH = 12 as const;
+export const ACCOUNT_PASSWORD_MAX_LENGTH = 256 as const;
+export const ACCOUNT_PASSWORD_LENGTH_MESSAGE =
+  "Use 12 to 256 characters." as const;
+
 export const accountEmailSchema = Schema.Trim.pipe(
   Schema.check(
     Schema.isNonEmpty(),
@@ -8,7 +13,16 @@ export const accountEmailSchema = Schema.Trim.pipe(
 );
 
 export const accountPasswordSchema = Schema.String.pipe(
-  Schema.check(Schema.isMinLength(8))
+  Schema.check(
+    Schema.isMinLength(ACCOUNT_PASSWORD_MIN_LENGTH),
+    Schema.isMaxLength(ACCOUNT_PASSWORD_MAX_LENGTH)
+  ),
+  Schema.annotate({
+    message: ACCOUNT_PASSWORD_LENGTH_MESSAGE,
+  })
+);
+export const loginPasswordSchema = Schema.String.pipe(
+  Schema.check(Schema.isNonEmpty())
 );
 
 export const accountNameSchema = Schema.Trim.pipe(
@@ -17,7 +31,7 @@ export const accountNameSchema = Schema.Trim.pipe(
 
 const LoginInputSchema = Schema.Struct({
   email: accountEmailSchema,
-  password: accountPasswordSchema,
+  password: loginPasswordSchema,
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });

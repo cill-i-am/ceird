@@ -238,6 +238,12 @@ type DomainWorkerStackRuntimeConfigEnv = Required<
     | "MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES"
     | "MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS"
     | "AUTH_COOKIE_DOMAIN"
+    | "AUTH_CAPTCHA_ENABLED"
+    | "AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE"
+    | "AUTH_CAPTCHA_TURNSTILE_SECRET_KEY"
+    | "AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED"
+    | "AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE"
+    | "BETTER_AUTH_SECRETS"
     | "CEIRD_LOCAL_DEV"
     | "DATABASE_URL"
   >;
@@ -297,7 +303,9 @@ type DomainWorkerRuntimeStringValueKeys = Exclude<
   keyof DomainWorkerStackRuntimeConfigEnv,
   | "AGENT_INTERNAL_SECRET"
   | "AUTH_EMAIL_FROM"
+  | "AUTH_CAPTCHA_TURNSTILE_SECRET_KEY"
   | "BETTER_AUTH_SECRET"
+  | "BETTER_AUTH_SECRETS"
   | "DATABASE_URL"
   | "GOOGLE_MAPS_API_KEY"
 >;
@@ -495,6 +503,14 @@ describe("Cloudflare stack", () => {
       OAUTH_ISSUER_URL: "https://api.example.com/api/auth",
     });
     expect(domainEnv.BETTER_AUTH_SECRET).toBe(betterAuthSecret);
+    expect(domainEnv.BETTER_AUTH_SECRETS).toBeUndefined();
+    expect(domainEnv.AUTH_CAPTCHA_ENABLED).toBeUndefined();
+    expect(domainEnv.AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE).toBeUndefined();
+    expect(domainEnv.AUTH_CAPTCHA_TURNSTILE_SECRET_KEY).toBeUndefined();
+    expect(domainEnv.AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED).toBeUndefined();
+    expect(
+      domainEnv.AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE
+    ).toBeUndefined();
     expect(mcpEnv).toStrictEqual({
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
       NODE_ENV: "production",
@@ -737,6 +753,82 @@ describe("Cloudflare stack", () => {
     ).toMatchObject({
       AUTH_RATE_LIMIT_ENABLED: "false",
     });
+  });
+
+  it("passes configured password compromise check overrides through to domain Workers", () => {
+    const betterAuthSecret = Redacted.make("better-auth-secret");
+    const agentInternalSecret = Redacted.make("agent-secret");
+
+    expect(
+      makeDomainWorkerEnv({
+        agentInternalSecret,
+        betterAuthSecret,
+        config: {
+          ...configWithoutCloudflareBootstrapSecrets,
+          authPasswordCompromiseCheckEnabled: false,
+          authPasswordCompromiseCheckRangeUrlOverride:
+            "http://127.0.0.1:8790/range",
+        },
+      })
+    ).toMatchObject({
+      AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED: "false",
+      AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE:
+        "http://127.0.0.1:8790/range",
+    });
+  });
+
+  it("passes configured Turnstile captcha settings to domain and app Workers", () => {
+    const betterAuthSecret = Redacted.make("better-auth-secret");
+    const agentInternalSecret = Redacted.make("agent-secret");
+    const turnstileSecretKey = Redacted.make("turnstile-secret-key");
+    const config = {
+      ...configWithoutCloudflareBootstrapSecrets,
+      authCaptchaEnabled: true,
+      authCaptchaSiteVerifyUrlOverride: "http://127.0.0.1:8787/siteverify",
+      authCaptchaTurnstileSecretKey: turnstileSecretKey,
+      authCaptchaTurnstileSiteKey: "turnstile-site-key",
+    };
+
+    const domainEnv = makeDomainWorkerEnv({
+      agentInternalSecret,
+      betterAuthSecret,
+      config,
+    });
+    const appEnv = makeAppWorkerEnv({
+      agentOrigin: "https://agent.example.com",
+      apiOrigin: "https://api.example.com",
+      config,
+      syncOrigin: "https://sync.example.com",
+    });
+
+    expect(domainEnv).toMatchObject({
+      AUTH_CAPTCHA_ENABLED: "true",
+      AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE: "http://127.0.0.1:8787/siteverify",
+      AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: turnstileSecretKey,
+    });
+    expect(appEnv).toMatchObject({
+      VITE_AUTH_CAPTCHA_ENABLED: "true",
+      VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY: "turnstile-site-key",
+    });
+    expect(appEnv).not.toHaveProperty("AUTH_CAPTCHA_TURNSTILE_SECRET_KEY");
+    expect(appEnv).not.toHaveProperty("VITE_AUTH_CAPTCHA_TURNSTILE_SECRET_KEY");
+  });
+
+  it("passes configured Better Auth rotation secrets through to domain Workers", () => {
+    const betterAuthSecret = Redacted.make("better-auth-secret");
+    const betterAuthSecrets = Redacted.make(
+      "2:current-secret-value-0123456789abcdef,1:previous-secret-value-0123456789abcdef"
+    );
+    const agentInternalSecret = Redacted.make("agent-secret");
+
+    const domainEnv = makeDomainWorkerEnv({
+      agentInternalSecret,
+      betterAuthSecret,
+      betterAuthSecrets,
+      config: configWithoutCloudflareBootstrapSecrets,
+    });
+
+    expect(domainEnv.BETTER_AUTH_SECRETS).toBe(betterAuthSecrets);
   });
 
   it("passes configured MCP authorized app cache settings through to domain Workers", () => {
@@ -1196,6 +1288,9 @@ describe("Cloudflare stack", () => {
       "postgresql://ceird:secret@example.neon.tech/ceird"
     );
     expect(domainWorkerProps.env.CEIRD_LOCAL_DEV).toBe("true");
+    expect(domainWorkerProps.env.AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED).toBe(
+      "false"
+    );
     expect(domainWorkerProps.env.AUTH_APP_ORIGIN).toBe(
       "http://app.localhost:1337"
     );

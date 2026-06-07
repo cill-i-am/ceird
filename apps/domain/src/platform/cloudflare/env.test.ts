@@ -68,6 +68,49 @@ describe("Cloudflare Worker environment config", () => {
     expect(config.get("AUTH_RATE_LIMIT_ENABLED")).toBe("false");
   });
 
+  it("propagates the password compromise check override when Alchemy provides one", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED: "false",
+      AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE:
+        "http://127.0.0.1:8790/range",
+    });
+
+    expect(config.get("AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED")).toBe("false");
+    expect(
+      config.get("AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE")
+    ).toBe("http://127.0.0.1:8790/range");
+  });
+
+  it("propagates optional Turnstile captcha settings", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      AUTH_CAPTCHA_ENABLED: "true",
+      AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE: "http://127.0.0.1:8787/siteverify",
+      AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: "turnstile-secret-key",
+    });
+
+    expect(config.get("AUTH_CAPTCHA_ENABLED")).toBe("true");
+    expect(config.get("AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE")).toBe(
+      "http://127.0.0.1:8787/siteverify"
+    );
+    expect(config.get("AUTH_CAPTCHA_TURNSTILE_SECRET_KEY")).toBe(
+      "turnstile-secret-key"
+    );
+  });
+
+  it("propagates optional Better Auth rotation secrets", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      BETTER_AUTH_SECRETS:
+        "2:current-secret-value-0123456789abcdef,1:previous-secret-value-0123456789abcdef",
+    });
+
+    expect(config.get("BETTER_AUTH_SECRETS")).toBe(
+      "2:current-secret-value-0123456789abcdef,1:previous-secret-value-0123456789abcdef"
+    );
+  });
+
   it("propagates optional OAuth MCP URL overrides", () => {
     const config = domainWorkerEnvConfigMap({
       ...makeWorkerEnv(),

@@ -41,6 +41,9 @@ describe("domain HTTP API", () => {
     expect(spec.paths["/sites"]?.get?.operationId).toBe("sites.listSites");
     expect(spec.paths["/sites"]?.post?.operationId).toBe("sites.createSite");
     expect(spec.paths["/labels"]?.get?.operationId).toBe("labels.listLabels");
+    expect(
+      spec.paths["/organization/security/activity"]?.get?.operationId
+    ).toBe("identity.listOrganizationSecurityActivity");
   });
 
   it("serves job options with an unverified site location", async () => {
@@ -140,6 +143,10 @@ describe("domain HTTP API", () => {
         })
       );
       expect(ownerOrglessResponse.status).toBe(403);
+
+      await withPool(databaseUrl, async (pool) => {
+        await verifyUserEmail(pool, ownerEmail);
+      });
 
       const ownerOrgId = await createOrganization(api, ownerCookieJar, {
         organizationName: "Owner Organization",
@@ -324,6 +331,17 @@ async function queryUserIdByEmail(pool: Pool, email: string) {
   }
 
   return userId;
+}
+
+async function verifyUserEmail(pool: Pool, email: string) {
+  const result = await pool.query(
+    `update "user" set email_verified = true where email = $1`,
+    [email]
+  );
+
+  if (result.rowCount !== 1) {
+    throw new Error(`Unable to verify user ${email}`);
+  }
 }
 
 async function querySessionIdByUserId(pool: Pool, userId: string) {

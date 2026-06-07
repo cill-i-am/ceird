@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { readGlobalAppServerContext } from "#/features/auth/app-server-context";
 import { OAuthConsentPage } from "#/features/auth/oauth-consent-page";
 import type { OAuthConsentSearch } from "#/features/auth/oauth-consent-page";
 
@@ -70,6 +71,7 @@ function normalizeOAuthConsentSearchPrimitive(
 
 function OAuthConsentRoute() {
   const search = Route.useSearch();
+  const { requestSearch } = readGlobalAppServerContext();
 
-  return <OAuthConsentPage search={search} />;
+  return <OAuthConsentPage rawSearch={requestSearch} search={search} />;
 }

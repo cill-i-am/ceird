@@ -18,6 +18,7 @@ interface User {
   email: string;
   image?: string | null;
   emailVerified: boolean;
+  twoFactorEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -93,6 +94,7 @@ describe("server session lookup", () => {
         email: "fallback@example.com",
         image: null,
         emailVerified: false,
+        twoFactorEnabled: false,
         createdAt: "2026-04-04T17:08:12.488Z",
         updatedAt: "2026-04-04T17:08:12.488Z",
       },
@@ -151,6 +153,7 @@ describe("server session lookup", () => {
         email: "cached@example.com",
         image: null,
         emailVerified: true,
+        twoFactorEnabled: false,
         createdAt: "2026-04-04T17:08:12.488Z",
         updatedAt: "2026-04-04T17:08:12.488Z",
       },
@@ -284,6 +287,7 @@ describe("server session lookup", () => {
           email: "fallback@example.com",
           image: null,
           emailVerified: false,
+          twoFactorEnabled: false,
           createdAt: "2026-04-04T17:08:12.488Z",
           updatedAt: "2026-04-04T17:08:12.488Z",
         },

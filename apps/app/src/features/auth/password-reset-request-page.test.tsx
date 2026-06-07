@@ -7,12 +7,19 @@ import type { authClient as AuthClient } from "#/lib/auth-client";
 import type * as AuthClientModule from "#/lib/auth-client";
 import { buildPasswordResetRedirectTo } from "#/lib/auth-client";
 
+import { AUTH_CAPTCHA_RESPONSE_HEADER } from "./auth-captcha";
 import { passwordResetRequestSchema } from "./auth-schemas";
 import { PasswordResetRequestPage } from "./password-reset-request-page";
 
 const { mockedRequestPasswordReset } = vi.hoisted(() => ({
   mockedRequestPasswordReset: vi.fn<
-    (input: { email: string; redirectTo: string }) => Promise<{
+    (input: {
+      email: string;
+      redirectTo: string;
+      fetchOptions?: {
+        headers: Record<string, string>;
+      };
+    }) => Promise<{
       data: { status: boolean } | null;
       error: {
         message: string;
@@ -78,6 +85,9 @@ describe("password reset request page", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
+    delete (window as unknown as { turnstile?: unknown }).turnstile;
+    document.querySelector("#ceird-turnstile-script")?.remove();
     vi.clearAllMocks();
   });
 
@@ -121,6 +131,57 @@ describe("password reset request page", () => {
     expect(
       screen.getByRole("heading", { name: "Check your email" })
     ).toBeInTheDocument();
+  }, 10_000);
+
+  it("passes the Turnstile token header when password reset captcha is enabled", async () => {
+    const user = userEvent.setup();
+    const renderTurnstile = vi.fn<
+      (
+        container: HTMLElement,
+        options: { callback: (token: string) => void }
+      ) => string
+    >(
+      (
+        _container: HTMLElement,
+        options: { callback: (token: string) => void }
+      ) => {
+        options.callback("captcha-token");
+        return "widget_123";
+      }
+    );
+
+    vi.stubEnv("VITE_AUTH_CAPTCHA_ENABLED", "true");
+    vi.stubEnv("VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY", "turnstile-site-key");
+    (
+      window as unknown as { turnstile: { render: typeof renderTurnstile } }
+    ).turnstile = {
+      render: renderTurnstile,
+    };
+
+    render(<PasswordResetRequestPage search={{ invitation: "inv_123" }} />);
+
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+
+    const submitButton = screen.getByRole("button", {
+      name: /send reset link/i,
+    });
+    await waitFor(() => expect(submitButton).toBeEnabled());
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(mockedRequestPasswordReset).toHaveBeenCalledWith({
+        email: "person@example.com",
+        redirectTo: buildPasswordResetRedirectTo(
+          window.location.origin,
+          "inv_123"
+        ),
+        fetchOptions: {
+          headers: {
+            [AUTH_CAPTCHA_RESPONSE_HEADER]: "captcha-token",
+          },
+        },
+      });
+    });
   }, 10_000);
 
   it("uses router links for back-to-login navigation before and after submit", async () => {

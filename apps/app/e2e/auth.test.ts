@@ -4,6 +4,11 @@ import { createRequire } from "node:module";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+import {
+  markUserEmailUnverified,
+  markUserEmailVerified,
+} from "./helpers/email-verification";
+import { createTestPassword } from "./helpers/test-account";
 import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { LoginPage } from "./pages/login-page";
 import { SignupPage } from "./pages/signup-page";
@@ -115,13 +120,14 @@ async function signUpAndCreateOrganization(
   const signupPage = new SignupPage(page);
   const createOrganizationPage = new CreateOrganizationPage(page);
   const email = options?.email ?? createTestEmail("signup");
-  const password = options?.password ?? "password123";
+  const password = options?.password ?? createTestPassword();
 
   await signupPage.goto();
   await signupPage.name.fill(options?.name ?? "Taylor Example");
   await signupPage.email.fill(email);
   await signupPage.password.fill(password);
   await signupPage.submit.click();
+  await markUserEmailVerified(email);
 
   await createOrganizationPage.expectLoaded();
   await createOrganizationPage.name.fill(
@@ -190,11 +196,9 @@ test.describe("auth pages", () => {
     await expect(loginPage.heading).toBeVisible();
     await loginPage.email.fill("person@example.com");
     await loginPage.email.blur();
-    await loginPage.password.fill("short");
-    await loginPage.password.blur();
     await loginPage.submit.click();
 
-    await expect(loginPage.alerts).toContainText("Use at least 8 characters.");
+    await expect(loginPage.alerts).toContainText("This field is required.");
   });
 
   test("signup shows password length validation inline", async ({ page }) => {
@@ -210,7 +214,7 @@ test.describe("auth pages", () => {
     await signupPage.password.blur();
     await signupPage.submit.click();
 
-    await expect(signupPage.alerts).toContainText("Use at least 8 characters.");
+    await expect(signupPage.alerts).toContainText("Use 12 to 256 characters.");
   });
 
   test("signup creates an org before entering the app", async ({ page }) => {
@@ -227,6 +231,9 @@ test.describe("auth pages", () => {
       organizationName: "Verification Banner Org",
     });
 
+    await markUserEmailUnverified(email);
+    await page.reload();
+
     const banner = page.getByRole("alert", {
       name: "Email verification reminder",
     });
@@ -241,10 +248,14 @@ test.describe("auth pages", () => {
   test("lets an unverified user request another verification email from the app shell", async ({
     page,
   }) => {
+    const email = createTestEmail("verification-resend");
+
     await signUpAndCreateOrganization(page, {
-      email: createTestEmail("verification-resend"),
+      email,
       organizationName: "Verification Resend Org",
     });
+    await markUserEmailUnverified(email);
+    await page.reload();
 
     const banner = page.getByRole("alert", {
       name: "Email verification reminder",
@@ -269,7 +280,7 @@ test.describe("auth pages", () => {
     request,
   }) => {
     const email = createTestEmail("login");
-    const password = "password123";
+    const password = createTestPassword();
     const loginPage = new LoginPage(page);
     const createOrganizationPage = new CreateOrganizationPage(page);
     const response = await request.post(
@@ -287,6 +298,7 @@ test.describe("auth pages", () => {
     );
 
     expect(response.ok()).toBeTruthy();
+    await markUserEmailVerified(email);
 
     await loginPage.goto();
     await loginPage.email.fill(email);
@@ -307,7 +319,7 @@ test.describe("auth pages", () => {
     test.setTimeout(60_000);
 
     const email = createTestEmail("existing-org-login");
-    const password = "password123";
+    const password = createTestPassword();
     const signupPage = new SignupPage(page);
     const createOrganizationPage = new CreateOrganizationPage(page);
     const loginPage = new LoginPage(page);
@@ -317,6 +329,7 @@ test.describe("auth pages", () => {
     await signupPage.email.fill(email);
     await signupPage.password.fill(password);
     await signupPage.submit.click();
+    await markUserEmailVerified(email);
 
     await createOrganizationPage.expectLoaded();
     await createOrganizationPage.name.fill("Existing Org Team");
@@ -342,8 +355,8 @@ test.describe("auth pages", () => {
     test.setTimeout(60_000);
 
     const email = createTestEmail("password-reset");
-    const oldPassword = "password123";
-    const newPassword = "new-password-123";
+    const oldPassword = createTestPassword("CeirdOldPassword");
+    const newPassword = createTestPassword("CeirdNewPassword");
     const loginPage = new LoginPage(page);
     const createOrganizationPage = new CreateOrganizationPage(page);
     const response = await request.post(
@@ -361,6 +374,7 @@ test.describe("auth pages", () => {
     );
 
     expect(response.ok()).toBeTruthy();
+    await markUserEmailVerified(email);
 
     await page.goto("/forgot-password");
     await waitForSubmitHydration(page);

@@ -5,6 +5,7 @@ import {
   decodeCreateOrganizationInput,
   decodeInvitationId,
   decodeOrganizationSummary,
+  decodeOrganizationSecurityActivityListResponse,
   decodeOrganizationRole,
   decodeOrganizationSlug,
   decodeSessionId,
@@ -16,6 +17,8 @@ import {
   isReservedOrganizationSlug,
   isExternalOrganizationRole,
   isInternalOrganizationRole,
+  ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES,
+  ORGANIZATION_SECURITY_ACTIVITY_TARGET_TYPES,
   ORGANIZATION_SLUG_PATTERN,
 } from "./index.js";
 
@@ -220,5 +223,108 @@ describe("identity id boundaries", () => {
     expect(() => decodeUserId("")).toThrow(/Expected/);
     expect(() => decodeSessionId("")).toThrow(/Expected/);
     expect(() => decodeInvitationId("")).toThrow(/Expected/);
+  }, 1000);
+});
+
+describe("organization security activity boundary", () => {
+  it("decodes safe organization security activity responses", () => {
+    expect(
+      decodeOrganizationSecurityActivityListResponse({
+        items: [
+          {
+            actor: {
+              email: "owner@example.com",
+              id: "user_owner",
+              name: "Owner User",
+            },
+            createdAt: "2026-06-07T10:30:00.000Z",
+            eventType: "organization_member_role_updated",
+            id: "audit_123",
+            organizationId: "org_123",
+            roleChange: {
+              after: "admin",
+              before: "member",
+            },
+            summary: "Changed a member role from Member to Admin.",
+            target: {
+              label: "Taylor Member",
+              type: "member",
+              userId: "user_member",
+            },
+          },
+        ],
+        nextCursor: "cursor_123",
+      })
+    ).toStrictEqual({
+      items: [
+        {
+          actor: {
+            email: "owner@example.com",
+            id: "user_owner",
+            name: "Owner User",
+          },
+          createdAt: "2026-06-07T10:30:00.000Z",
+          eventType: "organization_member_role_updated",
+          id: "audit_123",
+          organizationId: "org_123",
+          roleChange: {
+            after: "admin",
+            before: "member",
+          },
+          summary: "Changed a member role from Member to Admin.",
+          target: {
+            label: "Taylor Member",
+            type: "member",
+            userId: "user_member",
+          },
+        },
+      ],
+      nextCursor: "cursor_123",
+    });
+  }, 1000);
+
+  it("rejects raw provenance fields in organization security activity items", () => {
+    expect(() =>
+      decodeOrganizationSecurityActivityListResponse({
+        items: [
+          {
+            actor: {
+              email: "owner@example.com",
+              id: "user_owner",
+              name: "Owner User",
+            },
+            createdAt: "2026-06-07T10:30:00.000Z",
+            eventType: "organization_created",
+            id: "audit_123",
+            organizationId: "org_123",
+            sourceIp: "203.0.113.10",
+            summary: "Created the organization.",
+            target: {
+              label: "Acme Field Ops",
+              type: "organization",
+            },
+            userAgent: "Ceird Test Browser",
+          },
+        ],
+      })
+    ).toThrow(/[Uu]nexpected/);
+  }, 1000);
+
+  it("catalogs the owner/admin-visible event and target type allowlists", () => {
+    expect(ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES).toStrictEqual([
+      "organization_created",
+      "organization_updated",
+      "organization_invitation_created",
+      "organization_invitation_resent",
+      "organization_invitation_canceled",
+      "organization_invitation_accepted",
+      "organization_member_role_updated",
+      "organization_member_removed",
+    ]);
+    expect(ORGANIZATION_SECURITY_ACTIVITY_TARGET_TYPES).toStrictEqual([
+      "organization",
+      "invitation",
+      "member",
+    ]);
   }, 1000);
 });

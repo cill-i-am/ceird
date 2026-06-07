@@ -10,6 +10,10 @@ the codebase across:
 - `apps/app`, which owns auth UI, route gating, and session-aware navigation
 
 It describes the current implementation, not a hypothetical target state.
+The current auth/organization authorization split is mapped in
+[`auth-organization-permission-matrix.md`](auth-organization-permission-matrix.md).
+Pending Better Auth hardening decisions are tracked in
+[`better-auth-decision-log.md`](better-auth-decision-log.md).
 
 ## Current Scope
 
@@ -20,12 +24,30 @@ Authentication currently supports only:
 - email verification
 - password reset request
 - password reset completion
+- Cloudflare Turnstile captcha for selected public auth flows when enabled
+- profile updates
+- verified email-change request and completion
+- authenticated password change
 - sign-out
 - session lookup
+- account security settings with active-session listing and other-session
+  revocation
+- account security settings with optional TOTP two-factor enrollment, backup
+  code acknowledgement/regeneration, and disable controls
+- inline two-factor login challenge with TOTP and backup-code verification
+- versioned Better Auth secret rotation config
+- verified-email gates for high-trust organization and OAuth/MCP actions
 - route protection for the authenticated app shell
 - redirecting authenticated users away from guest-only auth pages
+- Better Auth organization creation, active organization switching,
+  invitations, invitation acceptance, member listing, member removal, and member
+  role changes
+- Ceird domain authorization for organization actors and role-scoped workflows
 - OAuth/OIDC authorization-server configuration for MCP clients
 - app-owned OAuth consent UI for Better Auth authorization requests
+- owner/admin organization security activity review
+- Better Auth two-factor persistence and endpoints for optional TOTP plus backup
+  codes
 - MCP resource-server bearer-token validation and tool authorization
 
 Authentication explicitly does not currently support:
@@ -33,7 +55,8 @@ Authentication explicitly does not currently support:
 - social auth
 - magic links or OTP flows
 - redirect-back after login or signup
-- roles, permissions, or authorization rules
+- passkeys, API keys, SSO, or SCIM
+- user-defined organization roles or Better Auth dynamic access control
 - custom app-owned auth endpoints such as `/me` or `/viewer`
 - a custom app-owned auth service layer that wraps Better Auth behavior
 - machine-to-machine `client_credentials` grants for Ceird MCP scopes
@@ -99,15 +122,75 @@ Current config decisions:
   `offline_access`, `ceird:read`, `ceird:write`, and `ceird:admin`
 - unauthenticated dynamic OAuth client registration is enabled for MCP clients,
   defaulting newly registered clients to the identity scopes plus `ceird:read`
-  while allowing the full Ceird MCP scope set
+  and rejecting `ceird:write` or `ceird:admin`; write/admin clients must be
+  manually registered or approved through a future accountable owner/admin flow
+- Ceird normalizes accepted dynamic client registration requests to public
+  OAuth clients by forwarding `token_endpoint_auth_method: "none"` to Better
+  Auth, including authenticated registrations that omit the field. Explicit
+  confidential client metadata such as `token_endpoint_auth_method:
+"client_secret_basic"` or `type: "web"` is rejected before Better Auth can
+  issue a client secret.
+- Better Auth's authenticated OAuth client write endpoints
+  (`/oauth2/create-client`, `/oauth2/update-client`, client secret rotation,
+  delete-client, and their admin variants) are disabled at the Ceird auth
+  handler boundary until that approval flow exists
+- dynamic client registration rejects unsafe redirect and metadata shapes before
+  Better Auth persists a client: non-HTTPS redirects outside local/dev,
+  loopback redirects outside local/dev, wildcard or fragment redirects,
+  malformed URL metadata, client-credentials or unsupported grants, unsupported
+  response types, repeated or oversized scope metadata, consent-skipping
+  attempts, unsupported metadata fields, malformed array metadata, oversized
+  pre-handler request bodies, and oversized client metadata
 - OAuth grants are limited to authorization-code and refresh-token flows;
   client-credentials tokens are intentionally not enabled for Ceird scopes
 - the OAuth Provider points clients at the existing app login and consent pages
   through app-owned absolute URLs for `/login` and `/oauth/consent`
+- `ceird:*` OAuth consent is organization-scoped through Better Auth
+  `postLogin.consentReferenceId`; the stored consent reference id is the active
+  Better Auth organization id, while identity-only consent remains account-level
+- if a `ceird:*` request reaches the post-login authorization step without an
+  active organization, Better Auth redirects to the app consent route for a
+  blocking workspace warning; server-side consent approval still fails with
+  `OAUTH_ACTIVE_ORGANIZATION_REQUIRED` if no active organization exists
+- email/password auth uses an explicit 12 to 256 character password length
+  policy through Better Auth `minPasswordLength` and `maxPasswordLength`
+- password creation and mutation paths use Ceird's Better Auth password
+  compromise check plugin for `/sign-up/email`, `/change-password`, and
+  `/reset-password`; deployed-looking auth config enables it by default, while
+  `CEIRD_LOCAL_DEV=true` or a strict loopback/`.localhost` auth base URL keeps it
+  disabled unless explicitly overridden
+- Better Auth's captcha plugin is enabled when `AUTH_CAPTCHA_ENABLED=true`
+  using Cloudflare Turnstile. The first rollout protects `/sign-up/email`,
+  `/request-password-reset`, and `/send-verification-email`; ordinary
+  `/sign-in/email` is intentionally not always challenged. Conditional captcha
+  after repeated failed sign-in attempts is deferred to `TSK-116`.
+- `AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE` is accepted only for strict loopback
+  or `.localhost` verifier stubs. Hostnames that merely start with `127.`, such
+  as `127.evil.example`, are rejected at both the domain config and Alchemy
+  stage config boundaries.
 - Better Auth remains the native owner of
   `/api/auth/request-password-reset` and `/api/auth/reset-password`
+- Better Auth remains the native owner of profile updates, verified email
+  changes, and password changes; the app only renders forms around those client
+  APIs
 - rate limiting is enabled and stored in the database
 - `BETTER_AUTH_BASE_URL` is required
+- `BETTER_AUTH_SECRET` is required as the legacy/current fallback secret and
+  must be at least 32 characters
+- `BETTER_AUTH_SECRETS` is optional versioned rotation material formatted as
+  comma-separated `<version>:<secret>` entries, for example
+  `2:current-secret,1:previous-secret`; versions must be unique non-negative
+  integers, each secret must be at least 32 characters, and the highest version
+  is passed to Better Auth first as the current signing material
+- `AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED` optionally overrides the password
+  compromise check. When omitted, the check is enabled unless
+  `CEIRD_LOCAL_DEV=true` or `BETTER_AUTH_BASE_URL` is strict loopback or
+  `.localhost`, so missing `NODE_ENV` does not disable deployed-stage password
+  screening.
+- `AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE` optionally points the
+  password compromise check at a strict loopback or `.localhost` range API stub
+  for deterministic tests and local browser smoke runs; deployed stages should
+  use the default HIBP provider.
 - `MCP_RESOURCE_URL` is configured from the stage MCP hostname for deployed
   Workers; when omitted in package-local runs the valid MCP resource audience
   defaults to the API origin plus `/mcp`
@@ -211,17 +294,233 @@ Current rate-limit rules:
 
 - `POST /sign-in/email`: 5 attempts per 60 seconds
 - `POST /sign-up/email`: 3 attempts per 60 seconds
+- `POST /request-password-reset`: 3 attempts per 60 seconds
 - `POST /send-verification-email`: 3 attempts per 60 seconds
+- `POST /change-email`: 3 attempts per 60 seconds
+- `POST /change-password`: 5 attempts per 60 seconds
+- `POST /oauth2/register`: 5 attempts per 60 seconds
+- `POST /organization/invite-member`: 30 attempts per 60 minutes by client IP,
+  actor, and recipient email; 200 attempts per organization per 24 hours
 
 Current note:
 
 - auth config currently defines custom rate-limit rules for sign-in, sign-up,
-  and verification email delivery
+  password reset request, verification email delivery, change email, change
+  password, dynamic OAuth client registration, and organization invitations
+- client IP resolution for Better Auth rate limits and Ceird atomic abuse
+  reservations checks `CF-Connecting-IP` first, then `X-Forwarded-For`, matching
+  the deployed Cloudflare Worker path while retaining local/proxy fallback
 - Better Auth still stores rate-limit state in the `rate_limit` table, but the
   auth runtime installs a small database-backed `customStorage` wrapper so
   rate-limit reads and writes can be measured as `auth.rateLimitReadMs` and
   `auth.rateLimitWriteMs`
+- public abuse endpoints (`sign-in`, `sign-up`, password reset request,
+  verification resend, dynamic OAuth client registration, organization
+  invitation submission) also use an atomic pre-handler reservation under
+  `ceird-auth-abuse:*` rate-limit keys; reservation failures fail closed with
+  `AUTH_RATE_LIMIT_UNAVAILABLE` and a short `Retry-After`, and over-limit
+  reservations return `429` before Better Auth performs endpoint side effects
+- delivery endpoints reserve additional flow-specific keys before email side
+  effects: password reset by target email, verification resend by target email
+  and authenticated user when available, change-email confirmation by
+  destination email and authenticated user, and organization invitation by
+  recipient email. Email-derived key components are HMAC digests using the
+  active Better Auth secret, so the `rate_limit` table and telemetry do not
+  store raw recipient addresses for those counters.
+- organization invitation submission also reserves actor and organization
+  scoped keys when a Better Auth session and active organization can be
+  resolved: 30 invitations per actor per hour and 200 invitations per
+  organization per day. An explicit invite `organizationId` must match the
+  active session organization before Ceird delegates to Better Auth.
+- oversized, unreadable, or unsupported delivery request bodies fail before
+  Better Auth side effects so malformed padding cannot bypass flow-specific
+  email counters
+- Better Auth's organization plugin enforces the first-release normal-path
+  structural limits for organization creation, member count, and pending
+  invitations: 10 organizations per user, 200 members per organization, and
+  100 pending invitations per organization. Ceird also checks the 10
+  organizations-per-user cap before invitation acceptance so accepted invites
+  cannot bypass the creation-only plugin limit.
+- `TSK-115` tracks database-atomic cardinality enforcement for concurrent
+  organization creation, invitation creation, and invitation acceptance races.
+- authenticated settings endpoints (`change-email` and `change-password`) also
+  use atomic pre-handler reservations while storage is healthy, but reservation
+  failures fail open so a rate-limit storage outage does not block an already
+  authenticated account-management action
+- Better Auth `customStorage` rate-limit reads fail open with warning
+  telemetry; this covers response-accounting reads after endpoint side effects
+  and any Better Auth request-time limiter path that is not covered by Ceird's
+  pre-handler reservation
+- rate-limit storage write failures remain non-blocking and emit sanitized
+  warning telemetry
+- fail-closed public abuse endpoints require a resolvable client IP for atomic
+  reservation; if the IP cannot be resolved, they return the stable
+  `AUTH_RATE_LIMIT_UNAVAILABLE` response rather than silently bypassing the
+  public abuse control
 - password reset revokes existing sessions once the new password is accepted
+- authenticated password changes request other-session revocation through the
+  Better Auth client
+- Turnstile captcha, when configured, is required for sign-up, password reset
+  request, and verification resend. The app passes the token through Better
+  Auth's `x-captcha-response` header and keeps normal sign-in captcha-free
+  until a conditional failed-attempt design exists.
+- conditional captcha after repeated failed sign-in attempts remains a backlog
+  spike in `TSK-116`
+- captcha provider timeout, fail-open/fail-closed, and Ceird-owned telemetry
+  policy remains a backlog spike in `TSK-121`
+- `rate_limit` table retention and cleanup policy remains a backlog spike in
+  `TSK-113`
+- durable auth email delivery de-duplication across queue redelivery remains a
+  backlog spike in `TSK-114`
+- raw auth audit provenance retention and anonymization remains a backlog spike
+  in `TSK-120`
+
+### Auth Abuse Telemetry
+
+Auth abuse logs use stable `authAbuseSignal`, `authAbuseSignalSeverity`, and
+`authAbuseAlertPolicy` annotations so dashboards and alerts can be built without
+parsing freeform messages.
+
+Current signal policy:
+
+| Signal                                             | Alert policy                                                                                         | Notes                                                                                                                                                                                                                             |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rate_limit_hit`                                   | `dashboard_until_sustained_spike`                                                                    | Emitted when the Ceird pre-handler abuse reservation blocks a request.                                                                                                                                                            |
+| `rate_limit_reservation_failure`                   | `alert_on_sustained_storage_failure` or `dashboard_until_sustained_storage_failure`                  | Emitted when the Ceird pre-handler abuse reservation cannot run; fail-closed public endpoints are high severity, authenticated settings endpoints are dashboard severity.                                                         |
+| `rate_limit_storage_read_failure`                  | `dashboard_until_sustained_storage_failure`                                                          | Emitted when Better Auth `customStorage` cannot read rate-limit state and falls open.                                                                                                                                             |
+| `rate_limit_storage_write_failure`                 | `dashboard_until_sustained_storage_failure`                                                          | Emitted when Better Auth `customStorage` cannot write rate-limit state; writes remain non-blocking.                                                                                                                               |
+| `rate_limit_client_ip_unavailable`                 | `alert_on_sustained_client_ip_failure` or `dashboard_until_sustained_client_ip_failure`              | Emitted when an atomic reservation endpoint cannot resolve a client IP; fail-closed public endpoints are high severity.                                                                                                           |
+| `oauth_dynamic_client_registration_rejected`       | `alert_on_suspicious_oauth_registration` or `dashboard_until_sustained_oauth_registration_rejection` | Emitted when Ceird rejects a dynamic client registration request before Better Auth persists it. Privileged scopes, client-credentials or unsupported grants, unsupported response types, and unsafe redirects are high severity. |
+| `password_compromise_provider_failure`             | `alert_on_repeated_provider_failure`                                                                 | HIBP outages fail open but are high-severity.                                                                                                                                                                                     |
+| `auth_email_provider_failure`                      | `alert_on_email_failure_threshold`                                                                   | Cloudflare email binding send failures.                                                                                                                                                                                           |
+| `auth_email_delivery_failure`                      | `alert_on_email_failure_threshold`                                                                   | Better Auth background email delivery failures.                                                                                                                                                                                   |
+| `auth_email_queue_delivery_failure`                | `alert_on_email_queue_failure_threshold`                                                             | Queue delivery failures that will be retried.                                                                                                                                                                                     |
+| `auth_email_queue_handler_defect`                  | `alert_on_email_queue_failure_threshold`                                                             | Queue handler defects after retries/error handling failed.                                                                                                                                                                        |
+| `auth_email_queue_invalid_message`                 | `dashboard_until_sustained_queue_failure`                                                            | Invalid queue messages are discarded and should alert only if spiking.                                                                                                                                                            |
+| `auth_security_audit_write_failure`                | `alert_on_audit_write_failure`                                                                       | Emitted when durable auth security audit capture fails after an OAuth/MCP or organization lifecycle event.                                                                                                                        |
+| `auth_security_audit_session_resolution_failure`   | `dashboard_until_sustained_audit_session_failure`                                                    | Emitted when Ceird cannot resolve the Better Auth session while enriching an OAuth/MCP or organization security audit event; request handling and audit capture continue without actor/session enrichment.                        |
+| `auth_security_audit_token_context_failure`        | `dashboard_until_sustained_audit_context_failure`                                                    | Emitted when Ceird cannot pre-read stored OAuth token context for refresh/revoke audit enrichment.                                                                                                                                |
+| `auth_security_audit_organization_context_failure` | `dashboard_until_sustained_audit_context_failure`                                                    | Emitted when Ceird cannot pre-read organization member or invitation context for audit enrichment.                                                                                                                                |
+
+Current redaction rules:
+
+- rate-limit logs include endpoint paths and fingerprinted rate-limit keys, not
+  raw IP-derived keys
+- Better Auth's internal logger is disabled; Ceird-owned Effect telemetry is the
+  auth logging boundary so upstream route logs cannot print raw submitted email
+  addresses.
+- email delivery logs use delivery-key fingerprints and message kinds, not raw
+  recipient emails, invite URLs, reset URLs, verification URLs, or tokens
+- password compromise logs include provider failure details but never password
+  material or full hash values
+
+Future alert wiring should use these annotations for sustained-rate thresholds,
+provider failure thresholds, suspicious OAuth dynamic client registration
+signals, and email provider or queue failure thresholds.
+
+### Auth Security Audit Events
+
+OAuth/MCP and organization lifecycle events are persisted to
+`auth_security_audit_event`. This is separate from abuse telemetry: telemetry
+drives dashboards and alerts, while the audit table is append-only security
+evidence.
+
+Current event types:
+
+- `oauth_client_registration_succeeded`
+- `oauth_client_registration_rejected`
+- `oauth_consent_granted`
+- `oauth_consent_denied`
+- `oauth_token_refreshed`
+- `oauth_token_revoked`
+- `organization_created`
+- `organization_updated`
+- `organization_active_changed`
+- `organization_invitation_created`
+- `organization_invitation_resent`
+- `organization_invitation_canceled`
+- `organization_invitation_accepted`
+- `organization_member_role_updated`
+- `organization_member_removed`
+
+Each row stores the event type, created timestamp, actor user id when known,
+active organization id when available, session id when available, OAuth client
+id, bounded scopes, source IP, user agent, and allowlisted JSON metadata. Actor,
+organization, and session identifiers are denormalized text snapshots rather
+than foreign keys, so normal session cleanup or user/org deletion does not erase
+historical audit correlation. The table indexes chronological, event-type,
+actor, organization, session, and OAuth-client review paths.
+
+Organization audit metadata stores target user/member IDs and role
+before/after values when available. Invitation audit metadata stores masked
+recipient email addresses only; raw invitation URLs and invitation IDs are not
+written to the audit table.
+
+Organization audit rows are success-only for this stage: Ceird records events
+after Better Auth accepts and applies the lifecycle mutation. Failed
+organization mutation attempts remain covered by abuse/rate-limit telemetry and
+request logs until a separate failed-attempt audit taxonomy is designed.
+
+`@ceird/identity-core` exposes the typed `identity` HTTP API group for the
+owner/admin organization security activity read model:
+
+- `GET /organization/security/activity`
+- the domain service resolves the current Better Auth session, active
+  organization, and membership role through `CurrentOrganizationActor`
+- only organization owners and admins may read it; other roles receive the
+  identity-core access-denied error
+- the query is scoped to the active organization and to the owner/admin-visible
+  organization event allowlist:
+  `organization_created`, `organization_updated`,
+  `organization_invitation_created`, `organization_invitation_resent`,
+  `organization_invitation_canceled`, `organization_invitation_accepted`,
+  `organization_member_role_updated`, and `organization_member_removed`
+- `organization_active_changed` remains in the internal audit table but is not
+  returned by the owner/admin workspace view
+- response items include safe actor, target, role-change, summary, timestamp,
+  organization id, and cursor fields; raw source IP and raw user-agent values
+  are not part of the shared response schema
+- member targets resolve display name/email only through a `member` row scoped to
+  the active organization, so schemaless audit metadata cannot expose another
+  user's profile details
+- filtering supports event type, actor user id, target type, date range, target
+  search, limit, and cursor parameters; cursors preserve the database timestamp
+  precision used by the `(created_at desc, id desc)` ordering
+
+The app renders this read model at `/organization/security` as a read-only
+admin route. It shows filters in the page header, hides raw provenance, and
+notes that internal audit retention may be longer than the visible recent
+activity view. Cursor pagination is exposed as a URL-backed `Next page` action.
+The route uses `G Y` for global admin navigation and has no page-local hotkeys
+because there are no row actions.
+
+Redaction rules:
+
+- never persist client secrets, access tokens, refresh tokens, authorization
+  codes, PKCE verifiers, raw OAuth query strings, or redirect URLs
+- store scope names only after count and length bounding
+- store revocation `token_type_hint`, not the token value
+- store admin/write-scope consent as metadata on consent grant/denial rows
+
+Reliability notes:
+
+- consent denial has no Better Auth consent row, so Ceird records it at the
+  auth HTTP wrapper boundary
+- OAuth Provider token storage is configured with Ceird's explicit SHA-256
+  base64url hash function; audit pre-read uses the same hash before querying
+  Better Auth token rows
+- refresh-token grants pre-read the stored Better Auth refresh token row before
+  Better Auth rotates it, so matching rows can include user, session, active
+  organization, client, and scope context
+- revoke events pre-read stored refresh or opaque access-token rows when
+  possible; JWT access-token revocation and unknown-token revocation cannot
+  prove a stored row mutation from the endpoint response alone, so those rows
+  remain redacted endpoint audit evidence with `matchedStoredToken: false`
+- audit writes are scheduled through the auth background-task handler when the
+  runtime provides one; write failures fail open with high-severity telemetry
+  (`auth_security_audit_write_failure`) so an audit storage outage does not
+  corrupt already-completed OAuth or organization responses; security can
+  revisit this policy before production if specific grant paths must fail closed
 
 ### Auth Email Runtime Configuration
 
@@ -360,6 +659,7 @@ Current tables:
 - `oauth_refresh_token`
 - `oauth_access_token`
 - `oauth_consent`
+- `auth_security_audit_event`
 
 The database is the source of truth for:
 
@@ -372,6 +672,24 @@ The database is the source of truth for:
 - OAuth client registrations, tokens, and consent records
 
 Ceird does not maintain a parallel app-specific session store.
+
+### Account Session Management
+
+The app exposes first-release active-session management inside `/settings` as a
+`Security` tab between `Profile` and `Email`.
+
+The `Security` tab:
+
+- lists Better Auth active sessions through the generated auth client
+- marks the current browser session as `This device`
+- allows revoking one other session through Better Auth `revokeSession`
+- allows revoking all other sessions through Better Auth `revokeOtherSessions`
+- hides raw IP addresses, raw user-agent strings, raw session tokens, and raw
+  session ids from the UI
+
+Current-session termination stays on the existing sign-out path. Ceird derives a
+small browser/device-family label from the user agent for display, but does not
+persist or expose a separate app-owned session metadata model.
 
 ### Database Wiring
 
@@ -430,12 +748,25 @@ localhost-alias development.
 
 Current behavior:
 
-- parses the authorization query for display through the TanStack Router route
-- shows the requesting `client_id`, requested scopes, and redirect host
-- leaves signed-query verification to Better Auth
+- parses the signed authorization-query prefix for display through the TanStack
+  Router route and ignores trailing forged duplicate query values
+- shows the requesting client, redirect host, active workspace context for
+  `ceird:*` requests, and semantic scope groups for identity, read, write,
+  admin, offline, and unknown scopes
+- fetches Better Auth public OAuth client metadata through
+  `authClient.oauth2.publicClient({ query: { client_id } })` after the user is
+  signed in; this enriches display with `client_name`, `client_uri`,
+  `policy_uri`, and `tos_uri` only and does not replace the signed query as the
+  trust boundary
+- treats `ceird:admin`, write, offline, and unknown scopes as warning states;
+  `ceird:admin` remains warning-only until the follow-up step-up-auth policy in
+  `TSK-111`
+- disables approval for `ceird:*` requests when the current Better Auth session
+  has no active organization, while keeping denial available
+- leaves signed-query verification and stored consent enforcement to Better Auth
 - submits approve or deny decisions through `authClient.oauth2.consent`
-- relies on the OAuth provider client plugin to forward the original signed
-  `window.location.search` query on submit
+- forwards the signed query prefix as `oauth_query` when present so Better Auth
+  can verify the authorization request server-side
 - avoids route hotkeys because consent is security-sensitive and should require
   an explicit focused button action
 
@@ -644,6 +975,104 @@ Design rule:
 - the authenticated shell should keep working while verification is pending
 - resend should stay available from the app shell until verification completes
 
+### Verified Email Gates
+
+Ceird treats verified email as a trust boundary for high-trust actions without
+blocking ordinary authenticated use of the product shell.
+
+Current gated actions:
+
+- organization creation at the auth HTTP boundary before Better Auth handles
+  the request
+- organization member invitations and reinvitations at the auth HTTP boundary
+  before Better Auth handles the request
+- approving OAuth/MCP consent requests
+
+Current allowed actions while email is unverified:
+
+- ordinary email/password login
+- authenticated password change
+- denying OAuth/MCP consent requests
+
+The domain auth wrapper blocks organization creation, organization invitations,
+and accepted OAuth consent approvals before the request reaches Better Auth and
+returns `EMAIL_NOT_VERIFIED`. OAuth consent approvals require verified email for
+all scopes because the guard does not rely on client-supplied scope provenance;
+this is intentionally stricter than the initial Ceird-scope-only policy and can
+be revisited in `TSK-66` if Better Auth exposes a server-side consent-code scope
+lookup that preserves the auth boundary. The app maps those errors to targeted
+copy in the OAuth consent, onboarding, and members workflows.
+The wrapper resolves sessions through Better Auth's signed-cookie API in the
+runtime path; direct database lookup is retained only for focused guard unit
+tests.
+
+### Password Compromise Checks
+
+Ceird rejects known-compromised passwords during sign-up, password reset, and
+authenticated password changes. The implementation uses the HIBP k-anonymity
+range API shape, so only the first five characters of the SHA-1 password hash
+leave the server. A matching suffix returns `PASSWORD_COMPROMISED`, and the app
+maps that to user-facing copy that asks for a different password without
+exposing provider details.
+
+Provider outages fail open by policy: the auth request continues and the domain
+runtime emits high-severity telemetry through Effect logging. This avoids
+turning a third-party outage into an account-creation or password-change
+outage while still making the degraded security posture observable.
+
+Local deterministic verification can set
+`AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE` to a loopback range API stub.
+The override is rejected for non-local hosts and uses the same padded HIBP range
+request shape as production, but it is intentionally a test/development hook
+rather than a production proxy setting.
+
+Future gated actions already approved by policy, but not implemented yet:
+
+- API key creation
+- passkey enrollment
+
+### Two-Factor Authentication
+
+Ceird adopts Better Auth's `twoFactor` plugin for optional TOTP authenticator
+apps plus backup codes. The server config uses issuer `Ceird`, explicit
+six-digit/30-second TOTP settings, encrypted backup-code storage, and no email
+or SMS OTP delivery. The auth schema includes `user.twoFactorEnabled` and a
+`two_factor` table for encrypted TOTP secrets, encrypted backup codes,
+verification state, and the owning user.
+
+Enrollment is gated at the auth boundary: `/two-factor/enable` requires a
+verified email session before Better Auth handles the request. Trusted-device
+requests are also blocked at the Ceird boundary for the first release, even
+though Better Auth supports them, because remembered-device product policy is
+deferred.
+
+The app auth client installs `twoFactorClient()` so settings and login work can
+use typed Better Auth methods. Account settings expose the first user-facing
+management surface under `/settings` -> `Security`: setup is blocked until the
+account email is verified, owners/admins see a stronger enrollment prompt, TOTP
+setup renders a QR code plus manual URI fallback, verification never sends a
+trusted-device request, backup codes must be acknowledged before returning to
+the enabled state, backup-code regeneration requires the current password, and
+disable requires both current password and explicit confirmation. Successful
+TOTP enrollment verification and disable refresh the app auth context so
+`user.twoFactorEnabled` stays aligned with Better Auth. While one-time backup
+codes are awaiting acknowledgement, the app keeps the security tab mounted and
+registers a route/before-unload warning to reduce accidental code loss.
+The domain auth boundary normalizes Better Auth session reads so app-visible
+sessions always include a boolean `user.twoFactorEnabled`; the app context
+decoder treats a missing or malformed value as a malformed session rather than
+silently assuming 2FA is off.
+
+The login page handles Better Auth's `twoFactorRedirect` credential sign-in
+response inline instead of redirecting to a separate route. After password
+verification, the app preserves the submitted email and invitation continuation
+target, replaces the credential form with a `Verify your sign-in` challenge,
+and verifies either a TOTP authenticator code or a one-time backup code through
+Better Auth's native `twoFactor` client methods. The app does not pass
+`trustDevice`; remembered-device policy remains deferred. If the temporary 2FA
+verification session expires, the user can return to the password form with the
+email preserved and the password cleared.
+
 ### Redirect Simplicity Rule
 
 Current redirect behavior is intentionally fixed:
@@ -757,7 +1186,7 @@ The shared auth schemas live in
 Current input rules:
 
 - email is trimmed, non-empty, and must match a basic email pattern
-- password is not trimmed and must be at least 8 characters
+- password is not trimmed and must be 12 to 256 characters
 - signup name is trimmed and must be at least 2 characters
 
 Important rule:
@@ -784,12 +1213,19 @@ Rules:
 
 - we do not surface raw Better Auth error payloads directly to users
 - rate-limit responses (`429`) map to a specific retry-later message
+- auth protection unavailable responses (`AUTH_RATE_LIMIT_UNAVAILABLE`) map to
+  a short retry-in-a-moment message rather than generic sign-in, sign-up, or
+  delivery failures
 - other sign-in failures map to a generic credentials-oriented message
 - other sign-up failures map to a generic account-creation message
 - password reset request responses remain generic and non-enumerating
 - the search-param-driven invalid-link state may specifically call out invalid
   or expired links
-- submitted reset failures still use the generic reset failure message
+- submitted reset failures map compromised-password rejections to dedicated
+  choose-a-different-password copy and otherwise use the generic reset failure
+  message
+- settings password-change failures map compromised-password rejections to the
+  same dedicated copy
 - verification resend failures map to a dedicated verification-safe message
 
 This is a deliberate anti-enumeration and UX decision.
@@ -834,9 +1270,21 @@ These are the important current rules we are following.
 - use database-backed rate limiting
 - keep auth rate-limit storage observable through the measured custom storage
   wrapper
+- reserve public abuse rate-limit slots atomically before Better Auth endpoint
+  side effects run
+- require Cloudflare Turnstile on selected high-abuse public auth flows when
+  captcha is enabled
 - send verification links through `AuthEmailSender`
+- require verified email before organization creation, member invitations, and
+  OAuth/MCP consent approvals
+- keep the app password schemas aligned with Better Auth's explicit 12 to 256
+  character password length policy
 - revoke existing sessions on successful password reset
 - use server-first session lookup for SSR-protected routes
+- expose account-scoped active-session listing and other-session revocation
+  through Better Auth's session APIs
+- handle Better Auth two-factor sign-in challenges inline with TOTP and backup
+  code verification
 - fail closed for protected routes
 - keep guest-only routes public only after a successful no-session lookup
 - surface unexpected auth lookup failures instead of swallowing them
@@ -850,7 +1298,7 @@ These are the important current rules we are following.
 - duplicate auth logic inside page components when route guards can own it
 - support redirect-back targets yet
 - gate app access on unverified email by default
-- implement authorization concerns like roles or permissions in this slice
+- implement domain authorization rules inside auth UI route guards
 - allow arbitrary origins to use credentialed auth CORS
 
 ## Component Responsibilities
@@ -892,6 +1340,9 @@ These are the important current rules we are following.
   Sign-up UI and submit flow.
 - `apps/app/src/features/auth/password-reset-request-page.tsx`
   Password reset request UI with generic response handling.
+- `apps/app/src/features/auth/auth-captcha.tsx`
+  Shared Turnstile loader, challenge component, and Better Auth captcha header
+  helper for selected auth forms.
 - `apps/app/src/features/auth/password-reset-page.tsx`
   Password reset completion UI with invalid/expired-link feedback.
 - `apps/app/src/features/auth/email-verification-page.tsx`

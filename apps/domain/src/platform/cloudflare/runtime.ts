@@ -687,6 +687,9 @@ function logInvalidAuthEmailQueueMessage(
 ) {
   return Effect.logWarning("Invalid auth email queue message discarded").pipe(
     Effect.annotateLogs({
+      authAbuseAlertPolicy: "dashboard_until_sustained_queue_failure",
+      authAbuseSignal: "auth_email_queue_invalid_message",
+      authAbuseSignalSeverity: "dashboard",
       authEmailQueueFailureCause: failure.cause,
       ...(failure.inputKind
         ? { authEmailQueueMessageKind: failure.inputKind }
@@ -700,6 +703,9 @@ function logInvalidAuthEmailQueueMessage(
 function logAuthEmailQueueDeliveryError(failure: AuthEmailQueueDeliveryError) {
   return Effect.logWarning("Auth email queue delivery failed; retrying").pipe(
     Effect.annotateLogs({
+      authAbuseAlertPolicy: "alert_on_email_queue_failure_threshold",
+      authAbuseSignal: "auth_email_queue_delivery_failure",
+      authAbuseSignalSeverity: "high",
       ...(failure.cause ? { authEmailQueueFailureCause: failure.cause } : {}),
       ...(failure.deliveryKey
         ? {
@@ -741,6 +747,9 @@ function handleQueuedAuthEmailMessage(message: Message<unknown>) {
     Effect.tapCause((cause) =>
       Effect.logError("Auth email queue handler failed with a defect").pipe(
         Effect.annotateLogs({
+          authAbuseAlertPolicy: "alert_on_email_queue_failure_threshold",
+          authAbuseSignal: "auth_email_queue_handler_defect",
+          authAbuseSignalSeverity: "high",
           authEmailQueueFailureMessage: String(Cause.squash(cause)),
         })
       )

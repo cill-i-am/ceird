@@ -35,6 +35,7 @@ const authenticatedSnapshot = {
       email: "taylor@example.com",
       image: null,
       emailVerified: false,
+      twoFactorEnabled: false,
       createdAt: "2026-05-24T10:00:00.000Z",
       updatedAt: "2026-05-24T10:00:00.000Z",
     },

@@ -23,6 +23,7 @@ function createAppServerContextSchema() {
     currentOrganizationRole: Schema.optional(OrganizationRole),
     organizations: Schema.optional(OrganizationSummaryListSchema),
     requestedOrganizationSlug: Schema.optional(OrganizationSlugSchema),
+    requestSearch: Schema.optional(Schema.String),
   });
 }
 
@@ -32,6 +33,7 @@ export interface AppServerContext {
   readonly currentOrganizationRole?: OrganizationRoleType;
   readonly organizations?: readonly OrganizationSummary[];
   readonly requestedOrganizationSlug?: OrganizationSlug | undefined;
+  readonly requestSearch?: string | undefined;
 }
 
 export function readAppServerContext(input: unknown): AppServerContext {
@@ -48,6 +50,7 @@ export function readAppServerContext(input: unknown): AppServerContext {
       currentOrganizationRole: record.currentOrganizationRole,
       organizations: record.organizations,
       requestedOrganizationSlug: record.requestedOrganizationSlug,
+      requestSearch: record.requestSearch,
     });
   } catch (error) {
     console.warn("Invalid app server context discarded.", {
@@ -58,6 +61,7 @@ export function readAppServerContext(input: unknown): AppServerContext {
         currentOrganizationRole: "currentOrganizationRole" in record,
         organizations: "organizations" in record,
         requestedOrganizationSlug: "requestedOrganizationSlug" in record,
+        requestSearch: "requestSearch" in record,
       },
     });
     return {};

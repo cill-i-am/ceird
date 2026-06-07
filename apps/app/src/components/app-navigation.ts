@@ -9,6 +9,7 @@ import {
   CommandIcon,
   ComputerTerminalIcon,
   Location01Icon,
+  SecurityCheckIcon,
 } from "@hugeicons/core-free-icons";
 import type { HugeiconsIcon } from "@hugeicons/react";
 import type * as React from "react";
@@ -26,7 +27,13 @@ export interface AppNavigationItem {
   readonly id: string;
   readonly keywords: readonly string[];
   readonly title: string;
-  readonly url: "/" | "/jobs" | "/sites" | "/activity" | "/members";
+  readonly url:
+    | "/"
+    | "/jobs"
+    | "/sites"
+    | "/activity"
+    | "/organization/security"
+    | "/members";
 }
 
 const APP_PRIMARY_NAV_ITEMS = [
@@ -64,6 +71,14 @@ const APP_PRIMARY_NAV_ITEMS = [
   },
   {
     access: "administrators",
+    icon: SecurityCheckIcon,
+    id: "organization-security",
+    keywords: ["security", "audit", "access"],
+    title: "Security",
+    url: "/organization/security",
+  },
+  {
+    access: "administrators",
     icon: CommandIcon,
     id: "members",
     keywords: ["team", "access"],
@@ -77,6 +92,7 @@ const APP_PRIMARY_NAV_SHORTCUTS_BY_URL = {
   "/activity": HOTKEYS.goActivity,
   "/jobs": HOTKEYS.goJobs,
   "/members": HOTKEYS.goMembers,
+  "/organization/security": HOTKEYS.goOrganizationSecurity,
   "/sites": HOTKEYS.goSites,
 } as const satisfies Readonly<
   Record<AppNavigationItem["url"], HotkeyDefinition>

@@ -1015,7 +1015,7 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assert.match(previewWorkflow, /preview-health-%s@example\.com/);
   assert.match(
     previewWorkflow,
-    /"\$PLAYWRIGHT_API_URL\/api\/auth\/organization\/create"/
+    /"\$PLAYWRIGHT_API_URL\/api\/auth\/organization\/list"/
   );
   assert.match(previewWorkflow, /waiting for service binding propagation/);
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_AGENT_URL\/health"/);

@@ -1,6 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { Schema } from "effect";
+import { useState } from "react";
 
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
@@ -15,6 +16,11 @@ import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
 import type { InvitationContinuationSearch } from "../organizations/invitation-continuation";
 import { clearOrganizationAccessClientCache } from "../organizations/organization-access-cache";
+import {
+  AuthCaptchaChallenge,
+  isAuthCaptchaChallengeRequired,
+  makeAuthCaptchaFetchOptions,
+} from "./auth-captcha";
 import {
   getAuthFailureMessage,
   getErrorText,
@@ -37,6 +43,8 @@ export function SignupPage({
 }) {
   const navigateOnSuccess = useAuthSuccessNavigation(search?.invitation);
   const isHydrated = useIsHydrated();
+  const [captchaToken, setCaptchaToken] = useState<string>();
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
   const form = useForm({
     defaultValues: {
       name: "",
@@ -53,14 +61,17 @@ export function SignupPage({
 
       const credentials = decodeSignupInput(value);
       const mutationFeedback = beginMutationFeedback();
-      const result = await authClient.signUp.email({
+      const payload = {
         name: credentials.name,
         email: credentials.email,
         password: credentials.password,
         callbackURL: buildEmailVerificationRedirectTo(window.location.origin),
-      });
+        ...makeAuthCaptchaFetchOptions(captchaToken),
+      };
+      const result = await authClient.signUp.email(payload);
 
       if (result.error) {
+        setCaptchaResetKey((currentValue) => currentValue + 1);
         formApi.setErrorMap({
           onSubmit: {
             form: getAuthFailureMessage("signUp", result.error),
@@ -193,6 +204,12 @@ export function SignupPage({
             </form.Field>
           </FieldGroup>
 
+          <AuthCaptchaChallenge
+            action="signup"
+            resetKey={captchaResetKey}
+            onTokenChange={setCaptchaToken}
+          />
+
           <form.Subscribe selector={(state) => state.errorMap.onSubmit}>
             {(error) =>
               getFormErrorText(error) ? (
@@ -208,7 +225,10 @@ export function SignupPage({
                 size="lg"
                 className="w-full [view-transition-name:auth-card-action]"
                 loading={isSubmitting}
-                disabled={!isHydrated}
+                disabled={
+                  !isHydrated ||
+                  (isAuthCaptchaChallengeRequired() && !captchaToken)
+                }
               >
                 {isSubmitting ? "Signing up..." : "Sign up"}
               </Button>

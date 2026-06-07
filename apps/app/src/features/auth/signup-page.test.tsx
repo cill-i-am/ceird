@@ -6,6 +6,7 @@ import type * as AuthClientModule from "#/lib/auth-client";
 
 import { listOrganizations } from "../organizations/organization-access";
 import { clearOrganizationAccessClientCache } from "../organizations/organization-access-cache";
+import { AUTH_CAPTCHA_RESPONSE_HEADER } from "./auth-captcha";
 import { SignupPage } from "./signup-page";
 
 const {
@@ -46,6 +47,9 @@ const {
       email: string;
       password: string;
       callbackURL: string;
+      fetchOptions?: {
+        headers: Record<string, string>;
+      };
     }) => Promise<{
       data: {
         token: string | null;
@@ -176,6 +180,9 @@ describe("signup page", () => {
 
   afterEach(() => {
     clearOrganizationAccessClientCache();
+    vi.unstubAllEnvs();
+    delete (window as unknown as { turnstile?: unknown }).turnstile;
+    document.querySelector("#ceird-turnstile-script")?.remove();
     vi.clearAllMocks();
   });
 
@@ -186,14 +193,14 @@ describe("signup page", () => {
 
     await user.type(screen.getByLabelText("Name"), "Taylor Example");
     await user.type(screen.getByLabelText("Email"), "person@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.type(screen.getByLabelText("Password"), "password1234");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
 
     await waitFor(() => {
       expect(mockedSignUpEmail).toHaveBeenCalledWith({
         name: "Taylor Example",
         email: "person@example.com",
-        password: "password123",
+        password: "password1234",
         callbackURL: "http://localhost:3000/verify-email?status=success",
       });
     });
@@ -204,6 +211,56 @@ describe("signup page", () => {
     });
     expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
     expect(mockedSignInEmail).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("passes the Turnstile token header when signup captcha is enabled", async () => {
+    const user = userEvent.setup();
+    const renderTurnstile = vi.fn<
+      (
+        container: HTMLElement,
+        options: { callback: (token: string) => void }
+      ) => string
+    >(
+      (
+        _container: HTMLElement,
+        options: { callback: (token: string) => void }
+      ) => {
+        options.callback("captcha-token");
+        return "widget_123";
+      }
+    );
+
+    vi.stubEnv("VITE_AUTH_CAPTCHA_ENABLED", "true");
+    vi.stubEnv("VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY", "turnstile-site-key");
+    (
+      window as unknown as { turnstile: { render: typeof renderTurnstile } }
+    ).turnstile = {
+      render: renderTurnstile,
+    };
+
+    render(<SignupPage />);
+
+    await user.type(screen.getByLabelText("Name"), "Taylor Example");
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password1234");
+
+    const submitButton = screen.getByRole("button", { name: /sign up/i });
+    await waitFor(() => expect(submitButton).toBeEnabled());
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(mockedSignUpEmail).toHaveBeenCalledWith({
+        name: "Taylor Example",
+        email: "person@example.com",
+        password: "password1234",
+        callbackURL: "http://localhost:3000/verify-email?status=success",
+        fetchOptions: {
+          headers: {
+            [AUTH_CAPTCHA_RESPONSE_HEADER]: "captcha-token",
+          },
+        },
+      });
+    });
   }, 10_000);
 
   it("clears stale organization cache after successful sign-up", async () => {
@@ -227,7 +284,7 @@ describe("signup page", () => {
 
     await user.type(screen.getByLabelText("Name"), "Taylor Example");
     await user.type(screen.getByLabelText("Email"), "person@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.type(screen.getByLabelText("Password"), "password1234");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
 
     await waitFor(() => {
@@ -249,7 +306,7 @@ describe("signup page", () => {
 
     await user.type(screen.getByLabelText("Name"), "Taylor Example");
     await user.type(screen.getByLabelText("Email"), "person@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.type(screen.getByLabelText("Password"), "password1234");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
 
     await waitFor(() => {
@@ -276,7 +333,7 @@ describe("signup page", () => {
 
     await user.type(screen.getByLabelText("Name"), "Taylor Example");
     await user.type(screen.getByLabelText("Email"), "person@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.type(screen.getByLabelText("Password"), "password1234");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
 
     await expect(
@@ -295,7 +352,7 @@ describe("signup page", () => {
     await user.click(screen.getByRole("button", { name: /sign up/i }));
 
     await expect(
-      screen.findByText("Use at least 8 characters.")
+      screen.findByText("Use 12 to 256 characters.")
     ).resolves.toBeInTheDocument();
     expect(mockedSignUpEmail).not.toHaveBeenCalled();
   }, 10_000);

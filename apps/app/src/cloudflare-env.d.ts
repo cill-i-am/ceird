@@ -13,6 +13,8 @@ export interface AppCloudflareEnv {
   readonly TENANT_STAGE_ALIAS?: string | undefined;
   readonly VITE_AGENT_ORIGIN: string;
   readonly VITE_API_ORIGIN: string;
+  readonly VITE_AUTH_CAPTCHA_ENABLED?: "false" | "true" | undefined;
+  readonly VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY?: string | undefined;
   readonly VITE_SYNC_ORIGIN: string;
   readonly VITE_SYSTEM_APP_ORIGIN: string;
   readonly VITE_TENANT_BASE_DOMAIN: string;

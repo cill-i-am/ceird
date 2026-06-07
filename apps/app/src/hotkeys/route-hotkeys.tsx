@@ -94,6 +94,23 @@ function AdministratorRouteHotkeys() {
     });
   });
 
+  useAppHotkeySequence("goOrganizationSecurity", () => {
+    React.startTransition(() => {
+      navigate({
+        to: "/organization/security",
+        search: {
+          actorUserId: undefined,
+          cursor: undefined,
+          eventType: undefined,
+          fromDate: undefined,
+          targetSearch: undefined,
+          targetType: undefined,
+          toDate: undefined,
+        },
+      });
+    });
+  });
+
   useAppHotkeySequence("goOrganizationSettings", () => {
     React.startTransition(() => {
       navigate({ to: "/organization/settings" });

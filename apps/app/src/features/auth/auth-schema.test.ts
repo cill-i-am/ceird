@@ -5,6 +5,7 @@ import {
   resolveApiBaseURL,
   resolveAuthBaseURL,
 } from "../../lib/auth-client";
+import * as authClientModule from "../../lib/auth-client";
 import {
   decodeLoginInput,
   decodePasswordResetInput,
@@ -17,7 +18,7 @@ describe("auth schemas", () => {
     expect(() =>
       decodeLoginInput({
         email: "not-an-email",
-        password: "supersecret",
+        password: "super-secret",
       })
     ).toThrow(/email/i);
   }, 1000);
@@ -26,11 +27,11 @@ describe("auth schemas", () => {
     expect(
       decodeLoginInput({
         email: " user@example.com ",
-        password: "supersecret",
+        password: "super-secret",
       })
     ).toStrictEqual({
       email: "user@example.com",
-      password: "supersecret",
+      password: "super-secret",
     });
   }, 1000);
 
@@ -46,17 +47,38 @@ describe("auth schemas", () => {
     });
   }, 1000);
 
+  it("allows short existing passwords through the login boundary", () => {
+    expect(
+      decodeLoginInput({
+        email: "user@example.com",
+        password: "old-pass",
+      })
+    ).toStrictEqual({
+      email: "user@example.com",
+      password: "old-pass",
+    });
+  }, 1000);
+
+  it("rejects empty login passwords", () => {
+    expect(() =>
+      decodeLoginInput({
+        email: "user@example.com",
+        password: "",
+      })
+    ).toThrow(/non empty|length of at least 1/i);
+  }, 1000);
+
   it("normalizes surrounding whitespace in signup input", () => {
     expect(
       decodeSignupInput({
         name: " Cillian ",
         email: " cillian@example.com ",
-        password: "supersecret",
+        password: "super-secret",
       })
     ).toStrictEqual({
       name: "Cillian",
       email: "cillian@example.com",
-      password: "supersecret",
+      password: "super-secret",
     });
   }, 1000);
 
@@ -65,18 +87,62 @@ describe("auth schemas", () => {
       decodeSignupInput({
         name: "Cillian",
         email: "cillian@example.com",
-        password: "supersecret",
-        confirmPassword: "supersecret",
+        password: "super-secret",
+        confirmPassword: "super-secret",
       })
     ).toThrow(/[Uu]nexpected/);
+  }, 1000);
+
+  it("rejects signup passwords below the account password minimum", () => {
+    expect(() =>
+      decodeSignupInput({
+        name: "Cillian",
+        email: "cillian@example.com",
+        password: "12345678901",
+      })
+    ).toThrow(/12/i);
+  }, 1000);
+
+  it("rejects signup passwords above the account password maximum", () => {
+    expect(() =>
+      decodeSignupInput({
+        name: "Cillian",
+        email: "cillian@example.com",
+        password: "a".repeat(257),
+      })
+    ).toThrow(/256/i);
+  }, 1000);
+
+  it("accepts signup passwords at the account password maximum", () => {
+    const password = "a".repeat(256);
+
+    expect(
+      decodeSignupInput({
+        name: "Cillian",
+        email: "cillian@example.com",
+        password,
+      })
+    ).toStrictEqual({
+      name: "Cillian",
+      email: "cillian@example.com",
+      password,
+    });
   }, 1000);
 
   it("rejects short reset request passwords", () => {
     expect(() =>
       decodePasswordResetInput({
-        password: "short",
+        password: "12345678901",
       })
-    ).toThrow(/8/i);
+    ).toThrow(/12/i);
+  }, 1000);
+
+  it("rejects reset request passwords above the policy maximum", () => {
+    expect(() =>
+      decodePasswordResetInput({
+        password: "a".repeat(257),
+      })
+    ).toThrow(/256/i);
   }, 1000);
 
   it("normalizes surrounding whitespace in reset request input", () => {
@@ -141,6 +207,19 @@ describe("auth base URL resolution", () => {
     );
 
     expect(authClient.$fetch).toBeDefined();
+  }, 1000);
+
+  it("installs the Better Auth two-factor client plugin for the setup and challenge flows", () => {
+    const createPlugins = (
+      authClientModule as typeof authClientModule & {
+        readonly createCeirdAuthClientPlugins?: () => readonly {
+          readonly id?: string;
+        }[];
+      }
+    ).createCeirdAuthClientPlugins;
+    const plugins = createPlugins?.() ?? [];
+
+    expect(plugins.map((plugin) => plugin.id)).toContain("two-factor");
   }, 1000);
 
   it("configures external as a member-level organization client role", () => {

@@ -13,6 +13,11 @@ import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
 import type { InvitationContinuationSearch } from "../organizations/invitation-continuation";
 import {
+  AuthCaptchaChallenge,
+  isAuthCaptchaChallengeRequired,
+  makeAuthCaptchaFetchOptions,
+} from "./auth-captcha";
+import {
   getErrorText,
   getFormErrorText,
   getPasswordResetRequestFailureMessage,
@@ -36,6 +41,8 @@ export function PasswordResetRequestPage({
   readonly search?: InvitationContinuationSearch;
 }) {
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string>();
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
   const isHydrated = useIsHydrated();
   const loginNavigationTarget: LoginNavigationTarget = getLoginNavigationTarget(
     search?.invitation
@@ -55,15 +62,18 @@ export function PasswordResetRequestPage({
 
       const input = decodePasswordResetRequestInput(value);
       const mutationFeedback = beginMutationFeedback();
-      const result = await authClient.requestPasswordReset({
+      const payload = {
         email: input.email,
         redirectTo: buildPasswordResetRedirectTo(
           window.location.origin,
           search?.invitation
         ),
-      });
+        ...makeAuthCaptchaFetchOptions(captchaToken),
+      };
+      const result = await authClient.requestPasswordReset(payload);
 
       if (result.error) {
+        setCaptchaResetKey((currentValue) => currentValue + 1);
         formApi.setErrorMap({
           onSubmit: {
             form: getPasswordResetRequestFailureMessage(result.error),
@@ -148,6 +158,12 @@ export function PasswordResetRequestPage({
               </form.Field>
             </FieldGroup>
 
+            <AuthCaptchaChallenge
+              action="password-reset-request"
+              resetKey={captchaResetKey}
+              onTokenChange={setCaptchaToken}
+            />
+
             <form.Subscribe selector={(state) => state.errorMap.onSubmit}>
               {(error) =>
                 getFormErrorText(error) ? (
@@ -167,7 +183,10 @@ export function PasswordResetRequestPage({
                   size="lg"
                   className="w-full [view-transition-name:auth-card-action]"
                   loading={isSubmitting}
-                  disabled={!isHydrated}
+                  disabled={
+                    !isHydrated ||
+                    (isAuthCaptchaChallengeRequired() && !captchaToken)
+                  }
                 >
                   {isSubmitting ? "Sending reset link..." : "Send reset link"}
                 </Button>

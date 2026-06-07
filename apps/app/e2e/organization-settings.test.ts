@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+import { markUserEmailVerified } from "./helpers/email-verification";
+import { createTestPassword } from "./helpers/test-account";
 import { CreateOrganizationPage } from "./pages/create-organization-page";
 import { SignupPage } from "./pages/signup-page";
 import { waitForLocatorHydration } from "./pages/wait-for-submit-hydration";
@@ -62,13 +64,15 @@ async function signUpAndCreateOrganization(
 ) {
   const signupPage = new SignupPage(page);
   const createOrganizationPage = new CreateOrganizationPage(page);
-  const password = "password123";
+  const password = createTestPassword();
+  const email = createTestEmail(emailPrefix);
 
   await signupPage.goto();
   await signupPage.name.fill(ownerName);
-  await signupPage.email.fill(createTestEmail(emailPrefix));
+  await signupPage.email.fill(email);
   await signupPage.password.fill(password);
   await signupPage.submit.click();
+  await markUserEmailVerified(email);
 
   await createOrganizationPage.expectLoaded();
   await createOrganizationPage.name.fill(organizationName);

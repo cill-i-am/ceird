@@ -38,6 +38,7 @@ describe("app auth context types", () => {
           email: "taylor@example.com",
           image: null,
           emailVerified: false,
+          twoFactorEnabled: false,
           createdAt: "2026-05-24T10:00:00.000Z",
           updatedAt: "2026-05-24T10:00:00.000Z",
         },
@@ -70,11 +71,47 @@ describe("app auth context types", () => {
           email: "taylor@example.com",
           image: null,
           emailVerified: false,
+          twoFactorEnabled: true,
           createdAt: "2026-05-24T10:00:00.000Z",
           updatedAt: "2026-05-24T10:00:00.000Z",
         },
-      }).session
-    ).not.toHaveProperty("token");
+      })
+    ).toMatchObject({
+      session: expect.not.objectContaining({ token: expect.any(String) }),
+      user: {
+        twoFactorEnabled: true,
+      },
+    });
+  });
+
+  it("accepts Better Auth session payloads that omit the session token", () => {
+    expect(
+      decodeServerAuthSession({
+        session: {
+          id: "session_123",
+          createdAt: "2026-05-24T10:00:00.000Z",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+          userId: "user_123",
+          expiresAt: "2026-05-31T10:00:00.000Z",
+          activeOrganizationId: "org_123",
+        },
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+          image: null,
+          emailVerified: false,
+          twoFactorEnabled: false,
+          createdAt: "2026-05-24T10:00:00.000Z",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+        },
+      })
+    ).toMatchObject({
+      session: expect.not.objectContaining({ token: expect.any(String) }),
+      user: {
+        twoFactorEnabled: false,
+      },
+    });
   });
 
   it("strips accidental session tokens from app context snapshots", () => {
@@ -95,6 +132,7 @@ describe("app auth context types", () => {
           email: "taylor@example.com",
           image: null,
           emailVerified: false,
+          twoFactorEnabled: false,
           createdAt: "2026-05-24T10:00:00.000Z",
           updatedAt: "2026-05-24T10:00:00.000Z",
         },
@@ -112,6 +150,31 @@ describe("app auth context types", () => {
         activeOrganizationId: null,
       })
     ).toThrow(/Expected/);
+  });
+
+  it("rejects authenticated sessions without explicit 2FA state", () => {
+    expect(() =>
+      decodeServerAuthSession({
+        session: {
+          id: "session_123",
+          createdAt: "2026-05-24T10:00:00.000Z",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+          userId: "user_123",
+          expiresAt: "2026-05-31T10:00:00.000Z",
+          token: "session-token",
+          activeOrganizationId: "org_123",
+        },
+        user: {
+          id: "user_123",
+          name: "Taylor Example",
+          email: "taylor@example.com",
+          image: null,
+          emailVerified: false,
+          createdAt: "2026-05-24T10:00:00.000Z",
+          updatedAt: "2026-05-24T10:00:00.000Z",
+        },
+      })
+    ).toThrow(/twoFactorEnabled/);
   });
 
   it("rejects malformed session active organization ids", () => {
@@ -132,6 +195,7 @@ describe("app auth context types", () => {
             email: "taylor@example.com",
             image: null,
             emailVerified: false,
+            twoFactorEnabled: false,
             createdAt: "2026-05-24T10:00:00.000Z",
             updatedAt: "2026-05-24T10:00:00.000Z",
           },

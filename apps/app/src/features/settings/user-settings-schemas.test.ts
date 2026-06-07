@@ -90,6 +90,20 @@ describe("user settings schemas", () => {
     });
   });
 
+  it("allows shorter current passwords so existing users can upgrade", () => {
+    expect(
+      decodeChangePasswordInput({
+        currentPassword: "old-pass",
+        newPassword: "new-password",
+        confirmPassword: "new-password",
+      })
+    ).toStrictEqual({
+      currentPassword: "old-pass",
+      newPassword: "new-password",
+      confirmPassword: "new-password",
+    });
+  });
+
   it("preserves surrounding whitespace in password inputs", () => {
     expect(
       decodeChangePasswordInput({
@@ -112,6 +126,28 @@ describe("user settings schemas", () => {
         confirmPassword: "different-password",
       })
     ).toThrow(/passwords must match/i);
+  });
+
+  it("rejects new passwords shorter than the shared password policy", () => {
+    expect(() =>
+      decodeChangePasswordInput({
+        currentPassword: "old-password",
+        newPassword: "12345678901",
+        confirmPassword: "12345678901",
+      })
+    ).toThrow(/12/i);
+  });
+
+  it("rejects new passwords above the shared password policy maximum", () => {
+    const oversizedPassword = "a".repeat(257);
+
+    expect(() =>
+      decodeChangePasswordInput({
+        currentPassword: "old-password",
+        newPassword: oversizedPassword,
+        confirmPassword: oversizedPassword,
+      })
+    ).toThrow(/256/i);
   });
 
   it("rejects unchanged password submissions", () => {

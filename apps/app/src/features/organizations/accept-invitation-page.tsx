@@ -25,6 +25,7 @@ import {
 import { hardRedirectToLogin } from "../auth/hard-redirect-to-login";
 import { signOut } from "../auth/sign-out";
 import { clearOrganizationAccessClientCache } from "./organization-access-cache";
+import { getAcceptInvitationFailureMessage } from "./organization-auth-errors";
 import { INVITE_ROLE_LABELS } from "./organization-invite-role-options";
 
 interface InvitationPreviewDetails {
@@ -374,7 +375,10 @@ function useAcceptInvitationPageModel(
       setState({
         status: "error",
         invitation: state.invitation,
-        message: INVITATION_ACCEPT_ERROR_MESSAGE,
+        message: getAcceptInvitationFailureMessage(
+          result.error,
+          INVITATION_ACCEPT_ERROR_MESSAGE
+        ),
       });
       return;
     }

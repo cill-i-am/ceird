@@ -29,6 +29,7 @@ const AppAuthUserFields = {
   email: Schema.String,
   image: Schema.optional(NullableString),
   emailVerified: Schema.Boolean,
+  twoFactorEnabled: Schema.Boolean,
   createdAt: IsoDateTimeString,
   updatedAt: IsoDateTimeString,
 };
@@ -36,7 +37,7 @@ const AppAuthUserFields = {
 const BetterAuthServerSessionSchema = Schema.Struct({
   session: Schema.Struct({
     ...AppAuthSessionFields,
-    token: Schema.NonEmptyString,
+    token: Schema.optional(Schema.NonEmptyString),
   }),
   user: Schema.Struct(AppAuthUserFields),
 });

@@ -241,6 +241,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     analytics: workerAnalytics,
     authEmailQueue,
     betterAuthSecret: betterAuthSecret.text,
+    betterAuthSecrets: input.config.authSecrets,
     config: input.config,
     databaseUrl: localDatabaseUrl,
     hyperdrive: input.hyperdrive,

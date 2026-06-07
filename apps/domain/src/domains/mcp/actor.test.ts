@@ -1,4 +1,8 @@
-import { decodeSessionId, decodeUserId } from "@ceird/identity-core";
+import {
+  decodeOrganizationId,
+  decodeSessionId,
+  decodeUserId,
+} from "@ceird/identity-core";
 import { Effect, Exit, Layer } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
@@ -33,6 +37,38 @@ describe(resolveCurrentOrganizationActorFromMcpSession, () => {
         userId: "user_123",
       })
     );
+  }, 10_000);
+
+  it("uses the OAuth token organization over the mutable session active organization", async () => {
+    const loadedOrganizationIds: string[] = [];
+    const exit = await Effect.runPromiseExit(
+      resolveCurrentOrganizationActorFromMcpSession({
+        session: {
+          organizationId: decodeOrganizationId("org_consent"),
+          sessionId: decodeSessionId("session_123"),
+          userId: decodeUserId("user_123"),
+        },
+        loadMembershipRoles: (organizationId) => {
+          loadedOrganizationIds.push(organizationId);
+          return Effect.succeed([{ role: "member" }]);
+        },
+        loadSessionById: () =>
+          Effect.succeed({
+            activeOrganizationId: "org_live_session",
+            expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+            userId: "user_123",
+          }),
+      })
+    );
+
+    expect(exit).toStrictEqual(
+      Exit.succeed({
+        organizationId: "org_consent",
+        role: "member",
+        userId: "user_123",
+      })
+    );
+    expect(loadedOrganizationIds).toStrictEqual(["org_consent"]);
   }, 10_000);
 
   it("fails when session owner differs from MCP subject", async () => {

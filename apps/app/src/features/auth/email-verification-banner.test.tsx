@@ -3,11 +3,18 @@ import userEvent from "@testing-library/user-event";
 
 import type * as AuthClientModule from "#/lib/auth-client";
 
+import { AUTH_CAPTCHA_RESPONSE_HEADER } from "./auth-captcha";
 import { EmailVerificationBanner } from "./email-verification-banner";
 
 const { mockedSendVerificationEmail } = vi.hoisted(() => ({
   mockedSendVerificationEmail: vi.fn<
-    (input: { email: string; callbackURL: string }) => Promise<{
+    (input: {
+      email: string;
+      callbackURL: string;
+      fetchOptions?: {
+        headers: Record<string, string>;
+      };
+    }) => Promise<{
       data: unknown;
       error: { status: number; message: string; statusText: string } | null;
     }>
@@ -36,6 +43,9 @@ describe("email verification banner", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
+    delete (window as unknown as { turnstile?: unknown }).turnstile;
+    document.querySelector("#ceird-turnstile-script")?.remove();
     vi.clearAllMocks();
   });
 
@@ -79,6 +89,138 @@ describe("email verification banner", () => {
         expect(mockedSendVerificationEmail).toHaveBeenCalledWith({
           email: "person@example.com",
           callbackURL: "http://localhost:3000/verify-email?status=success",
+        });
+      });
+    }
+  );
+
+  it(
+    "passes the Turnstile token header when resend captcha is enabled",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      const renderTurnstile = vi.fn<
+        (
+          container: HTMLElement,
+          options: { callback: (token: string) => void }
+        ) => string
+      >(
+        (
+          _container: HTMLElement,
+          options: { callback: (token: string) => void }
+        ) => {
+          options.callback("captcha-token");
+          return "widget_123";
+        }
+      );
+
+      vi.stubEnv("VITE_AUTH_CAPTCHA_ENABLED", "true");
+      vi.stubEnv("VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY", "turnstile-site-key");
+      (
+        window as unknown as { turnstile: { render: typeof renderTurnstile } }
+      ).turnstile = {
+        render: renderTurnstile,
+      };
+
+      render(
+        <EmailVerificationBanner
+          email="person@example.com"
+          emailVerified={false}
+        />
+      );
+
+      const resendButton = screen.getByRole("button", {
+        name: "Resend verification email",
+      });
+      await waitFor(() => expect(resendButton).toBeEnabled());
+      await user.click(resendButton);
+
+      await waitFor(() => {
+        expect(mockedSendVerificationEmail).toHaveBeenCalledWith({
+          email: "person@example.com",
+          callbackURL: "http://localhost:3000/verify-email?status=success",
+          fetchOptions: {
+            headers: {
+              [AUTH_CAPTCHA_RESPONSE_HEADER]: "captcha-token",
+            },
+          },
+        });
+      });
+    }
+  );
+
+  it(
+    "resets the Turnstile token after successful resend",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      const captchaTokens = ["captcha-token-1", "captcha-token-2"];
+      const renderTurnstile = vi.fn<
+        (
+          container: HTMLElement,
+          options: { callback: (token: string) => void }
+        ) => string
+      >((_container, options) => {
+        const token = captchaTokens.shift();
+
+        if (!token) {
+          throw new Error("Expected another captcha token");
+        }
+
+        options.callback(token);
+        return `widget-${token}`;
+      });
+
+      vi.stubEnv("VITE_AUTH_CAPTCHA_ENABLED", "true");
+      vi.stubEnv("VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY", "turnstile-site-key");
+      (
+        window as unknown as { turnstile: { render: typeof renderTurnstile } }
+      ).turnstile = {
+        render: renderTurnstile,
+      };
+
+      render(
+        <EmailVerificationBanner
+          email="person@example.com"
+          emailVerified={false}
+        />
+      );
+
+      const resendButton = screen.getByRole("button", {
+        name: "Resend verification email",
+      });
+      await waitFor(() => expect(resendButton).toBeEnabled());
+      await user.click(resendButton);
+
+      await waitFor(() =>
+        expect(mockedSendVerificationEmail).toHaveBeenCalledOnce()
+      );
+      await waitFor(() => expect(renderTurnstile).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(resendButton).toBeEnabled());
+      await user.click(resendButton);
+
+      await waitFor(() => {
+        expect(mockedSendVerificationEmail).toHaveBeenNthCalledWith(1, {
+          email: "person@example.com",
+          callbackURL: "http://localhost:3000/verify-email?status=success",
+          fetchOptions: {
+            headers: {
+              [AUTH_CAPTCHA_RESPONSE_HEADER]: "captcha-token-1",
+            },
+          },
+        });
+        expect(mockedSendVerificationEmail).toHaveBeenNthCalledWith(2, {
+          email: "person@example.com",
+          callbackURL: "http://localhost:3000/verify-email?status=success",
+          fetchOptions: {
+            headers: {
+              [AUTH_CAPTCHA_RESPONSE_HEADER]: "captcha-token-2",
+            },
+          },
         });
       });
     }

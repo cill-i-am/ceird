@@ -102,6 +102,14 @@ export const HOTKEYS = {
     label: "Go to Activity",
     scope: "global",
   },
+  goOrganizationSecurity: {
+    group: "Navigation",
+    hotkey: "G Y",
+    id: "goOrganizationSecurity",
+    label: "Go to Security activity",
+    scope: "global",
+    when: "Viewer can administer organization",
+  },
   goMembers: {
     group: "Navigation",
     hotkey: "G M",

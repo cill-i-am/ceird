@@ -66,6 +66,7 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 import { cn } from "#/lib/utils";
 
+import { getInviteMemberFailureMessage } from "./organization-auth-errors";
 import {
   INVITE_ROLE_SELECTION_GROUPS,
   isInviteRole,
@@ -445,7 +446,9 @@ export function OrganizationMembersPage({
       });
 
       if (result.error) {
-        setErrorMessage(INVITE_FAILURE_MESSAGE);
+        setErrorMessage(
+          getInviteMemberFailureMessage(result.error, INVITE_FAILURE_MESSAGE)
+        );
         return;
       }
 
@@ -493,7 +496,14 @@ export function OrganizationMembersPage({
               });
 
         if (result.error) {
-          setInvitationActionErrorMessage(INVITATION_ACTION_FAILURE_MESSAGE);
+          setInvitationActionErrorMessage(
+            action === "resend"
+              ? getInviteMemberFailureMessage(
+                  result.error,
+                  INVITATION_ACTION_FAILURE_MESSAGE
+                )
+              : INVITATION_ACTION_FAILURE_MESSAGE
+          );
           return;
         }
 

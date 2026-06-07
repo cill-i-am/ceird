@@ -390,6 +390,10 @@ describe("app sidebar", () => {
       "href",
       "/members"
     );
+    expect(screen.getByRole("link", { name: /security/i })).toHaveAttribute(
+      "href",
+      "/organization/security"
+    );
   });
 
   it(
@@ -418,6 +422,10 @@ describe("app sidebar", () => {
       expect(screen.getByRole("link", { name: /activity/i })).toHaveAttribute(
         "href",
         "/activity"
+      );
+      expect(screen.getByRole("link", { name: /security/i })).toHaveAttribute(
+        "href",
+        "/organization/security"
       );
       const membersLink = screen.getByRole("link", { name: /members/i });
 
@@ -483,6 +491,10 @@ describe("app sidebar", () => {
         "href",
         "/activity"
       );
+      expect(screen.getByRole("link", { name: /security/i })).toHaveAttribute(
+        "href",
+        "/organization/security"
+      );
       expect(screen.getByRole("link", { name: /members/i })).toHaveAttribute(
         "href",
         "/members"
@@ -521,6 +533,12 @@ describe("app sidebar", () => {
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("link", { name: /members/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /security/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: /security/i })
       ).not.toBeInTheDocument();
     }
   );
@@ -595,6 +613,9 @@ describe("app sidebar", () => {
     expect(screen.getByRole("link", { name: /jobs/i })).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /members/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /security/i })
     ).not.toBeInTheDocument();
   });
 });

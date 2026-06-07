@@ -28,6 +28,8 @@ type WorkerConfiguredEnv = Record<string, WorkerConfiguredEnvValue>;
 
 export type AppWorkerStageConfig = Pick<
   InfraStageConfig,
+  | "authCaptchaEnabled"
+  | "authCaptchaTurnstileSiteKey"
   | "appHostname"
   | "tenantBaseDomain"
   | "tenantHostMode"
@@ -48,6 +50,8 @@ export interface AppWorkerConfiguredEnv {
   readonly TENANT_STAGE_ALIAS?: string | undefined;
   readonly VITE_AGENT_ORIGIN: Input<string>;
   readonly VITE_API_ORIGIN: Input<string>;
+  readonly VITE_AUTH_CAPTCHA_ENABLED?: "false" | "true" | undefined;
+  readonly VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY?: string | undefined;
   readonly VITE_SYNC_ORIGIN: Input<string>;
   readonly VITE_SYSTEM_APP_ORIGIN: string;
   readonly VITE_TENANT_BASE_DOMAIN: string;
@@ -96,6 +100,19 @@ export function makeAppWorkerEnv(input: {
       : { TENANT_STAGE_ALIAS: tenantStageAlias }),
     VITE_AGENT_ORIGIN: input.agentOrigin,
     VITE_API_ORIGIN: input.apiOrigin,
+    ...(input.config.authCaptchaEnabled === undefined
+      ? {}
+      : {
+          VITE_AUTH_CAPTCHA_ENABLED: input.config.authCaptchaEnabled
+            ? "true"
+            : "false",
+        }),
+    ...(input.config.authCaptchaTurnstileSiteKey === undefined
+      ? {}
+      : {
+          VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY:
+            input.config.authCaptchaTurnstileSiteKey,
+        }),
     VITE_SYNC_ORIGIN: input.syncOrigin,
     VITE_SYSTEM_APP_ORIGIN: systemAppOrigin,
     VITE_TENANT_BASE_DOMAIN: input.config.tenantBaseDomain,

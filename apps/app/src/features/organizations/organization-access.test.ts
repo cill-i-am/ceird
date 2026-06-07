@@ -8,6 +8,7 @@ import {
 } from "../auth/app-context-client-cache";
 import { decodeServerAuthSession } from "../auth/app-context-types";
 import {
+  assertOrganizationInternalRouteContext,
   clearOrganizationAccessClientCache,
   ensureActiveOrganizationId,
   ensureActiveOrganizationIdForSession,
@@ -38,6 +39,7 @@ interface Session {
     email: string;
     image?: string | null;
     emailVerified?: boolean;
+    twoFactorEnabled?: boolean;
     createdAt?: string;
     updatedAt?: string;
   };
@@ -72,6 +74,7 @@ function createAppContextSession(input?: {
       email: "app-context@example.com",
       image: null,
       emailVerified: true,
+      twoFactorEnabled: false,
       createdAt: "2026-05-24T10:00:00.000Z",
       updatedAt: "2026-05-24T10:00:00.000Z",
     },
@@ -579,6 +582,7 @@ describe("organization access helpers", () => {
             createdAt: "2026-05-24T10:00:00.000Z",
             email: "server@example.com",
             emailVerified: true,
+            twoFactorEnabled: false,
             id: "user_server",
             image: null,
             name: "Server User",
@@ -857,6 +861,7 @@ describe("organization access helpers", () => {
         email: "taylor@example.com",
         image: null,
         emailVerified: false,
+        twoFactorEnabled: false,
         createdAt: "2026-04-04T17:08:12.488Z",
         updatedAt: "2026-04-04T17:08:12.488Z",
       },
@@ -895,6 +900,7 @@ describe("organization access helpers", () => {
         email: "taylor@example.com",
         image: null,
         emailVerified: false,
+        twoFactorEnabled: false,
         createdAt: "2026-04-04T17:08:12.488Z",
         updatedAt: "2026-04-04T17:08:12.488Z",
       },
@@ -937,6 +943,7 @@ describe("organization access helpers", () => {
           email: "taylor@example.com",
           image: null,
           emailVerified: false,
+          twoFactorEnabled: false,
           createdAt: "2026-04-04T17:08:12.488Z",
           updatedAt: "2026-04-04T17:08:12.488Z",
         },
@@ -1044,39 +1051,64 @@ describe("organization access helpers", () => {
     });
   }, 1000);
 
-  it("redirects non-admin members away from organization administration routes", async () => {
-    mockedIsServerEnvironment.mockReturnValue(false);
-    mockedGetSession.mockResolvedValue({
-      data: {
-        session: {
-          activeOrganizationId: "org_active",
+  it.each<OrganizationRole>(["member", "external"])(
+    "redirects %s users away from organization administration routes",
+    async (role) => {
+      mockedIsServerEnvironment.mockReturnValue(false);
+      mockedGetSession.mockResolvedValue({
+        data: {
+          session: {
+            activeOrganizationId: "org_active",
+          },
+          user: {
+            id: "user_123",
+            name: "Taylor Example",
+            email: "taylor@example.com",
+          },
         },
-        user: {
-          id: "user_123",
-          name: "Taylor Example",
-          email: "taylor@example.com",
+        error: null,
+      });
+      mockedGetClientOrganizations.mockResolvedValue({
+        data: [{ id: "org_active", name: "Active Org", slug: "active-org" }],
+        error: null,
+      });
+      mockedGetClientActiveMemberRole.mockResolvedValue({
+        data: {
+          role,
         },
-      },
-      error: null,
-    });
-    mockedGetClientOrganizations.mockResolvedValue({
-      data: [{ id: "org_active", name: "Active Org", slug: "active-org" }],
-      error: null,
-    });
-    mockedGetClientActiveMemberRole.mockResolvedValue({
-      data: {
-        role: "member",
-      },
-      error: null,
-    });
+        error: null,
+      });
 
-    const result = requireOrganizationAdministrationAccess();
+      const result = requireOrganizationAdministrationAccess();
 
-    await expect(result).rejects.toMatchObject({
-      options: { to: "/" },
+      await expect(result).rejects.toMatchObject({
+        options: { to: "/" },
+      });
+      await expect(result).rejects.toSatisfy(isRedirect);
+    },
+    1000
+  );
+
+  it("redirects external users away from internal organization route contexts", () => {
+    let result: unknown;
+
+    try {
+      assertOrganizationInternalRouteContext({
+        activeOrganizationSync: {
+          required: false,
+          targetOrganizationId: decodeOrganizationId("org_active"),
+        },
+        currentOrganizationRole: "external",
+      });
+    } catch (error) {
+      result = error;
+    }
+
+    expect(result).toMatchObject({
+      options: { to: "/jobs" },
     });
-    await expect(result).rejects.toSatisfy(isRedirect);
-  }, 1000);
+    expect(result).toSatisfy(isRedirect);
+  });
 
   it("redirects unauthenticated users to /login from redirectIfOrganizationReady", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);

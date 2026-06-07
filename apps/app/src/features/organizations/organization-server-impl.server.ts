@@ -21,6 +21,7 @@ import {
 } from "../auth/auth-request-context.server";
 import type { ServerAuthRequest } from "../auth/auth-request-context.server";
 import type { ServerAuthSession } from "../auth/server-session-types";
+import { getCreateOrganizationFailureMessage } from "./organization-auth-errors";
 
 const ORGANIZATION_SLUG_CONFLICT_MARKERS = [
   "ORGANIZATION_ALREADY_EXISTS",
@@ -61,14 +62,10 @@ export async function createCurrentServerOrganizationDirect(
       return await finalizeCreatedOrganization(authRequest, retryResponse);
     }
 
-    throw new Error(
-      `Organization creation failed with status ${retryResponse.status}.`
-    );
+    return await throwCreateOrganizationError(retryResponse);
   }
 
-  throw new Error(
-    `Organization creation failed with status ${response.status}.`
-  );
+  return await throwCreateOrganizationError(response);
 }
 
 async function finalizeCreatedOrganization(
@@ -252,6 +249,25 @@ async function readCreatedOrganization(
     return decodeOrganizationSummary((await response.json()) as unknown);
   } catch {
     throw new Error("Organization creation returned an invalid payload.");
+  }
+}
+
+async function throwCreateOrganizationError(
+  response: Response
+): Promise<never> {
+  const failureMessage = getCreateOrganizationFailureMessage(
+    await readResponseJson(response),
+    `Organization creation failed with status ${response.status}.`
+  );
+
+  throw new Error(failureMessage);
+}
+
+async function readResponseJson(response: Response): Promise<unknown> {
+  try {
+    return await response.clone().json();
+  } catch {
+    return null;
   }
 }
 

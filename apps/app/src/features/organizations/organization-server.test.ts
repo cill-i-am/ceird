@@ -37,6 +37,7 @@ interface User {
   email: string;
   image?: string | null;
   emailVerified: boolean;
+  twoFactorEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,6 +67,7 @@ function createAuthSession(overrides: Partial<Session> = {}): AuthSession {
       email: "taylor@example.com",
       image: null,
       emailVerified: false,
+      twoFactorEnabled: false,
       createdAt: "2026-04-04T17:08:12.488Z",
       updatedAt: "2026-04-04T17:08:12.488Z",
     },
@@ -290,6 +292,7 @@ describe("server organization lookup", () => {
         email: "taylor@example.com",
         image: null,
         emailVerified: false,
+        twoFactorEnabled: false,
         createdAt: "2026-04-04T17:08:12.488Z",
         updatedAt: "2026-04-04T17:08:12.488Z",
       },
@@ -347,6 +350,7 @@ describe("server organization lookup", () => {
         email: "taylor@example.com",
         image: null,
         emailVerified: false,
+        twoFactorEnabled: false,
         createdAt: "2026-04-04T17:08:12.488Z",
         updatedAt: "2026-04-04T17:08:12.488Z",
       },
@@ -376,6 +380,7 @@ describe("server organization lookup", () => {
         email: "taylor@example.com",
         image: null,
         emailVerified: false,
+        twoFactorEnabled: false,
         createdAt: "2026-04-04T17:08:12.488Z",
         updatedAt: "2026-04-04T17:08:12.488Z",
       },
@@ -465,6 +470,7 @@ describe("server organization lookup", () => {
           email: "taylor@example.com",
           image: null,
           emailVerified: false,
+          twoFactorEnabled: false,
           createdAt: "2026-04-04T17:08:12.488Z",
           updatedAt: "2026-04-04T17:08:12.488Z",
         },
@@ -855,6 +861,31 @@ describe("server organization lookup", () => {
     await expect(
       createCurrentServerOrganizationDirect({ name: "Acme Field Ops" })
     ).rejects.toThrow("Organization creation failed with status 503.");
+  }, 1000);
+
+  it("maps Better Auth email verification failures during organization creation", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json(
+        {
+          code: "EMAIL_NOT_VERIFIED",
+          message: "Verify your email before creating an organization.",
+        },
+        { status: 403 }
+      )
+    );
+
+    await expect(
+      createCurrentServerOrganizationDirect({ name: "Acme Field Ops" })
+    ).rejects.toThrow(
+      "Verify your email before creating a team. Check your inbox, then try again."
+    );
+
+    expect(fetchMock).toHaveBeenCalledOnce();
   }, 1000);
 
   it("does not retry organization creation for generic validation failures", async () => {

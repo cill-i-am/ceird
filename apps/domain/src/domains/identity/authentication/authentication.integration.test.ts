@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 import {
@@ -29,7 +29,9 @@ describe("authentication integration", () => {
   const cleanup: (() => Promise<void>)[] = [];
 
   afterAll(async () => {
-    await Promise.all([...cleanup].toReversed().map((step) => step()));
+    for (const step of [...cleanup].toReversed()) {
+      await step();
+    }
   });
 
   it("boots authentication on the shared app database runtime", async (context: {
@@ -163,6 +165,7 @@ describe("authentication integration", () => {
     );
     updateCookieJar(cookieJar, signUpResponse);
     expect(signUpResponse.status).toBe(200);
+    await verifyUserEmailForTest(adminPool, "org-flow@example.com");
 
     const organizationResponse = await auth.handler(
       makeJsonRequest(
@@ -307,6 +310,448 @@ describe("authentication integration", () => {
     expect(sessionAfterRestore?.session?.activeOrganizationId).toBe(
       createdOrganization.id
     );
+  }, 30_000);
+
+  it("rejects organization creation when the user has reached the first-release organization limit", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const adminPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => adminPool.end());
+
+    if (!(await canConnect(adminPool))) {
+      context.skip(
+        "Auth integration database unavailable; skipping organization limit coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    const auth = createAuthentication({
+      appOrigin: "http://127.0.0.1:4173",
+      backgroundTaskHandler: () => {},
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl,
+      }),
+      database: drizzle({ client: authPool }),
+      reportPasswordResetEmailFailure: () => {},
+      sendOrganizationInvitationEmail: async () => {},
+      reportVerificationEmailFailure: () => {},
+      sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: async () => {},
+    });
+
+    const cookieJar = new Map<string, string>();
+
+    const signUpResponse = await auth.handler(
+      makeJsonRequest("/sign-up/email", {
+        email: "org-limit@example.com",
+        name: "Org Limit User",
+        password: "correct horse battery staple",
+      })
+    );
+    updateCookieJar(cookieJar, signUpResponse);
+    expect(signUpResponse.status).toBe(200);
+    await verifyUserEmailForTest(adminPool, "org-limit@example.com");
+
+    for (let index = 1; index <= 10; index += 1) {
+      const organizationResponse = await auth.handler(
+        makeJsonRequest(
+          "/organization/create",
+          {
+            name: `Limit Organization ${index}`,
+            slug: `limit-organization-${index}`,
+          },
+          {
+            cookieJar,
+          }
+        )
+      );
+      updateCookieJar(cookieJar, organizationResponse);
+      expect(organizationResponse.status).toBe(200);
+    }
+
+    const blockedResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/create",
+        {
+          name: "Limit Organization 11",
+          slug: "limit-organization-11",
+        },
+        {
+          cookieJar,
+        }
+      )
+    );
+
+    expect(blockedResponse.status).toBe(403);
+    await expect(blockedResponse.json()).resolves.toMatchObject({
+      code: "YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS",
+    });
+
+    const userRows = await adminPool.query<{
+      id: string;
+    }>(`select id from "user" where email = $1`, ["org-limit@example.com"]);
+    expect(userRows.rows).toHaveLength(1);
+    const organizationRows = await adminPool.query<{
+      count: number;
+    }>(
+      `select count(*)::int as count
+       from organization
+       where slug like 'limit-organization-%'`
+    );
+    const membershipRows = await adminPool.query<{
+      count: number;
+    }>(`select count(*)::int as count from member where user_id = $1`, [
+      userRows.rows[0]?.id,
+    ]);
+
+    expect(organizationRows.rows[0]?.count).toBe(10);
+    expect(membershipRows.rows[0]?.count).toBe(10);
+  }, 30_000);
+
+  it("blocks unverified organization create and invite flows before persistence or email side effects", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const adminPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => adminPool.end());
+
+    if (!(await canConnect(adminPool))) {
+      context.skip(
+        "Auth integration database unavailable; skipping unverified organization guard coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+    const sentInvitations: unknown[] = [];
+
+    const auth = createAuthentication({
+      appOrigin: "http://127.0.0.1:4173",
+      backgroundTaskHandler: () => {},
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl,
+      }),
+      database: drizzle({ client: authPool }),
+      reportPasswordResetEmailFailure: () => {},
+      sendOrganizationInvitationEmail: (input) => {
+        sentInvitations.push(input);
+        return Promise.resolve();
+      },
+      reportVerificationEmailFailure: () => {},
+      sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: async () => {},
+    });
+
+    const cookieJar = new Map<string, string>();
+
+    const signUpResponse = await auth.handler(
+      makeJsonRequest("/sign-up/email", {
+        email: "unverified-org-guard@example.com",
+        name: "Unverified Org Guard",
+        password: "correct horse battery staple",
+      })
+    );
+    updateCookieJar(cookieJar, signUpResponse);
+    expect(signUpResponse.status).toBe(200);
+
+    const blockedCreateResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/create",
+        {
+          name: "Blocked Organization",
+          slug: "blocked-organization",
+        },
+        {
+          cookieJar,
+        }
+      )
+    );
+
+    await expect(blockedCreateResponse.json()).resolves.toStrictEqual({
+      code: "EMAIL_NOT_VERIFIED",
+      message: "Verify your email before creating an organization.",
+    });
+    expect(blockedCreateResponse.status).toBe(403);
+    const blockedOrganizationRows = await adminPool.query<{
+      count: number;
+    }>(`select count(*)::int as count from organization where slug = $1`, [
+      "blocked-organization",
+    ]);
+    expect(blockedOrganizationRows.rows[0]?.count).toBe(0);
+
+    await verifyUserEmailForTest(adminPool, "unverified-org-guard@example.com");
+
+    const createResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/create",
+        {
+          name: "Verified Organization",
+          slug: "verified-organization",
+        },
+        {
+          cookieJar,
+        }
+      )
+    );
+    updateCookieJar(cookieJar, createResponse);
+    expect(createResponse.status).toBe(200);
+    const createdOrganization =
+      (await createResponse.json()) as CreatedOrganizationResponse;
+
+    await unverifyUserEmailForTest(
+      adminPool,
+      "unverified-org-guard@example.com"
+    );
+
+    const blockedInviteResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/invite-member",
+        {
+          email: "invitee@example.com",
+          organizationId: createdOrganization.id,
+          role: "member",
+        },
+        {
+          cookieJar,
+          forwardedFor: "127.0.0.1",
+        }
+      )
+    );
+
+    await expect(blockedInviteResponse.json()).resolves.toStrictEqual({
+      code: "EMAIL_NOT_VERIFIED",
+      message: "Verify your email before inviting organization members.",
+    });
+    expect(blockedInviteResponse.status).toBe(403);
+    expect(sentInvitations).toStrictEqual([]);
+    const invitationRows = await adminPool.query<{
+      count: number;
+    }>(
+      `select count(*)::int as count from invitation where organization_id = $1`,
+      [createdOrganization.id]
+    );
+    expect(invitationRows.rows[0]?.count).toBe(0);
+  }, 30_000);
+
+  it("simulates Turnstile verification without binding a local server", async () => {
+    await withCaptchaSiteVerifyServer(async ({ requests, url }) => {
+      const acceptedResponse = await fetch(url, {
+        body: JSON.stringify({
+          remoteip: "203.0.113.42",
+          response: "captcha-token",
+          secret: "turnstile-secret-key",
+        }),
+        method: "POST",
+      });
+      const rejectedResponse = await fetch(url, {
+        body: JSON.stringify({
+          remoteip: "203.0.113.43",
+          response: "invalid-captcha-token",
+          secret: "turnstile-secret-key",
+        }),
+        method: "POST",
+      });
+
+      await expect(acceptedResponse.json()).resolves.toStrictEqual({
+        success: true,
+      });
+      await expect(rejectedResponse.json()).resolves.toStrictEqual({
+        success: false,
+      });
+      expect(requests).toStrictEqual([
+        {
+          remoteip: "203.0.113.42",
+          response: "captcha-token",
+          secret: "turnstile-secret-key",
+        },
+        {
+          remoteip: "203.0.113.43",
+          response: "invalid-captcha-token",
+          secret: "turnstile-secret-key",
+        },
+      ]);
+    });
+  });
+
+  it("enforces Turnstile captcha verification before protected sign-up persistence", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const adminPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => adminPool.end());
+
+    if (!(await canConnect(adminPool))) {
+      context.skip(
+        "Auth integration database unavailable; skipping captcha sign-up verification coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    await withCaptchaSiteVerifyServer(async ({ requests, url }) => {
+      const auth = createAuthentication({
+        appOrigin: "http://127.0.0.1:4173",
+        backgroundTaskHandler: () => {},
+        config: makeAuthenticationConfig({
+          baseUrl: "http://127.0.0.1:3000",
+          captchaEnabled: true,
+          captchaSiteVerifyURLOverride: url,
+          captchaTurnstileSecretKey: "turnstile-secret-key",
+          rateLimitEnabled: false,
+          secret: "0123456789abcdef0123456789abcdef",
+          databaseUrl,
+        }),
+        database: drizzle({ client: authPool }),
+        reportPasswordResetEmailFailure: () => {},
+        sendOrganizationInvitationEmail: async () => {},
+        reportVerificationEmailFailure: () => {},
+        sendPasswordResetEmail: async () => {},
+        sendVerificationEmail: async () => {},
+      });
+
+      const cookieJar = new Map<string, string>();
+      const acceptedResponse = await auth.handler(
+        makeJsonRequest(
+          "/sign-up/email",
+          {
+            email: "captcha-accepted@example.com",
+            name: "Captcha Accepted",
+            password: "correct horse battery staple",
+          },
+          {
+            forwardedFor: "203.0.113.42",
+            headers: {
+              "x-captcha-response": "captcha-token",
+            },
+          }
+        )
+      );
+
+      updateCookieJar(cookieJar, acceptedResponse);
+      expect(acceptedResponse.status).toBe(200);
+
+      const rejectedResponse = await auth.handler(
+        makeJsonRequest(
+          "/sign-up/email",
+          {
+            email: "captcha-rejected@example.com",
+            name: "Captcha Rejected",
+            password: "correct horse battery staple",
+          },
+          {
+            forwardedFor: "203.0.113.43",
+            headers: {
+              "x-captcha-response": "invalid-captcha-token",
+            },
+          }
+        )
+      );
+
+      const passwordResetResponse = await auth.handler(
+        makeJsonRequest(
+          "/request-password-reset",
+          {
+            email: "captcha-accepted@example.com",
+            redirectTo: "http://127.0.0.1:4173/reset-password",
+          },
+          {
+            forwardedFor: "203.0.113.44",
+            headers: {
+              "x-captcha-response": "captcha-token",
+            },
+          }
+        )
+      );
+      expect(passwordResetResponse.status).toBe(200);
+
+      const verificationResendResponse = await auth.handler(
+        makeJsonRequest(
+          "/send-verification-email",
+          {
+            email: "captcha-accepted@example.com",
+            callbackURL: "http://127.0.0.1:4173/verify-email",
+          },
+          {
+            cookieJar,
+            forwardedFor: "203.0.113.45",
+            headers: {
+              "x-captcha-response": "captcha-token",
+            },
+          }
+        )
+      );
+      expect(verificationResendResponse.status).toBe(200);
+
+      expect(rejectedResponse.status).toBe(403);
+      await expect(rejectedResponse.json()).resolves.toStrictEqual({
+        code: "VERIFICATION_FAILED",
+        message: "Captcha verification failed",
+      });
+      expect(requests).toStrictEqual([
+        {
+          remoteip: "203.0.113.42",
+          response: "captcha-token",
+          secret: "turnstile-secret-key",
+        },
+        {
+          remoteip: "203.0.113.43",
+          response: "invalid-captcha-token",
+          secret: "turnstile-secret-key",
+        },
+        {
+          remoteip: "203.0.113.44",
+          response: "captcha-token",
+          secret: "turnstile-secret-key",
+        },
+        {
+          remoteip: "203.0.113.45",
+          response: "captcha-token",
+          secret: "turnstile-secret-key",
+        },
+      ]);
+
+      const userRows = await adminPool.query<{
+        count: number;
+        email: string;
+      }>(
+        `select email, count(*)::int as count
+         from "user"
+         where email in ($1, $2)
+         group by email
+         order by email`,
+        ["captcha-accepted@example.com", "captcha-rejected@example.com"]
+      );
+
+      expect(userRows.rows).toStrictEqual([
+        {
+          count: 1,
+          email: "captcha-accepted@example.com",
+        },
+      ]);
+    });
   }, 30_000);
 
   it("sends verification mail on sign-up, supports resend, and marks the session user verified after the verification redirect", async (context: {
@@ -531,6 +976,539 @@ describe("authentication integration", () => {
     expect(rateLimitRows.rows[0]?.count).toBe(3);
   }, 30_000);
 
+  it("atomically reserves public auth abuse limits under concurrent password reset bursts", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (adminPool) => await canConnect(adminPool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Auth integration database unavailable; skipping atomic auth abuse rate-limit coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    const auth = createAuthentication({
+      appOrigin: "http://127.0.0.1:4173",
+      backgroundTaskHandler: async (task) => {
+        await task;
+      },
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl,
+      }),
+      database: drizzle({ client: authPool }),
+      reportPasswordResetEmailFailure: () => {},
+      sendOrganizationInvitationEmail: async () => {},
+      reportVerificationEmailFailure: () => {},
+      sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: async () => {},
+    });
+
+    const responses = await Promise.all(
+      Array.from({ length: 4 }, (_, attempt) =>
+        auth.handler(
+          makeJsonRequest(
+            "/request-password-reset",
+            {
+              email: `missing-reset-${attempt}@example.com`,
+              redirectTo: "http://127.0.0.1:3000/reset-password",
+            },
+            {
+              forwardedFor: "203.0.113.30",
+            }
+          )
+        )
+      )
+    );
+    const statuses = responses.map((response) => response.status).toSorted();
+
+    expect(statuses).toStrictEqual([200, 200, 200, 429]);
+
+    const rateLimitRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        count: number;
+        key: string;
+      }>(`select key, count from rate_limit where key = $1`, [
+        "ceird-auth-abuse:203.0.113.30|/request-password-reset",
+      ])
+    );
+
+    expect(rateLimitRows.rows).toHaveLength(1);
+    expect(rateLimitRows.rows[0]?.count).toBe(4);
+  }, 30_000);
+
+  it("persists password reset delivery limits with HMAC target-email keys", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (adminPool) => await canConnect(adminPool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Auth integration database unavailable; skipping password reset delivery key persistence coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    const secret = "0123456789abcdef0123456789abcdef";
+    const normalizedEmail = "delivery-limit@example.com";
+    const auth = createAuthentication({
+      appOrigin: "http://127.0.0.1:4173",
+      backgroundTaskHandler: async (task) => {
+        await task;
+      },
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret,
+        databaseUrl,
+      }),
+      database: drizzle({ client: authPool }),
+      reportPasswordResetEmailFailure: () => {},
+      sendOrganizationInvitationEmail: async () => {},
+      reportVerificationEmailFailure: () => {},
+      sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: async () => {},
+    });
+
+    const response = await auth.handler(
+      makeJsonRequest(
+        "/request-password-reset",
+        {
+          email: normalizedEmail,
+          redirectTo: "http://127.0.0.1:4173/reset-password",
+        },
+        {
+          forwardedFor: "203.0.113.31",
+        }
+      )
+    );
+
+    expect(response.status).toBe(200);
+
+    const expectedTargetEmailKey = makeExpectedAuthAbuseEmailKey({
+      email: normalizedEmail,
+      endpointPath: "/request-password-reset",
+      scope: "target-email",
+      secret,
+    });
+    const rateLimitRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        count: number;
+        key: string;
+      }>(
+        `select key, count
+         from rate_limit
+         where key like 'ceird-auth-abuse:%'
+         order by key`
+      )
+    );
+
+    expect(rateLimitRows.rows).toStrictEqual(
+      expect.arrayContaining([
+        {
+          count: 1,
+          key: "ceird-auth-abuse:203.0.113.31|/request-password-reset",
+        },
+        {
+          count: 1,
+          key: expectedTargetEmailKey,
+        },
+      ])
+    );
+    expect(JSON.stringify(rateLimitRows.rows)).not.toContain("delivery-limit");
+    expect(JSON.stringify(rateLimitRows.rows)).not.toContain("example.com");
+  }, 30_000);
+
+  it("rejects invalid OAuth dynamic client registration before client persistence", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (adminPool) => await canConnect(adminPool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Auth integration database unavailable; skipping OAuth dynamic client registration persistence coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    const auth = createAuthentication({
+      appOrigin: "http://127.0.0.1:4173",
+      backgroundTaskHandler: async (task) => {
+        await task;
+      },
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl,
+      }),
+      database: drizzle({ client: authPool }),
+      reportPasswordResetEmailFailure: () => {},
+      sendOrganizationInvitationEmail: async () => {},
+      reportVerificationEmailFailure: () => {},
+      sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: async () => {},
+    });
+
+    const response = await auth.handler(
+      makeJsonRequest(
+        "/oauth2/register",
+        {
+          redirect_uris: ["https://client.example/oauth/callback"],
+          scope: "openid ceird:write",
+        },
+        {
+          forwardedFor: "203.0.113.40",
+        }
+      )
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      error: "invalid_scope",
+    });
+    expect(response.status).toBe(400);
+
+    const persistedRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        count: number;
+      }>(`select count(*)::int as count from oauth_client`)
+    );
+    expect(persistedRows.rows[0]?.count).toBe(0);
+
+    const rateLimitRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        count: number;
+        key: string;
+      }>(`select key, count from rate_limit where key = $1`, [
+        "ceird-auth-abuse:203.0.113.40|/oauth2/register",
+      ])
+    );
+
+    expect(rateLimitRows.rows).toHaveLength(1);
+    expect(rateLimitRows.rows[0]?.count).toBe(1);
+
+    const auditRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        event_type: string;
+        metadata: {
+          dynamicRegistration?: boolean;
+          oauthError?: string;
+          outcome?: string;
+        };
+        oauth_client_id: string | null;
+        scopes: string[] | null;
+        source_ip: string | null;
+      }>(
+        `select event_type,
+                metadata,
+                oauth_client_id,
+                scopes,
+                source_ip
+         from auth_security_audit_event
+         where event_type = 'oauth_client_registration_rejected'`
+      )
+    );
+
+    expect(auditRows.rows).toStrictEqual([
+      {
+        event_type: "oauth_client_registration_rejected",
+        metadata: {
+          dynamicRegistration: true,
+          oauthError: "invalid_scope",
+          outcome: "rejected",
+        },
+        oauth_client_id: null,
+        scopes: ["openid", "ceird:write"],
+        source_ip: "203.0.113.40",
+      },
+    ]);
+    expect(JSON.stringify(auditRows.rows)).not.toContain(
+      "https://client.example/oauth/callback"
+    );
+  }, 30_000);
+
+  it("persists successful OAuth dynamic client registration as a public read-only client", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (adminPool) => await canConnect(adminPool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Auth integration database unavailable; skipping OAuth dynamic client registration persistence coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const authPool = new Pool({ connectionString: databaseUrl });
+    cleanup.push(() => authPool.end());
+
+    const auth = createAuthentication({
+      appOrigin: "http://127.0.0.1:4173",
+      backgroundTaskHandler: async (task) => {
+        await task;
+      },
+      config: makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl,
+      }),
+      database: drizzle({ client: authPool }),
+      reportPasswordResetEmailFailure: () => {},
+      sendOrganizationInvitationEmail: async () => {},
+      reportVerificationEmailFailure: () => {},
+      sendPasswordResetEmail: async () => {},
+      sendVerificationEmail: async () => {},
+    });
+
+    const response = await auth.handler(
+      makeJsonRequest(
+        "/oauth2/register",
+        {
+          client_name: "Ceird MCP Runtime Smoke",
+          contacts: ["security@example.com"],
+          grant_types: ["authorization_code", "refresh_token"],
+          redirect_uris: ["http://127.0.0.1:9123/oauth/callback"],
+          type: "native",
+        },
+        {
+          forwardedFor: "203.0.113.41",
+          headers: {
+            "user-agent": "Ceird MCP Runtime Smoke",
+          },
+        }
+      )
+    );
+
+    expect(response.status).toBe(200);
+    const registration =
+      (await response.json()) as OAuthClientRegistrationResponse;
+
+    expect(registration.client_id).toStrictEqual(expect.any(String));
+    expect(registration.client_secret).toBeUndefined();
+    expect(registration.redirect_uris).toStrictEqual([
+      "http://127.0.0.1:9123/oauth/callback",
+    ]);
+    expect(registration.token_endpoint_auth_method).toBe("none");
+    expect(registration.scope).toBe(
+      "openid profile email offline_access ceird:read"
+    );
+
+    const persistedRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        client_id: string;
+        client_secret: string | null;
+        contacts: string[] | null;
+        grant_types: string[] | null;
+        name: string | null;
+        public: boolean | null;
+        redirect_uris: string[];
+        response_types: string[] | null;
+        scopes: string[] | null;
+        skip_consent: boolean | null;
+        token_endpoint_auth_method: string | null;
+        type: string | null;
+        user_id: string | null;
+      }>(
+        `select client_id,
+                client_secret,
+                contacts,
+                grant_types,
+                name,
+                public,
+                redirect_uris,
+                response_types,
+                scopes,
+                skip_consent,
+                token_endpoint_auth_method,
+                type,
+                user_id
+         from oauth_client`
+      )
+    );
+
+    expect(persistedRows.rows).toStrictEqual([
+      {
+        client_id: registration.client_id,
+        client_secret: null,
+        contacts: ["security@example.com"],
+        grant_types: ["authorization_code", "refresh_token"],
+        name: "Ceird MCP Runtime Smoke",
+        public: true,
+        redirect_uris: ["http://127.0.0.1:9123/oauth/callback"],
+        response_types: ["code"],
+        scopes: ["openid", "profile", "email", "offline_access", "ceird:read"],
+        skip_consent: null,
+        token_endpoint_auth_method: "none",
+        type: "native",
+        user_id: null,
+      },
+    ]);
+
+    const rateLimitRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        count: number;
+        key: string;
+      }>(`select key, count from rate_limit where key = $1`, [
+        "ceird-auth-abuse:203.0.113.41|/oauth2/register",
+      ])
+    );
+
+    expect(rateLimitRows.rows).toHaveLength(1);
+    expect(rateLimitRows.rows[0]?.count).toBe(1);
+
+    const auditRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        actor_user_id: string | null;
+        event_type: string;
+        metadata: {
+          dynamicRegistration?: boolean;
+          oauthError?: string | null;
+          outcome?: string;
+        };
+        oauth_client_id: string | null;
+        scopes: string[] | null;
+        source_ip: string | null;
+        user_agent: string | null;
+      }>(
+        `select actor_user_id,
+                event_type,
+                metadata,
+                oauth_client_id,
+                scopes,
+                source_ip,
+                user_agent
+         from auth_security_audit_event
+         where event_type = 'oauth_client_registration_succeeded'`
+      )
+    );
+
+    expect(auditRows.rows).toStrictEqual([
+      {
+        actor_user_id: null,
+        event_type: "oauth_client_registration_succeeded",
+        metadata: {
+          dynamicRegistration: true,
+          oauthError: null,
+          outcome: "succeeded",
+        },
+        oauth_client_id: registration.client_id,
+        scopes: ["openid", "profile", "email", "offline_access", "ceird:read"],
+        source_ip: "203.0.113.41",
+        user_agent: "Ceird MCP Runtime Smoke",
+      },
+    ]);
+    expect(JSON.stringify(auditRows.rows)).not.toContain("client_secret");
+  }, 30_000);
+
+  it("creates the auth security audit event table and indexes through migrations", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase();
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (adminPool) => await canConnect(adminPool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Auth integration database unavailable; skipping auth security audit migration coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    const auditTableRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        count: number;
+      }>(
+        `select count(*)::int as count
+         from information_schema.tables
+         where table_schema = 'public'
+           and table_name = 'auth_security_audit_event'`
+      )
+    );
+    const auditIndexRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        indexname: string;
+      }>(
+        `select indexname
+         from pg_indexes
+         where schemaname = 'public'
+           and tablename = 'auth_security_audit_event'`
+      )
+    );
+    const auditConstraintRows = await withPool(databaseUrl, (adminPool) =>
+      adminPool.query<{
+        conname: string;
+      }>(
+        `select conname
+         from pg_constraint
+         where conname = 'auth_security_audit_event_type_chk'`
+      )
+    );
+
+    expect(auditTableRows.rows[0]?.count).toBe(1);
+    expect(auditConstraintRows.rows).toStrictEqual([
+      {
+        conname: "auth_security_audit_event_type_chk",
+      },
+    ]);
+    expect(auditIndexRows.rows.map((row) => row.indexname)).toStrictEqual(
+      expect.arrayContaining([
+        "auth_security_audit_event_created_at_idx",
+        "auth_security_audit_event_type_created_at_idx",
+        "auth_security_audit_event_actor_created_at_idx",
+        "auth_security_audit_event_organization_created_at_idx",
+        "auth_security_audit_event_session_created_at_idx",
+        "auth_security_audit_event_oauth_client_created_at_idx",
+      ])
+    );
+  }, 30_000);
+
   it("rejects organization creation when the slug violates the app contract", async (context: {
     skip: (note?: string) => never;
   }) => {
@@ -579,6 +1557,7 @@ describe("authentication integration", () => {
     );
     updateCookieJar(cookieJar, signUpResponse);
     expect(signUpResponse.status).toBe(200);
+    await verifyUserEmailForTest(adminPool, "invalid-slug@example.com");
 
     const organizationResponse = await auth.handler(
       makeJsonRequest(
@@ -652,6 +1631,7 @@ describe("authentication integration", () => {
     );
     updateCookieJar(ownerCookieJar, ownerSignUpResponse);
     expect(ownerSignUpResponse.status).toBe(200);
+    await verifyUserEmailForTest(adminPool, "role-owner@example.com");
 
     const organizationResponse = await auth.handler(
       makeJsonRequest(
@@ -834,6 +1814,7 @@ describe("authentication integration", () => {
     );
     updateCookieJar(ownerCookieJar, ownerSignUpResponse);
     expect(ownerSignUpResponse.status).toBe(200);
+    await verifyUserEmailForTest(adminPool, "owner@example.com");
 
     const organizationResponse = await auth.handler(
       makeJsonRequest(
@@ -942,7 +1923,7 @@ describe("authentication integration", () => {
     ).resolves.toBeNull();
   }, 30_000);
 
-  it("only lets owners and admins use Better Auth member listing", async (context: {
+  it("guards external access across Better Auth organization endpoints", async (context: {
     skip: (note?: string) => never;
   }) => {
     const testDatabase = await createTestDatabase();
@@ -954,7 +1935,7 @@ describe("authentication integration", () => {
 
     if (!(await canConnect(adminPool))) {
       context.skip(
-        "Auth integration database unavailable; skipping member listing authorization coverage"
+        "Auth integration database unavailable; skipping external organization endpoint authorization coverage"
       );
     }
 
@@ -963,6 +1944,7 @@ describe("authentication integration", () => {
     const authPool = new Pool({ connectionString: databaseUrl });
     cleanup.push(() => authPool.end());
 
+    const sentInvitationEmails: unknown[] = [];
     const auth = createAuthentication({
       appOrigin: "http://127.0.0.1:4173",
       backgroundTaskHandler: async (task) => {
@@ -976,7 +1958,10 @@ describe("authentication integration", () => {
       database: drizzle({ client: authPool }),
       reportPasswordResetEmailFailure: () => {},
       reportVerificationEmailFailure: () => {},
-      sendOrganizationInvitationEmail: async () => {},
+      sendOrganizationInvitationEmail: (input) => {
+        sentInvitationEmails.push(input);
+        return Promise.resolve();
+      },
       sendPasswordResetEmail: async () => {},
       sendVerificationEmail: async () => {},
     });
@@ -991,6 +1976,7 @@ describe("authentication integration", () => {
     );
     updateCookieJar(ownerCookieJar, ownerSignUpResponse);
     expect(ownerSignUpResponse.status).toBe(200);
+    await verifyUserEmailForTest(adminPool, "owner-list-members@example.com");
 
     const organizationResponse = await auth.handler(
       makeJsonRequest(
@@ -1055,6 +2041,23 @@ describe("authentication integration", () => {
     const invitation = (await inviteResponse.json()) as {
       readonly id: string;
     };
+    const pendingInvitationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/invite-member",
+        {
+          email: "external-pending-action@example.com",
+          organizationId: createdOrganization.id,
+          role: "member",
+        },
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+    expect(pendingInvitationResponse.status).toBe(200);
+    const pendingInvitation = (await pendingInvitationResponse.json()) as {
+      readonly id: string;
+    };
 
     const externalCookieJar = new Map<string, string>();
     const externalSignUpResponse = await auth.handler(
@@ -1084,6 +2087,198 @@ describe("authentication integration", () => {
     );
     updateCookieJar(externalCookieJar, acceptInvitationResponse);
     expect(acceptInvitationResponse.status).toBe(200);
+
+    const externalMemberRows = await adminPool.query<{
+      id: string;
+      role: string;
+    }>(
+      `select member.id, member.role
+       from member
+       inner join "user" on "user".id = member.user_id
+       where member.organization_id = $1 and "user".email = $2`,
+      [createdOrganization.id, "external-list-members@example.com"]
+    );
+    expect(externalMemberRows.rows).toStrictEqual([
+      {
+        id: expect.any(String),
+        role: "external",
+      },
+    ]);
+
+    const clearExternalActiveOrganizationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/set-active",
+        {
+          organizationId: null,
+        },
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+    updateCookieJar(externalCookieJar, clearExternalActiveOrganizationResponse);
+    expect(clearExternalActiveOrganizationResponse.status).toBe(200);
+
+    const setExternalActiveOrganizationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/set-active",
+        {
+          organizationId: createdOrganization.id,
+        },
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+    updateCookieJar(externalCookieJar, setExternalActiveOrganizationResponse);
+    expect(setExternalActiveOrganizationResponse.status).toBe(200);
+
+    const externalSessionResponse = await auth.handler(
+      makeRequest("/get-session", {
+        cookieJar: externalCookieJar,
+      })
+    );
+    expect(externalSessionResponse.status).toBe(200);
+    const externalSession =
+      (await externalSessionResponse.json()) as SessionResponse;
+    expect(externalSession.session?.activeOrganizationId).toBe(
+      createdOrganization.id
+    );
+
+    const unrelatedOrganizationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/create",
+        {
+          name: "Out Of Scope Organization",
+          slug: "out-of-scope-organization",
+        },
+        {
+          cookieJar: ownerCookieJar,
+        }
+      )
+    );
+    updateCookieJar(ownerCookieJar, unrelatedOrganizationResponse);
+    expect(unrelatedOrganizationResponse.status).toBe(200);
+    const unrelatedOrganization =
+      (await unrelatedOrganizationResponse.json()) as CreatedOrganizationResponse;
+
+    const externalUnrelatedActiveOrganizationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/set-active",
+        {
+          organizationId: unrelatedOrganization.id,
+        },
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+    updateCookieJar(
+      externalCookieJar,
+      externalUnrelatedActiveOrganizationResponse
+    );
+    expectDeniedResponse(externalUnrelatedActiveOrganizationResponse);
+
+    const externalSessionAfterUnrelatedResponse = await auth.handler(
+      makeRequest("/get-session", {
+        cookieJar: externalCookieJar,
+      })
+    );
+    expect(externalSessionAfterUnrelatedResponse.status).toBe(200);
+    const externalSessionAfterUnrelated =
+      (await externalSessionAfterUnrelatedResponse.json()) as SessionResponse;
+    expect(
+      externalSessionAfterUnrelated.session?.activeOrganizationId
+    ).toBeNull();
+
+    const externalInviteResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/invite-member",
+        {
+          email: "external-should-not-invite@example.com",
+          organizationId: createdOrganization.id,
+          role: "external",
+        },
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+    expectDeniedResponse(externalInviteResponse);
+
+    const externalInviteResendResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/invite-member",
+        {
+          email: "external-pending-action@example.com",
+          organizationId: createdOrganization.id,
+          resend: true,
+          role: "member",
+        },
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+    expectDeniedResponse(externalInviteResendResponse);
+
+    const externalCancelInvitationResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/cancel-invitation",
+        {
+          invitationId: pendingInvitation.id,
+        },
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+    expectDeniedResponse(externalCancelInvitationResponse);
+
+    const externalOrganizationUpdateResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/update",
+        {
+          data: {
+            name: "Externally Renamed Organization",
+          },
+          organizationId: createdOrganization.id,
+        },
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+    expectDeniedResponse(externalOrganizationUpdateResponse);
+
+    const externalRoleUpdateResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/update-member-role",
+        {
+          memberId: externalMemberRows.rows[0]?.id,
+          organizationId: createdOrganization.id,
+          role: "member",
+        },
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+    expectDeniedResponse(externalRoleUpdateResponse);
+
+    const externalRemoveMemberResponse = await auth.handler(
+      makeJsonRequest(
+        "/organization/remove-member",
+        {
+          memberIdOrEmail: "external-list-members@example.com",
+          organizationId: createdOrganization.id,
+        },
+        {
+          cookieJar: externalCookieJar,
+        }
+      )
+    );
+    expectDeniedResponse(externalRemoveMemberResponse);
 
     const externalListResponse = await auth.handler(
       makeRequest(
@@ -1128,6 +2323,37 @@ describe("authentication integration", () => {
     );
 
     expect(externalFullOrganizationBySlugResponse.status).toBe(403);
+
+    const unchangedExternalMemberRows = await adminPool.query<{
+      role: string;
+    }>(`select role from member where id = $1`, [
+      externalMemberRows.rows[0]?.id,
+    ]);
+    expect(unchangedExternalMemberRows.rows).toStrictEqual([
+      { role: "external" },
+    ]);
+
+    const unchangedOrganizationRows = await adminPool.query<{ name: string }>(
+      `select name from organization where id = $1`,
+      [createdOrganization.id]
+    );
+    expect(unchangedOrganizationRows.rows).toStrictEqual([
+      { name: "Member Listing Guard" },
+    ]);
+
+    const blockedInvitationRows = await adminPool.query<{ count: number }>(
+      `select count(*)::int as count from invitation where email = $1`,
+      ["external-should-not-invite@example.com"]
+    );
+    expect(blockedInvitationRows.rows[0]?.count).toBe(0);
+
+    const unchangedPendingInvitationRows = await adminPool.query<{
+      status: string;
+    }>(`select status from invitation where id = $1`, [pendingInvitation.id]);
+    expect(unchangedPendingInvitationRows.rows).toStrictEqual([
+      { status: "pending" },
+    ]);
+    expect(sentInvitationEmails).toHaveLength(2);
   }, 30_000);
 
   it("serves the public invitation preview from the mounted api route", async (context: {
@@ -1179,6 +2405,7 @@ describe("authentication integration", () => {
     );
     updateCookieJar(ownerCookieJar, ownerSignUpResponse);
     expect(ownerSignUpResponse.status).toBe(200);
+    await verifyUserEmailForTest(adminPool, "owner@example.com");
 
     const organizationResponse = await auth.handler(
       makeJsonRequest(
@@ -1712,6 +2939,19 @@ function makeJsonRequest(
   });
 }
 
+function makeExpectedAuthAbuseEmailKey(input: {
+  readonly email: string;
+  readonly endpointPath: string;
+  readonly scope: "destination-email" | "recipient-email" | "target-email";
+  readonly secret: string;
+}) {
+  const digest = createHmac("sha256", input.secret)
+    .update(`${input.scope}:${input.email}`)
+    .digest("hex");
+
+  return `ceird-auth-abuse:${input.scope}:${digest}|${input.endpointPath}`;
+}
+
 interface RequestOptions {
   readonly body?: string;
   readonly cookieJar?: Map<string, string>;
@@ -1740,6 +2980,14 @@ interface CreatedOrganizationResponse {
   }[];
 }
 
+interface OAuthClientRegistrationResponse {
+  readonly client_id: string;
+  readonly client_secret?: string;
+  readonly redirect_uris: readonly string[];
+  readonly scope?: string;
+  readonly token_endpoint_auth_method?: string;
+}
+
 function makeRequest(routePath: string, options?: RequestOptions): Request {
   const headers = new Headers(options?.headers);
 
@@ -1764,6 +3012,93 @@ function makeRequest(routePath: string, options?: RequestOptions): Request {
       method: options?.method ?? "GET",
     }
   );
+}
+
+interface CaptchaSiteVerifyRequest {
+  readonly remoteip?: unknown;
+  readonly response?: unknown;
+  readonly secret?: unknown;
+}
+
+async function withCaptchaSiteVerifyServer(
+  run: (input: {
+    readonly requests: readonly CaptchaSiteVerifyRequest[];
+    readonly url: string;
+  }) => Promise<void>
+) {
+  const requests: CaptchaSiteVerifyRequest[] = [];
+  const url = "http://127.0.0.1:49152/siteverify";
+  const fetchSpy = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (input, init) => {
+      let requestUrl: string;
+      if (input instanceof Request) {
+        requestUrl = input.url;
+      } else if (input instanceof URL) {
+        requestUrl = input.toString();
+      } else {
+        requestUrl = String(input);
+      }
+
+      const { body: initBody, method: initMethod } = init ?? {};
+      let method = "GET";
+      if (input instanceof Request) {
+        const { method: inputMethod } = input;
+        method = inputMethod;
+      }
+      if (initMethod !== undefined) {
+        method = initMethod;
+      }
+
+      let body: BodyInit | null | undefined;
+      if (input instanceof Request) {
+        body = await input.clone().text();
+      }
+      if (initBody !== undefined) {
+        body = initBody;
+      }
+      const requestBody = await readCaptchaSiteVerifyRequestBody(body);
+      requests.push(requestBody);
+
+      return Response.json({
+        success:
+          requestUrl === url &&
+          method === "POST" &&
+          requestBody.secret === "turnstile-secret-key" &&
+          requestBody.response === "captcha-token",
+      });
+    });
+
+  try {
+    await run({
+      requests,
+      url,
+    });
+  } finally {
+    fetchSpy.mockRestore();
+  }
+}
+
+async function readCaptchaSiteVerifyRequestBody(
+  body: BodyInit | null | undefined
+): Promise<CaptchaSiteVerifyRequest> {
+  if (body === undefined || body === null) {
+    return {};
+  }
+
+  const text = await new Response(body).text();
+
+  if (text.length === 0) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text) as CaptchaSiteVerifyRequest;
+  } catch {
+    const params = new URLSearchParams(text);
+
+    return Object.fromEntries(params) as CaptchaSiteVerifyRequest;
+  }
 }
 
 function updateCookieJar(
@@ -1795,10 +3130,22 @@ function updateCookieJar(
   }
 }
 
+function expectDeniedResponse(response: Response) {
+  expect(response.status).toBeGreaterThanOrEqual(400);
+  expect(response.status).toBeLessThan(500);
+}
+
 async function verifyUserEmailForTest(pool: Pool, email: string) {
   await pool.query(`update "user" set email_verified = true where email = $1`, [
     email,
   ]);
+}
+
+async function unverifyUserEmailForTest(pool: Pool, email: string) {
+  await pool.query(
+    `update "user" set email_verified = false where email = $1`,
+    [email]
+  );
 }
 
 async function withEnvironment(

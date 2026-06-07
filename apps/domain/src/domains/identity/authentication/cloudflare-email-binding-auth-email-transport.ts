@@ -100,6 +100,9 @@ export function makeCloudflareEmailBindingAuthEmailTransport() {
           Effect.catchTag(AUTH_EMAIL_REQUEST_ERROR_TAG, (error) =>
             logOutcome("request_failed").pipe(
               Effect.annotateLogs({
+                authAbuseAlertPolicy: "alert_on_email_failure_threshold",
+                authAbuseSignal: "auth_email_provider_failure",
+                authAbuseSignalSeverity: "high",
                 authEmailFailureCause: error.cause ?? error.message,
                 authEmailFailureTag: error._tag,
               }),

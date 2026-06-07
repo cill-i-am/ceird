@@ -6,6 +6,7 @@ import {
   accountEmailSchema,
   accountNameSchema,
   accountPasswordSchema,
+  ACCOUNT_PASSWORD_LENGTH_MESSAGE,
 } from "#/features/auth/auth-schemas";
 
 const SettingsEmail = accountEmailSchema.pipe(
@@ -16,7 +17,14 @@ const SettingsEmail = accountEmailSchema.pipe(
 
 const SettingsPassword = accountPasswordSchema.pipe(
   Schema.annotate({
-    message: "Use 8 or more characters",
+    message: ACCOUNT_PASSWORD_LENGTH_MESSAGE,
+  })
+);
+
+const SettingsCurrentPassword = Schema.String.pipe(
+  Schema.check(Schema.isMinLength(1)),
+  Schema.annotate({
+    message: "Enter your current password",
   })
 );
 
@@ -61,7 +69,7 @@ const ChangeEmailInputSchema = Schema.Struct({
 });
 
 const ChangePasswordInputSchema = Schema.Struct({
-  currentPassword: SettingsPassword,
+  currentPassword: SettingsCurrentPassword,
   newPassword: SettingsPassword,
   confirmPassword: SettingsPassword,
 }).pipe(
