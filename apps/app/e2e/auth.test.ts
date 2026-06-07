@@ -54,7 +54,7 @@ async function expectAuthenticatedHome(page: Page) {
     page.getByRole("link", { exact: true, name: "Jobs" })
   ).toBeVisible();
   await expect(
-    workspaceHome.getByRole("link", { exact: true, name: "Invite teammate" })
+    workspaceHome.getByRole("link", { exact: true, name: "New job" })
   ).toBeVisible();
 }
 

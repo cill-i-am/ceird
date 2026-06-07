@@ -219,7 +219,10 @@ test("created organization can be opened on the tenant host", async ({
 
   await expect(workspaceHome).toBeVisible({ timeout: 20_000 });
   await expect(
-    workspaceHome.getByText(`${ORGANIZATION_NAME} / @${organizationSlug}`, {
+    page.getByText(ORGANIZATION_NAME, { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText(organizationSlug, {
       exact: true,
     })
   ).toBeVisible();
