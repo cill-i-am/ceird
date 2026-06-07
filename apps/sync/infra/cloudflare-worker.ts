@@ -89,10 +89,10 @@ export interface ElectricContainerStorageConfig {
 }
 
 export interface ElectricContainerSecretConfig {
-  readonly awsAccessKeyId: Input<string>;
-  readonly awsSecretAccessKey: Input<string>;
-  readonly databaseUrl: Input<string>;
-  readonly electricSecret: Input<string>;
+  readonly awsAccessKeyId: Input<Redacted.Redacted<string>>;
+  readonly awsSecretAccessKey: Input<Redacted.Redacted<string>>;
+  readonly databaseUrl: Input<Redacted.Redacted<string>>;
+  readonly electricSecret: Input<Redacted.Redacted<string>>;
 }
 
 export interface ElectricContainerConfig {
@@ -195,6 +195,12 @@ export const electricContainerDockerfile = [
   "USER 65532:65532",
 ].join("\n");
 
+function containerSecretReference(
+  secret: Input<Redacted.Redacted<string>>
+): Input<string> {
+  return secret as unknown as Input<string>;
+}
+
 export function makeElectricContainerProps(input: {
   readonly config: SyncWorkerStageConfig;
   readonly name: string;
@@ -228,22 +234,22 @@ export function makeElectricContainerProps(input: {
     secrets: [
       {
         name: "AWS_ACCESS_KEY_ID",
-        secret: input.secrets.awsAccessKeyId,
+        secret: containerSecretReference(input.secrets.awsAccessKeyId),
         type: "env",
       },
       {
         name: "AWS_SECRET_ACCESS_KEY",
-        secret: input.secrets.awsSecretAccessKey,
+        secret: containerSecretReference(input.secrets.awsSecretAccessKey),
         type: "env",
       },
       {
         name: "DATABASE_URL",
-        secret: input.secrets.databaseUrl,
+        secret: containerSecretReference(input.secrets.databaseUrl),
         type: "env",
       },
       {
         name: "ELECTRIC_SECRET",
-        secret: input.secrets.electricSecret,
+        secret: containerSecretReference(input.secrets.electricSecret),
         type: "env",
       },
     ],

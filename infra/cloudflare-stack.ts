@@ -493,52 +493,53 @@ function makeElectricContainerConfig(input: {
 }): Effect.Effect<ElectricContainerConfig, never, Cloudflare.Providers> {
   return Effect.gen(function* () {
     const store = yield* Cloudflare.SecretsStore("ElectricContainerSecrets");
-    const awsAccessKeyId = yield* Cloudflare.Secret(
-      "ElectricContainerAwsAccessKeyIdSecret",
-      {
-        store,
-        name: makeElectricContainerSecretName(
-          input.config,
-          "aws-access-key-id"
-        ),
-        value: redactInput(input.storageCredentials.accessKeyId),
-      }
-    );
-    const awsSecretAccessKey = yield* Cloudflare.Secret(
-      "ElectricContainerAwsSecretAccessKeySecret",
-      {
-        store,
-        name: makeElectricContainerSecretName(
-          input.config,
-          "aws-secret-access-key"
-        ),
-        value: redactInput(input.storageCredentials.secretAccessKey),
-      }
-    );
-    const databaseUrl = yield* Cloudflare.Secret(
-      "ElectricContainerDatabaseUrlSecret",
-      {
-        store,
-        name: makeElectricContainerSecretName(input.config, "database-url"),
-        value: redactInput(input.databaseConnectionUri),
-      }
-    );
-    const electricSecret = yield* Cloudflare.Secret(
-      "ElectricContainerSourceSecret",
-      {
-        store,
-        name: makeElectricContainerSecretName(input.config, "source-secret"),
-        value: input.electricSourceSecret,
-      }
-    );
+    const secretNames = {
+      awsAccessKeyId: makeElectricContainerSecretName(
+        input.config,
+        "aws-access-key-id"
+      ),
+      awsSecretAccessKey: makeElectricContainerSecretName(
+        input.config,
+        "aws-secret-access-key"
+      ),
+      databaseUrl: makeElectricContainerSecretName(
+        input.config,
+        "database-url"
+      ),
+      electricSecret: makeElectricContainerSecretName(
+        input.config,
+        "source-secret"
+      ),
+    };
+
+    yield* Cloudflare.Secret("ElectricContainerAwsAccessKeyIdSecret", {
+      store,
+      name: secretNames.awsAccessKeyId,
+      value: redactInput(input.storageCredentials.accessKeyId),
+    });
+    yield* Cloudflare.Secret("ElectricContainerAwsSecretAccessKeySecret", {
+      store,
+      name: secretNames.awsSecretAccessKey,
+      value: redactInput(input.storageCredentials.secretAccessKey),
+    });
+    yield* Cloudflare.Secret("ElectricContainerDatabaseUrlSecret", {
+      store,
+      name: secretNames.databaseUrl,
+      value: redactInput(input.databaseConnectionUri),
+    });
+    yield* Cloudflare.Secret("ElectricContainerSourceSecret", {
+      store,
+      name: secretNames.electricSecret,
+      value: input.electricSourceSecret,
+    });
 
     return {
       name: input.name,
       secrets: {
-        awsAccessKeyId: awsAccessKeyId.secretName,
-        awsSecretAccessKey: awsSecretAccessKey.secretName,
-        databaseUrl: databaseUrl.secretName,
-        electricSecret: electricSecret.secretName,
+        awsAccessKeyId: Redacted.make(secretNames.awsAccessKeyId),
+        awsSecretAccessKey: Redacted.make(secretNames.awsSecretAccessKey),
+        databaseUrl: Redacted.make(secretNames.databaseUrl),
+        electricSecret: Redacted.make(secretNames.electricSecret),
       },
       storage: {
         accountId: input.accountId,

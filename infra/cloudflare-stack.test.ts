@@ -888,10 +888,12 @@ describe("Cloudflare stack", () => {
       config: configWithoutCloudflareBootstrapSecrets,
       name: "ceird-main-electric",
       secrets: {
-        awsAccessKeyId: "ceird-main-electric-aws-access-key-id",
-        awsSecretAccessKey: "ceird-main-electric-aws-secret-access-key",
-        databaseUrl: "ceird-main-electric-database-url",
-        electricSecret: "ceird-main-electric-source-secret",
+        awsAccessKeyId: Redacted.make("ceird-main-electric-aws-access-key-id"),
+        awsSecretAccessKey: Redacted.make(
+          "ceird-main-electric-aws-secret-access-key"
+        ),
+        databaseUrl: Redacted.make("ceird-main-electric-database-url"),
+        electricSecret: Redacted.make("ceird-main-electric-source-secret"),
       },
       storage: {
         accountId: "cloudflare-account-id",
@@ -1087,7 +1089,19 @@ describe("Cloudflare stack", () => {
       { name: "R2_ACCOUNT_ID", value: "cloudflare-account-id" },
       { name: "R2_BUCKET_NAME", value: "ceird-main-electric-storage" },
     ]);
-    expect(electricContainerProps.secrets).toStrictEqual([
+    const electricContainerSecrets = electricContainerProps.secrets.map(
+      ({ name, secret, type }) => {
+        expect(Redacted.isRedacted(secret)).toBeTruthy();
+        return {
+          name,
+          secret: Redacted.value(
+            secret as unknown as Redacted.Redacted<string>
+          ),
+          type,
+        };
+      }
+    );
+    expect(electricContainerSecrets).toStrictEqual([
       {
         name: "AWS_ACCESS_KEY_ID",
         secret: "ceird-main-electric-aws-access-key-id",
