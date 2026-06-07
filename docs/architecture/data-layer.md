@@ -180,8 +180,8 @@ service restarts. Cloudflare Container disks are ephemeral, so the Alchemy stack
 provisions a stage-scoped R2 bucket for Electric storage. In local
 `alchemy dev` stages, the stack also mints a bucket-scoped R2 API token so the
 local cloud-backed loop stays self-contained. In deployed stages, the separate
-GitHub credential stack owns an Electric R2 API token scoped to all stage buckets
-and stores `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
+GitHub credential stack owns an account-scoped Electric R2 API token with R2
+read/write permissions and stores `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
 `CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` in the GitHub environments that
 deploy or destroy app stacks. The app stack consumes those values instead of
 creating API tokens during routine deploys, so the deploy token does not need

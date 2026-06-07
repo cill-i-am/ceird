@@ -5,10 +5,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
-import {
-  makeCloudflareR2AllBucketsResourceScope,
-  makeR2SecretAccessKey,
-} from "./cloudflare-r2.ts";
+import { makeR2SecretAccessKey } from "./cloudflare-r2.ts";
 
 export const gitHubCiDeployEnvironments = [
   "main",
@@ -81,14 +78,12 @@ export function makeCloudflareElectricStorageTokenProps(
       {
         effect: "allow",
         permissionGroups: [
-          "Workers R2 Storage Bucket Item Read",
-          "Workers R2 Storage Bucket Item Write",
+          "Workers R2 Storage Read",
+          "Workers R2 Storage Write",
         ],
-        // Cloudflare's R2 all-buckets policy uses a nested account resource.
-        // Alchemy beta.44 still types token resources as flat string values.
-        resources: makeCloudflareR2AllBucketsResourceScope(
-          config.cloudflareAccountId
-        ) as unknown as Record<string, string>,
+        resources: {
+          [`com.cloudflare.api.account.${config.cloudflareAccountId}`]: "*",
+        },
       },
     ],
   } satisfies InputProps<Cloudflare.ApiTokenProps>;
@@ -116,6 +111,9 @@ export const makeGitHubCiStack = Effect.fn("GitHubCiStack.make")(function* (
   );
   const electricStorageSecretAccessKey = electricStorageToken.value.pipe(
     Output.map((value) => Redacted.make(makeR2SecretAccessKey(value)))
+  );
+  const electricStorageAccessKeyId = electricStorageToken.tokenId.pipe(
+    Output.map(Redacted.make)
   );
   const repository = {
     owner: config.gitHubOwner,
@@ -148,7 +146,7 @@ export const makeGitHubCiStack = Effect.fn("GitHubCiStack.make")(function* (
           ...repository,
           environment,
           name: "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID",
-          value: Redacted.make(electricStorageToken.tokenId),
+          value: electricStorageAccessKeyId,
         }),
         GitHub.Secret(`GitHubElectricStorageSecretAccessKey${environment}`, {
           ...repository,
