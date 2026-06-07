@@ -9,6 +9,7 @@
 | `agent`   | Public Cloudflare Agents SDK Worker. Owns `CeirdAgent` Durable Objects, chat runtime state, and action tool calls.         |
 | `domain`  | Private business/domain Worker. Owns product services, repositories, authorization, audit, auth, and Postgres persistence. |
 | `mcp`     | Standalone MCP adapter Worker. Forwards MCP traffic through the same private `DOMAIN` service binding.                     |
+| `sync`    | Public Electric SQL sync Worker. Authorizes domain shapes through `DOMAIN` and forwards to the Electric container.         |
 
 Use root commands for cross-service work:
 
@@ -29,6 +30,7 @@ pnpm --filter domain test
 pnpm --filter domain db:generate
 pnpm --filter domain db:migrate
 pnpm --filter mcp test
+pnpm --filter sync test
 ```
 
 Architecture docs:

@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 
 import { isAgentInternalPath } from "@ceird/agents-core";
-import { makeDomainOriginClient } from "@ceird/domain-core";
+import { isSyncInternalPath, makeDomainOriginClient } from "@ceird/domain-core";
 import type { DomainHttpClient } from "@ceird/domain-core";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Config, Context, Effect, Layer } from "effect";
@@ -104,7 +104,7 @@ function handleApiRequest(
     return Response.json(makeHealthPayload(readRuntimeConfig(runtimeConfig)));
   }
 
-  if (isAgentInternalPath(url.pathname)) {
+  if (isAgentInternalPath(url.pathname) || isSyncInternalPath(url.pathname)) {
     return new Response("Not found", { status: 404 });
   }
 

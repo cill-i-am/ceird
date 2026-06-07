@@ -58,13 +58,35 @@ import type {
   McpWorkerBindingRuntimeEnv,
   McpWorkerConfigEnv,
 } from "../apps/mcp/src/platform/cloudflare/env.ts";
+import type {
+  SyncWorkerBindingEnv,
+  SyncWorkerConfiguredEnv,
+} from "../apps/sync/infra/cloudflare-worker.ts";
+import {
+  electricContainerDockerfile,
+  makeElectricContainerEnv,
+  makeElectricContainerProps,
+  makeSyncWorkerBindings,
+  makeSyncWorkerEnv,
+  makeSyncWorkerProps,
+} from "../apps/sync/infra/cloudflare-worker.ts";
+import type {
+  SyncWorkerBindingRuntimeEnv,
+  SyncWorkerConfigEnv,
+} from "../apps/sync/src/platform/cloudflare/env.ts";
+import {
+  makeCloudflareR2BucketResourceKey,
+  makeR2SecretAccessKey,
+} from "./cloudflare-r2.ts";
 import type { makeCloudflareStack } from "./cloudflare-stack.ts";
 import {
   makeAlchemyLocalWorkerOrigin,
   makeCloudflareHyperdriveProps,
+  makeDurableObjectLocationHintForNeonRegion,
   makeTenantReservedHostBypassRoutePatterns,
   makeCloudflareWorkerOrigin,
   shouldReconcileTenantRouting,
+  shouldProvisionElectricStorage,
 } from "./cloudflare-stack.ts";
 import {
   ceirdDomainWorkerPlacement,
@@ -108,6 +130,11 @@ const mcpWorkerBindingKeys = [
   "ANALYTICS",
   "DOMAIN",
 ] as const satisfies readonly (keyof McpWorkerBindingEnv)[];
+const syncWorkerBindingKeys = [
+  "ANALYTICS",
+  "DOMAIN",
+  "ElectricSql",
+] as const satisfies readonly (keyof SyncWorkerBindingEnv)[];
 const agentWorkerResourceBindingKeys = [
   "AI",
   "ANALYTICS",
@@ -157,6 +184,17 @@ const agentWorkerBindingsSatisfyRuntimeContract: AssertTrue<
 > = true;
 const agentWorkerRuntimeContractSatisfiesBindings: AssertTrue<
   RequiredNonNullableProperties<AgentWorkerBindingRuntimeEnv> extends AgentWorkerBindingEnv
+    ? true
+    : false
+> = true;
+const syncWorkerBindingKeysMatchRuntimeContract: AssertTrue<
+  HasSameKeys<SyncWorkerBindingEnv, SyncWorkerBindingRuntimeEnv>
+> = true;
+const syncWorkerBindingsSatisfyRuntimeContract: AssertTrue<
+  SyncWorkerBindingEnv extends SyncWorkerBindingRuntimeEnv ? true : false
+> = true;
+const syncWorkerRuntimeContractSatisfiesBindings: AssertTrue<
+  RequiredNonNullableProperties<SyncWorkerBindingRuntimeEnv> extends SyncWorkerBindingEnv
     ? true
     : false
 > = true;
@@ -233,11 +271,34 @@ type AgentWorkerStackRuntimeConfigEnv = Required<
   >
 > &
   Pick<AgentWorkerConfigEnv, "CEIRD_LOCAL_DEV">;
+type SyncWorkerStackRuntimeConfigEnv = Required<
+  Pick<
+    SyncWorkerConfigEnv,
+    | "ALCHEMY_STACK_NAME"
+    | "ALCHEMY_STAGE"
+    | "AUTH_APP_ORIGIN"
+    | "AUTH_TRUSTED_ORIGINS"
+    | "CEIRD_WORKER_ANALYTICS_SAMPLE_RATE"
+    | "ELECTRIC_SQL_LOCATION_HINT"
+    | "ELECTRIC_SOURCE_SECRET"
+    | "NODE_ENV"
+  >
+> &
+  Pick<
+    SyncWorkerConfigEnv,
+    | "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
+    | "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
+    | "ELECTRIC_CONTAINER_DATABASE_URL"
+    | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
+    | "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
+    | "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+  >;
 type ApiWorkerStackEnv = ApiWorkerConfiguredEnv & AlchemyInjectedWorkerEnv;
 type DomainWorkerStackEnv = DomainWorkerConfiguredEnv &
   AlchemyInjectedWorkerEnv;
 type McpWorkerStackEnv = McpWorkerConfiguredEnv & AlchemyInjectedWorkerEnv;
 type AgentWorkerStackEnv = AgentWorkerConfiguredEnv & AlchemyInjectedWorkerEnv;
+type SyncWorkerStackEnv = SyncWorkerConfiguredEnv & AlchemyInjectedWorkerEnv;
 type DomainWorkerRuntimeStringValueKeys = Exclude<
   keyof DomainWorkerStackRuntimeConfigEnv,
   | "AGENT_INTERNAL_SECRET"
@@ -270,6 +331,9 @@ const mcpWorkerConfiguredEnvKeysMatchRuntimeConfig: AssertTrue<
 const agentWorkerConfiguredEnvKeysMatchRuntimeConfig: AssertTrue<
   HasSameKeys<AgentWorkerStackEnv, AgentWorkerStackRuntimeConfigEnv>
 > = true;
+const syncWorkerConfiguredEnvKeysMatchRuntimeConfig: AssertTrue<
+  HasSameKeys<SyncWorkerStackEnv, SyncWorkerStackRuntimeConfigEnv>
+> = true;
 const domainWorkerConfiguredStringValuesSatisfyRuntimeConfig: AssertTrue<
   DomainWorkerStackStringValueEnv extends DomainWorkerRuntimeStringValueEnv
     ? true
@@ -286,6 +350,9 @@ const mcpWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
 > = true;
 const agentWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
   AllPropertyValuesExtend<AgentWorkerConfiguredEnv, WorkerConfiguredEnvValue>
+> = true;
+const syncWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
+  AllPropertyValuesExtend<SyncWorkerConfiguredEnv, WorkerConfiguredEnvValue>
 > = true;
 
 type AppWorkerStackEnv = ReturnType<typeof makeAppWorkerEnv> &
@@ -317,6 +384,14 @@ const cloudflareStackOutputsIncludeCanonicalOrigins: AssertTrue<
     readonly agentOrigin: Input<string>;
     readonly appOrigin: Input<string>;
     readonly mcpOrigin: Input<string>;
+    readonly syncOrigin: Input<string>;
+  }
+    ? true
+    : false
+> = true;
+const cloudflareStackOutputsIncludeElectricStorage: AssertTrue<
+  CloudflareStackResources extends {
+    readonly electricStorageBucket: Cloudflare.R2Bucket | undefined;
   }
     ? true
     : false
@@ -353,12 +428,14 @@ describe("Cloudflare stack", () => {
     authCookieDomain: "example.com",
     authCookiePrefix: "ceird-pr-123",
     mcpHostname: "mcp.pr-123.example.com",
+    syncHostname: "sync.pr-123.example.com",
     stage: "pr-123",
     tenantReservedHostnames: [
       "app.pr-123.example.com",
       "api.pr-123.example.com",
       "agent.pr-123.example.com",
       "mcp.pr-123.example.com",
+      "sync.pr-123.example.com",
     ],
     tenantBaseDomain: "example.com",
     tenantRoutePattern: "*--pr-123.example.com/*",
@@ -391,6 +468,12 @@ describe("Cloudflare stack", () => {
       agentOrigin: "https://agent.example.com",
       apiOrigin: "https://api.example.com",
       config: configWithoutCloudflareBootstrapSecrets,
+      syncOrigin: "https://sync.example.com",
+    });
+    const syncEnv = makeSyncWorkerEnv({
+      config: configWithoutCloudflareBootstrapSecrets,
+      electricSqlLocationHint: "weur",
+      electricSourceSecret: Redacted.make("electric-secret"),
     });
 
     expect(apiEnv).not.toHaveProperty("ALCHEMY_STAGE");
@@ -398,6 +481,7 @@ describe("Cloudflare stack", () => {
     expect(mcpEnv).not.toHaveProperty("ALCHEMY_STAGE");
     expect(agentEnv).not.toHaveProperty("ALCHEMY_STAGE");
     expect(appEnv).not.toHaveProperty("ALCHEMY_STAGE");
+    expect(syncEnv).not.toHaveProperty("ALCHEMY_STAGE");
     expect(apiEnv).toStrictEqual({
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
       NODE_ENV: "production",
@@ -445,20 +529,30 @@ describe("Cloudflare stack", () => {
       AGENT_ORIGIN: "https://agent.example.com",
       API_ORIGIN: "https://api.example.com",
       CEIRD_CLOUDFLARE: "1",
+      SYNC_ORIGIN: "https://sync.example.com",
       SYSTEM_APP_ORIGIN: "https://app.example.com",
       TENANT_BASE_DOMAIN: "example.com",
       TENANT_HOST_MODE: "stage",
       TENANT_RESERVED_HOSTNAMES:
-        "app.example.com,api.example.com,agent.example.com,mcp.example.com",
+        "app.example.com,api.example.com,agent.example.com,mcp.example.com,sync.example.com",
       TENANT_STAGE_ALIAS: "main",
       VITE_AGENT_ORIGIN: "https://agent.example.com",
       VITE_API_ORIGIN: "https://api.example.com",
+      VITE_SYNC_ORIGIN: "https://sync.example.com",
       VITE_SYSTEM_APP_ORIGIN: "https://app.example.com",
       VITE_TENANT_BASE_DOMAIN: "example.com",
       VITE_TENANT_HOST_MODE: "stage",
       VITE_TENANT_RESERVED_HOSTNAMES:
-        "app.example.com,api.example.com,agent.example.com,mcp.example.com",
+        "app.example.com,api.example.com,agent.example.com,mcp.example.com,sync.example.com",
       VITE_TENANT_STAGE_ALIAS: "main",
+    });
+    expect(syncEnv).toMatchObject({
+      AUTH_APP_ORIGIN: "https://app.example.com",
+      AUTH_TRUSTED_ORIGINS:
+        "https://app.example.com,https://*--main.example.com",
+      CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+      ELECTRIC_SQL_LOCATION_HINT: "weur",
+      NODE_ENV: "production",
     });
   });
 
@@ -469,6 +563,7 @@ describe("Cloudflare stack", () => {
       agentOrigin: "https://agent.pr-123.example.com",
       apiOrigin: "https://api.pr-123.example.com",
       config: previewTenantConfig,
+      syncOrigin: "https://sync.pr-123.example.com",
     });
     const domainEnv = makeDomainWorkerEnv({
       agentInternalSecret,
@@ -485,8 +580,9 @@ describe("Cloudflare stack", () => {
     expect(appEnv.TENANT_BASE_DOMAIN).toBe("example.com");
     expect(appEnv.TENANT_HOST_MODE).toBe("stage");
     expect(appEnv.TENANT_RESERVED_HOSTNAMES).toBe(
-      "app.pr-123.example.com,api.pr-123.example.com,agent.pr-123.example.com,mcp.pr-123.example.com"
+      "app.pr-123.example.com,api.pr-123.example.com,agent.pr-123.example.com,mcp.pr-123.example.com,sync.pr-123.example.com"
     );
+    expect(appEnv.SYNC_ORIGIN).toBe("https://sync.pr-123.example.com");
     expect(appEnv.TENANT_STAGE_ALIAS).toBe("pr-123");
     expect(appEnv.VITE_SYSTEM_APP_ORIGIN).toBe(
       "https://app.pr-123.example.com"
@@ -494,8 +590,9 @@ describe("Cloudflare stack", () => {
     expect(appEnv.VITE_TENANT_BASE_DOMAIN).toBe("example.com");
     expect(appEnv.VITE_TENANT_HOST_MODE).toBe("stage");
     expect(appEnv.VITE_TENANT_RESERVED_HOSTNAMES).toBe(
-      "app.pr-123.example.com,api.pr-123.example.com,agent.pr-123.example.com,mcp.pr-123.example.com"
+      "app.pr-123.example.com,api.pr-123.example.com,agent.pr-123.example.com,mcp.pr-123.example.com,sync.pr-123.example.com"
     );
+    expect(appEnv.VITE_SYNC_ORIGIN).toBe("https://sync.pr-123.example.com");
     expect(appEnv.VITE_TENANT_STAGE_ALIAS).toBe("pr-123");
     expect(domainEnv.AUTH_APP_ORIGIN).toBe("https://app.pr-123.example.com");
     expect(domainEnv.AUTH_COOKIE_DOMAIN).toBe("example.com");
@@ -519,6 +616,7 @@ describe("Cloudflare stack", () => {
       "api.pr-123.example.com/*",
       "agent.pr-123.example.com/*",
       "mcp.pr-123.example.com/*",
+      "sync.pr-123.example.com/*",
     ]);
   });
 
@@ -550,6 +648,72 @@ describe("Cloudflare stack", () => {
         tenantRoutePattern: undefined,
       })
     ).toBe(false);
+  });
+
+  it("bootstraps local Electric storage and fails closed for deployed stage credentials", () => {
+    expect(
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: configWithoutCloudflareBootstrapSecrets,
+          localDev: true,
+        })
+      )
+    ).toBe(true);
+    expect(
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: {
+            ...previewTenantConfig,
+            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
+            electricStorageSecretAccessKey: Redacted.make(
+              "electric-secret-access-key"
+            ),
+          },
+          localDev: false,
+        })
+      )
+    ).toBe(true);
+    expect(() =>
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: previewTenantConfig,
+          localDev: false,
+        })
+      )
+    ).toThrow(/required outside local Alchemy dev/);
+    expect(
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: {
+            ...configWithoutCloudflareBootstrapSecrets,
+            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
+            electricStorageSecretAccessKey: Redacted.make(
+              "electric-secret-access-key"
+            ),
+          },
+          localDev: false,
+        })
+      )
+    ).toBe(true);
+    expect(() =>
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: {
+            ...configWithoutCloudflareBootstrapSecrets,
+            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
+          },
+          localDev: false,
+        })
+      )
+    ).toThrow(/must be configured together/);
+    expect(() =>
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: configWithoutCloudflareBootstrapSecrets,
+          localDev: false,
+        })
+      )
+    ).toThrow(/required outside local Alchemy dev/);
   });
 
   it("sets cross-subdomain auth cookies from the configured tenant base domain", () => {
@@ -634,6 +798,7 @@ describe("Cloudflare stack", () => {
       agentOrigin: "https://agent.example.com",
       apiOrigin: "https://api.example.com",
       config,
+      syncOrigin: "https://sync.example.com",
     });
 
     expect(domainEnv).toMatchObject({
@@ -727,24 +892,27 @@ describe("Cloudflare stack", () => {
         agentOrigin: "https://agent.stage.example.com",
         apiOrigin: "https://api.stage.example.com",
         config: configWithoutCloudflareBootstrapSecrets,
+        syncOrigin: "https://sync.stage.example.com",
       })
     ).toStrictEqual({
       AGENT_ORIGIN: "https://agent.stage.example.com",
       API_ORIGIN: "https://api.stage.example.com",
       CEIRD_CLOUDFLARE: "1",
+      SYNC_ORIGIN: "https://sync.stage.example.com",
       SYSTEM_APP_ORIGIN: "https://app.example.com",
       TENANT_BASE_DOMAIN: "example.com",
       TENANT_HOST_MODE: "stage",
       TENANT_RESERVED_HOSTNAMES:
-        "app.example.com,api.example.com,agent.example.com,mcp.example.com",
+        "app.example.com,api.example.com,agent.example.com,mcp.example.com,sync.example.com",
       TENANT_STAGE_ALIAS: "main",
       VITE_AGENT_ORIGIN: "https://agent.stage.example.com",
       VITE_API_ORIGIN: "https://api.stage.example.com",
+      VITE_SYNC_ORIGIN: "https://sync.stage.example.com",
       VITE_SYSTEM_APP_ORIGIN: "https://app.example.com",
       VITE_TENANT_BASE_DOMAIN: "example.com",
       VITE_TENANT_HOST_MODE: "stage",
       VITE_TENANT_RESERVED_HOSTNAMES:
-        "app.example.com,api.example.com,agent.example.com,mcp.example.com",
+        "app.example.com,api.example.com,agent.example.com,mcp.example.com,sync.example.com",
       VITE_TENANT_STAGE_ALIAS: "main",
     });
   });
@@ -766,6 +934,7 @@ describe("Cloudflare stack", () => {
     const aiGateway = {
       gatewayId: "ceird-main-agent-ai",
     } as unknown as Cloudflare.AiGateway;
+    const electricSourceSecret = Redacted.make("electric-secret");
 
     const domainBindings = makeDomainWorkerBindings({
       analytics: workerAnalytics,
@@ -802,6 +971,37 @@ describe("Cloudflare stack", () => {
       analytics: workerAnalytics,
       domain,
     });
+    const syncBindings = makeSyncWorkerBindings({
+      analytics: workerAnalytics,
+      domain,
+    });
+    const electricContainerEnv = makeElectricContainerEnv({
+      databaseUrl: Redacted.make("postgres://electric.example/db"),
+      electricSecret: electricSourceSecret,
+      storage: {
+        accessKeyId: Redacted.make("r2-access-key-id"),
+        accountId: "cloudflare-account-id",
+        bucketName: "ceird-main-electric-storage",
+        awsSecretAccessKey: Redacted.make("r2-secret-access-key"),
+      },
+    });
+    const syncWorkerProps = makeSyncWorkerProps({
+      analytics: workerAnalytics,
+      config: configWithoutCloudflareBootstrapSecrets,
+      domain,
+      electricContainer: {
+        env: electricContainerEnv,
+        name: "ceird-main-electric",
+      },
+      electricSqlLocationHint: "weur",
+      electricSourceSecret,
+      hostname: "sync.example.com",
+      name: "ceird-main-sync",
+    });
+    const electricContainerProps = makeElectricContainerProps({
+      config: configWithoutCloudflareBootstrapSecrets,
+      name: "ceird-main-electric",
+    });
     const authEmailBinding = domainBindings.AUTH_EMAIL;
 
     if (authEmailBinding === undefined) {
@@ -817,6 +1017,7 @@ describe("Cloudflare stack", () => {
     ]);
     expect(Object.keys(apiBindings)).toStrictEqual([...apiWorkerBindingKeys]);
     expect(Object.keys(mcpBindings)).toStrictEqual([...mcpWorkerBindingKeys]);
+    expect(Object.keys(syncBindings)).toStrictEqual([...syncWorkerBindingKeys]);
     expect(Object.keys(agentBindings)).toStrictEqual([
       ...agentWorkerResourceBindingKeys,
     ]);
@@ -832,6 +1033,9 @@ describe("Cloudflare stack", () => {
     expect(agentWorkerBindingKeysMatchRuntimeContract).toBeTruthy();
     expect(agentWorkerBindingsSatisfyRuntimeContract).toBeTruthy();
     expect(agentWorkerRuntimeContractSatisfiesBindings).toBeTruthy();
+    expect(syncWorkerBindingKeysMatchRuntimeContract).toBeTruthy();
+    expect(syncWorkerBindingsSatisfyRuntimeContract).toBeTruthy();
+    expect(syncWorkerRuntimeContractSatisfiesBindings).toBeTruthy();
     expect(domainBindings.AUTH_EMAIL_QUEUE).toBe(authEmailQueue);
     expect(domainBindings.ANALYTICS).toBe(workerAnalytics);
     expect(domainBindings.DATABASE).toBe(hyperdrive);
@@ -842,11 +1046,23 @@ describe("Cloudflare stack", () => {
     expect(agentBindings.AI).toBe(aiGateway);
     expect(agentBindings.ANALYTICS).toBe(workerAnalytics);
     expect(agentBindings.DOMAIN).toBe(domain);
+    expect(syncBindings.ANALYTICS).toBe(workerAnalytics);
+    expect(syncBindings.DOMAIN).toBe(domain);
     expect(domainWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
     expect(domainWorkerProps.observability).toBe(ceirdWorkerObservability);
     expect(domainWorkerProps.placement).toBe(ceirdDomainWorkerPlacement);
     expect(apiWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
     expect(apiWorkerProps.observability).toBe(ceirdWorkerObservability);
+    expect(syncWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
+    expect(syncWorkerProps.observability).toMatchObject({
+      logs: {
+        enabled: true,
+        invocationLogs: false,
+      },
+      traces: {
+        enabled: true,
+      },
+    });
     expect(domainWorkerProps).not.toHaveProperty("domain");
     expect(domainWorkerProps.main).toContain("/apps/domain/src/worker.ts");
     expect(domainWorkerProps.url).toBeFalsy();
@@ -861,6 +1077,125 @@ describe("Cloudflare stack", () => {
     });
     expect(apiWorkerProps.main).toContain("/apps/api/src/worker.ts");
     expect(apiWorkerProps.bindings.DOMAIN).toBe(domain);
+    expect(syncWorkerProps).toMatchObject({
+      domain: "sync.example.com",
+      env: {
+        AUTH_APP_ORIGIN: "https://app.example.com",
+        AUTH_TRUSTED_ORIGINS:
+          "https://app.example.com,https://*--main.example.com",
+        CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+        ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID:
+          electricContainerEnv.AWS_ACCESS_KEY_ID,
+        ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY:
+          electricContainerEnv.AWS_SECRET_ACCESS_KEY,
+        ELECTRIC_CONTAINER_DATABASE_URL: electricContainerEnv.DATABASE_URL,
+        ELECTRIC_CONTAINER_ELECTRIC_SECRET:
+          electricContainerEnv.ELECTRIC_SECRET,
+        ELECTRIC_CONTAINER_R2_ACCOUNT_ID: "cloudflare-account-id",
+        ELECTRIC_CONTAINER_R2_BUCKET_NAME: "ceird-main-electric-storage",
+        ELECTRIC_SQL_LOCATION_HINT: "weur",
+        ELECTRIC_SOURCE_SECRET: electricSourceSecret,
+        NODE_ENV: "production",
+      },
+      name: "ceird-main-sync",
+      url: false,
+    });
+    expect(syncWorkerProps.main).toContain("/apps/sync/src/worker.ts");
+    expect(syncWorkerProps.bindings.DOMAIN).toBe(domain);
+    expect(syncWorkerProps.bindings.ElectricSql).toMatchObject({
+      className: "ElectricSql",
+    });
+    expect(electricContainerEnv).toMatchObject({
+      CEIRD_ELECTRIC_STORAGE_BACKEND: "r2",
+      CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric",
+      ELECTRIC_INSECURE: "false",
+      ELECTRIC_LOG_LEVEL: "info",
+      ELECTRIC_PERSISTENT_STATE: "file",
+      ELECTRIC_PORT: "3000",
+      ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true",
+      ELECTRIC_STORAGE: "fast_file",
+      ELECTRIC_STORAGE_DIR: "/var/lib/electric",
+      R2_ACCOUNT_ID: "cloudflare-account-id",
+      R2_BUCKET_NAME: "ceird-main-electric-storage",
+    });
+    expect(
+      Redacted.value(
+        electricContainerEnv.AWS_ACCESS_KEY_ID as Redacted.Redacted<string>
+      )
+    ).toBe("r2-access-key-id");
+    expect(
+      Redacted.value(
+        electricContainerEnv.AWS_SECRET_ACCESS_KEY as Redacted.Redacted<string>
+      )
+    ).toBe("r2-secret-access-key");
+    expect(
+      Redacted.value(
+        electricContainerEnv.DATABASE_URL as Redacted.Redacted<string>
+      )
+    ).toBe("postgres://electric.example/db");
+    expect(
+      Redacted.value(
+        electricContainerEnv.ELECTRIC_SECRET as Redacted.Redacted<string>
+      )
+    ).toBe("electric-secret");
+    expect(
+      makeCloudflareR2BucketResourceKey({
+        accountId: "cloudflare-account-id",
+        bucketName: "ceird-main-electric-storage",
+        jurisdiction: "default",
+      })
+    ).toBe(
+      "com.cloudflare.edge.r2.bucket.cloudflare-account-id_default_ceird-main-electric-storage"
+    );
+    expect(makeR2SecretAccessKey(Redacted.make("r2-api-token"))).toBe(
+      "aa5f2214de84af13e0c69fa550e9c92fa4a5ca10d115fdd708acf64f9b4ff0ac"
+    );
+    expect(makeDurableObjectLocationHintForNeonRegion("aws-eu-west-2")).toBe(
+      "weur"
+    );
+    expect(makeDurableObjectLocationHintForNeonRegion("aws-us-east-1")).toBe(
+      "enam"
+    );
+    expect(makeDurableObjectLocationHintForNeonRegion("aws-us-west-2")).toBe(
+      "wnam"
+    );
+    expect(makeDurableObjectLocationHintForNeonRegion("aws-sa-east-1")).toBe(
+      "sam"
+    );
+    expect(
+      makeDurableObjectLocationHintForNeonRegion("aws-ap-southeast-1")
+    ).toBe("apac");
+    expect(electricContainerProps).toMatchObject({
+      autoInstallExternals: false,
+      isExternal: true,
+      instanceType: "basic",
+      instances: 1,
+      maxInstances: 1,
+      name: "ceird-main-electric",
+      ports: [{ name: "http", port: 3000 }],
+      runtime: "node",
+    });
+    expect(electricContainerProps.main).toContain(
+      "/apps/sync/src/platform/cloudflare/electric-container-runtime.ts"
+    );
+    expect(electricContainerProps).not.toHaveProperty("checks");
+    expect(electricContainerDockerfile).toContain(
+      "FROM --platform=linux/amd64 golang:1.25-bookworm AS tigrisfs-build"
+    );
+    const tigrisfsVersionReference = `$${"{TIGRISFS_VERSION}"}`;
+    expect(electricContainerDockerfile).toContain(
+      `git clone --depth=1 --branch v${tigrisfsVersionReference} https://github.com/tigrisdata/tigrisfs.git`
+    );
+    expect(electricContainerDockerfile).toContain(
+      "GOBIN=/out /usr/local/go/bin/go install ."
+    );
+    expect(electricContainerDockerfile).toContain("TIGRISFS_VERSION");
+    expect(electricContainerDockerfile).not.toContain("curl");
+    expect(electricContainerDockerfile).not.toContain(
+      "github.com/tigrisdata/tigrisfs/releases/download"
+    );
+    expect(electricContainerProps).not.toHaveProperty("environmentVariables");
+    expect(electricContainerProps).not.toHaveProperty("secrets");
     expect(Cloudflare.isSendEmail(authEmail)).toBeTruthy();
     expect(authEmail).toMatchObject({
       allowedSenderAddresses: ["no-reply@example.com"],
@@ -890,6 +1225,7 @@ describe("Cloudflare stack", () => {
       api: makeAlchemyLocalWorkerOrigin("api"),
       app: makeAlchemyLocalWorkerOrigin("app"),
       mcp: makeAlchemyLocalWorkerOrigin("mcp"),
+      sync: makeAlchemyLocalWorkerOrigin("sync"),
     };
 
     const domainBindings = makeDomainWorkerBindings({
@@ -934,6 +1270,7 @@ describe("Cloudflare stack", () => {
       config: configWithoutCloudflareBootstrapSecrets,
       localAppOrigin: localOrigins.app,
       localDev: true,
+      syncOrigin: localOrigins.sync,
     });
 
     expect(Object.keys(domainBindings)).toStrictEqual(["ANALYTICS"]);
@@ -982,12 +1319,14 @@ describe("Cloudflare stack", () => {
       API_ORIGIN: "http://api.localhost:1337",
       CEIRD_CLOUDFLARE: "1",
       CEIRD_LOCAL_DEV: "true",
+      SYNC_ORIGIN: "http://sync.localhost:1337",
       SYSTEM_APP_ORIGIN: "http://app.localhost:1337",
       TENANT_BASE_DOMAIN: "example.com",
       TENANT_HOST_MODE: "disabled",
       TENANT_RESERVED_HOSTNAMES: "",
       VITE_AGENT_ORIGIN: "http://agent.localhost:1337",
       VITE_API_ORIGIN: "http://api.localhost:1337",
+      VITE_SYNC_ORIGIN: "http://sync.localhost:1337",
       VITE_SYSTEM_APP_ORIGIN: "http://app.localhost:1337",
       VITE_TENANT_BASE_DOMAIN: "example.com",
       VITE_TENANT_HOST_MODE: "disabled",
@@ -1126,16 +1465,19 @@ describe("Cloudflare stack", () => {
     expect(domainWorkerConfiguredEnvKeysMatchRuntimeConfig).toBeTruthy();
     expect(mcpWorkerConfiguredEnvKeysMatchRuntimeConfig).toBeTruthy();
     expect(agentWorkerConfiguredEnvKeysMatchRuntimeConfig).toBeTruthy();
+    expect(syncWorkerConfiguredEnvKeysMatchRuntimeConfig).toBeTruthy();
     expect(domainWorkerConfiguredStringValuesSatisfyRuntimeConfig).toBeTruthy();
     expect(apiWorkerConfiguredValuesSatisfyAlchemyWorkerEnv).toBeTruthy();
     expect(domainWorkerConfiguredValuesSatisfyAlchemyWorkerEnv).toBeTruthy();
     expect(mcpWorkerConfiguredValuesSatisfyAlchemyWorkerEnv).toBeTruthy();
     expect(agentWorkerConfiguredValuesSatisfyAlchemyWorkerEnv).toBeTruthy();
+    expect(syncWorkerConfiguredValuesSatisfyAlchemyWorkerEnv).toBeTruthy();
     expect(appWorkerEnvKeysMatchAppContract).toBeTruthy();
     expect(appWorkerRuntimeEnvSatisfiesAppContract).toBeTruthy();
     expect(appContractSatisfiesStackEnv).toBeTruthy();
     expect(appWorkerConfiguredValuesSatisfyAlchemyWorkerEnv).toBeTruthy();
     expect(cloudflareStackOutputsIncludeCanonicalOrigins).toBeTruthy();
+    expect(cloudflareStackOutputsIncludeElectricStorage).toBeTruthy();
     expect(cloudflareStackOutputsIncludeTenantRouting).toBeTruthy();
   });
 });

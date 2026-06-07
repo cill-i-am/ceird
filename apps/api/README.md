@@ -41,6 +41,8 @@ The API owns:
 - Public `GET /` and `GET /health` responses.
 - Public HTTP routing as an adapter over the private domain Worker.
 - The `DOMAIN` service binding adapter using `@ceird/domain-core`.
+- Blocking private `/agent/internal/*` and `/sync/internal/*` service-binding
+  routes from the public API surface.
 
 Product repositories, Better Auth runtime behavior, authorization, action
 execution, audit/activity recording, Drizzle schema, migrations, and Postgres

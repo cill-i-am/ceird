@@ -33,11 +33,12 @@ worktree or agent task:
 pnpm dev -- --stage codex-my-task
 ```
 
-Alchemy creates or updates the stage-scoped Cloudflare Workers, app,
-Agent Worker, Hyperdrive, Neon branch, and queues. In local dev it prints
-local proxy origins such as `http://app.localhost:1337` for the running stack.
-The wrapper leaves Alchemy confirmations enabled by default; add `--yes` only
-for an intentional non-interactive run against the selected stage.
+Alchemy creates or updates the stage-scoped Cloudflare Workers, app, Agent
+Worker, sync Worker, Electric SQL container, Hyperdrive, Neon branch, queues,
+and routes. In local dev it prints local proxy origins such as
+`http://app.localhost:1337` for the running stack. The wrapper leaves Alchemy
+confirmations enabled by default; add `--yes` only for an intentional
+non-interactive run against the selected stage.
 
 Non-parent stages depend on the parent `main` stage because they fork Neon
 branches from its shared project. If a worktree stage reports a missing
@@ -57,6 +58,7 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 | `apps/agent`             | Public Cloudflare Agents SDK Worker that hosts org/user/thread-scoped `CeirdAgent` Durable Objects.                                |
 | `apps/domain`            | Private Ceird domain Worker that owns product services, persistence, authorization, action execution, audit, auth, and migrations. |
 | `apps/mcp`               | Standalone MCP adapter Worker that forwards MCP traffic through the same private `DOMAIN` service binding.                         |
+| `apps/sync`              | Public Electric SQL sync Worker plus Cloudflare Container runtime for domain-layer shape replication.                              |
 | `packages/agents-core`   | Shared agent thread IDs, action contracts, instance-name helpers, and connect-token schemas.                                       |
 | `packages/identity-core` | Shared organization and membership schemas, role helpers, and decoders.                                                            |
 | `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, job assignment endpoints, and typed job errors.                                          |
@@ -122,13 +124,16 @@ collaborators, visits, comments, job-label assignment, and activity recording.
 Sites and organization labels have their own domain services, repositories,
 schemas, and `HttpApi` contracts. The agents domain owns agent thread records,
 connection grants, and the action-run ledger used for idempotent mutating agent
-actions. The public API, MCP, and Agent Workers are protocol/runtime adapters
-over that shared capability surface.
+actions. The public API, MCP, Agent, and sync Workers are protocol/runtime
+adapters over that shared capability surface. The sync Worker authorizes named
+domain shapes through a private domain service-binding endpoint, then forwards
+the resulting table, predicate, parameters, and source secret to Electric SQL
+running in a Cloudflare Container.
 
 Local multi-service development and production infrastructure are both described
-in Alchemy. Alchemy provisions Cloudflare Workers/Vite, Cloudflare Queues,
-Hyperdrive, Workers AI bindings, Agent Durable Objects, and Neon Postgres
-branches per stage.
+in Alchemy. Alchemy provisions Cloudflare Workers/Vite, Cloudflare Containers,
+Cloudflare Queues, Hyperdrive, Workers AI bindings, Agent Durable Objects, and
+Neon Postgres branches per stage.
 
 ## Quality Gates
 

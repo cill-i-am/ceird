@@ -167,6 +167,78 @@ resource depends on `Drizzle.Schema`, then applies SQL files from
 the stage-specific `appliedMigrationsDir` before Hyperdrive and the domain
 Worker are reconciled.
 
+## Electric SQL Sync
+
+Electric SQL is deployed as a Cloudflare Container owned by `apps/sync`. The
+container reads the same stage Neon branch as the domain Worker through a
+`DATABASE_URL` supplied at container start, while the public sync Worker holds
+the matching `ELECTRIC_SOURCE_SECRET`. Both secrets are generated or supplied
+through the Alchemy stack and are not emitted as stack outputs.
+
+Electric stores shape logs and metadata on a filesystem that must survive sync
+service restarts. Cloudflare Container disks are ephemeral, so the Alchemy stack
+provisions a stage-scoped R2 bucket for Electric storage. In local
+`alchemy dev` stages, the stack also mints a bucket-scoped R2 API token so the
+local cloud-backed loop stays self-contained. In deployed stages, the separate
+GitHub credential stack owns an account-scoped Electric R2 API token with R2
+read/write permissions and stores `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
+`CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` in the GitHub environments that
+deploy or destroy app stacks. The app stack consumes those values instead of
+creating API tokens during routine deploys, so the deploy token does not need
+`API Tokens Write`. Production, pull-request previews, and push-to-main cloud
+E2E stages all provision the Electric Container and stage-scoped R2 bucket; a
+deployed stack fails closed when either Electric storage credential is absent.
+During reconciliation, the app stack passes the R2 credentials, stage Neon
+connection URL, and generated Electric source secret into the Sync Worker as
+secrets. The `ElectricSql` Durable Object passes those values to the Cloudflare
+Container as startup environment variables, so the Containers application
+configuration does not need account-secret references.
+
+The token id is exposed to the container as `AWS_ACCESS_KEY_ID`; the SHA-256
+hash of the token value is exposed as `AWS_SECRET_ACCESS_KEY`, which matches
+Cloudflare R2's S3 credential derivation. The container mounts the R2 bucket at
+`/var/lib/electric` with TigrisFS, verifies the mountpoint is active and
+writable before starting Electric, and runs with `ELECTRIC_STORAGE=fast_file`,
+`ELECTRIC_PERSISTENT_STATE=file`, and `ELECTRIC_STORAGE_DIR=/var/lib/electric`.
+It also sets
+`ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true` so Electric's active-shape SQLite
+database is configured for the R2-backed network filesystem. The sync Worker
+resolves the singleton `ElectricSql` Durable Object with a stage-derived
+`locationHint` based on the Neon region so the container is placed near the
+database.
+
+The durability tradeoff is now explicit: restarts and reschedules rebuild a
+fresh Container VM, but Electric's shape storage is backed by R2. R2-over-FUSE
+does not behave like local SSD storage, so stage rollout should include sync
+latency and restart-resume checks before raising traffic or shape count.
+
+Sync is domain-layer only. Better Auth tables, sessions, accounts, rate limits,
+organizations, members, and invitations are not exposed as Electric shapes.
+The shape registry in `@ceird/domain-core` names the non-auth domain tables
+that browser sync clients may request. The domain Worker authorizes each shape
+through `/sync/internal/shapes/:shapeName/authorize`, using the same current
+organization actor resolution as the HTTP API. Most shapes receive an
+`organization_id = $1` predicate. Agent thread and action-run shapes add
+`user_id = $2` so users only sync their own agent records.
+
+The public sync Worker accepts Electric-compatible shape requests at
+`/v1/shape?shape=<name>` and `/v1/shapes/<name>`. It strips caller-controlled
+Electric source parameters, then injects the authorized table, predicate,
+parameters, and source secret before forwarding to the `ElectricSql` Durable
+Object and container. Postgres remains the source of truth; Electric provides
+client-facing shape replication for selected domain tables.
+Pull-request previews can temporarily deploy the sync Worker without the
+Electric Container when the GitHub environment has not yet received the
+separate Electric R2 runtime credentials; local dev and production stages
+provision the full Worker, Durable Object, Container, R2, and Neon path.
+
+The deployed sync path is ready for Electric/TanStack DB clients, but the app's
+existing route-scoped TanStack DB collections remain query-backed in this
+change. `VITE_SYNC_ORIGIN` is injected so browser collections can move to
+`@tanstack/electric-db-collection` once that package is installed in the app
+workspace and each collection has an explicit fallback/write reconciliation
+plan.
+
 ## Agents Tables
 
 The agents domain owns two Postgres tables:

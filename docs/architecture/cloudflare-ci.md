@@ -129,6 +129,8 @@ Secrets:
 
 - `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`
 - `AUTH_EMAIL_FROM`
+- `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID`
+- `CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `GOOGLE_MAPS_API_KEY`
@@ -142,8 +144,9 @@ Variables:
 The `main` environment is used by `.github/workflows/deploy-main.yml` only after
 the `Build` workflow has succeeded on `main`, or during an explicit manual main
 deploy. The `Build` workflow's cloud E2E path uses `preview-deploy` with an
-ephemeral `ci-<run-number>-<attempt>` stage, so production deploy secrets are not
-exposed to pull-request code or reused for temporary validation environments.
+ephemeral `ci-<run-number>-<attempt>` stage, so the main deployment environment
+is not exposed to pull-request code or reused for temporary validation
+environments.
 
 For both `preview-deploy` and `preview-cleanup`, add:
 
@@ -151,6 +154,8 @@ Secrets:
 
 - `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`
 - `AUTH_EMAIL_FROM`
+- `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID`
+- `CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `GOOGLE_MAPS_API_KEY`
@@ -195,9 +200,16 @@ pnpm alchemy:state-audit --stage <stage> --json --tenant-routing-required --allo
 The audit reads state only. It blocks missing `PostgresBranch.origin`, missing
 `AgentAiGateway`, disabled AI Gateway authentication, prompt-log collection,
 missing Worker Analytics Engine bindings, missing Worker analytics sample-rate
-env, missing Domain Worker Smart Placement, and stage tenant-route or
+env, missing Sync Worker domain/analytics/Durable Object bindings, missing sync
+source configuration, missing Electric container or R2 storage for audited cloud
+stages, missing Domain Worker Smart Placement, and stage tenant-route or
 wildcard-DNS drift while allowing the known legacy Drizzle tombstone until it
-has been inspected and intentionally removed. Plain
+has been inspected and intentionally removed. Cloud E2E and preview deploys pass
+Electric storage credentials so Alchemy reconciles the stage-scoped bucket and
+Electric Container before tests run. During deploy, Alchemy passes those
+credentials plus the stage database URL and Electric source secret into the Sync
+Worker as secrets, and the `ElectricSql` Durable Object supplies them to the
+container when it starts. Plain
 `PostgresBranch.connectionUri` state is reported as a low-severity finding, not
 a CI blocker, because Alchemy may still expose that value for some provider
 shapes.
@@ -337,11 +349,13 @@ environments `main`, `preview-deploy`, and `preview-cleanup` as
 `CLOUDFLARE_API_TOKEN`, writes the state-store JSON from
 `CEIRD_ALCHEMY_STATE_STORE_CREDENTIALS` to the matching environment secret
 `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`, writes `CLOUDFLARE_ACCOUNT_ID`
-as an environment secret, and manages the non-secret repository variables
-`CEIRD_CLOUDFLARE_ZONE_ID` and `CEIRD_ZONE_NAME`. Reconcile that stack only
-with a bootstrap Cloudflare token that can manage account API tokens and a
-GitHub token that can write repository and environment Actions
-secrets/variables.
+as an environment secret, creates the account-scoped Electric R2 runtime token
+with R2 read/write permissions, writes `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` and
+`CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` to those same environments, and
+manages the non-secret repository variables `CEIRD_CLOUDFLARE_ZONE_ID` and
+`CEIRD_ZONE_NAME`. Reconcile that stack only with a bootstrap Cloudflare token
+that can manage account API tokens and a GitHub token that can write repository
+and environment Actions secrets/variables.
 
 ## Alchemy Docs Notes
 

@@ -112,6 +112,12 @@ export const siteContact = pgTable(
       foreignColumns: [contact.id, contact.organizationId],
       name: "site_contacts_contact_org_fk",
     }).onDelete("cascade"),
+    index("site_contacts_organization_created_at_idx").on(
+      table.organizationId,
+      table.createdAt.asc(),
+      table.siteId.asc(),
+      table.contactId.asc()
+    ),
     index("site_contacts_contact_site_idx").on(table.contactId, table.siteId),
     uniqueIndex("site_contacts_primary_site_idx")
       .on(table.siteId)

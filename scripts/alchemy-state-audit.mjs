@@ -13,6 +13,9 @@ const knownResources = [
   "Api",
   "Mcp",
   "Agent",
+  "Sync",
+  "ElectricSql",
+  "ElectricStorageBucket",
   "Drizzle.Migrations",
   "TenantWorkerRoute",
   "TenantWildcardDnsRecord",
@@ -196,6 +199,19 @@ function workerChecks(resources) {
     workerBindingCheck(resources, "Api", ["ANALYTICS"]),
     workerBindingCheck(resources, "Mcp", ["ANALYTICS"]),
     workerBindingCheck(resources, "Agent", ["ANALYTICS"]),
+    workerBindingCheck(
+      resources,
+      "Sync",
+      ["ANALYTICS", "DOMAIN", "ElectricSql"],
+      {
+        requiredEnv: [
+          "AUTH_APP_ORIGIN",
+          "CEIRD_WORKER_ANALYTICS_SAMPLE_RATE",
+          "ELECTRIC_SOURCE_SECRET",
+          "ELECTRIC_SQL_LOCATION_HINT",
+        ],
+      }
+    ),
   ];
 }
 
@@ -219,6 +235,12 @@ function workerBindingCheck(
   const missingBindings = requiredBindings.filter(
     (bindingName) => !workerHasBinding(attr, bindingName)
   );
+  const requiredEnv = options.requiredEnv ?? [
+    "CEIRD_WORKER_ANALYTICS_SAMPLE_RATE",
+  ];
+  const missingEnv = requiredEnv.filter(
+    (envName) => !workerHasEnvValue(attr, envName)
+  );
 
   if (missingBindings.length > 0) {
     return check(
@@ -229,13 +251,20 @@ function workerBindingCheck(
   }
 
   if (
-    !workerHasEnvValue(attr, "CEIRD_WORKER_ANALYTICS_SAMPLE_RATE") ||
+    missingEnv.length > 0 ||
     (options.placementRequired === true && !workerHasSmartPlacement(attr))
   ) {
     return check(
       `${resourceName.toLowerCase()}_worker_runtime_config`,
       "fail",
-      `${resourceName} Worker is missing expected analytics runtime config${options.placementRequired === true ? " or Smart Placement" : ""}.`
+      [
+        `${resourceName} Worker is missing expected runtime config`,
+        missingEnv.length > 0 ? `env: ${missingEnv.join(", ")}` : undefined,
+        options.placementRequired === true ? "or Smart Placement" : undefined,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .concat(".")
     );
   }
 
@@ -244,6 +273,44 @@ function workerBindingCheck(
     "pass",
     `${resourceName} Worker has required analytics binding and runtime config.`
   );
+}
+
+function electricSyncStorageChecks(input) {
+  const productionStage = input.productionStage ?? defaultProductionStage;
+
+  if (input.stage !== productionStage && input.tenantRoutingRequired !== true) {
+    return [];
+  }
+
+  const electricContainer = input.resources.ElectricSql;
+  const electricStorageBucket = input.resources.ElectricStorageBucket;
+  const stageDescription =
+    input.stage === productionStage ? "production sync" : "audited cloud sync";
+
+  return [
+    resourceType(electricStorageBucket) === "Cloudflare.R2Bucket"
+      ? check(
+          "electric_storage_bucket",
+          "pass",
+          `Electric storage R2 bucket exists for ${stageDescription}.`
+        )
+      : check(
+          "electric_storage_bucket",
+          "fail",
+          `Electric storage R2 bucket is required for ${stageDescription}.`
+        ),
+    resourceType(electricContainer) === "Cloudflare.Container"
+      ? check(
+          "electric_container",
+          "pass",
+          `Electric container application exists for ${stageDescription}.`
+        )
+      : check(
+          "electric_container",
+          "fail",
+          `Electric container application is required for ${stageDescription}.`
+        ),
+  ];
 }
 
 function workerHasBinding(attr, bindingName) {
@@ -365,6 +432,12 @@ export function analyzeAlchemyStateResources(input) {
     ...postgresBranchReport.checks,
     ...agentAiGatewayChecks(resources),
     ...workerChecks(resources),
+    ...electricSyncStorageChecks({
+      productionStage,
+      resources,
+      stage,
+      tenantRoutingRequired,
+    }),
   ];
 
   if (resources["Drizzle.Migrations"] !== undefined) {

@@ -1173,6 +1173,9 @@ describe("auth schema", () => {
     const slugReservedMigrationSql = await readMigrationSql(
       "20260527030012_organization_slug_reserved"
     );
+    const syncReviewMigrationSql = await readMigrationSql(
+      "20260531000100_sync_review_indexes"
+    );
 
     expect(migrationSql).toContain("organization_slug_format_chk");
     expect(migrationSql).toContain("~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'");
@@ -1187,6 +1190,12 @@ describe("auth schema", () => {
     );
     expect(slugReservedMigrationSql).toContain(
       `"slug" not in ('app', 'api', 'agent', 'mcp')`
+    );
+    expect(syncReviewMigrationSql).toContain(
+      `"slug" = "slug" || '-' || substr(md5("id"), 1, 12)`
+    );
+    expect(syncReviewMigrationSql).toContain(
+      `"slug" not in ('app', 'api', 'agent', 'mcp', 'sync')`
     );
   }, 10_000);
 

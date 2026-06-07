@@ -137,6 +137,12 @@ describe("Alchemy Drizzle integration", () => {
     const agentMigrationSql = readDomainMigrationSqlBySlug("neat_skullbuster");
     const agentAlchemyMigrationSql =
       readAlchemyMigrationSqlBySlug("neat_skullbuster");
+    const syncReviewMigrationSql = readDomainMigrationSqlBySlug(
+      "sync_review_indexes"
+    );
+    const syncReviewAlchemyMigrationSql = readAlchemyMigrationSqlBySlug(
+      "sync_review_indexes"
+    );
 
     expect(drizzleKitApi.generateDrizzleJson).toStrictEqual(
       expect.any(Function)
@@ -151,5 +157,9 @@ describe("Alchemy Drizzle integration", () => {
       "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
     );
     expect(agentAlchemyMigrationSql).toBe(agentMigrationSql);
+    expect(syncReviewAlchemyMigrationSql).toBe(syncReviewMigrationSql);
+    expect(syncReviewMigrationSql).toContain(
+      `CREATE INDEX "labels_organization_id_idx" ON "labels" USING btree ("organization_id");`
+    );
   }, 15_000);
 });

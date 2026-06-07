@@ -80,7 +80,7 @@ describe("API request logging", () => {
     ]);
   });
 
-  it("does not forward internal Agent routes through the public API adapter", async () => {
+  it("does not forward private internal routes through the public API adapter", async () => {
     const fetch = vi.fn<(request: Request) => Promise<Response>>(() =>
       Promise.resolve(new Response("domain ok"))
     );
@@ -100,13 +100,19 @@ describe("API request logging", () => {
             { method: "POST" }
           )
         ),
+        webHandler.handler(
+          new Request(
+            "http://127.0.0.1:3001/sync/internal/shapes/jobs/authorize"
+          )
+        ),
       ]);
 
       expect(responses.map((response) => response.status)).toStrictEqual([
-        404, 404,
+        404, 404, 404,
       ]);
       await expect(responses[0].text()).resolves.toBe("Not found");
       await expect(responses[1].text()).resolves.toBe("Not found");
+      await expect(responses[2].text()).resolves.toBe("Not found");
       expect(fetch).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();

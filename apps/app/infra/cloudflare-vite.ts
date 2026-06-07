@@ -42,6 +42,7 @@ export interface AppWorkerConfiguredEnv {
   readonly API_ORIGIN: Input<string>;
   readonly CEIRD_CLOUDFLARE: "1";
   readonly CEIRD_LOCAL_DEV?: "true" | undefined;
+  readonly SYNC_ORIGIN: Input<string>;
   readonly SYSTEM_APP_ORIGIN: string;
   readonly TENANT_BASE_DOMAIN: string;
   readonly TENANT_HOST_MODE: TenantHostMode;
@@ -51,6 +52,7 @@ export interface AppWorkerConfiguredEnv {
   readonly VITE_API_ORIGIN: Input<string>;
   readonly VITE_AUTH_CAPTCHA_ENABLED?: "false" | "true" | undefined;
   readonly VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY?: string | undefined;
+  readonly VITE_SYNC_ORIGIN: Input<string>;
   readonly VITE_SYSTEM_APP_ORIGIN: string;
   readonly VITE_TENANT_BASE_DOMAIN: string;
   readonly VITE_TENANT_HOST_MODE: TenantHostMode;
@@ -64,6 +66,7 @@ export function makeAppWorkerEnv(input: {
   readonly config: AppWorkerStageConfig;
   readonly localDev?: boolean | undefined;
   readonly localAppOrigin?: string | undefined;
+  readonly syncOrigin: Input<string>;
 }): AppWorkerConfiguredEnv {
   const systemAppOrigin =
     input.localDev === true && input.localAppOrigin
@@ -87,6 +90,7 @@ export function makeAppWorkerEnv(input: {
           CEIRD_LOCAL_DEV: "true" as const,
         }
       : {}),
+    SYNC_ORIGIN: input.syncOrigin,
     SYSTEM_APP_ORIGIN: systemAppOrigin,
     TENANT_BASE_DOMAIN: input.config.tenantBaseDomain,
     TENANT_HOST_MODE: tenantHostMode,
@@ -109,6 +113,7 @@ export function makeAppWorkerEnv(input: {
           VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY:
             input.config.authCaptchaTurnstileSiteKey,
         }),
+    VITE_SYNC_ORIGIN: input.syncOrigin,
     VITE_SYSTEM_APP_ORIGIN: systemAppOrigin,
     VITE_TENANT_BASE_DOMAIN: input.config.tenantBaseDomain,
     VITE_TENANT_HOST_MODE: tenantHostMode,
@@ -127,6 +132,7 @@ export function makeAppWorker(input: {
   readonly localDev?: boolean | undefined;
   readonly localAppOrigin?: string | undefined;
   readonly name: string;
+  readonly syncOrigin: Input<string>;
 }) {
   return Cloudflare.Vite("App", {
     name: input.name,
@@ -139,6 +145,7 @@ export function makeAppWorker(input: {
         config: input.config,
         localDev: input.localDev,
         localAppOrigin: input.localAppOrigin,
+        syncOrigin: input.syncOrigin,
       }),
     },
     domain: input.hostname,

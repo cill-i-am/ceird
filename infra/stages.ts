@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -81,6 +82,19 @@ function isIPv4MappedIPv6LoopbackHostname(hostname: string) {
 }
 
 export type TenantHostMode = "disabled" | "production" | "stage";
+export const ElectricContainerInstanceType = Schema.Literals([
+  "lite",
+  "dev",
+  "basic",
+  "standard",
+  "standard-1",
+  "standard-2",
+  "standard-3",
+  "standard-4",
+] as const);
+export type ElectricContainerInstanceType = Schema.Schema.Type<
+  typeof ElectricContainerInstanceType
+>;
 
 export const DomainName = Schema.NonEmptyString.check(
   Schema.isPattern(domainNamePattern, {
@@ -116,6 +130,7 @@ export interface InfraStageConfig {
   readonly apiHostname: DomainName;
   readonly agentHostname: DomainName;
   readonly mcpHostname: DomainName;
+  readonly syncHostname: DomainName;
   readonly authCookiePrefix: string;
   readonly authCookieDomain: DomainName | undefined;
   readonly authCaptchaEnabled: boolean | undefined;
@@ -131,6 +146,11 @@ export interface InfraStageConfig {
   readonly googleMapsApiKey: Redacted.Redacted<InfraGoogleMapsApiKey>;
   readonly hyperdriveName: ProviderResourceName;
   readonly hyperdriveOriginConnectionLimit: number;
+  readonly electricContainerInstanceType: ElectricContainerInstanceType;
+  readonly electricStorageAccessKeyId: Redacted.Redacted<string> | undefined;
+  readonly electricStorageSecretAccessKey:
+    | Redacted.Redacted<string>
+    | undefined;
   readonly mcpAuthorizedAppCacheMaxEntries: number | undefined;
   readonly mcpAuthorizedAppCacheTtlSeconds: number | undefined;
   readonly neonDatabaseName: string;
@@ -160,6 +180,7 @@ export interface AlchemyStageIdentityInput {
 
 export interface AlchemyStageIdentity {
   readonly appName: string;
+  readonly isEphemeralCi: boolean;
   readonly isProduction: boolean;
   readonly isPullRequestPreview: boolean;
   readonly neonBranchName: string;
@@ -435,6 +456,50 @@ function decodeNeonPgVersion(value: number) {
   );
 }
 
+function decodeElectricContainerInstanceType(value: string) {
+  return Schema.decodeUnknownEffect(ElectricContainerInstanceType)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
+function readOptionalNonEmptyRedactedConfig(name: string) {
+  return Config.option(Config.redacted(name)).pipe(
+    Effect.map((option) => {
+      let result: Redacted.Redacted<string> | undefined;
+
+      if (Option.isSome(option)) {
+        const trimmed = Redacted.value(option.value).trim();
+
+        if (trimmed.length > 0) {
+          result = Redacted.make(trimmed);
+        }
+      }
+
+      return result;
+    })
+  );
+}
+
+export function makeInfraConfigSourceError(message: string) {
+  return new Config.ConfigError(new ConfigProvider.SourceError({ message }));
+}
+
+function validateElectricStorageCredentialPair(input: {
+  readonly accessKeyId: Redacted.Redacted<string> | undefined;
+  readonly secretAccessKey: Redacted.Redacted<string> | undefined;
+}) {
+  const hasAccessKey = input.accessKeyId !== undefined;
+  const hasSecretKey = input.secretAccessKey !== undefined;
+
+  return hasAccessKey === hasSecretKey
+    ? Effect.void
+    : Effect.fail(
+        makeInfraConfigSourceError(
+          "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY must be configured together"
+        )
+      );
+}
+
 export function loadInfraStageConfig(stageInput: string) {
   return Effect.gen(function* () {
     const stage = yield* decodeAlchemyStage(stageInput);
@@ -454,6 +519,7 @@ export function loadInfraStageConfig(stageInput: string) {
     const defaultApiHostname = `api.${identity.stageSlug}.${zoneName}`;
     const defaultAgentHostname = `agent.${identity.stageSlug}.${zoneName}`;
     const defaultMcpHostname = `mcp.${identity.stageSlug}.${zoneName}`;
+    const defaultSyncHostname = `sync.${identity.stageSlug}.${zoneName}`;
     const defaultHyperdriveName = identity.isProduction
       ? `${identity.appName}-production-postgres`
       : stageResourceName(identity, "postgres");
@@ -473,6 +539,10 @@ export function loadInfraStageConfig(stageInput: string) {
       Config.withDefault(defaultMcpHostname),
       Config.mapOrFail(decodeDomainName)
     );
+    const syncHostname = yield* Config.string("CEIRD_SYNC_HOSTNAME").pipe(
+      Config.withDefault(defaultSyncHostname),
+      Config.mapOrFail(decodeDomainName)
+    );
     const tenantBaseDomain = zoneName;
     const tenantHostMode = resolveTenantHostMode({
       agentHostname,
@@ -480,6 +550,7 @@ export function loadInfraStageConfig(stageInput: string) {
       apiHostname,
       identity,
       mcpHostname,
+      syncHostname,
       zoneName,
     });
     const tenantStageAlias =
@@ -499,6 +570,7 @@ export function loadInfraStageConfig(stageInput: string) {
       apiHostname,
       agentHostname,
       mcpHostname,
+      syncHostname,
     ];
     const authCookiePrefix = makeAuthCookiePrefix(identity);
     const authCookieDomain = tenantBaseDomain;
@@ -586,6 +658,24 @@ export function loadInfraStageConfig(stageInput: string) {
       Config.withDefault(0.1),
       Config.mapOrFail(decodeWorkerAnalyticsSampleRate)
     );
+    const electricContainerInstanceType = yield* Config.string(
+      "CEIRD_ELECTRIC_CONTAINER_INSTANCE_TYPE"
+    ).pipe(
+      Config.withDefault(identity.isProduction ? "basic" : "dev"),
+      Config.mapOrFail(decodeElectricContainerInstanceType)
+    );
+    const electricStorageAccessKeyId =
+      yield* readOptionalNonEmptyRedactedConfig(
+        "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID"
+      );
+    const electricStorageSecretAccessKey =
+      yield* readOptionalNonEmptyRedactedConfig(
+        "CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY"
+      );
+    yield* validateElectricStorageCredentialPair({
+      accessKeyId: electricStorageAccessKeyId,
+      secretAccessKey: electricStorageSecretAccessKey,
+    });
     const mcpAuthorizedAppCacheMaxEntries = yield* Config.option(
       Config.int("CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES").pipe(
         Config.mapOrFail(
@@ -653,6 +743,7 @@ export function loadInfraStageConfig(stageInput: string) {
       apiHostname,
       agentHostname,
       mcpHostname,
+      syncHostname,
       authCookiePrefix,
       authCookieDomain,
       authCaptchaEnabled,
@@ -668,6 +759,9 @@ export function loadInfraStageConfig(stageInput: string) {
       googleMapsApiKey,
       hyperdriveName,
       hyperdriveOriginConnectionLimit,
+      electricContainerInstanceType,
+      electricStorageAccessKeyId,
+      electricStorageSecretAccessKey,
       mcpAuthorizedAppCacheMaxEntries,
       mcpAuthorizedAppCacheTtlSeconds,
       neonDatabaseName,
@@ -711,6 +805,7 @@ export function makeAlchemyStageIdentity(
 
   return {
     appName,
+    isEphemeralCi: /^ci-\d+-\d+$/.test(stage),
     isProduction: stage === productionStage,
     isPullRequestPreview: /^pr-\d+$/.test(stage),
     neonBranchName: stageSlug,
@@ -774,6 +869,7 @@ function resolveTenantHostMode(input: {
   readonly apiHostname: string;
   readonly identity: AlchemyStageIdentity;
   readonly mcpHostname: string;
+  readonly syncHostname: string;
   readonly zoneName: string;
 }): TenantHostMode {
   if (
@@ -781,7 +877,8 @@ function resolveTenantHostMode(input: {
     input.agentHostname === `agent.${input.zoneName}` &&
     input.apiHostname === `api.${input.zoneName}` &&
     input.appHostname === `app.${input.zoneName}` &&
-    input.mcpHostname === `mcp.${input.zoneName}`
+    input.mcpHostname === `mcp.${input.zoneName}` &&
+    input.syncHostname === `sync.${input.zoneName}`
   ) {
     return "production";
   }

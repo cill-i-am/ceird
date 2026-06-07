@@ -1,8 +1,11 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import type { Input, InputProps } from "alchemy/Input";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+
+import { makeR2SecretAccessKey } from "./cloudflare-r2.ts";
 
 export const gitHubCiDeployEnvironments = [
   "main",
@@ -37,6 +40,10 @@ export function makeCloudflareCiDeployTokenProps(
           "Queues Write",
           "Secrets Store Read",
           "Secrets Store Write",
+          "Workers Containers Read",
+          "Workers Containers Write",
+          "Workers R2 Storage Read",
+          "Workers R2 Storage Write",
           "Workers Scripts Read",
           "Workers Scripts Write",
         ],
@@ -61,6 +68,27 @@ export function makeCloudflareCiDeployTokenProps(
   } satisfies InputProps<Cloudflare.ApiTokenProps>;
 }
 
+export function makeCloudflareElectricStorageTokenProps(
+  config: Pick<GitHubCiConfig, "cloudflareAccountId">
+) {
+  return {
+    accountId: config.cloudflareAccountId,
+    name: "ceird-electric-storage-r2",
+    policies: [
+      {
+        effect: "allow",
+        permissionGroups: [
+          "Workers R2 Storage Read",
+          "Workers R2 Storage Write",
+        ],
+        resources: {
+          [`com.cloudflare.api.account.${config.cloudflareAccountId}`]: "*",
+        },
+      },
+    ],
+  } satisfies InputProps<Cloudflare.ApiTokenProps>;
+}
+
 export function makeGitHubCiVariables(
   config: Pick<GitHubCiConfig, "cloudflareZoneId" | "cloudflareZoneName">
 ) {
@@ -76,6 +104,16 @@ export const makeGitHubCiStack = Effect.fn("GitHubCiStack.make")(function* (
   const deployToken = yield* Cloudflare.AccountApiToken(
     "CloudflareCiDeployToken",
     makeCloudflareCiDeployTokenProps(config)
+  );
+  const electricStorageToken = yield* Cloudflare.AccountApiToken(
+    "CloudflareElectricStorageToken",
+    makeCloudflareElectricStorageTokenProps(config)
+  );
+  const electricStorageSecretAccessKey = electricStorageToken.value.pipe(
+    Output.map((value) => Redacted.make(makeR2SecretAccessKey(value)))
+  );
+  const electricStorageAccessKeyId = electricStorageToken.tokenId.pipe(
+    Output.map(Redacted.make)
   );
   const repository = {
     owner: config.gitHubOwner,
@@ -103,6 +141,18 @@ export const makeGitHubCiStack = Effect.fn("GitHubCiStack.make")(function* (
           environment,
           name: "ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS",
           value: config.stateStoreCredentials,
+        }),
+        GitHub.Secret(`GitHubElectricStorageAccessKeyId${environment}`, {
+          ...repository,
+          environment,
+          name: "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID",
+          value: electricStorageAccessKeyId,
+        }),
+        GitHub.Secret(`GitHubElectricStorageSecretAccessKey${environment}`, {
+          ...repository,
+          environment,
+          name: "CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY",
+          value: electricStorageSecretAccessKey,
         }),
       ],
       { discard: true }

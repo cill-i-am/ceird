@@ -1,6 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect } from "effect";
-import * as Redacted from "effect/Redacted";
+import { ConfigProvider, Effect, Redacted } from "effect";
 
 import { configWithoutCloudflareBootstrapSecrets } from "./stages.contract.ts";
 import {
@@ -19,6 +18,7 @@ describe("Alchemy stage identity", () => {
 
     expect(identity).toStrictEqual({
       appName: "ceird",
+      isEphemeralCi: false,
       isProduction: true,
       isPullRequestPreview: false,
       neonBranchName: "main",
@@ -35,6 +35,7 @@ describe("Alchemy stage identity", () => {
     });
 
     expect(identity).toMatchObject({
+      isEphemeralCi: false,
       isProduction: false,
       isPullRequestPreview: false,
       neonBranchName: "codex-alchemy-v2-native-migration",
@@ -44,6 +45,22 @@ describe("Alchemy stage identity", () => {
     expect(stageResourceName(identity, "auth_email")).toBe(
       "ceird-codex-alchemy-v2-native-migration-auth-email"
     );
+  });
+
+  it("identifies ephemeral push-to-main cloud E2E stages", () => {
+    const identity = makeAlchemyStageIdentity({
+      appName: "ceird",
+      stage: "ci-517-1",
+    });
+
+    expect(identity).toMatchObject({
+      isEphemeralCi: true,
+      isProduction: false,
+      isPullRequestPreview: false,
+      neonBranchName: "ci-517-1",
+      stage: "ci-517-1",
+      stageSlug: "ci-517-1",
+    });
   });
 
   it("adds a deterministic hash when truncating long stage names", () => {
@@ -101,7 +118,9 @@ describe("Alchemy stage identity", () => {
     expect(config.authSecrets).toBeUndefined();
     expect(config.agentActionRunStaleAfterSeconds).toBe(900);
     expect(config.mcpHostname).toBe("mcp.dev-cillian.example.com");
+    expect(config.syncHostname).toBe("sync.dev-cillian.example.com");
     expect(config.hyperdriveName).toBe("ceird-dev-cillian-postgres");
+    expect(config.electricContainerInstanceType).toBe("dev");
     expect(config.mcpAuthorizedAppCacheMaxEntries).toBeUndefined();
     expect(config.mcpAuthorizedAppCacheTtlSeconds).toBeUndefined();
     expect(config.neonDatabaseName).toBe("ceird");
@@ -144,6 +163,9 @@ describe("Alchemy stage identity", () => {
     expect(config.mcpHostname).toBe(
       "mcp.codex-alchemy-v2-native-migration.ceird.app"
     );
+    expect(config.syncHostname).toBe(
+      "sync.codex-alchemy-v2-native-migration.ceird.app"
+    );
   });
 
   it("defaults the parent stage to stage-scoped app/API hostnames", () => {
@@ -167,7 +189,9 @@ describe("Alchemy stage identity", () => {
     expect(config.apiHostname).toBe("api.main.ceird.app");
     expect(config.agentHostname).toBe("agent.main.ceird.app");
     expect(config.mcpHostname).toBe("mcp.main.ceird.app");
+    expect(config.syncHostname).toBe("sync.main.ceird.app");
     expect(config.hyperdriveName).toBe("ceird-production-postgres");
+    expect(config.electricContainerInstanceType).toBe("basic");
     expect(config.neonHistoryRetentionSeconds).toBe(21_600);
     expect(config.neonParentBranchProtected).toBeFalsy();
   });
@@ -184,6 +208,7 @@ describe("Alchemy stage identity", () => {
                 CEIRD_API_HOSTNAME: "api.ceird.app",
                 CEIRD_AGENT_HOSTNAME: "agent.ceird.app",
                 CEIRD_MCP_HOSTNAME: "mcp.ceird.app",
+                CEIRD_SYNC_HOSTNAME: "sync.ceird.app",
                 CEIRD_ZONE_NAME: "ceird.app",
                 GOOGLE_MAPS_API_KEY: "google-key",
               },
@@ -211,6 +236,7 @@ describe("Alchemy stage identity", () => {
               env: {
                 AUTH_EMAIL_FROM: "no-reply@example.com",
                 CEIRD_APP_HOSTNAME: "app.ceird.app",
+                CEIRD_SYNC_HOSTNAME: "sync.ceird.app",
                 CEIRD_ZONE_NAME: "ceird.app",
                 GOOGLE_MAPS_API_KEY: "google-key",
               },
@@ -223,6 +249,7 @@ describe("Alchemy stage identity", () => {
     expect(config.apiHostname).toBe("api.main.ceird.app");
     expect(config.agentHostname).toBe("agent.main.ceird.app");
     expect(config.mcpHostname).toBe("mcp.main.ceird.app");
+    expect(config.syncHostname).toBe("sync.ceird.app");
     expect(config.tenantHostMode).toBe("stage");
     expect(config.tenantRoutePattern).toBe("*--main.ceird.app/*");
     expect(config.tenantTrustedOriginPattern).toBe("https://*--main.ceird.app");
@@ -237,6 +264,7 @@ describe("Alchemy stage identity", () => {
     );
 
     expect(config.appHostname).toBe("app.main.example.com");
+    expect(config.syncHostname).toBe("sync.main.example.com");
     expect(config.tenantHostMode).toBe("stage");
     expect(config.tenantStageAlias).toBe("main");
     expect(config.tenantRoutePattern).toBe("*--main.example.com/*");
@@ -300,6 +328,57 @@ describe("Alchemy stage identity", () => {
     );
 
     expect(config.authRateLimitEnabled).toBeFalsy();
+  });
+
+  it("treats blank Electric storage credentials from GitHub secrets as absent", () => {
+    const blankConfig = Effect.runSync(
+      loadInfraStageConfig("pr-104").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            makeConfigProvider({
+              CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: "",
+              CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: "   ",
+            })
+          )
+        )
+      )
+    );
+    const configured = Effect.runSync(
+      loadInfraStageConfig("pr-104").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            makeConfigProvider({
+              CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: " access-key-id ",
+              CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: " secret-access-key ",
+            })
+          )
+        )
+      )
+    );
+
+    expect(blankConfig.electricStorageAccessKeyId).toBeUndefined();
+    expect(blankConfig.electricStorageSecretAccessKey).toBeUndefined();
+    expect(
+      Redacted.value(configured.electricStorageAccessKeyId ?? Redacted.make(""))
+    ).toBe("access-key-id");
+    expect(
+      Redacted.value(
+        configured.electricStorageSecretAccessKey ?? Redacted.make("")
+      )
+    ).toBe("secret-access-key");
+    expect(() =>
+      Effect.runSync(
+        loadInfraStageConfig("pr-104").pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              makeConfigProvider({
+                CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: "access-key-id",
+              })
+            )
+          )
+        )
+      )
+    ).toThrow(/must be configured together/);
   });
 
   it("allows PR preview auth rate limits to be enabled explicitly", () => {
@@ -658,12 +737,13 @@ describe("Alchemy stage identity", () => {
   });
 });
 
-function makeConfigProvider() {
+function makeConfigProvider(overrides: Record<string, string> = {}) {
   return ConfigProvider.fromEnv({
     env: {
       AUTH_EMAIL_FROM: "no-reply@example.com",
       CEIRD_ZONE_NAME: "example.com",
       GOOGLE_MAPS_API_KEY: "google-key",
+      ...overrides,
     },
   });
 }

@@ -1,11 +1,8 @@
 {
-  "version": "8",
   "dialect": "postgres",
-  "id": "56b64641-072f-4030-9cbd-0d2c407ef1c3",
-  "prevIds": [
-    "b8414801-d66f-4622-8a96-6a1b5db60aa6",
-    "c0c29aa4-fa3f-4785-8fd9-9ac1a78576f0"
-  ],
+  "id": "812e765b-3795-4125-839b-70c4599723f4",
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
+  "version": "8",
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -4400,6 +4397,27 @@
           "asc": true,
           "nullsFirst": false,
           "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "labels_organization_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
         },
         {
           "value": "name",
@@ -4922,6 +4940,83 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "site_comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "comment_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "site_comments_organization_created_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "site_comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "site_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "contact_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "site_contacts_organization_created_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "site_contacts"
     },
     {
       "nameExplicit": true,
@@ -5650,6 +5745,41 @@
       "method": "btree",
       "concurrently": false,
       "name": "work_item_comments_work_item_created_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "work_item_comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "comment_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "work_item_comments_organization_created_at_idx",
       "entityType": "indexes",
       "schema": "public",
       "table": "work_item_comments"
@@ -6904,7 +7034,7 @@
       "table": "member"
     },
     {
-      "value": "\"slug\" ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$' and char_length(\"slug\") <= 40 and \"slug\" not in ('app', 'api', 'agent', 'mcp')",
+      "value": "\"slug\" ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$' and char_length(\"slug\") <= 40 and \"slug\" not in ('app', 'api', 'agent', 'mcp', 'sync')",
       "name": "organization_slug_format_chk",
       "entityType": "checks",
       "schema": "public",

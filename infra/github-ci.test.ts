@@ -3,6 +3,7 @@ import { describe, expect, it } from "@effect/vitest";
 import {
   gitHubCiDeployEnvironments,
   makeCloudflareCiDeployTokenProps,
+  makeCloudflareElectricStorageTokenProps,
   makeGitHubCiVariables,
 } from "./github-ci.ts";
 
@@ -28,6 +29,10 @@ describe("GitHub CI credentials stack", () => {
             "Queues Write",
             "Secrets Store Read",
             "Secrets Store Write",
+            "Workers Containers Read",
+            "Workers Containers Write",
+            "Workers R2 Storage Read",
+            "Workers R2 Storage Write",
             "Workers Scripts Read",
             "Workers Scripts Write",
           ],
@@ -46,6 +51,29 @@ describe("GitHub CI credentials stack", () => {
           ],
           resources: {
             "com.cloudflare.api.account.zone.zone-id": "*",
+          },
+        },
+      ],
+    });
+  });
+
+  it("keeps Electric runtime R2 credentials in a separate account-scoped token", () => {
+    expect(
+      makeCloudflareElectricStorageTokenProps({
+        cloudflareAccountId: "account-id",
+      })
+    ).toStrictEqual({
+      accountId: "account-id",
+      name: "ceird-electric-storage-r2",
+      policies: [
+        {
+          effect: "allow",
+          permissionGroups: [
+            "Workers R2 Storage Read",
+            "Workers R2 Storage Write",
+          ],
+          resources: {
+            "com.cloudflare.api.account.account-id": "*",
           },
         },
       ],
