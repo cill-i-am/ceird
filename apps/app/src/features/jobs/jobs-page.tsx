@@ -6,6 +6,7 @@ import type {
   UserIdType,
 } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
+import type { ProximityLimit } from "@ceird/proximity-core";
 import {
   Add01Icon,
   ArrowRight01Icon,
@@ -14,12 +15,14 @@ import {
   CheckmarkCircle02Icon,
   FilterHorizontalIcon,
   LeftToRightListBulletIcon,
+  Location01Icon,
   MapsSquare01Icon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
+import type { ComponentProps } from "react";
 
 import {
   Alert,
@@ -83,6 +86,7 @@ import {
   JOB_PRIORITY_LABELS as PRIORITY_LABELS,
   JOB_STATUS_LABELS as STATUS_LABELS,
 } from "./job-display";
+import { JobsProximityPanel } from "./jobs-proximity-panel";
 import {
   buildJobSavedViews,
   findMatchingJobSavedView,
@@ -105,6 +109,12 @@ import type { JobsViewer } from "./jobs-viewer";
 type JobsViewMode = "list" | "map";
 
 type JobsLookup = ReturnType<typeof useJobsLookup>;
+
+type JobsFiltersAction =
+  | { readonly type: "clear_internal_options" }
+  | { readonly patch: Partial<JobsListFilters>; readonly type: "patch" }
+  | { readonly type: "reset" }
+  | { readonly filters: JobsListFilters; readonly type: "set" };
 
 const STATUS_FILTER_OPTIONS = [
   { label: "Active", value: "active" },
@@ -187,23 +197,74 @@ const JobsCoverageMap = React.lazy(async () => {
   return { default: module.JobsCoverageMap };
 });
 
+function jobsFiltersReducer(
+  filters: JobsListFilters,
+  action: JobsFiltersAction
+): JobsListFilters {
+  switch (action.type) {
+    case "clear_internal_options": {
+      return {
+        ...filters,
+        assigneeId: defaultJobsListFilters.assigneeId,
+        coordinatorId: defaultJobsListFilters.coordinatorId,
+        labelId: defaultJobsListFilters.labelId,
+        priority: defaultJobsListFilters.priority,
+        siteId: defaultJobsListFilters.siteId,
+      };
+    }
+    case "patch": {
+      return { ...filters, ...action.patch };
+    }
+    case "reset": {
+      return defaultJobsListFilters;
+    }
+    case "set": {
+      return action.filters;
+    }
+    default: {
+      const exhaustiveAction: never = action;
+
+      return exhaustiveAction;
+    }
+  }
+}
+
 // Route-level page coordinates filters, URL state, command actions, and layout.
 // react-doctor-disable-next-line
 export function JobsPage({
   listHotkeysEnabled = true,
+  nearMeEnabled: controlledNearMeEnabled,
+  onNearMeChange,
+  onRouteLimitChange,
   onViewModeChange,
+  routeLimit: controlledRouteLimit,
   viewMode: controlledViewMode,
   viewer,
 }: {
   readonly listHotkeysEnabled?: boolean;
+  readonly nearMeEnabled?: boolean | undefined;
+  readonly onNearMeChange?: (value: boolean) => void;
+  readonly onRouteLimitChange?: (value: ProximityLimit) => void;
   readonly onViewModeChange?: (value: JobsViewMode) => void;
+  readonly routeLimit?: ProximityLimit | undefined;
   readonly viewMode?: JobsViewMode;
   readonly viewer: JobsViewer;
 }) {
   const [uncontrolledViewMode, setUncontrolledViewMode] =
     React.useState<JobsViewMode>("list");
   const viewMode = controlledViewMode ?? uncontrolledViewMode;
-  const [filters, setFilters] = React.useState<JobsListFilters>(
+  const [uncontrolledNearMeEnabled, setUncontrolledNearMeEnabled] =
+    React.useState(false);
+  const nearMeEnabled = controlledNearMeEnabled ?? uncontrolledNearMeEnabled;
+  const [uncontrolledRouteLimit, setUncontrolledRouteLimit] =
+    React.useState<ProximityLimit>(10 as ProximityLimit);
+  const routeLimit = controlledRouteLimit ?? uncontrolledRouteLimit;
+  const [currentLocationRequestKey, requestCurrentLocation] = React.useReducer(
+    (current: number) => current + 1,
+    0
+  );
+  const [filters, dispatchFilters] = React.useReducer(
+    jobsFiltersReducer,
     defaultJobsListFilters
   );
   const jobsListState = useJobsListState();
@@ -244,25 +305,12 @@ export function JobsPage({
       return;
     }
 
-    setFilters((current) => ({
-      ...current,
-      assigneeId: defaultJobsListFilters.assigneeId,
-      coordinatorId: defaultJobsListFilters.coordinatorId,
-      labelId: defaultJobsListFilters.labelId,
-      priority: defaultJobsListFilters.priority,
-      siteId: defaultJobsListFilters.siteId,
-    }));
-  }, [canUseInternalOptions, setFilters]);
+    dispatchFilters({ type: "clear_internal_options" });
+  }, [canUseInternalOptions]);
 
-  const patchFilters = React.useCallback(
-    (patch: Partial<JobsListFilters>) => {
-      setFilters((current) => ({
-        ...current,
-        ...patch,
-      }));
-    },
-    [setFilters]
-  );
+  const patchFilters = React.useCallback((patch: Partial<JobsListFilters>) => {
+    dispatchFilters({ patch, type: "patch" });
+  }, []);
 
   const setViewMode = React.useCallback(
     (nextViewMode: JobsViewMode) => {
@@ -278,13 +326,55 @@ export function JobsPage({
     },
     [controlledViewMode, onViewModeChange, viewMode]
   );
+  const setNearMeEnabled = React.useCallback(
+    (nextEnabled: boolean) => {
+      if (controlledNearMeEnabled === undefined) {
+        setUncontrolledNearMeEnabled(nextEnabled);
+      }
 
-  const applySavedView = React.useCallback(
-    (savedView: JobSavedView) => {
-      setFilters(savedView.filters);
+      onNearMeChange?.(nextEnabled);
     },
-    [setFilters]
+    [controlledNearMeEnabled, onNearMeChange]
   );
+  const setRouteLimit = React.useCallback(
+    (nextLimit: ProximityLimit) => {
+      if (controlledRouteLimit === undefined) {
+        setUncontrolledRouteLimit(nextLimit);
+      }
+
+      onRouteLimitChange?.(nextLimit);
+    },
+    [controlledRouteLimit, onRouteLimitChange]
+  );
+  const activateNearMeWithCurrentLocation = React.useCallback(() => {
+    setNearMeEnabled(true);
+    requestCurrentLocation();
+  }, [requestCurrentLocation, setNearMeEnabled]);
+  const clearFilters = React.useCallback(() => {
+    dispatchFilters({ type: "reset" });
+  }, []);
+  const selectActiveStatus = React.useCallback(() => {
+    patchFilters({ status: "active" });
+  }, [patchFilters]);
+  const selectAllStatus = React.useCallback(() => {
+    patchFilters({ status: "all" });
+  }, [patchFilters]);
+  const handleStatusChange = React.useCallback(
+    (status: JobsListFilters["status"]) => {
+      patchFilters({ status });
+    },
+    [patchFilters]
+  );
+  const createJob = React.useCallback(() => {
+    navigate({
+      search: (current) =>
+        openWorkspaceSheetSearch(current, { kind: "job.create" }),
+    });
+  }, [navigate]);
+
+  const applySavedView = React.useCallback((savedView: JobSavedView) => {
+    dispatchFilters({ filters: savedView.filters, type: "set" });
+  }, []);
   const openJob = React.useCallback(
     (jobId: JobListItem["id"]) => {
       navigate({
@@ -295,112 +385,23 @@ export function JobsPage({
     [navigate]
   );
 
-  const jobsPageCommandActions = React.useMemo<readonly CommandAction[]>(() => {
-    const actions: CommandAction[] = [
-      ...(canCreateJobs
-        ? [
-            {
-              group: "Current page",
-              icon: Add01Icon,
-              id: "jobs-create",
-              priority: 90,
-              run: () =>
-                navigate({
-                  search: (current) =>
-                    openWorkspaceSheetSearch(current, { kind: "job.create" }),
-                }),
-              scope: "route" as const,
-              shortcut: HOTKEYS.jobsCreate,
-              title: "Create job",
-            },
-          ]
-        : []),
-      ...(canUseInternalOptions
-        ? [
-            ...savedViews.map((savedView, index) => ({
-              disabled: savedView.id === activeSavedView?.id,
-              group: "Job views",
-              icon: FilterHorizontalIcon,
-              id: `jobs-saved-view-${savedView.id}`,
-              priority: 65 - index,
-              run: () => applySavedView(savedView),
-              scope: "route" as const,
-              title: `Apply ${savedView.label} view`,
-            })),
-            {
-              disabled: viewMode === "list",
-              group: "Current page",
-              icon: LeftToRightListBulletIcon,
-              id: "jobs-switch-list-view",
-              priority: 80,
-              run: () => setViewMode("list"),
-              scope: "route" as const,
-              shortcut: HOTKEYS.jobsListView,
-              title: "Switch to list view",
-            },
-            {
-              disabled: viewMode === "map",
-              group: "Current page",
-              icon: MapsSquare01Icon,
-              id: "jobs-switch-map-view",
-              priority: 70,
-              run: () => setViewMode("map"),
-              scope: "route" as const,
-              shortcut: HOTKEYS.jobsMapView,
-              title: "Switch to map view",
-            },
-          ]
-        : []),
-      {
-        disabled: filters.status === "active",
-        group: "Job filters",
-        icon: FilterHorizontalIcon,
-        id: "jobs-filter-active",
-        priority: 60,
-        run: () => patchFilters({ status: "active" }),
-        scope: "route",
-        title: "Show active jobs",
-      },
-      {
-        disabled: filters.status === "all",
-        group: "Job filters",
-        icon: FilterHorizontalIcon,
-        id: "jobs-filter-all",
-        priority: 50,
-        run: () => patchFilters({ status: "all" }),
-        scope: "route",
-        title: "Show all jobs",
-      },
-    ];
-
-    if (hasCustomFilters) {
-      actions.push({
-        group: "Job filters",
-        icon: Cancel01Icon,
-        id: "jobs-clear-filters",
-        priority: 90,
-        run: () => setFilters(defaultJobsListFilters),
-        scope: "route",
-        shortcut: HOTKEYS.jobsClearFilters,
-        title: "Clear job filters",
-      });
-    }
-
-    return actions;
-  }, [
-    activeSavedView?.id,
-    applySavedView,
+  const jobsPageCommandActions = useJobsPageCommandActions({
+    activeSavedViewId: activeSavedView?.id,
     canCreateJobs,
     canUseInternalOptions,
-    filters.status,
+    filtersStatus: filters.status,
     hasCustomFilters,
-    navigate,
-    patchFilters,
-    setFilters,
+    nearMeEnabled,
     savedViews,
     viewMode,
-    setViewMode,
-  ]);
+    onActiveStatusSelect: selectActiveStatus,
+    onAllStatusSelect: selectAllStatus,
+    onClearFilters: clearFilters,
+    onCreateJob: createJob,
+    onNearMeSelect: activateNearMeWithCurrentLocation,
+    onSavedViewSelect: applySavedView,
+    onViewModeSelect: setViewMode,
+  });
 
   useRegisterCommandActions(jobsPageCommandActions);
   useAppHotkey(
@@ -411,16 +412,9 @@ export function JobsPage({
     },
     { enabled: listHotkeysEnabled }
   );
-  useAppHotkey(
-    "jobsCreate",
-    () => {
-      navigate({
-        search: (current) =>
-          openWorkspaceSheetSearch(current, { kind: "job.create" }),
-      });
-    },
-    { enabled: listHotkeysEnabled && canCreateJobs }
-  );
+  useAppHotkey("jobsCreate", createJob, {
+    enabled: listHotkeysEnabled && canCreateJobs,
+  });
   useAppHotkey(
     "jobsRefresh",
     () => {
@@ -442,6 +436,9 @@ export function JobsPage({
     },
     { enabled: listHotkeysEnabled && canUseInternalOptions }
   );
+  useAppHotkeySequence("jobsNearMe", activateNearMeWithCurrentLocation, {
+    enabled: listHotkeysEnabled && canUseInternalOptions && !nearMeEnabled,
+  });
   useAppHotkeySequence(
     "jobsSavedViews",
     () => {
@@ -452,59 +449,23 @@ export function JobsPage({
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
-      <header className="flex min-w-0 flex-col gap-3 border-b border-border/60 pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <h1 className="truncate font-heading text-xl font-medium text-foreground">
-              Jobs
-            </h1>
-            {canUseInternalOptions && !isMobile ? (
-              <SavedViewsControl
-                activeSavedView={activeSavedView}
-                className="h-8 w-36 shrink-0 bg-background"
-                id="jobs-saved-view-desktop"
-                onOpenChange={setSavedViewsOpen}
-                onSavedViewSelect={applySavedView}
-                open={savedViewsOpen}
-                savedViews={savedViews}
-              />
-            ) : null}
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {canUseInternalOptions ? (
-              <ViewModeSwitch value={viewMode} onValueChange={setViewMode} />
-            ) : null}
-            {canCreateJobs ? <NewJobLink /> : null}
-          </div>
-        </div>
-        <JobsCommandToolbar
-          filters={filters}
-          hasCustomFilters={hasCustomFilters}
-          optionsState={options}
-          onClearFilters={() => setFilters(defaultJobsListFilters)}
-          onFiltersChange={patchFilters}
-          savedViewsControl={
-            canUseInternalOptions && isMobile ? (
-              <SavedViewsControl
-                activeSavedView={activeSavedView}
-                className="h-8 w-40"
-                id="jobs-saved-view-mobile"
-                onOpenChange={setSavedViewsOpen}
-                onSavedViewSelect={applySavedView}
-                open={savedViewsOpen}
-                savedViews={savedViews}
-              />
-            ) : null
-          }
-          searchInputRef={searchInputRef}
-          showInternalFilters={canUseInternalOptions}
-        />
-        <JobStatusRail
-          counts={statusCounts}
-          status={filters.status}
-          onStatusChange={(status) => patchFilters({ status })}
-        />
-      </header>
+      <JobsPageHeader
+        activeSavedView={activeSavedView}
+        capabilities={{ canCreateJobs, canUseInternalOptions }}
+        filters={filters}
+        options={options}
+        presentation={{ hasCustomFilters, isMobile, savedViewsOpen }}
+        savedViews={savedViews}
+        searchInputRef={searchInputRef}
+        statusCounts={statusCounts}
+        viewMode={viewMode}
+        onClearFilters={clearFilters}
+        onFiltersChange={patchFilters}
+        onSavedViewSelect={applySavedView}
+        onSavedViewsOpenChange={setSavedViewsOpen}
+        onStatusChange={handleStatusChange}
+        onViewModeChange={setViewMode}
+      />
 
       {notice ? (
         <Alert
@@ -531,32 +492,357 @@ export function JobsPage({
       {hasCustomFilters ? (
         <ActiveFilterBar
           filters={activeFilters}
-          onClearAll={() => setFilters(defaultJobsListFilters)}
+          onClearAll={clearFilters}
           onRemove={(key) =>
             patchFilters({ [key]: defaultJobsListFilters[key] })
           }
         />
       ) : null}
 
-      {visibleViewMode === "list" ? (
-        <JobsListView
-          jobs={jobs}
+      {canUseInternalOptions ? (
+        <JobsProximityPanel
+          active={nearMeEnabled}
+          currentLocationRequestKey={currentLocationRequestKey}
+          filters={filters}
+          limit={routeLimit}
+          viewMode={visibleViewMode}
+          onActiveChange={setNearMeEnabled}
+          onClearFilters={clearFilters}
+          onLimitChange={setRouteLimit}
+        >
+          <JobsPrimaryContent
+            canCreateJobs={canCreateJobs}
+            hasCustomFilters={hasCustomFilters}
+            jobs={jobs}
+            lookup={lookup}
+            mode={visibleViewMode}
+            totalJobs={jobsListState.items.length}
+            visible
+            onClearFilters={clearFilters}
+            onOpenJob={openJob}
+          />
+        </JobsProximityPanel>
+      ) : (
+        <JobsPrimaryContent
           canCreateJobs={canCreateJobs}
           hasCustomFilters={hasCustomFilters}
+          jobs={jobs}
           lookup={lookup}
+          mode={visibleViewMode}
           totalJobs={jobsListState.items.length}
-          onClearFilters={() => setFilters(defaultJobsListFilters)}
+          visible
+          onClearFilters={clearFilters}
           onOpenJob={openJob}
         />
-      ) : (
-        <section data-testid="jobs-coverage-panel" className="min-h-0">
-          <React.Suspense fallback={<JobsCoverageMapFallback />}>
-            <JobsCoverageMap jobs={jobs} sites={lookup.siteById} />
-          </React.Suspense>
-        </section>
       )}
     </main>
   );
+}
+
+function JobsPrimaryContent({
+  canCreateJobs,
+  hasCustomFilters,
+  jobs,
+  lookup,
+  mode,
+  onClearFilters,
+  onOpenJob,
+  totalJobs,
+  visible,
+}: {
+  readonly canCreateJobs: boolean;
+  readonly hasCustomFilters: boolean;
+  readonly jobs: readonly JobListItem[];
+  readonly lookup: JobsLookup;
+  readonly mode: JobsViewMode;
+  readonly onClearFilters: () => void;
+  readonly onOpenJob: (jobId: JobListItem["id"]) => void;
+  readonly totalJobs: number;
+  readonly visible: boolean;
+}) {
+  if (!visible) {
+    return null;
+  }
+
+  if (mode === "list") {
+    return (
+      <JobsListView
+        jobs={jobs}
+        canCreateJobs={canCreateJobs}
+        hasCustomFilters={hasCustomFilters}
+        lookup={lookup}
+        totalJobs={totalJobs}
+        onClearFilters={onClearFilters}
+        onOpenJob={onOpenJob}
+      />
+    );
+  }
+
+  return (
+    <section data-testid="jobs-coverage-panel" className="min-h-0">
+      <React.Suspense fallback={<JobsCoverageMapFallback />}>
+        <JobsCoverageMap jobs={jobs} sites={lookup.siteById} />
+      </React.Suspense>
+    </section>
+  );
+}
+
+function JobsPageHeader({
+  activeSavedView,
+  capabilities,
+  filters,
+  onClearFilters,
+  onFiltersChange,
+  onSavedViewsOpenChange,
+  onSavedViewSelect,
+  onStatusChange,
+  onViewModeChange,
+  options,
+  presentation,
+  savedViews,
+  searchInputRef,
+  statusCounts,
+  viewMode,
+}: {
+  readonly activeSavedView: JobSavedView | undefined;
+  readonly capabilities: {
+    readonly canCreateJobs: boolean;
+    readonly canUseInternalOptions: boolean;
+  };
+  readonly filters: JobsListFilters;
+  readonly onClearFilters: () => void;
+  readonly onFiltersChange: (patch: Partial<JobsListFilters>) => void;
+  readonly onSavedViewsOpenChange: (open: boolean) => void;
+  readonly onSavedViewSelect: (savedView: JobSavedView) => void;
+  readonly onStatusChange: (status: JobsListFilters["status"]) => void;
+  readonly onViewModeChange: (mode: JobsViewMode) => void;
+  readonly options: ComponentProps<typeof JobsCommandToolbar>["optionsState"];
+  readonly presentation: {
+    readonly hasCustomFilters: boolean;
+    readonly isMobile: boolean;
+    readonly savedViewsOpen: boolean;
+  };
+  readonly savedViews: readonly JobSavedView[];
+  readonly searchInputRef: React.RefObject<HTMLInputElement | null>;
+  readonly statusCounts: ReturnType<typeof buildJobStatusCounts>;
+  readonly viewMode: JobsViewMode;
+}) {
+  const { canCreateJobs, canUseInternalOptions } = capabilities;
+  const { hasCustomFilters, isMobile, savedViewsOpen } = presentation;
+  const desktopSavedViewsControl =
+    canUseInternalOptions && !isMobile ? (
+      <SavedViewsControl
+        activeSavedView={activeSavedView}
+        className="h-8 w-36 shrink-0 bg-background"
+        id="jobs-saved-view-desktop"
+        onOpenChange={onSavedViewsOpenChange}
+        onSavedViewSelect={onSavedViewSelect}
+        open={savedViewsOpen}
+        savedViews={savedViews}
+      />
+    ) : null;
+  const mobileSavedViewsControl =
+    canUseInternalOptions && isMobile ? (
+      <SavedViewsControl
+        activeSavedView={activeSavedView}
+        className="h-8 w-40"
+        id="jobs-saved-view-mobile"
+        onOpenChange={onSavedViewsOpenChange}
+        onSavedViewSelect={onSavedViewSelect}
+        open={savedViewsOpen}
+        savedViews={savedViews}
+      />
+    ) : null;
+
+  return (
+    <header className="flex min-w-0 flex-col gap-3 border-b border-border/60 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <h1 className="truncate font-heading text-xl font-medium text-foreground">
+            Jobs
+          </h1>
+          {desktopSavedViewsControl}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {canUseInternalOptions ? (
+            <ViewModeSwitch value={viewMode} onValueChange={onViewModeChange} />
+          ) : null}
+          {canCreateJobs ? <NewJobLink /> : null}
+        </div>
+      </div>
+      <JobsCommandToolbar
+        filters={filters}
+        hasCustomFilters={hasCustomFilters}
+        optionsState={options}
+        savedViewsControl={mobileSavedViewsControl}
+        searchInputRef={searchInputRef}
+        showInternalFilters={canUseInternalOptions}
+        onClearFilters={onClearFilters}
+        onFiltersChange={onFiltersChange}
+      />
+      <JobStatusRail
+        counts={statusCounts}
+        status={filters.status}
+        onStatusChange={onStatusChange}
+      />
+    </header>
+  );
+}
+
+function useJobsPageCommandActions({
+  activeSavedViewId,
+  canCreateJobs,
+  canUseInternalOptions,
+  filtersStatus,
+  hasCustomFilters,
+  nearMeEnabled,
+  onActiveStatusSelect,
+  onAllStatusSelect,
+  onClearFilters,
+  onCreateJob,
+  onNearMeSelect,
+  onSavedViewSelect,
+  onViewModeSelect,
+  savedViews,
+  viewMode,
+}: {
+  readonly activeSavedViewId: JobSavedView["id"] | undefined;
+  readonly canCreateJobs: boolean;
+  readonly canUseInternalOptions: boolean;
+  readonly filtersStatus: JobsListFilters["status"];
+  readonly hasCustomFilters: boolean;
+  readonly nearMeEnabled: boolean;
+  readonly onActiveStatusSelect: () => void;
+  readonly onAllStatusSelect: () => void;
+  readonly onClearFilters: () => void;
+  readonly onCreateJob: () => void;
+  readonly onNearMeSelect: () => void;
+  readonly onSavedViewSelect: (savedView: JobSavedView) => void;
+  readonly onViewModeSelect: (viewMode: JobsViewMode) => void;
+  readonly savedViews: readonly JobSavedView[];
+  readonly viewMode: JobsViewMode;
+}) {
+  return React.useMemo<readonly CommandAction[]>(() => {
+    const actions: CommandAction[] = [];
+
+    if (canCreateJobs) {
+      actions.push({
+        group: "Current page",
+        icon: Add01Icon,
+        id: "jobs-create",
+        priority: 90,
+        run: onCreateJob,
+        scope: "route",
+        shortcut: HOTKEYS.jobsCreate,
+        title: "Create job",
+      });
+    }
+
+    if (canUseInternalOptions) {
+      for (const [index, savedView] of savedViews.entries()) {
+        actions.push({
+          disabled: savedView.id === activeSavedViewId,
+          group: "Job views",
+          icon: FilterHorizontalIcon,
+          id: `jobs-saved-view-${savedView.id}`,
+          priority: 65 - index,
+          run: () => onSavedViewSelect(savedView),
+          scope: "route",
+          title: `Apply ${savedView.label} view`,
+        });
+      }
+
+      actions.push(
+        {
+          disabled: viewMode === "list",
+          group: "Current page",
+          icon: LeftToRightListBulletIcon,
+          id: "jobs-switch-list-view",
+          priority: 80,
+          run: () => onViewModeSelect("list"),
+          scope: "route",
+          shortcut: HOTKEYS.jobsListView,
+          title: "Switch to list view",
+        },
+        {
+          disabled: viewMode === "map",
+          group: "Current page",
+          icon: MapsSquare01Icon,
+          id: "jobs-switch-map-view",
+          priority: 70,
+          run: () => onViewModeSelect("map"),
+          scope: "route",
+          shortcut: HOTKEYS.jobsMapView,
+          title: "Switch to map view",
+        },
+        {
+          disabled: nearMeEnabled,
+          group: "Job filters",
+          icon: Location01Icon,
+          id: "jobs-near-me",
+          priority: 75,
+          run: onNearMeSelect,
+          scope: "route",
+          shortcut: HOTKEYS.jobsNearMe,
+          title: "Rank jobs near me",
+        }
+      );
+    }
+
+    actions.push(
+      {
+        disabled: filtersStatus === "active",
+        group: "Job filters",
+        icon: FilterHorizontalIcon,
+        id: "jobs-filter-active",
+        priority: 60,
+        run: onActiveStatusSelect,
+        scope: "route",
+        title: "Show active jobs",
+      },
+      {
+        disabled: filtersStatus === "all",
+        group: "Job filters",
+        icon: FilterHorizontalIcon,
+        id: "jobs-filter-all",
+        priority: 50,
+        run: onAllStatusSelect,
+        scope: "route",
+        title: "Show all jobs",
+      }
+    );
+
+    if (hasCustomFilters) {
+      actions.push({
+        group: "Job filters",
+        icon: Cancel01Icon,
+        id: "jobs-clear-filters",
+        priority: 90,
+        run: onClearFilters,
+        scope: "route",
+        shortcut: HOTKEYS.jobsClearFilters,
+        title: "Clear job filters",
+      });
+    }
+
+    return actions;
+  }, [
+    activeSavedViewId,
+    canCreateJobs,
+    canUseInternalOptions,
+    filtersStatus,
+    hasCustomFilters,
+    nearMeEnabled,
+    onActiveStatusSelect,
+    onAllStatusSelect,
+    onClearFilters,
+    onCreateJob,
+    onNearMeSelect,
+    onSavedViewSelect,
+    onViewModeSelect,
+    savedViews,
+    viewMode,
+  ]);
 }
 
 function JobsCoverageMapFallback() {

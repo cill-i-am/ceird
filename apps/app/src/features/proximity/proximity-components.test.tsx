@@ -3,7 +3,7 @@ import type {
   ProximityOriginSummary,
   RouteSummary,
 } from "@ceird/proximity-core";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ProximityLimitSelect } from "./proximity-limit-select";
@@ -26,8 +26,8 @@ const origin = {
   accuracyMeters: 18,
   computedAt: "2026-06-06T08:41:00.000Z",
   coordinates: {
-    latitude: 53.349805,
-    longitude: -6.26031,
+    latitude: 53.349_805,
+    longitude: -6.260_31,
   },
   displayText: "Current location",
   mode: "current_location",
@@ -65,8 +65,8 @@ describe("proximity components", () => {
         selectedSuggestion={null}
         suggestions={[suggestion]}
         onConfirm={onConfirm}
-        onOpenChange={vi.fn()}
-        onQueryChange={vi.fn()}
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        onQueryChange={vi.fn<(query: string) => void>()}
         onSuggestionSelect={onSuggestionSelect}
       />
     );
@@ -86,8 +86,8 @@ describe("proximity components", () => {
         selectedSuggestion={suggestion}
         suggestions={[suggestion]}
         onConfirm={onConfirm}
-        onOpenChange={vi.fn()}
-        onQueryChange={vi.fn()}
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        onQueryChange={vi.fn<(query: string) => void>()}
         onSuggestionSelect={onSuggestionSelect}
       />
     );
@@ -125,6 +125,30 @@ describe("proximity components", () => {
       expect.stringContaining("travelmode=driving")
     );
     expect(screen.getByRole("button", { name: "View job" })).toBeVisible();
+  });
+
+  it("selects route-ranked rows when users scan them with pointer or focus", () => {
+    const onSelect = vi.fn<() => void>();
+    render(
+      <ProximityResultRow
+        destination={{
+          coordinates: { latitude: 53.351, longitude: -6.255 },
+          label: "14 Willow Close",
+        }}
+        origin={origin}
+        rank={1}
+        routeSummary={routeSummary}
+        title="14 Willow Close"
+        onSelect={onSelect}
+      />
+    );
+    const row = screen.getByText("14 Willow Close").closest("article");
+
+    expect(row).toBeInstanceOf(HTMLElement);
+    fireEvent.pointerEnter(row as HTMLElement);
+    screen.getByRole("link", { name: "Open in Maps" }).focus();
+
+    expect(onSelect).toHaveBeenCalledTimes(2);
   });
 
   it("renders compact route result cards for mobile and agent surfaces", () => {

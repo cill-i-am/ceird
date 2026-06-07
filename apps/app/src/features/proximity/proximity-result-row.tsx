@@ -51,10 +51,12 @@ export function ProximityResultRow({
   selected = false,
   subtitle,
   title,
+  onSelect,
 }: {
   readonly destination: ProximityDestination;
   readonly detailAction?: ReactNode;
   readonly meta?: ReactNode;
+  readonly onSelect?: (() => void) | undefined;
   readonly origin: ProximityOriginSummary;
   readonly rank: number;
   readonly routeSummary: RouteSummary;
@@ -70,6 +72,8 @@ export function ProximityResultRow({
           ? "border-primary bg-primary/5 ring-1 ring-primary/20"
           : "border-border hover:bg-muted/20"
       )}
+      onFocusCapture={onSelect}
+      onPointerEnter={onSelect}
     >
       <RankBadge rank={rank} selected={selected} />
       <div className="min-w-0">
@@ -160,7 +164,12 @@ export function MapsHandoffButton({
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuItem
             render={
-              <a href={urls.google.url} target="_blank" rel="noreferrer" />
+              <a
+                href={urls.google.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Open in Google Maps"
+              />
             }
           >
             <HugeiconsIcon icon={SquareArrowDiagonal01Icon} strokeWidth={2} />
@@ -168,7 +177,12 @@ export function MapsHandoffButton({
           </DropdownMenuItem>
           <DropdownMenuItem
             render={
-              <a href={urls.apple.url} target="_blank" rel="noreferrer" />
+              <a
+                href={urls.apple.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Open in Apple Maps"
+              />
             }
           >
             <HugeiconsIcon icon={SquareArrowDiagonal01Icon} strokeWidth={2} />

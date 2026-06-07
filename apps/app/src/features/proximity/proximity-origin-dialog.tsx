@@ -21,6 +21,7 @@ import {
 import { cn } from "#/lib/utils";
 
 export function ProximityOriginDialog({
+  error,
   loading = false,
   onConfirm,
   onOpenChange,
@@ -31,6 +32,7 @@ export function ProximityOriginDialog({
   selectedSuggestion,
   suggestions,
 }: {
+  readonly error?: string | null | undefined;
   readonly loading?: boolean;
   readonly onConfirm: (suggestion: ProximityOriginSuggestion) => void;
   readonly onOpenChange: (open: boolean) => void;
@@ -104,6 +106,15 @@ export function ProximityOriginDialog({
             );
           })}
         </div>
+
+        {error ? (
+          <p
+            role="alert"
+            className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+          >
+            {error}
+          </p>
+        ) : null}
 
         <DialogFooter>
           <Button

@@ -263,6 +263,14 @@ export const HOTKEYS = {
     label: "Map view",
     scope: "jobs",
   },
+  jobsNearMe: {
+    group: "Jobs",
+    hotkey: "V N",
+    id: "jobsNearMe",
+    label: "Rank jobs near me",
+    scope: "jobs",
+    when: "Internal job filters are available",
+  },
   jobsSavedViews: {
     group: "Jobs",
     hotkey: "V S",

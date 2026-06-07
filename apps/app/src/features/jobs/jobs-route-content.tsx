@@ -19,9 +19,13 @@ export function JobsRouteContent({
   dataPlaneSeeds = EMPTY_DATA_PLANE_SEEDS,
   listHotkeysEnabled,
   list,
+  nearMeEnabled,
+  onNearMeChange,
+  onRouteLimitChange,
   onViewModeChange,
   options,
   queryClient,
+  routeLimit,
   stack = EMPTY_WORKSPACE_SHEET_STACK,
   viewMode,
   viewer,
@@ -32,11 +36,17 @@ export function JobsRouteContent({
     typeof JobsPage
   >["listHotkeysEnabled"];
   readonly list: JobListResponse;
+  readonly nearMeEnabled?: ComponentProps<typeof JobsPage>["nearMeEnabled"];
+  readonly onNearMeChange?: ComponentProps<typeof JobsPage>["onNearMeChange"];
+  readonly onRouteLimitChange?: ComponentProps<
+    typeof JobsPage
+  >["onRouteLimitChange"];
   readonly onViewModeChange?: ComponentProps<
     typeof JobsPage
   >["onViewModeChange"];
   readonly options: JobOptionsResponse;
   readonly queryClient?: QueryClient | undefined;
+  readonly routeLimit?: ComponentProps<typeof JobsPage>["routeLimit"];
   readonly stack?: readonly WorkspaceSheet[] | undefined;
   readonly viewMode?: ComponentProps<typeof JobsPage>["viewMode"];
   readonly viewer: JobsViewer;
@@ -55,7 +65,11 @@ export function JobsRouteContent({
     >
       <JobsPage
         listHotkeysEnabled={listHotkeysEnabled}
+        nearMeEnabled={nearMeEnabled}
+        onNearMeChange={onNearMeChange}
+        onRouteLimitChange={onRouteLimitChange}
         onViewModeChange={onViewModeChange}
+        routeLimit={routeLimit}
         viewMode={viewMode}
         viewer={viewer}
       />
