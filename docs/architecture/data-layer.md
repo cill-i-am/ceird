@@ -188,14 +188,19 @@ creating API tokens during routine deploys, so the deploy token does not need
 `API Tokens Write`. Production, pull-request previews, and push-to-main cloud
 E2E stages all provision the Electric Container and stage-scoped R2 bucket; a
 deployed stack fails closed when either Electric storage credential is absent.
+During reconciliation, the app stack writes the R2 credentials, stage Neon
+connection URL, and generated Electric source secret into Cloudflare Secrets
+Store with stage-scoped names. The Cloudflare Container configuration references
+those account-secret names; it does not send raw secret values to the Containers
+application API.
 
-The token id is passed to the container as `AWS_ACCESS_KEY_ID`; the SHA-256 hash
-of the token value is passed as `AWS_SECRET_ACCESS_KEY`, which matches
+The token id is exposed to the container as `AWS_ACCESS_KEY_ID`; the SHA-256
+hash of the token value is exposed as `AWS_SECRET_ACCESS_KEY`, which matches
 Cloudflare R2's S3 credential derivation. The container mounts the R2 bucket at
 `/var/lib/electric` with TigrisFS, verifies the mountpoint is active and
-writable with a startup probe, and only then starts Electric. Electric runs with
-`ELECTRIC_STORAGE=fast_file`, `ELECTRIC_PERSISTENT_STATE=file`, and
-`ELECTRIC_STORAGE_DIR=/var/lib/electric`. It also sets
+writable before starting Electric, and runs with `ELECTRIC_STORAGE=fast_file`,
+`ELECTRIC_PERSISTENT_STATE=file`, and `ELECTRIC_STORAGE_DIR=/var/lib/electric`.
+It also sets
 `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true` so Electric's active-shape SQLite
 database is configured for the R2-backed network filesystem. The sync Worker
 resolves the singleton `ElectricSql` Durable Object with a stage-derived

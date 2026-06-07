@@ -206,7 +206,10 @@ stages, missing Domain Worker Smart Placement, and stage tenant-route or
 wildcard-DNS drift while allowing the known legacy Drizzle tombstone until it
 has been inspected and intentionally removed. Cloud E2E and preview deploys pass
 Electric storage credentials so Alchemy reconciles the stage-scoped bucket and
-Electric Container before tests run. Plain
+Electric Container before tests run. During deploy, Alchemy stores those
+credentials plus the stage database URL and Electric source secret in
+Cloudflare Secrets Store, then references the resulting account-secret names in
+the Container application configuration. Plain
 `PostgresBranch.connectionUri` state is reported as a low-severity finding, not
 a CI blocker, because Alchemy may still expose that value for some provider
 shapes.
@@ -218,6 +221,9 @@ CI guide specifically calls out that
 `Cloudflare.state()` needs Cloudflare Secrets Store Read/Write in CI because
 Alchemy reads the state-store token back through an ephemeral edge-preview
 Worker with a secret binding.
+The same token also needs Secrets Store Read/Write for the Electric Container
+runtime secrets that are created by the app stack before the container
+application is reconciled.
 
 ## Preview Workflow
 

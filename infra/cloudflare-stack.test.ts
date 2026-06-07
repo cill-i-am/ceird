@@ -83,6 +83,7 @@ import {
   makeAlchemyLocalWorkerOrigin,
   makeCloudflareHyperdriveProps,
   makeDurableObjectLocationHintForNeonRegion,
+  makeElectricContainerSecretName,
   makeTenantReservedHostBypassRoutePatterns,
   makeCloudflareWorkerOrigin,
   shouldReconcileTenantRouting,
@@ -885,14 +886,16 @@ describe("Cloudflare stack", () => {
     });
     const electricContainerProps = makeElectricContainerProps({
       config: configWithoutCloudflareBootstrapSecrets,
-      databaseConnectionUri: "postgresql://ceird:secret@db.example.com/ceird",
-      electricSourceSecret: Redacted.value(electricSourceSecret),
       name: "ceird-main-electric",
+      secrets: {
+        awsAccessKeyId: "ceird-main-electric-aws-access-key-id",
+        awsSecretAccessKey: "ceird-main-electric-aws-secret-access-key",
+        databaseUrl: "ceird-main-electric-database-url",
+        electricSecret: "ceird-main-electric-source-secret",
+      },
       storage: {
-        accessKeyId: "electric-storage-access-key",
         accountId: "cloudflare-account-id",
         bucketName: "ceird-main-electric-storage",
-        secretAccessKey: "electric-storage-secret-key",
       },
     });
     const authEmailBinding = domainBindings.AUTH_EMAIL;
@@ -1036,6 +1039,12 @@ describe("Cloudflare stack", () => {
     expect(
       makeDurableObjectLocationHintForNeonRegion("aws-ap-southeast-1")
     ).toBe("apac");
+    expect(
+      makeElectricContainerSecretName(
+        configWithoutCloudflareBootstrapSecrets,
+        "database-url"
+      )
+    ).toBe("ceird-main-electric-database-url");
     expect(electricContainerProps).toMatchObject({
       autoInstallExternals: false,
       isExternal: true,
@@ -1081,22 +1090,22 @@ describe("Cloudflare stack", () => {
     expect(electricContainerProps.secrets).toStrictEqual([
       {
         name: "AWS_ACCESS_KEY_ID",
-        secret: "electric-storage-access-key",
+        secret: "ceird-main-electric-aws-access-key-id",
         type: "env",
       },
       {
         name: "AWS_SECRET_ACCESS_KEY",
-        secret: "electric-storage-secret-key",
+        secret: "ceird-main-electric-aws-secret-access-key",
         type: "env",
       },
       {
         name: "DATABASE_URL",
-        secret: "postgresql://ceird:secret@db.example.com/ceird",
+        secret: "ceird-main-electric-database-url",
         type: "env",
       },
       {
         name: "ELECTRIC_SECRET",
-        secret: Redacted.value(electricSourceSecret),
+        secret: "ceird-main-electric-source-secret",
         type: "env",
       },
     ]);

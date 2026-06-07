@@ -14,7 +14,6 @@ import {
   ceirdWorkerCompatibility,
   ceirdWorkerObservability,
 } from "../../../infra/cloudflare-worker-defaults.ts";
-import type { NeonPostgresResources } from "../../../infra/neon.ts";
 import type { DomainWorkerResource } from "../../domain/infra/cloudflare-worker.ts";
 
 const syncWorkerMain = new URL("../src/worker.ts", import.meta.url).pathname;
@@ -85,10 +84,21 @@ export interface ElectricContainerConfiguredEnv {
 }
 
 export interface ElectricContainerStorageConfig {
-  readonly accessKeyId: Input<string>;
   readonly accountId: Input<string>;
   readonly bucketName: Input<string>;
-  readonly secretAccessKey: Input<string>;
+}
+
+export interface ElectricContainerSecretConfig {
+  readonly awsAccessKeyId: Input<string>;
+  readonly awsSecretAccessKey: Input<string>;
+  readonly databaseUrl: Input<string>;
+  readonly electricSecret: Input<string>;
+}
+
+export interface ElectricContainerConfig {
+  readonly name: string;
+  readonly secrets: ElectricContainerSecretConfig;
+  readonly storage: ElectricContainerStorageConfig;
 }
 
 export function makeSyncWorkerBindings(input: {
@@ -187,9 +197,8 @@ export const electricContainerDockerfile = [
 
 export function makeElectricContainerProps(input: {
   readonly config: SyncWorkerStageConfig;
-  readonly databaseConnectionUri: Input<string>;
-  readonly electricSourceSecret: Input<string>;
   readonly name: string;
+  readonly secrets: ElectricContainerSecretConfig;
   readonly storage: ElectricContainerStorageConfig;
 }) {
   return {
@@ -219,22 +228,22 @@ export function makeElectricContainerProps(input: {
     secrets: [
       {
         name: "AWS_ACCESS_KEY_ID",
-        secret: input.storage.accessKeyId,
+        secret: input.secrets.awsAccessKeyId,
         type: "env",
       },
       {
         name: "AWS_SECRET_ACCESS_KEY",
-        secret: input.storage.secretAccessKey,
+        secret: input.secrets.awsSecretAccessKey,
         type: "env",
       },
       {
         name: "DATABASE_URL",
-        secret: input.databaseConnectionUri,
+        secret: input.secrets.databaseUrl,
         type: "env",
       },
       {
         name: "ELECTRIC_SECRET",
-        secret: input.electricSourceSecret,
+        secret: input.secrets.electricSecret,
         type: "env",
       },
     ],
@@ -278,30 +287,26 @@ export function makeSyncWorkerProps(input: {
 export function makeSyncWorker(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly config: SyncWorkerStageConfig;
-  readonly database: NeonPostgresResources;
   readonly domain: DomainWorkerResource;
-  readonly electricContainerName: string;
+  readonly electricContainer?: ElectricContainerConfig | undefined;
   readonly electricSqlLocationHint: DurableObjectLocationHint;
   readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
-  readonly electricSourceSecretValue: Input<string>;
   readonly hostname: string;
   readonly localDev?: boolean | undefined;
   readonly localAppOrigin?: string | undefined;
   readonly name: string;
-  readonly storage?: ElectricContainerStorageConfig | undefined;
 }) {
   return Effect.gen(function* () {
     const worker = yield* Cloudflare.Worker("Sync", makeSyncWorkerProps(input));
 
-    if (input.storage !== undefined) {
+    if (input.electricContainer !== undefined) {
       const electricContainer = yield* Cloudflare.Container<unknown>()(
         "ElectricSql",
         makeElectricContainerProps({
           config: input.config,
-          databaseConnectionUri: input.database.branch.connectionUri,
-          electricSourceSecret: input.electricSourceSecretValue,
-          name: input.electricContainerName,
-          storage: input.storage,
+          name: input.electricContainer.name,
+          secrets: input.electricContainer.secrets,
+          storage: input.electricContainer.storage,
         })
       );
 
