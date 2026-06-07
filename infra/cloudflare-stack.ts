@@ -484,22 +484,27 @@ function makeElectricContainerConfig(input: {
   readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
   readonly name: string;
   readonly storageCredentials: ElectricStorageCredentialValues;
-}): Effect.Effect<ElectricContainerConfig> {
-  return Effect.succeed({
-    env: makeElectricContainerEnv({
-      databaseUrl: redactInput(input.databaseConnectionUri),
-      electricSecret: input.electricSourceSecret,
-      storage: {
-        accessKeyId: redactInput(input.storageCredentials.accessKeyId),
-        accountId: input.accountId,
-        bucketName: input.bucketName,
-        awsSecretAccessKey: redactInput(
-          input.storageCredentials.secretAccessKey
-        ),
-      },
-    }),
-    name: input.name,
-  } satisfies ElectricContainerConfig);
+}): Effect.Effect<ElectricContainerConfig, never, Cloudflare.Providers> {
+  return Effect.gen(function* () {
+    // Preserve the previously declared account store so Alchemy state reads keep working after deploy.
+    yield* Cloudflare.SecretsStore("ElectricContainerSecrets");
+
+    return {
+      env: makeElectricContainerEnv({
+        databaseUrl: redactInput(input.databaseConnectionUri),
+        electricSecret: input.electricSourceSecret,
+        storage: {
+          accessKeyId: redactInput(input.storageCredentials.accessKeyId),
+          accountId: input.accountId,
+          bucketName: input.bucketName,
+          awsSecretAccessKey: redactInput(
+            input.storageCredentials.secretAccessKey
+          ),
+        },
+      }),
+      name: input.name,
+    } satisfies ElectricContainerConfig;
+  });
 }
 
 function makeLocalElectricStorageCredentials(input: {
