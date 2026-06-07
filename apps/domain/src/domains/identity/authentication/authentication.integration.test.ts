@@ -1301,7 +1301,7 @@ describe("authentication integration", () => {
       sendVerificationEmail: async () => {},
     });
 
-    const response = await auth.handler(
+    const refreshResponse = await auth.handler(
       makeJsonRequest(
         "/oauth2/register",
         {
@@ -1320,17 +1320,59 @@ describe("authentication integration", () => {
       )
     );
 
-    expect(response.status).toBe(200);
-    const registration =
-      (await response.json()) as OAuthClientRegistrationResponse;
+    expect(refreshResponse.status).toBe(200);
+    const refreshRegistration =
+      (await refreshResponse.json()) as OAuthClientRegistrationResponse;
 
-    expect(registration.client_id).toStrictEqual(expect.any(String));
-    expect(registration.client_secret).toBeUndefined();
-    expect(registration.redirect_uris).toStrictEqual([
+    expect(refreshRegistration.client_id).toStrictEqual(expect.any(String));
+    expect(refreshRegistration.client_secret).toBeUndefined();
+    expect(refreshRegistration.grant_types).toStrictEqual([
+      "authorization_code",
+      "refresh_token",
+    ]);
+    expect(refreshRegistration.redirect_uris).toStrictEqual([
       "http://127.0.0.1:9123/oauth/callback",
     ]);
-    expect(registration.token_endpoint_auth_method).toBe("none");
-    expect(registration.scope).toBe(
+    expect(refreshRegistration.token_endpoint_auth_method).toBe("none");
+    expect(refreshRegistration.scope).toBe(
+      "openid profile email offline_access ceird:read"
+    );
+
+    const authorizationOnlyResponse = await auth.handler(
+      makeJsonRequest(
+        "/oauth2/register",
+        {
+          client_name: "Ceird MCP Runtime Authorization Code",
+          redirect_uris: ["http://127.0.0.1:9124/oauth/callback"],
+          type: "native",
+        },
+        {
+          forwardedFor: "203.0.113.42",
+          headers: {
+            "user-agent": "Ceird MCP Authorization Code Smoke",
+          },
+        }
+      )
+    );
+
+    expect(authorizationOnlyResponse.status).toBe(200);
+    const authorizationOnlyRegistration =
+      (await authorizationOnlyResponse.json()) as OAuthClientRegistrationResponse;
+
+    expect(authorizationOnlyRegistration.client_id).toStrictEqual(
+      expect.any(String)
+    );
+    expect(authorizationOnlyRegistration.client_secret).toBeUndefined();
+    expect(authorizationOnlyRegistration.grant_types).toStrictEqual([
+      "authorization_code",
+    ]);
+    expect(authorizationOnlyRegistration.redirect_uris).toStrictEqual([
+      "http://127.0.0.1:9124/oauth/callback",
+    ]);
+    expect(authorizationOnlyRegistration.token_endpoint_auth_method).toBe(
+      "none"
+    );
+    expect(authorizationOnlyRegistration.scope).toBe(
       "openid profile email offline_access ceird:read"
     );
 
@@ -1363,13 +1405,29 @@ describe("authentication integration", () => {
                 token_endpoint_auth_method,
                 type,
                 user_id
-         from oauth_client`
+         from oauth_client
+         order by name`
       )
     );
 
     expect(persistedRows.rows).toStrictEqual([
       {
-        client_id: registration.client_id,
+        client_id: authorizationOnlyRegistration.client_id,
+        client_secret: null,
+        contacts: null,
+        grant_types: ["authorization_code"],
+        name: "Ceird MCP Runtime Authorization Code",
+        public: true,
+        redirect_uris: ["http://127.0.0.1:9124/oauth/callback"],
+        response_types: ["code"],
+        scopes: ["openid", "profile", "email", "offline_access", "ceird:read"],
+        skip_consent: null,
+        token_endpoint_auth_method: "none",
+        type: "native",
+        user_id: null,
+      },
+      {
+        client_id: refreshRegistration.client_id,
         client_secret: null,
         contacts: ["security@example.com"],
         grant_types: ["authorization_code", "refresh_token"],
@@ -1389,13 +1447,28 @@ describe("authentication integration", () => {
       adminPool.query<{
         count: number;
         key: string;
-      }>(`select key, count from rate_limit where key = $1`, [
-        "ceird-auth-abuse:203.0.113.41|/oauth2/register",
-      ])
+      }>(
+        `select key, count
+         from rate_limit
+         where key in ($1, $2)
+         order by key`,
+        [
+          "ceird-auth-abuse:203.0.113.41|/oauth2/register",
+          "ceird-auth-abuse:203.0.113.42|/oauth2/register",
+        ]
+      )
     );
 
-    expect(rateLimitRows.rows).toHaveLength(1);
-    expect(rateLimitRows.rows[0]?.count).toBe(1);
+    expect(rateLimitRows.rows).toStrictEqual([
+      {
+        count: 1,
+        key: "ceird-auth-abuse:203.0.113.41|/oauth2/register",
+      },
+      {
+        count: 1,
+        key: "ceird-auth-abuse:203.0.113.42|/oauth2/register",
+      },
+    ]);
 
     const auditRows = await withPool(databaseUrl, (adminPool) =>
       adminPool.query<{
@@ -1419,7 +1492,8 @@ describe("authentication integration", () => {
                 source_ip,
                 user_agent
          from auth_security_audit_event
-         where event_type = 'oauth_client_registration_succeeded'`
+         where event_type = 'oauth_client_registration_succeeded'
+         order by source_ip`
       )
     );
 
@@ -1432,10 +1506,23 @@ describe("authentication integration", () => {
           oauthError: null,
           outcome: "succeeded",
         },
-        oauth_client_id: registration.client_id,
+        oauth_client_id: refreshRegistration.client_id,
         scopes: ["openid", "profile", "email", "offline_access", "ceird:read"],
         source_ip: "203.0.113.41",
         user_agent: "Ceird MCP Runtime Smoke",
+      },
+      {
+        actor_user_id: null,
+        event_type: "oauth_client_registration_succeeded",
+        metadata: {
+          dynamicRegistration: true,
+          oauthError: null,
+          outcome: "succeeded",
+        },
+        oauth_client_id: authorizationOnlyRegistration.client_id,
+        scopes: ["openid", "profile", "email", "offline_access", "ceird:read"],
+        source_ip: "203.0.113.42",
+        user_agent: "Ceird MCP Authorization Code Smoke",
       },
     ]);
     expect(JSON.stringify(auditRows.rows)).not.toContain("client_secret");
@@ -2983,6 +3070,7 @@ interface CreatedOrganizationResponse {
 interface OAuthClientRegistrationResponse {
   readonly client_id: string;
   readonly client_secret?: string;
+  readonly grant_types?: readonly string[];
   readonly redirect_uris: readonly string[];
   readonly scope?: string;
   readonly token_endpoint_auth_method?: string;
