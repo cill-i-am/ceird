@@ -1260,7 +1260,7 @@ describe("authentication integration", () => {
     );
   }, 30_000);
 
-  it("persists successful OAuth dynamic client registration as a public read-only client", async (context: {
+  it("persists explicit refresh-token DCR metadata while omitted grants stay authorization-code-only", async (context: {
     skip: (note?: string) => never;
   }) => {
     const testDatabase = await createTestDatabase();
@@ -1300,6 +1300,14 @@ describe("authentication integration", () => {
       sendPasswordResetEmail: async () => {},
       sendVerificationEmail: async () => {},
     });
+    const expectedDefaultScopes = [
+      "openid",
+      "profile",
+      "email",
+      "offline_access",
+      "ceird:read",
+    ];
+    const expectedDefaultScope = expectedDefaultScopes.join(" ");
 
     const refreshResponse = await auth.handler(
       makeJsonRequest(
@@ -1334,9 +1342,7 @@ describe("authentication integration", () => {
       "http://127.0.0.1:9123/oauth/callback",
     ]);
     expect(refreshRegistration.token_endpoint_auth_method).toBe("none");
-    expect(refreshRegistration.scope).toBe(
-      "openid profile email offline_access ceird:read"
-    );
+    expect(refreshRegistration.scope).toBe(expectedDefaultScope);
 
     const authorizationOnlyResponse = await auth.handler(
       makeJsonRequest(
@@ -1372,9 +1378,7 @@ describe("authentication integration", () => {
     expect(authorizationOnlyRegistration.token_endpoint_auth_method).toBe(
       "none"
     );
-    expect(authorizationOnlyRegistration.scope).toBe(
-      "openid profile email offline_access ceird:read"
-    );
+    expect(authorizationOnlyRegistration.scope).toBe(expectedDefaultScope);
 
     const persistedRows = await withPool(databaseUrl, (adminPool) =>
       adminPool.query<{
@@ -1420,7 +1424,7 @@ describe("authentication integration", () => {
         public: true,
         redirect_uris: ["http://127.0.0.1:9124/oauth/callback"],
         response_types: ["code"],
-        scopes: ["openid", "profile", "email", "offline_access", "ceird:read"],
+        scopes: expectedDefaultScopes,
         skip_consent: null,
         token_endpoint_auth_method: "none",
         type: "native",
@@ -1435,7 +1439,7 @@ describe("authentication integration", () => {
         public: true,
         redirect_uris: ["http://127.0.0.1:9123/oauth/callback"],
         response_types: ["code"],
-        scopes: ["openid", "profile", "email", "offline_access", "ceird:read"],
+        scopes: expectedDefaultScopes,
         skip_consent: null,
         token_endpoint_auth_method: "none",
         type: "native",
@@ -1507,7 +1511,7 @@ describe("authentication integration", () => {
           outcome: "succeeded",
         },
         oauth_client_id: refreshRegistration.client_id,
-        scopes: ["openid", "profile", "email", "offline_access", "ceird:read"],
+        scopes: expectedDefaultScopes,
         source_ip: "203.0.113.41",
         user_agent: "Ceird MCP Runtime Smoke",
       },
@@ -1520,7 +1524,7 @@ describe("authentication integration", () => {
           outcome: "succeeded",
         },
         oauth_client_id: authorizationOnlyRegistration.client_id,
-        scopes: ["openid", "profile", "email", "offline_access", "ceird:read"],
+        scopes: expectedDefaultScopes,
         source_ip: "203.0.113.42",
         user_agent: "Ceird MCP Authorization Code Smoke",
       },

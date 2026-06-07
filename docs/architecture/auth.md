@@ -127,8 +127,10 @@ Current config decisions:
 - dynamic client registration follows Better Auth's native grant default:
   clients that omit `grant_types` are persisted with `authorization_code` only,
   even though Ceird's default registration scope includes `offline_access`;
-  clients that need refresh tokens must request
-  `grant_types: ["authorization_code", "refresh_token"]`
+  clients that need their registered metadata to advertise refresh-token support
+  must request `grant_types: ["authorization_code", "refresh_token"]`. Runtime
+  token issuance remains Better Auth-native in this policy-only spike; Ceird
+  does not add a separate per-client grant enforcement layer here
 - Ceird normalizes accepted dynamic client registration requests to public
   OAuth clients by forwarding `token_endpoint_auth_method: "none"` to Better
   Auth, including authenticated registrations that omit the field. Explicit
@@ -148,9 +150,6 @@ Current config decisions:
   pre-handler request bodies, and oversized client metadata
 - OAuth grants are limited to authorization-code and refresh-token flows;
   client-credentials tokens are intentionally not enabled for Ceird scopes
-- refresh-token capability is opt-in per OAuth client registration; advertising
-  `refresh_token` support and defaulting `offline_access` scope does not grant
-  refresh-token use to clients that omit `grant_types`
 - the OAuth Provider points clients at the existing app login and consent pages
   through app-owned absolute URLs for `/login` and `/oauth/consent`
 - `ceird:*` OAuth consent is organization-scoped through Better Auth
