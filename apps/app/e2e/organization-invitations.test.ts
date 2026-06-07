@@ -60,13 +60,7 @@ async function expectAuthenticatedHome(page: Page) {
   await expect(page).toHaveURL(/\/$/, { timeout: 20_000 });
   await expect(workspaceHome).toBeVisible({ timeout: 15_000 });
   await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();
-  const pageHeader = workspaceHome.locator("header").filter({
-    has: workspaceHome.getByRole("heading", {
-      exact: true,
-      level: 1,
-      name: "Home",
-    }),
-  });
+  const pageHeader = workspaceHome.locator(":scope > header");
 
   await expect(
     page.getByRole("link", { exact: true, name: "Jobs" })
