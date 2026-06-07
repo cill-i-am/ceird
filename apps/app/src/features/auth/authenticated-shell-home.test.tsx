@@ -89,13 +89,10 @@ describe("authenticated shell home", () => {
       renderHome(<AuthenticatedShellHome />);
 
       expect(screen.getByRole("heading", { name: "Home" })).toBeInTheDocument();
-      expect(
-        screen.getByText("Acme Field Ops / @acme-field-ops")
-      ).toBeVisible();
       const pageHeader = screen.getByRole("banner");
       expect(
-        within(pageHeader).getByRole("link", { name: /invite teammate/i })
-      ).toHaveAttribute("href", "/members");
+        within(pageHeader).queryByRole("link", { name: /invite teammate/i })
+      ).not.toBeInTheDocument();
       expect(
         within(pageHeader).getByRole("link", { name: /^new job/i })
       ).toHaveAttribute("href", "/jobs");
@@ -103,8 +100,10 @@ describe("authenticated shell home", () => {
         within(pageHeader).queryByRole("link", { name: /open jobs/i })
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("heading", { name: "Workspace overview" })
-      ).toBeInTheDocument();
+        screen.queryByRole("heading", { name: "Workspace overview" })
+      ).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Workspace metrics")).toBeInTheDocument();
+      expect(screen.queryByText("Verify")).not.toBeInTheDocument();
       expect(
         screen.getByRole("heading", { name: "Jobs at a glance" })
       ).toBeInTheDocument();
@@ -212,7 +211,7 @@ describe("authenticated shell home", () => {
       expect(
         within(nextActions as HTMLElement).getAllByRole("listitem")
       ).toHaveLength(3);
-      expect(screen.getByText("Verified")).toBeInTheDocument();
+      expect(screen.queryByText("Verified")).not.toBeInTheDocument();
       expect(
         within(nextActions as HTMLElement).queryByText(/verify your email/i)
       ).not.toBeInTheDocument();
@@ -285,8 +284,8 @@ describe("authenticated shell home", () => {
       );
 
       expect(
-        screen.getByRole("heading", { name: "Workspace overview" })
-      ).toBeInTheDocument();
+        screen.queryByRole("heading", { name: "Workspace overview" })
+      ).not.toBeInTheDocument();
       expect(
         screen.getByRole("heading", { name: "Jobs at a glance" })
       ).toBeInTheDocument();
@@ -294,6 +293,9 @@ describe("authenticated shell home", () => {
         name: "Jobs at a glance",
       });
       expect(within(jobsPanel).getByText("Boiler replacement")).toBeVisible();
+      expect(
+        within(jobsPanel).getByRole("link", { name: /boiler replacement/i })
+      ).toHaveAttribute("href", "/jobs");
       expect(within(jobsPanel).getByText("In progress")).toBeVisible();
       expect(within(jobsPanel).getByText("Apex House")).toBeVisible();
       expect(
@@ -303,6 +305,9 @@ describe("authenticated shell home", () => {
         name: "Sites with active work",
       });
       expect(within(sitesPanel).getByText("Apex House")).toBeVisible();
+      expect(
+        within(sitesPanel).getByRole("link", { name: /apex house/i })
+      ).toHaveAttribute("href", "/sites");
       expect(within(sitesPanel).getByText("1 active job")).toBeVisible();
       expect(
         screen.getByRole("heading", { name: "Recent activity" })

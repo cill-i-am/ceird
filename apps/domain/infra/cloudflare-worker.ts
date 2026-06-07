@@ -35,7 +35,7 @@ export interface DomainWorkerStageConfig {
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for InferEnv.
 export type DomainWorkerBindings = {
-  readonly ANALYTICS: Cloudflare.AnalyticsEngineDataset;
+  readonly ANALYTICS?: Cloudflare.AnalyticsEngineDataset | undefined;
   readonly AUTH_EMAIL?: Cloudflare.SendEmail | undefined;
   readonly AUTH_EMAIL_QUEUE?: Cloudflare.Queue | undefined;
   readonly DATABASE?: Cloudflare.Hyperdrive | undefined;
@@ -91,9 +91,7 @@ export function makeDomainWorkerBindings(input: {
   readonly localDev?: boolean | undefined;
 }): DomainWorkerBindingProps {
   if (input.localDev === true) {
-    return {
-      ANALYTICS: input.analytics,
-    } satisfies DomainWorkerBindingProps;
+    return {} satisfies DomainWorkerBindingProps;
   }
 
   return {

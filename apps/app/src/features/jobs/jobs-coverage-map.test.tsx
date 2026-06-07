@@ -1,6 +1,6 @@
 import type { JobListItem, WorkItemIdType } from "@ceird/jobs-core";
 import type { SiteIdType } from "@ceird/sites-core";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import { JobsCoverageMap } from "./jobs-coverage-map";
@@ -118,6 +118,7 @@ describe("jobs coverage map", () => {
       "href",
       expect.stringContaining("Main+Street")
     );
+    await flushScrollAreaEffects();
   }, 5000);
 
   it("keeps mapped site context visible when every job is on the map", async () => {
@@ -167,6 +168,49 @@ describe("jobs coverage map", () => {
     expect(
       screen.queryByRole("heading", { name: /unverified location/i })
     ).not.toBeInTheDocument();
+    await flushScrollAreaEffects();
+  }, 5000);
+
+  it("bounds the map panel and makes the site rail scrollable", async () => {
+    render(
+      <JobsCoverageMap
+        jobs={Array.from({ length: 12 }, (_, index) =>
+          buildJob({
+            id: `55555555-5555-4555-8555-55555555555${index}` as WorkItemIdType,
+            priority: "medium",
+            siteId: depotSiteId,
+            status: "triaged",
+            title: `Depot job ${index + 1}`,
+          })
+        )}
+        sites={
+          new Map([
+            [
+              depotSiteId,
+              {
+                hasUsableCoordinates: true,
+                id: depotSiteId,
+                latitude: 53.3498,
+                locationStatus: "google_resolved",
+                longitude: -6.2603,
+                name: "Depot",
+              },
+            ],
+          ])
+        }
+      />
+    );
+
+    await expect(
+      screen.findByTestId("coverage-map-canvas")
+    ).resolves.toHaveTextContent("Depot");
+    expect(screen.getByLabelText("Job coverage map")).toHaveClass(
+      "h-[clamp(20rem,calc(100vh-24rem),42rem)]"
+    );
+    const railScrollArea = screen.getByTestId("jobs-map-site-rail-scroll");
+
+    expect(railScrollArea).toHaveAttribute("data-slot", "scroll-area");
+    await flushScrollAreaEffects();
   }, 5000);
 
   it("routes overflow grouped jobs to the site detail", async () => {
@@ -213,6 +257,7 @@ describe("jobs coverage map", () => {
     expect(
       screen.getByRole("link", { name: "View 1 more on site" })
     ).toHaveAttribute("href", "/sites");
+    await flushScrollAreaEffects();
   }, 5000);
 
   it("renders the empty state when no visible jobs have mapped sites", () => {
@@ -225,6 +270,12 @@ describe("jobs coverage map", () => {
     expect(screen.queryByTestId("coverage-map-canvas")).not.toBeInTheDocument();
   }, 5000);
 });
+
+async function flushScrollAreaEffects() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
 
 function buildJob(
   overrides: Partial<JobListItem> & Pick<JobListItem, "id" | "status" | "title">

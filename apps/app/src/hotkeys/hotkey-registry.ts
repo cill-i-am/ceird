@@ -371,6 +371,20 @@ export const HOTKEYS = {
     scope: "sites",
     when: "Viewer can create sites",
   },
+  sitesListView: {
+    group: "Sites",
+    hotkey: "V L",
+    id: "sitesListView",
+    label: "List view",
+    scope: "sites",
+  },
+  sitesMapView: {
+    group: "Sites",
+    hotkey: "V M",
+    id: "sitesMapView",
+    label: "Map view",
+    scope: "sites",
+  },
   membersInvite: {
     group: "Members",
     hotkey: "N",

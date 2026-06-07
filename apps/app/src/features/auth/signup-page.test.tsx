@@ -12,6 +12,7 @@ const {
   mockedClearAppContextClientCache,
   mockedGetSession,
   mockedListOrganizations,
+  mockedMirrorLocalAlchemyAuthSession,
   mockedNavigate,
   mockedSignInEmail,
   mockedSignUpEmail,
@@ -28,6 +29,9 @@ const {
       data: { id: string; name: string; slug: string }[] | null;
       error: null;
     }>
+  >(),
+  mockedMirrorLocalAlchemyAuthSession: vi.fn<
+    (input: { email: string; password: string }) => Promise<boolean>
   >(),
   mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
   mockedSignInEmail: vi.fn<
@@ -138,6 +142,7 @@ vi.mock(import("#/lib/auth-client"), async () => {
       },
     } as unknown as typeof AuthClientModule.authClient,
     buildEmailVerificationRedirectTo: actual.buildEmailVerificationRedirectTo,
+    mirrorLocalAlchemyAuthSession: mockedMirrorLocalAlchemyAuthSession,
   };
 });
 
@@ -149,6 +154,7 @@ describe("signup page", () => {
       data: [{ id: "org_current", name: "Current Org", slug: "current" }],
       error: null,
     });
+    mockedMirrorLocalAlchemyAuthSession.mockResolvedValue(true);
     mockedNavigate.mockResolvedValue();
     mockedSignInEmail.mockResolvedValue({
       data: {
@@ -204,6 +210,10 @@ describe("signup page", () => {
     });
     expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
     expect(mockedSignInEmail).not.toHaveBeenCalled();
+    expect(mockedMirrorLocalAlchemyAuthSession).toHaveBeenCalledWith({
+      email: "person@example.com",
+      password: "password123",
+    });
   }, 10_000);
 
   it("clears stale organization cache after successful sign-up", async () => {
@@ -282,6 +292,27 @@ describe("signup page", () => {
     await expect(
       screen.findByText("We couldn't create your account. Please try again.")
     ).resolves.toBeInTheDocument();
+    expect(mockedMirrorLocalAlchemyAuthSession).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("shows a safe local session error when the local mirror fails", async () => {
+    mockedMirrorLocalAlchemyAuthSession.mockResolvedValue(false);
+
+    const user = userEvent.setup();
+
+    render(<SignupPage />);
+
+    await user.type(screen.getByLabelText("Name"), "Taylor Example");
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: /sign up/i }));
+
+    await expect(
+      screen.findByText(
+        "Your account was created, but we couldn't finish signing you in locally. Try signing in."
+      )
+    ).resolves.toBeInTheDocument();
+    expect(mockedNavigate).not.toHaveBeenCalled();
   }, 10_000);
 
   it("shows password length errors inline", async () => {

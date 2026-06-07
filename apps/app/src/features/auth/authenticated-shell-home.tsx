@@ -4,7 +4,6 @@ import {
   ArrowRight01Icon,
   Briefcase01Icon,
   Location01Icon,
-  Mail01Icon,
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -68,7 +67,6 @@ export function AuthenticatedShellHome({
   readonly dashboard?: AuthenticatedHomeDashboard;
   readonly routeHotkeysEnabled?: boolean;
 }) {
-  const { activeOrganization } = useRouteContext({ from: "/_app/_org" });
   const { session } = useRouteContext({ from: "/_app" });
   const navigate = useNavigate({ from: "/" });
   const {
@@ -98,56 +96,34 @@ export function AuthenticatedShellHome({
     >
       <AppPageHeader
         title="Home"
-        description={`${activeOrganization.name} / @${activeOrganization.slug}`}
         actions={
-          <>
-            <Link
-              to="/members"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              <HugeiconsIcon
-                icon={UserGroupIcon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
-              Invite teammate
-              <ShortcutHint
-                surface="button"
-                hotkey={HOTKEYS.goMembers.hotkey}
-                label={HOTKEYS.goMembers.label}
-                decorative
-              />
-            </Link>
-            <Link
-              to="/jobs"
-              search={createWorkspaceSheetSearch({ kind: "job.create" })}
-              className={buttonVariants({ size: "sm" })}
-            >
-              <HugeiconsIcon
-                icon={Add01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
-              New job
-              <ShortcutHint
-                surface="button"
-                hotkey={HOTKEYS.homeCreateJob.hotkey}
-                label={HOTKEYS.homeCreateJob.label}
-                decorative
-              />
-            </Link>
-          </>
+          <Link
+            to="/jobs"
+            search={createWorkspaceSheetSearch({ kind: "job.create" })}
+            className={buttonVariants({ size: "sm" })}
+          >
+            <HugeiconsIcon
+              icon={Add01Icon}
+              strokeWidth={2}
+              data-icon="inline-start"
+            />
+            New job
+            <ShortcutHint
+              surface="button"
+              hotkey={HOTKEYS.homeCreateJob.hotkey}
+              label={HOTKEYS.homeCreateJob.label}
+              decorative
+            />
+          </Link>
         }
       />
 
       <section className="flex max-w-7xl flex-col gap-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0">
-            <h2 className="font-heading text-lg font-medium">
-              Workspace overview
-            </h2>
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-sm sm:flex sm:items-center">
+        <div className="flex justify-end">
+          <div
+            aria-label="Workspace metrics"
+            className="grid grid-cols-2 gap-2 text-sm sm:flex sm:items-center"
+          >
             <WorkspaceMetric
               icon={Briefcase01Icon}
               label="Active jobs"
@@ -162,11 +138,6 @@ export function AuthenticatedShellHome({
               icon={UserGroupIcon}
               label="Members"
               value={dashboard.members.total}
-            />
-            <WorkspaceMetric
-              icon={Mail01Icon}
-              label="Email"
-              value={emailVerified ? "Verified" : "Verify"}
             />
           </div>
         </div>
@@ -291,41 +262,41 @@ function JobsAtAGlance({
 
 function HomeJobRow({ job }: { readonly job: AuthenticatedHomeJobItem }) {
   return (
-    <li
-      className={cn(
-        "grid gap-2 px-4 py-3 text-sm hover:bg-muted/30 md:items-center md:gap-3",
-        "md:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(6rem,0.65fr)_minmax(7rem,0.8fr)_minmax(7rem,0.75fr)]"
-      )}
-    >
-      <div className="min-w-0 font-medium">
-        <Link
-          to="/jobs"
-          search={createWorkspaceSheetSearch({
-            jobId: job.id,
-            kind: "job.detail",
-          })}
-          className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        >
-          {job.title}
-        </Link>
-      </div>
-      <DashboardGridCell label="Site">
-        <span>{job.siteName ?? "No site"}</span>
-      </DashboardGridCell>
-      <div className="min-w-0">
-        <Badge variant="secondary" className="rounded-full">
-          {job.statusLabel}
-        </Badge>
-      </div>
-      <DashboardGridCell label="Assignee">
-        <span>{job.assigneeName ?? "Unassigned"}</span>
-      </DashboardGridCell>
-      <DashboardGridCell
-        label="Updated"
-        className="md:justify-end md:text-right"
+    <li>
+      <Link
+        to="/jobs"
+        search={createWorkspaceSheetSearch({
+          jobId: job.id,
+          kind: "job.detail",
+        })}
+        className={cn(
+          "grid gap-2 px-4 py-3 text-sm transition-colors outline-none hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset md:items-center md:gap-3",
+          "md:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(6rem,0.65fr)_minmax(7rem,0.8fr)_minmax(7rem,0.75fr)]"
+        )}
       >
-        <span>{job.updatedAt}</span>
-      </DashboardGridCell>
+        <div className="min-w-0 font-medium">
+          <span className="line-clamp-2 md:line-clamp-1">
+          {job.title}
+          </span>
+        </div>
+        <DashboardGridCell label="Site">
+          <span>{job.siteName ?? "No site"}</span>
+        </DashboardGridCell>
+        <div className="min-w-0">
+          <Badge variant="secondary" className="rounded-full">
+            {job.statusLabel}
+          </Badge>
+        </div>
+        <DashboardGridCell label="Assignee">
+          <span>{job.assigneeName ?? "Unassigned"}</span>
+        </DashboardGridCell>
+        <DashboardGridCell
+          label="Updated"
+          className="md:justify-end md:text-right"
+        >
+          <span>{job.updatedAt}</span>
+        </DashboardGridCell>
+      </Link>
     </li>
   );
 }
@@ -383,38 +354,36 @@ function SitesWithActiveWork({
 
 function HomeSiteRow({ site }: { readonly site: AuthenticatedHomeSiteItem }) {
   return (
-    <li
-      className={cn(
-        "grid gap-2 px-4 py-3 text-sm hover:bg-muted/30 md:items-center md:gap-3",
-        "md:grid-cols-[minmax(0,1.1fr)_minmax(7rem,0.7fr)_minmax(0,1.4fr)_minmax(7rem,0.7fr)]"
-      )}
-    >
-      <div className="min-w-0 font-medium">
-        <Link
-          to="/sites"
-          search={createWorkspaceSheetSearch({
-            kind: "site.detail",
-            siteId: site.id,
-          })}
-          className="rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        >
-          {site.name}
-        </Link>
-      </div>
-      <DashboardGridCell label="Active jobs">
-        {site.activeJobCount === 1
-          ? "1 active job"
-          : `${site.activeJobCount} active jobs`}
-      </DashboardGridCell>
-      <DashboardGridCell label="Address">
-        <span className="md:truncate">{site.address || "No address"}</span>
-      </DashboardGridCell>
-      <DashboardGridCell
-        label="Updated"
-        className="md:justify-end md:text-right"
+    <li>
+      <Link
+        to="/sites"
+        search={createWorkspaceSheetSearch({
+          kind: "site.detail",
+          siteId: site.id,
+        })}
+        className={cn(
+          "grid gap-2 px-4 py-3 text-sm transition-colors outline-none hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset md:items-center md:gap-3",
+          "md:grid-cols-[minmax(0,1.1fr)_minmax(7rem,0.7fr)_minmax(0,1.4fr)_minmax(7rem,0.7fr)]"
+        )}
       >
-        <span>{site.updatedAt}</span>
-      </DashboardGridCell>
+        <div className="min-w-0 font-medium">
+          <span className="line-clamp-2 md:line-clamp-1">{site.name}</span>
+        </div>
+        <DashboardGridCell label="Active jobs">
+          {site.activeJobCount === 1
+            ? "1 active job"
+            : `${site.activeJobCount} active jobs`}
+        </DashboardGridCell>
+        <DashboardGridCell label="Address">
+          <span className="md:truncate">{site.address || "No address"}</span>
+        </DashboardGridCell>
+        <DashboardGridCell
+          label="Updated"
+          className="md:justify-end md:text-right"
+        >
+          <span>{site.updatedAt}</span>
+        </DashboardGridCell>
+      </Link>
     </li>
   );
 }

@@ -6,7 +6,7 @@ import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
-import { authClient } from "#/lib/auth-client";
+import { authClient, mirrorLocalAlchemyAuthSession } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
@@ -27,6 +27,9 @@ import {
 import { AuthPasswordInput } from "./auth-password-input";
 import { decodeLoginInput, loginSchema } from "./auth-schemas";
 import { EntryShell, EntrySurfaceCard } from "./entry-shell";
+
+const LOCAL_AUTH_MIRROR_FAILURE_MESSAGE =
+  "We couldn't finish signing in locally. Please try again.";
 
 export function LoginPage({
   search,
@@ -64,6 +67,19 @@ export function LoginPage({
       }
 
       await mutationFeedback.waitForSuccess();
+      const mirrored = await mirrorLocalAlchemyAuthSession(credentials);
+
+      if (!mirrored) {
+        formApi.setErrorMap({
+          onSubmit: {
+            form: LOCAL_AUTH_MIRROR_FAILURE_MESSAGE,
+            fields: {},
+          },
+        });
+
+        return;
+      }
+
       clearOrganizationAccessClientCache();
       await navigateOnSuccess();
     },

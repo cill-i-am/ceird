@@ -4,6 +4,7 @@ import {
   Add01Icon,
   ArrowRight01Icon,
   FilterHorizontalIcon,
+  LeftToRightListBulletIcon,
   Location01Icon,
   MapPinCheckIcon,
   MapPinXIcon,
@@ -55,11 +56,18 @@ import { openWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-
 import { useIsMobile } from "#/hooks/use-mobile";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
-import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
+import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
 
+import type { SitesViewMode } from "./sites-search";
 import { useSitesNotice, useSitesOptions } from "./sites-state";
 
 const SITE_COMMAND_LIMIT = 25;
+
+const SitesCoverageMap = React.lazy(async () => {
+  const module = await import("./sites-coverage-map");
+
+  return { default: module.SitesCoverageMap };
+});
 
 type SiteDirectoryItem = SitesOptionsResponse["sites"][number];
 interface SiteDirectoryViewItem {
@@ -74,12 +82,19 @@ type SitesMapFilter = "all" | "mapped" | "unmapped";
 // Route-level page coordinates filters, commands, responsive layout, and nested route outlet.
 // react-doctor-disable-next-line
 export function SitesPage({
+  onViewModeChange,
   routeHotkeysEnabled = true,
+  viewMode: controlledViewMode,
   viewer,
 }: {
+  readonly onViewModeChange?: (value: SitesViewMode) => void;
   readonly routeHotkeysEnabled?: boolean;
+  readonly viewMode?: SitesViewMode;
   readonly viewer: OrganizationViewer;
 }) {
+  const [uncontrolledViewMode, setUncontrolledViewMode] =
+    React.useState<SitesViewMode>("list");
+  const viewMode = controlledViewMode ?? uncontrolledViewMode;
   const navigate = useNavigate({ from: "/sites" });
   const options = useSitesOptions();
   const [notice, clearNotice] = useSitesNotice();
@@ -133,7 +148,25 @@ export function SitesPage({
       return matchesQuery && matchesMap;
     });
   }, [mapFilter, query, siteDirectoryItems]);
+  const filteredSites = React.useMemo(
+    () => filteredSiteItems.map((item) => item.site),
+    [filteredSiteItems]
+  );
   const hasFilters = query.trim().length > 0 || mapFilter !== "all";
+  const setViewMode = React.useCallback(
+    (nextViewMode: SitesViewMode) => {
+      if (nextViewMode === viewMode) {
+        return;
+      }
+
+      if (controlledViewMode === undefined) {
+        setUncontrolledViewMode(nextViewMode);
+      }
+
+      onViewModeChange?.(nextViewMode);
+    },
+    [controlledViewMode, onViewModeChange, viewMode]
+  );
   const sitesPageCommandActions = React.useMemo<
     readonly CommandAction[]
   >(() => {
@@ -175,8 +208,40 @@ export function SitesPage({
       });
     }
 
+    actions.unshift(
+      {
+        disabled: viewMode === "list",
+        group: "Current page",
+        icon: LeftToRightListBulletIcon,
+        id: "sites-switch-list-view",
+        priority: 70,
+        run: () => setViewMode("list"),
+        scope: "route",
+        shortcut: HOTKEYS.sitesListView,
+        title: "Switch to list view",
+      },
+      {
+        disabled: viewMode === "map",
+        group: "Current page",
+        icon: MapsSquare01Icon,
+        id: "sites-switch-map-view",
+        priority: 60,
+        run: () => setViewMode("map"),
+        scope: "route",
+        shortcut: HOTKEYS.sitesMapView,
+        title: "Switch to map view",
+      }
+    );
+
     return actions;
-  }, [canCreateSites, navigate, routeHotkeysEnabled, siteDirectoryItems]);
+  }, [
+    canCreateSites,
+    navigate,
+    routeHotkeysEnabled,
+    setViewMode,
+    siteDirectoryItems,
+    viewMode,
+  ]);
 
   useRegisterCommandActions(sitesPageCommandActions);
   useAppHotkey(
@@ -191,6 +256,20 @@ export function SitesPage({
       enabled: canCreateSites && routeHotkeysEnabled,
       ignoreInputs: true,
     }
+  );
+  useAppHotkeySequence(
+    "sitesListView",
+    () => {
+      setViewMode("list");
+    },
+    { enabled: routeHotkeysEnabled }
+  );
+  useAppHotkeySequence(
+    "sitesMapView",
+    () => {
+      setViewMode("map");
+    },
+    { enabled: routeHotkeysEnabled }
   );
 
   function clearFilters() {
@@ -211,28 +290,31 @@ export function SitesPage({
         title="Sites"
         leading={<HugeiconsIcon icon={Location01Icon} strokeWidth={2} />}
         actions={
-          canCreateSites ? (
-            <Link
-              to="/sites"
-              search={(current) =>
-                openWorkspaceSheetSearch(current, { kind: "site.create" })
-              }
-              className={buttonVariants({ size: "sm" })}
-            >
-              <HugeiconsIcon
-                icon={Add01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
-              New site
-              <ShortcutHint
-                surface="button"
-                hotkey={HOTKEYS.sitesCreate.hotkey}
-                label={HOTKEYS.sitesCreate.label}
-                decorative
-              />
-            </Link>
-          ) : null
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <ViewModeSwitch value={viewMode} onValueChange={setViewMode} />
+            {canCreateSites ? (
+              <Link
+                to="/sites"
+                search={(current) =>
+                  openWorkspaceSheetSearch(current, { kind: "site.create" })
+                }
+                className={buttonVariants({ size: "sm" })}
+              >
+                <HugeiconsIcon
+                  icon={Add01Icon}
+                  strokeWidth={2}
+                  data-icon="inline-start"
+                />
+                New site
+                <ShortcutHint
+                  surface="button"
+                  hotkey={HOTKEYS.sitesCreate.hotkey}
+                  label={HOTKEYS.sitesCreate.label}
+                  decorative
+                />
+              </Link>
+            ) : null}
+          </div>
         }
       />
 
@@ -319,33 +401,41 @@ export function SitesPage({
             </div>
           </div>
 
-          <div className="min-h-0 overflow-hidden rounded-lg border bg-background">
-            {isMobile ? (
-              <SitesMobileDirectory items={filteredSiteItems} />
-            ) : (
-              <SitesDesktopDirectory
-                items={filteredSiteItems}
-                openSite={openSite}
-              />
-            )}
+          {viewMode === "list" ? (
+            <div className="min-h-0 overflow-hidden rounded-lg border bg-background">
+              {isMobile ? (
+                <SitesMobileDirectory items={filteredSiteItems} />
+              ) : (
+                <SitesDesktopDirectory
+                  items={filteredSiteItems}
+                  openSite={openSite}
+                />
+              )}
 
-            {filteredSiteItems.length === 0 ? (
-              <Empty className="min-h-72 border-transparent bg-transparent">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <HugeiconsIcon
-                      icon={FilterHorizontalIcon}
-                      strokeWidth={2}
-                    />
-                  </EmptyMedia>
-                  <EmptyTitle>No sites match these filters.</EmptyTitle>
-                  <EmptyDescription>
-                    Clear filters or search for another site or address.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : null}
-          </div>
+              {filteredSiteItems.length === 0 ? (
+                <Empty className="min-h-72 border-transparent bg-transparent">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <HugeiconsIcon
+                        icon={FilterHorizontalIcon}
+                        strokeWidth={2}
+                      />
+                    </EmptyMedia>
+                    <EmptyTitle>No sites match these filters.</EmptyTitle>
+                    <EmptyDescription>
+                      Clear filters or search for another site or address.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : null}
+            </div>
+          ) : (
+            <section data-testid="sites-coverage-panel" className="min-h-0">
+              <React.Suspense fallback={<SitesCoverageMapFallback />}>
+                <SitesCoverageMap sites={filteredSites} />
+              </React.Suspense>
+            </section>
+          )}
         </section>
       ) : (
         <Empty className="min-h-[24rem] border-transparent bg-transparent">
@@ -361,6 +451,41 @@ export function SitesPage({
         </Empty>
       )}
     </main>
+  );
+}
+
+function SitesCoverageMapFallback() {
+  return (
+    <div
+      aria-label="Loading map view"
+      className="min-h-[420px] rounded-2xl border bg-muted/10"
+    />
+  );
+}
+
+function ViewModeSwitch({
+  onValueChange,
+  value,
+}: {
+  readonly onValueChange: (value: SitesViewMode) => void;
+  readonly value: SitesViewMode;
+}) {
+  const nextView = value === "list" ? "map" : "list";
+  const label = nextView === "map" ? "Map" : "List";
+  const icon =
+    nextView === "map" ? MapsSquare01Icon : LeftToRightListBulletIcon;
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="bg-background"
+      onClick={() => onValueChange(nextView)}
+    >
+      <HugeiconsIcon icon={icon} strokeWidth={2} data-icon="inline-start" />
+      {label}
+    </Button>
   );
 }
 

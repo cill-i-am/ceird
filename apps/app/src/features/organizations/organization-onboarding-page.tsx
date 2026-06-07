@@ -82,6 +82,15 @@ export function OrganizationOnboardingPage() {
 
       try {
         organization = await createCurrentServerOrganization({ data: input });
+        const activeOrganizationResult = await authClient.organization.setActive(
+          {
+            organizationId: organization.id,
+          }
+        );
+
+        if (activeOrganizationResult.error) {
+          throw new Error("API active organization sync failed.");
+        }
       } catch {
         formApi.setErrorMap({
           onSubmit: {

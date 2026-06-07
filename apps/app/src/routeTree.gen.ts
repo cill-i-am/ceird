@@ -22,6 +22,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppCreateOrganizationRouteImport } from './routes/_app.create-organization'
 import { Route as AppOrgRouteImport } from './routes/_app._org'
 import { Route as AppOrgIndexRouteImport } from './routes/_app._org.index'
+import { Route as ApiAuthSplatRouteImport } from './routes/api.auth.$'
 import { Route as AppOrgSitesRouteImport } from './routes/_app._org.sites'
 import { Route as AppOrgMembersRouteImport } from './routes/_app._org.members'
 import { Route as AppOrgJobsRouteImport } from './routes/_app._org.jobs'
@@ -92,6 +93,11 @@ const AppOrgIndexRoute = AppOrgIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppOrgRoute,
 } as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppOrgSitesRoute = AppOrgSitesRouteImport.update({
   id: '/sites',
   path: '/sites',
@@ -135,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/jobs': typeof AppOrgJobsRoute
   '/members': typeof AppOrgMembersRoute
   '/sites': typeof AppOrgSitesRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
   '/organization/settings': typeof AppOrgOrganizationSettingsRoute
 }
 export interface FileRoutesByTo {
@@ -153,6 +160,7 @@ export interface FileRoutesByTo {
   '/jobs': typeof AppOrgJobsRoute
   '/members': typeof AppOrgMembersRoute
   '/sites': typeof AppOrgSitesRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
   '/organization/settings': typeof AppOrgOrganizationSettingsRoute
 }
 export interface FileRoutesById {
@@ -173,6 +181,7 @@ export interface FileRoutesById {
   '/_app/_org/jobs': typeof AppOrgJobsRoute
   '/_app/_org/members': typeof AppOrgMembersRoute
   '/_app/_org/sites': typeof AppOrgSitesRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
   '/_app/_org/': typeof AppOrgIndexRoute
   '/_app/_org/organization/settings': typeof AppOrgOrganizationSettingsRoute
 }
@@ -194,6 +203,7 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/members'
     | '/sites'
+    | '/api/auth/$'
     | '/organization/settings'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -212,6 +222,7 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/members'
     | '/sites'
+    | '/api/auth/$'
     | '/organization/settings'
   id:
     | '__root__'
@@ -231,6 +242,7 @@ export interface FileRouteTypes {
     | '/_app/_org/jobs'
     | '/_app/_org/members'
     | '/_app/_org/sites'
+    | '/api/auth/$'
     | '/_app/_org/'
     | '/_app/_org/organization/settings'
   fileRoutesById: FileRoutesById
@@ -245,6 +257,7 @@ export interface RootRouteChildren {
   VerifyEmailRoute: typeof VerifyEmailRoute
   AcceptInvitationInvitationIdRoute: typeof AcceptInvitationInvitationIdRoute
   OauthConsentRoute: typeof OauthConsentRoute
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -340,6 +353,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrgIndexRouteImport
       parentRoute: typeof AppOrgRoute
     }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/_org/sites': {
       id: '/_app/_org/sites'
       path: '/sites'
@@ -423,6 +443,7 @@ const rootRouteChildren: RootRouteChildren = {
   VerifyEmailRoute: VerifyEmailRoute,
   AcceptInvitationInvitationIdRoute: AcceptInvitationInvitationIdRoute,
   OauthConsentRoute: OauthConsentRoute,
+  ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

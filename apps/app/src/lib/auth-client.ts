@@ -13,6 +13,7 @@ import {
 } from "better-auth/plugins/organization/access";
 import { createAuthClient } from "better-auth/react";
 
+import { toURL } from "./app-service-origin";
 import { readConfiguredApiOrigin, resolveApiOrigin } from "./api-origin";
 
 export const API_BASE_PATH = "/api";
@@ -43,6 +44,40 @@ export function resolveAuthBaseURL(
   }
 
   return new URL(AUTH_BASE_PATH, apiOrigin).toString();
+}
+
+export function resolveLocalAlchemyAuthMirrorBaseURL(
+  origin: string | undefined,
+  explicitApiOrigin?: string | undefined
+): string | undefined {
+  if (!origin) {
+    return undefined;
+  }
+
+  const apiOrigin = resolveApiOrigin(origin, explicitApiOrigin);
+
+  if (!apiOrigin) {
+    return undefined;
+  }
+
+  const appUrl = toURL(origin);
+  const apiUrl = toURL(apiOrigin);
+
+  if (!appUrl || !apiUrl) {
+    return undefined;
+  }
+
+  if (
+    appUrl.protocol !== "http:" ||
+    apiUrl.protocol !== "http:" ||
+    appUrl.hostname !== "app.localhost" ||
+    apiUrl.hostname !== "api.localhost" ||
+    appUrl.port !== apiUrl.port
+  ) {
+    return undefined;
+  }
+
+  return new URL(AUTH_BASE_PATH, appUrl.origin).toString();
 }
 
 export function resolveApiBaseURL(
@@ -147,6 +182,40 @@ export function createBrowserCeirdAuthClient(
   }
 
   return createCeirdAuthClient(baseURL);
+}
+
+export async function mirrorLocalAlchemyAuthSession(input: {
+  readonly email: string;
+  readonly password: string;
+}) {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  const baseURL = resolveLocalAlchemyAuthMirrorBaseURL(
+    window.location.origin,
+    configuredApiOrigin
+  );
+
+  if (!baseURL) {
+    return true;
+  }
+
+  try {
+    const response = await fetch(new URL("sign-in/email", `${baseURL}/`), {
+      body: JSON.stringify(input),
+      credentials: "include",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 export function buildPasswordResetRedirectTo(

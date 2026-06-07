@@ -254,6 +254,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     config: input.config,
     domain,
     hostname: input.config.apiHostname,
+    localDev,
     name: resourceName(input.config, "api"),
   });
 
@@ -291,6 +292,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     config: input.config,
     domain,
     hostname: input.config.mcpHostname,
+    localDev,
     name: resourceName(input.config, "mcp"),
   });
 
@@ -549,7 +551,7 @@ export function shouldProvisionElectricStorage(input: {
   readonly localDev: boolean;
 }) {
   if (input.localDev) {
-    return Effect.succeed(true);
+    return Effect.succeed(false);
   }
 
   const hasAccessKey = input.config.electricStorageAccessKeyId !== undefined;

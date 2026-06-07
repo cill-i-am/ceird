@@ -21,6 +21,7 @@ const {
   mockedCreateOrganization,
   mockedInviteMember,
   mockedNavigate,
+  mockedSetActiveOrganization,
   mockedToastSuccess,
 } = vi.hoisted(() => ({
   mockedClearAppContextClientCache: vi.fn<() => void>(),
@@ -44,6 +45,16 @@ const {
     }>
   >(),
   mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
+  mockedSetActiveOrganization: vi.fn<
+    (input: { organizationId: string }) => Promise<{
+      data: unknown;
+      error: {
+        message: string;
+        status: number;
+        statusText: string;
+      } | null;
+    }>
+  >(),
   mockedToastSuccess:
     vi.fn<(title: string, options: { description: string }) => void>(),
 }));
@@ -84,6 +95,7 @@ vi.mock(import("#/lib/auth-client"), () => ({
   authClient: {
     organization: {
       inviteMember: mockedInviteMember,
+      setActive: mockedSetActiveOrganization,
     },
   } as unknown as typeof AuthClient,
 }));
@@ -116,6 +128,10 @@ describe("organization onboarding page", () => {
       data: {
         id: "inv_123",
       },
+      error: null,
+    });
+    mockedSetActiveOrganization.mockResolvedValue({
+      data: {},
       error: null,
     });
     mockedToastSuccess.mockClear();
@@ -203,6 +219,9 @@ describe("organization onboarding page", () => {
       expect(
         screen.getByRole("heading", { name: "Invite members" })
       ).toBeInTheDocument();
+    });
+    expect(mockedSetActiveOrganization).toHaveBeenCalledWith({
+      organizationId: "org_123",
     });
     expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
     const inviteProgress = screen.getByRole("navigation", {
@@ -434,6 +453,28 @@ describe("organization onboarding page", () => {
 
   it("shows an inline error when org creation fails", async () => {
     mockedCreateOrganization.mockRejectedValue(new Error("Create failed"));
+
+    const user = userEvent.setup();
+
+    render(<OrganizationOnboardingPage />);
+
+    await user.type(screen.getByLabelText("Team name"), "Acme Field Ops");
+    await user.click(screen.getByRole("button", { name: "Create team" }));
+
+    await expect(
+      screen.findByText("We couldn't create your team. Please try again.")
+    ).resolves.toBeInTheDocument();
+  }, 10_000);
+
+  it("shows an inline error when active organization sync fails", async () => {
+    mockedSetActiveOrganization.mockResolvedValue({
+      data: null,
+      error: {
+        message: "Set active failed",
+        status: 400,
+        statusText: "Bad Request",
+      },
+    });
 
     const user = userEvent.setup();
 

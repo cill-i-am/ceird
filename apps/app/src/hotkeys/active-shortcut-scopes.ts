@@ -1,4 +1,5 @@
 import { isJobsMapViewSearch } from "#/features/jobs/jobs-search";
+import { isSitesMapViewSearch } from "#/features/sites/sites-search";
 import {
   decodeWorkspaceSheetSearch,
   getActiveWorkspaceSheet,
@@ -51,7 +52,9 @@ function getBaseShortcutScopes(
   }
 
   if (pathname === "/sites") {
-    return ["global", "sites"];
+    return isSitesMapViewSearch(search)
+      ? ["global", "sites", "map"]
+      : ["global", "sites"];
   }
 
   if (pathname === "/members") {

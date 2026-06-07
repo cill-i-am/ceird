@@ -634,7 +634,7 @@ describe("Cloudflare stack", () => {
     ).toBe(false);
   });
 
-  it("bootstraps local Electric storage and fails closed for deployed stage credentials", () => {
+  it("skips local Electric storage and fails closed for deployed stage credentials", () => {
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({
@@ -642,7 +642,7 @@ describe("Cloudflare stack", () => {
           localDev: true,
         })
       )
-    ).toBe(true);
+    ).toBe(false);
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({
@@ -1161,6 +1161,22 @@ describe("Cloudflare stack", () => {
       },
       name: "ceird-main-domain",
     });
+    const apiWorkerProps = makeApiWorkerProps({
+      analytics: workerAnalytics,
+      config: configWithoutCloudflareBootstrapSecrets,
+      domain,
+      hostname: "api.example.com",
+      localDev: true,
+      name: "ceird-main-api",
+    });
+    const mcpWorkerProps = makeMcpWorkerProps({
+      analytics: workerAnalytics,
+      config: configWithoutCloudflareBootstrapSecrets,
+      domain,
+      hostname: "mcp.example.com",
+      localDev: true,
+      name: "ceird-main-mcp",
+    });
     const agentWorkerProps = makeAgentWorkerProps({
       agentInternalSecret: Redacted.make("agent-secret"),
       aiGateway,
@@ -1172,6 +1188,17 @@ describe("Cloudflare stack", () => {
       localDev: true,
       name: "ceird-main-agent",
     });
+    const syncWorkerProps = makeSyncWorkerProps({
+      analytics: workerAnalytics,
+      config: configWithoutCloudflareBootstrapSecrets,
+      domain,
+      electricSqlLocationHint: "weur",
+      electricSourceSecret: Redacted.make("electric-secret"),
+      hostname: "sync.example.com",
+      localAppOrigin: localOrigins.app,
+      localDev: true,
+      name: "ceird-main-sync",
+    });
     const appEnv = makeAppWorkerEnv({
       agentOrigin: localOrigins.agent,
       apiOrigin: localOrigins.api,
@@ -1181,9 +1208,12 @@ describe("Cloudflare stack", () => {
       syncOrigin: localOrigins.sync,
     });
 
-    expect(Object.keys(domainBindings)).toStrictEqual(["ANALYTICS"]);
+    expect(Object.keys(domainBindings)).toStrictEqual([]);
     expect(domainWorkerProps.bindings).toStrictEqual(domainBindings);
-    expect(domainWorkerProps.bindings.ANALYTICS).toBe(workerAnalytics);
+    expect(apiWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
+    expect(mcpWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
+    expect(agentWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
+    expect(syncWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
     const localDatabaseUrl = domainWorkerProps.env.DATABASE_URL;
 
     if (!Redacted.isRedacted(localDatabaseUrl)) {

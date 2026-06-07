@@ -2,6 +2,7 @@ import {
   buildPasswordResetRedirectTo,
   createBrowserCeirdAuthClient,
   createCeirdAuthClient,
+  resolveLocalAlchemyAuthMirrorBaseURL,
   resolveApiBaseURL,
   resolveAuthBaseURL,
 } from "../../lib/auth-client";
@@ -117,6 +118,39 @@ describe("auth base URL resolution", () => {
 
   it("maps the local app origin to the matching local API auth origin", () => {
     expect(resolveAuthBaseURL("http://app.localhost:1337")).toBe(
+      "http://api.localhost:1337/api/auth"
+    );
+  }, 1000);
+
+  it("resolves the same-origin mirror auth URL for Alchemy local app origins", () => {
+    expect(
+      resolveLocalAlchemyAuthMirrorBaseURL(
+        "http://app.localhost:1337",
+        "http://api.localhost:1337"
+      )
+    ).toBe("http://app.localhost:1337/api/auth");
+  }, 1000);
+
+  it("does not mirror auth sessions for raw package-local dev origins", () => {
+    expect(
+      resolveLocalAlchemyAuthMirrorBaseURL(
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001"
+      )
+    ).toBeUndefined();
+  }, 1000);
+
+  it("does not mirror auth sessions for deployed origins", () => {
+    expect(
+      resolveLocalAlchemyAuthMirrorBaseURL(
+        "https://app.ceird.example.com",
+        "https://api.ceird.example.com"
+      )
+    ).toBeUndefined();
+  }, 1000);
+
+  it("keeps configured local API auth origins for server-only resolution", () => {
+    expect(resolveAuthBaseURL(undefined, "http://api.localhost:1337")).toBe(
       "http://api.localhost:1337/api/auth"
     );
   }, 1000);

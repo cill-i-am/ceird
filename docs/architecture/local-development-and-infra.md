@@ -7,8 +7,8 @@ Local development uses the same root Alchemy stack as deployment. Root
 the Alchemy profile `ceird-env`, enables Cloudflare-backed Alchemy, derives a
 branch stage for linked worktrees, and starts `alchemy dev`. The selected stage
 creates or updates Cloudflare Workers/Vite, the Agent Worker, the sync Worker,
-the Electric SQL Cloudflare Container, Hyperdrive, queues, routes, and a Neon
-branch.
+Hyperdrive, queues, routes, and a Neon branch. Deployed and preview stages also
+reconcile the Electric SQL Cloudflare Container and its R2 storage resources.
 
 Authenticate Cloudflare locally through the Alchemy profile before the first
 cloud-backed run:
@@ -146,13 +146,17 @@ routes. They also pass `AGENT_ORIGIN` and `VITE_AGENT_ORIGIN`; by default
 and WebSocket paths can be mocked in focused app E2E tests without starting a
 separate Agent Worker process.
 
-Electric SQL local development follows the Alchemy-native path. Running
-`pnpm dev -- --stage <stage>` reconciles the stage sync Worker and Cloudflare
-Container, injects `VITE_SYNC_ORIGIN` into the app, points Electric at the
-stage Neon branch, and provisions the stage R2 bucket used for Electric's FUSE
-storage mount. Local Alchemy dev stages also create a stage-scoped R2 API token
-for the container. Deployed stages consume the
-`CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` and
+Electric SQL is deployed through the Alchemy-native path, but default local
+`pnpm dev` does not reconcile the Cloudflare Container or its R2 storage
+resources. Local Alchemy dev stages still start the sync Worker and inject
+`VITE_SYNC_ORIGIN` into the app so client contracts can be wired consistently,
+while route-scoped app data continues to use the existing query-backed adapters.
+This keeps ordinary app/API/browser development from depending on Cloudflare
+Containers availability during every local start. Electric shape requests
+against a local sync Worker fail explicitly until a cloud stage has reconciled
+the container.
+
+Deployed stages consume the `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` and
 `CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` secrets created by the separate
 GitHub credential stack, keeping routine app deploy credentials out of API token
 management. Pull-request previews and push-to-main cloud E2E stages receive the
@@ -164,9 +168,10 @@ the `ElectricSql` Durable Object supplies them to the Cloudflare Container as
 startup environment variables when it starts Electric.
 Deployed stages fail closed when Electric storage secrets are absent.
 
-There is no separate local Docker service in the default workflow; local
-cloud-backed stages exercise the same Worker, Durable Object, Container, R2,
-and Neon resources as production with stage-scoped names.
+There is no separate local Docker service in the default workflow. Local
+cloud-backed stages exercise the same Worker, Durable Object, and Neon resources
+as production with stage-scoped names, while Electric Container/R2 coverage is
+reserved for deployed preview or E2E stages.
 Package-local sync tests inject fake domain authorization and Electric
 forwarding boundaries, while end-to-end sync testing should target an explicit
 Alchemy stage sync origin. Non-production stages default the Cloudflare
@@ -188,11 +193,11 @@ The stack provisions:
 
 - native Alchemy Neon project and per-stage branch
 - native Alchemy Cloudflare Hyperdrive for Postgres connectivity
-- native Alchemy Cloudflare R2 bucket for Electric shape storage; local dev
-  stages mint their own bucket-scoped token, while CI/deployed stages consume
-  Electric R2 credentials from GitHub environment secrets managed by the
-  separate credential stack; the Sync Worker injects runtime container secrets
-  through Durable Object container startup environment variables
+- native Alchemy Cloudflare R2 bucket for Electric shape storage in deployed
+  stages; CI/deployed stages consume Electric R2 credentials from GitHub
+  environment secrets managed by the separate credential stack; the Sync Worker
+  injects runtime container secrets through Durable Object container startup
+  environment variables
 - private Cloudflare domain Worker declared in
   `apps/domain/infra/cloudflare-worker.ts` and executed from
   `apps/domain/src/worker.ts`
@@ -207,7 +212,8 @@ The stack provisions:
   `apps/agent/src/worker.ts`
 - public Cloudflare sync Worker and Electric SQL Cloudflare Container declared
   in `apps/sync/infra/cloudflare-worker.ts` and executed from
-  `apps/sync/src/worker.ts`
+  `apps/sync/src/worker.ts`; default local dev starts the sync Worker without
+  the container binding
 - Cloudflare Vite app declared in `apps/app/infra/cloudflare-vite.ts`
 - Cloudflare Queue for auth email
 - Cloudflare dead-letter queue for auth email failures
@@ -217,8 +223,10 @@ Alchemy local Workerd does not support every deployed provider binding. In
 local dev, the domain Worker omits `AUTH_EMAIL`, `AUTH_EMAIL_QUEUE`, and the
 Hyperdrive binding, injects the selected Neon branch connection URI as a
 redacted Worker `DATABASE_URL` env value, and uses the domain's deterministic
-email scheduler instead of the Cloudflare Queue consumer. Deployed stages keep
-Hyperdrive, Queue, and Email Worker bindings.
+email scheduler instead of the Cloudflare Queue consumer. Local dev also omits
+the `ANALYTICS` Analytics Engine binding from app-owned Workers because
+Workerd rejects Analytics Engine bindings in local mode. Deployed stages keep
+Hyperdrive, Queue, Email Worker, and Analytics Engine bindings.
 
 Local Vite app Workers are not deployed edge scripts, so local dev also skips
 tenant wildcard DNS, tenant Worker routes, reserved host bypass routes, and the
@@ -260,11 +268,12 @@ All app-owned Workers also receive the native Analytics Engine binding
 through the Effect-native `WorkerObservability` service.
 The public sync Worker declares `DOMAIN` plus the `ElectricSql` Durable Object
 namespace, and its Alchemy module also declares the Cloudflare Container that
-runs Electric SQL. The root stack declares the stage R2 bucket that the
-container mounts at `/var/lib/electric` before Electric starts. Local dev stages
-mint a bucket-scoped token in the app stack; CI and deployed stages consume
-Electric R2 S3 credentials from the GitHub credential stack. The root stack also
-derives the `ElectricSql` Durable Object placement hint from the Neon region.
+runs Electric SQL for deployed stages. The root stack declares the stage R2
+bucket that the container mounts at `/var/lib/electric` before Electric starts.
+CI and deployed stages consume Electric R2 S3 credentials from the GitHub
+credential stack. Default local dev starts the sync Worker without reconciling
+the container or R2 resources. The root stack also derives the `ElectricSql`
+Durable Object placement hint from the Neon region.
 The private domain Worker is additionally configured with Cloudflare Smart
 Placement because it is the only Worker that owns database access through
 Hyperdrive. Infra tests compare the app-owned binding/env declarations against

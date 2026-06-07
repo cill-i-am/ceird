@@ -34,7 +34,7 @@ export function JobsCoverageMapCanvas({
   readonly groups: readonly MappedSiteGroup[];
 }) {
   return (
-    <div className="h-full min-h-[520px]">
+    <div className="h-full min-h-0">
       <Map
         center={[DEFAULT_SITE_MAP_CENTER[0], DEFAULT_SITE_MAP_CENTER[1]]}
         zoom={DEFAULT_SITE_MAP_ZOOM}

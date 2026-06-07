@@ -1,6 +1,7 @@
 import type { OrganizationId } from "@ceird/identity-core";
 import type { SitesOptionsResponse } from "@ceird/sites-core";
 import type { QueryClient } from "@tanstack/query-core";
+import type { ComponentProps } from "react";
 
 import type { DataPlaneSeed } from "#/data-plane/bootstrap";
 import { useApplyDataPlaneSeeds } from "#/data-plane/session";
@@ -17,16 +18,22 @@ const EMPTY_DATA_PLANE_SEEDS: readonly DataPlaneSeed<unknown>[] = [];
 export function SitesRouteContent({
   activeOrganizationId,
   dataPlaneSeeds = EMPTY_DATA_PLANE_SEEDS,
+  onViewModeChange,
   options,
   queryClient,
   stack = EMPTY_WORKSPACE_SHEET_STACK,
+  viewMode,
   viewer,
 }: {
   readonly activeOrganizationId: OrganizationId;
   readonly dataPlaneSeeds?: readonly DataPlaneSeed<unknown>[] | undefined;
+  readonly onViewModeChange?: ComponentProps<
+    typeof SitesPage
+  >["onViewModeChange"];
   readonly options: SitesOptionsResponse;
   readonly queryClient?: QueryClient | undefined;
   readonly stack?: readonly WorkspaceSheet[] | undefined;
+  readonly viewMode?: ComponentProps<typeof SitesPage>["viewMode"];
   readonly viewer: OrganizationViewer;
 }) {
   useApplyDataPlaneSeeds(dataPlaneSeeds);
@@ -40,7 +47,12 @@ export function SitesRouteContent({
       queryClient={queryClient}
       viewer={viewer}
     >
-      <SitesPage routeHotkeysEnabled={stack.length === 0} viewer={viewer} />
+      <SitesPage
+        onViewModeChange={onViewModeChange}
+        routeHotkeysEnabled={stack.length === 0}
+        viewMode={viewMode}
+        viewer={viewer}
+      />
       <WorkspaceSheetStack stack={stack} />
     </SitesStateProvider>
   );

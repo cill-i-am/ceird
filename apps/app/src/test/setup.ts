@@ -19,5 +19,6 @@ class TestResizeObserver implements ResizeObserver {
 globalThis.ResizeObserver ??= TestResizeObserver;
 
 if (typeof Element !== "undefined") {
+  Element.prototype.getAnimations ??= vi.fn(() => []);
   Element.prototype.scrollIntoView ??= vi.fn();
 }

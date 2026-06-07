@@ -14,6 +14,7 @@ const {
   mockedClearAppContextClientCache,
   mockedGetSession,
   mockedListOrganizations,
+  mockedMirrorLocalAlchemyAuthSession,
   mockedNavigate,
   mockedSignInEmail,
 } = vi.hoisted(() => ({
@@ -29,6 +30,9 @@ const {
       data: { id: string; name: string; slug: string }[] | null;
       error: null;
     }>
+  >(),
+  mockedMirrorLocalAlchemyAuthSession: vi.fn<
+    (input: { email: string; password: string }) => Promise<boolean>
   >(),
   mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
   mockedSignInEmail: vi.fn<
@@ -110,6 +114,7 @@ vi.mock(import("#/lib/auth-client"), () => ({
       email: mockedSignInEmail,
     },
   } as unknown as typeof AuthClient,
+  mirrorLocalAlchemyAuthSession: mockedMirrorLocalAlchemyAuthSession,
 }));
 
 describe("login page", () => {
@@ -119,6 +124,7 @@ describe("login page", () => {
       data: [{ id: "org_current", name: "Current Org", slug: "current" }],
       error: null,
     });
+    mockedMirrorLocalAlchemyAuthSession.mockResolvedValue(true);
     mockedNavigate.mockResolvedValue();
     mockedSignInEmail.mockResolvedValue({
       data: {
@@ -154,6 +160,10 @@ describe("login page", () => {
       expect(mockedNavigate).toHaveBeenCalledWith({
         to: "/",
       });
+    });
+    expect(mockedMirrorLocalAlchemyAuthSession).toHaveBeenCalledWith({
+      email: "person@example.com",
+      password: "password123",
     });
     expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
   }, 10_000);
@@ -231,6 +241,26 @@ describe("login page", () => {
         "We couldn't sign you in. Check your email and password and try again."
       )
     ).resolves.toBeInTheDocument();
+    expect(mockedMirrorLocalAlchemyAuthSession).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("shows a safe local session error when the local mirror fails", async () => {
+    mockedMirrorLocalAlchemyAuthSession.mockResolvedValue(false);
+
+    const user = userEvent.setup();
+
+    render(<LoginPage />);
+
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
+    await expect(
+      screen.findByText(
+        "We couldn't finish signing in locally. Please try again."
+      )
+    ).resolves.toBeInTheDocument();
+    expect(mockedNavigate).not.toHaveBeenCalled();
   }, 10_000);
 
   it("uses the shared login schema for submit validation", async () => {

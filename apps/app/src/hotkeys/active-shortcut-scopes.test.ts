@@ -32,6 +32,11 @@ describe("active shortcut scopes", () => {
       "global",
       "sites",
     ]);
+    expect(getActiveShortcutScopes("/sites", { view: "map" })).toStrictEqual([
+      "global",
+      "sites",
+      "map",
+    ]);
     expect(
       getActiveShortcutScopes("/sites", {
         sheets: [

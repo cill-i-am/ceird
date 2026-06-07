@@ -9,6 +9,7 @@ import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import {
   authClient,
   buildEmailVerificationRedirectTo,
+  mirrorLocalAlchemyAuthSession,
 } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
@@ -29,6 +30,9 @@ import {
 import { AuthPasswordInput } from "./auth-password-input";
 import { decodeSignupInput, signupSchema } from "./auth-schemas";
 import { EntryShell, EntrySurfaceCard } from "./entry-shell";
+
+const LOCAL_AUTH_MIRROR_FAILURE_MESSAGE =
+  "Your account was created, but we couldn't finish signing you in locally. Try signing in.";
 
 export function SignupPage({
   search,
@@ -72,6 +76,22 @@ export function SignupPage({
       }
 
       await mutationFeedback.waitForSuccess();
+      const mirrored = await mirrorLocalAlchemyAuthSession({
+        email: credentials.email,
+        password: credentials.password,
+      });
+
+      if (!mirrored) {
+        formApi.setErrorMap({
+          onSubmit: {
+            form: LOCAL_AUTH_MIRROR_FAILURE_MESSAGE,
+            fields: {},
+          },
+        });
+
+        return;
+      }
+
       clearOrganizationAccessClientCache();
       await navigateOnSuccess();
     },

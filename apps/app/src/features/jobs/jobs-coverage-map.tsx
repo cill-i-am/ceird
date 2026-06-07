@@ -14,6 +14,7 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "#/components/ui/empty";
+import { ScrollArea } from "#/components/ui/scroll-area";
 import { Skeleton } from "#/components/ui/skeleton";
 import { useCanRenderInteractiveMap } from "#/components/ui/use-can-render-interactive-map";
 import {
@@ -69,7 +70,10 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
   const showSiteRail = groupedSites.length > 0 || hasUnmappedJobs;
 
   return (
-    <div className="flex min-h-[calc(100vh-14rem)] flex-col overflow-hidden rounded-2xl border bg-background">
+    <div
+      aria-label="Job coverage map"
+      className="flex h-[clamp(20rem,calc(100vh-24rem),42rem)] flex-col overflow-hidden rounded-2xl border bg-background"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           <HugeiconsIcon icon={Location01Icon} strokeWidth={2} />
@@ -85,13 +89,13 @@ export function JobsCoverageMap({ jobs, sites }: JobsCoverageMapProps) {
 
       <div
         className={cn(
-          "grid min-h-0 flex-1",
+          "grid min-h-0 flex-1 overflow-hidden",
           showSiteRail
-            ? "lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]"
-            : "lg:grid-cols-1"
+            ? "grid-rows-[minmax(0,1fr)_minmax(0,18rem)] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)] lg:grid-rows-1"
+            : "grid-rows-1 lg:grid-cols-1"
         )}
       >
-        <div className="min-h-[520px] overflow-hidden bg-muted/10">
+        <div className="min-h-0 overflow-hidden bg-muted/10">
           <MapViewport
             canRenderInteractiveMap={canRenderInteractiveMap}
             groupedSites={groupedSites}
@@ -120,94 +124,101 @@ function JobsMapSiteRail({
   readonly unmappedJobs: readonly JobListItem[];
 }) {
   return (
-    <aside className="flex min-h-0 flex-col border-t lg:border-t-0 lg:border-l">
-      {groupedSites.length > 0 ? (
-        <section className="flex min-h-0 flex-col">
-          <div className="border-b px-3 py-2">
-            <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Mapped sites
-            </h2>
-          </div>
-          <ul className="flex min-h-0 flex-col overflow-y-auto">
-            {groupedSites.map((group) => (
-              <JobsMapSiteRailItem key={group.site.id} group={group} />
-            ))}
-          </ul>
-        </section>
-      ) : null}
+    <aside className="flex min-h-0 flex-col overflow-hidden border-t lg:border-t-0 lg:border-l">
+      <ScrollArea
+        className="min-h-0 flex-1"
+        data-testid="jobs-map-site-rail-scroll"
+      >
+        <div className="flex min-h-full flex-col">
+          {groupedSites.length > 0 ? (
+            <section className="flex flex-col">
+              <div className="border-b px-3 py-2">
+                <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Mapped sites
+                </h2>
+              </div>
+              <ul className="flex flex-col">
+                {groupedSites.map((group) => (
+                  <JobsMapSiteRailItem key={group.site.id} group={group} />
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
-      {unmappedJobs.length > 0 ? (
-        <section className="flex min-h-0 flex-col">
-          <div className="border-b px-3 py-2">
-            <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Unverified location
-            </h2>
-          </div>
-          <ul className="flex min-h-0 flex-col overflow-y-auto">
-            {unmappedJobs.slice(0, 8).map((job) => {
-              const site = job.siteId ? sites.get(job.siteId) : undefined;
-              const googleMapsUrl = buildGoogleMapsUrl(site);
+          {unmappedJobs.length > 0 ? (
+            <section className="flex flex-col">
+              <div className="border-b px-3 py-2">
+                <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Unverified location
+                </h2>
+              </div>
+              <ul className="flex flex-col">
+                {unmappedJobs.slice(0, 8).map((job) => {
+                  const site = job.siteId ? sites.get(job.siteId) : undefined;
+                  const googleMapsUrl = buildGoogleMapsUrl(site);
 
-              return (
-                <li key={job.id} className="border-b last:border-b-0">
-                  <div className="flex flex-col gap-2 p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant={
-                          job.status === "blocked" ? "outline" : "secondary"
-                        }
-                      >
-                        {STATUS_LABELS[job.status]}
-                      </Badge>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {site?.name ?? "No site"}
-                      </span>
-                    </div>
-                    <p className="line-clamp-2 text-sm font-medium">
-                      {job.title}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Link
-                        to="/jobs"
-                        search={(current) =>
-                          openWorkspaceSheetSearch(current, {
-                            jobId: job.id,
-                            kind: "job.detail",
-                          })
-                        }
-                        className={buttonVariants({
-                          size: "xs",
-                          variant: "ghost",
-                        })}
-                      >
-                        Open
-                      </Link>
-                      {googleMapsUrl ? (
-                        <a
-                          href={googleMapsUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className={buttonVariants({
-                            size: "xs",
-                            variant: "outline",
-                          })}
-                        >
-                          <HugeiconsIcon
-                            icon={MapsLocation01Icon}
-                            strokeWidth={2}
-                            data-icon="inline-start"
-                          />
-                          Maps
-                        </a>
-                      ) : null}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ) : null}
+                  return (
+                    <li key={job.id} className="border-b last:border-b-0">
+                      <div className="flex flex-col gap-2 p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant={
+                              job.status === "blocked" ? "outline" : "secondary"
+                            }
+                          >
+                            {STATUS_LABELS[job.status]}
+                          </Badge>
+                          <span className="truncate text-xs text-muted-foreground">
+                            {site?.name ?? "No site"}
+                          </span>
+                        </div>
+                        <p className="line-clamp-2 text-sm font-medium">
+                          {job.title}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Link
+                            to="/jobs"
+                            search={(current) =>
+                              openWorkspaceSheetSearch(current, {
+                                jobId: job.id,
+                                kind: "job.detail",
+                              })
+                            }
+                            className={buttonVariants({
+                              size: "xs",
+                              variant: "ghost",
+                            })}
+                          >
+                            Open
+                          </Link>
+                          {googleMapsUrl ? (
+                            <a
+                              href={googleMapsUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={buttonVariants({
+                                size: "xs",
+                                variant: "outline",
+                              })}
+                            >
+                              <HugeiconsIcon
+                                icon={MapsLocation01Icon}
+                                strokeWidth={2}
+                                data-icon="inline-start"
+                              />
+                              Maps
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      </ScrollArea>
     </aside>
   );
 }
@@ -292,7 +303,7 @@ function MapViewport({
 }) {
   if (groupedSites.length === 0) {
     return (
-      <Empty className="h-full min-h-[520px] rounded-none border-0 bg-muted/10 px-6 py-10">
+      <Empty className="h-full min-h-0 rounded-none border-0 bg-muted/10 px-6 py-10">
         <EmptyHeader>
           <EmptyTitle>No mapped jobs.</EmptyTitle>
           <EmptyDescription>
@@ -305,7 +316,7 @@ function MapViewport({
 
   if (!canRenderInteractiveMap) {
     return (
-      <div className="flex h-full min-h-[520px] flex-col justify-between gap-6 bg-muted/10 p-4">
+      <div className="flex h-full min-h-0 flex-col justify-between gap-6 overflow-y-auto bg-muted/10 p-4">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {groupedSites.slice(0, 6).map((group) => (
             <div
@@ -343,7 +354,7 @@ function MapViewport({
 
 function CoverageMapLoadingState() {
   return (
-    <div className="flex min-h-[520px] flex-col gap-4 bg-muted/10 p-4">
+    <div className="flex h-full min-h-0 flex-col gap-4 bg-muted/10 p-4">
       <Skeleton className="h-6 w-44" />
       <Skeleton className="h-80 w-full rounded-2xl" />
       <div className="grid gap-3 sm:grid-cols-2">
