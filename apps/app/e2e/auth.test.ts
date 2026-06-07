@@ -50,11 +50,19 @@ async function expectAuthenticatedHome(page: Page) {
   await expect(page).toHaveURL(/\/$/, { timeout: AUTH_ACTION_TIMEOUT_MS });
   await expect(workspaceHome).toBeVisible({ timeout: 15_000 });
   await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();
+  const pageHeader = workspaceHome.locator("header").filter({
+    has: workspaceHome.getByRole("heading", {
+      exact: true,
+      level: 1,
+      name: "Home",
+    }),
+  });
+
   await expect(
     page.getByRole("link", { exact: true, name: "Jobs" })
   ).toBeVisible();
   await expect(
-    workspaceHome.getByRole("link", { exact: true, name: "New job" })
+    pageHeader.getByRole("link", { exact: true, name: "New job" })
   ).toBeVisible();
 }
 
