@@ -72,6 +72,7 @@ import {
 } from "#/components/ui/tooltip";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
+import { RouteAwareNearMeButton } from "#/features/proximity/route-aware-near-me-button";
 import { openWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
 import { useIsMobile } from "#/hooks/use-mobile";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
@@ -615,6 +616,7 @@ function JobsCommandToolbar({
 
         <div className="no-scrollbar flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto pb-1 xl:justify-end xl:pb-0">
           {savedViewsControl}
+          <RouteAwareNearMeButton target="jobs" />
           {showInternalFilters ? (
             <>
               <CommandFilter

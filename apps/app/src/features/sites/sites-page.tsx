@@ -48,6 +48,7 @@ import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
 import { hasOrganizationElevatedAccess } from "#/features/organizations/organization-viewer";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
+import { RouteAwareNearMeButton } from "#/features/proximity/route-aware-near-me-button";
 import {
   buildSiteAddressLines,
   hasSiteCoordinates,
@@ -369,6 +370,7 @@ export function SitesPage({
               </div>
 
               <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <RouteAwareNearMeButton target="sites" />
                 <SitesMapFilterButton
                   active={mapFilter === "all"}
                   count={siteStats.totalSites}
