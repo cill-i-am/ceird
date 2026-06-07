@@ -238,15 +238,29 @@ describe("CeirdAgent", () => {
 
     expect(mockedStreamText).toHaveBeenCalledWith(
       expect.objectContaining({
-        system: expect.stringContaining("Request origin data JSON"),
+        system: expect.not.stringContaining("Request origin data JSON"),
       })
     );
     const streamTextInput = mockedStreamText.mock.calls.at(-1)?.[0] as
       | { readonly system?: string }
       | undefined;
-    expect(streamTextInput?.system).toContain('"mode":"current_location"');
+    expect(streamTextInput?.system).not.toContain("53.349805");
+    expect(streamTextInput?.system).not.toContain("-6.26031");
+    expect(streamTextInput?.system).toContain("hidden current-location origin");
+    expect(streamTextInput?.system).toContain("placeholder coordinates");
     expect(streamTextInput?.system).toContain(
       "Rank by traffic-aware driving time, not straight-line distance"
+    );
+    expect(mockedCreateCeirdTools).toHaveBeenLastCalledWith(
+      agent.env,
+      agent.name,
+      {
+        proximityOrigin: {
+          accuracyMeters: 12,
+          coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+          mode: "current_location",
+        },
+      }
     );
     expect(mockedValidateAgentCurrentLocationAccess).toHaveBeenCalledWith(
       agent.env,

@@ -147,6 +147,7 @@ export interface InfraStageConfig {
   readonly googleMapsRoutesApiKey:
     | Redacted.Redacted<InfraGoogleMapsApiKey>
     | undefined;
+  readonly proximityOriginTokenTtlSeconds: number | undefined;
   readonly hyperdriveName: ProviderResourceName;
   readonly hyperdriveOriginConnectionLimit: number;
   readonly electricContainerInstanceType: ElectricContainerInstanceType;
@@ -260,6 +261,12 @@ const AgentActionRunStaleAfterSeconds = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(1, {
     message:
       "CEIRD_AGENT_ACTION_RUN_STALE_AFTER_SECONDS must be a positive integer",
+  })
+);
+const ProximityOriginTokenTtlSeconds = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(1, {
+    message:
+      "CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS must be a positive integer",
   })
 );
 const NeonHistoryRetentionSeconds = Schema.Int.check(
@@ -433,6 +440,12 @@ function decodeAgentActionRunStaleAfterSeconds(value: number) {
   return Schema.decodeUnknownEffect(AgentActionRunStaleAfterSeconds)(
     value
   ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+}
+
+function decodeProximityOriginTokenTtlSeconds(value: number) {
+  return Schema.decodeUnknownEffect(ProximityOriginTokenTtlSeconds)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
 }
 
 function decodeNeonHistoryRetentionSeconds(value: number) {
@@ -650,6 +663,11 @@ export function loadInfraStageConfig(stageInput: string) {
         Config.mapOrFail(decodeGoogleMapsApiKey)
       )
     ).pipe(Effect.map(Option.getOrUndefined));
+    const proximityOriginTokenTtlSeconds = yield* Config.option(
+      Config.number("CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS").pipe(
+        Config.mapOrFail(decodeProximityOriginTokenTtlSeconds)
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
     const hyperdriveName = yield* Config.string("CEIRD_HYPERDRIVE_NAME").pipe(
       Config.withDefault(defaultHyperdriveName),
       Config.mapOrFail(decodeProviderResourceName)
@@ -766,6 +784,7 @@ export function loadInfraStageConfig(stageInput: string) {
       authSecrets,
       googleMapsApiKey,
       googleMapsRoutesApiKey,
+      proximityOriginTokenTtlSeconds,
       hyperdriveName,
       hyperdriveOriginConnectionLimit,
       electricContainerInstanceType,

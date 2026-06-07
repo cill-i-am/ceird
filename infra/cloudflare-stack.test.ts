@@ -249,6 +249,7 @@ type DomainWorkerStackRuntimeConfigEnv = Required<
     | "CEIRD_LOCAL_DEV"
     | "DATABASE_URL"
     | "GOOGLE_MAPS_ROUTES_API_KEY"
+    | "PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS"
   >;
 type McpWorkerStackRuntimeConfigEnv = Required<
   Pick<
@@ -757,6 +758,19 @@ describe("Cloudflare stack", () => {
       configWithoutCloudflareBootstrapSecrets.googleMapsApiKey
     );
     expect(domainEnv.GOOGLE_MAPS_ROUTES_API_KEY).toBe(googleMapsRoutesApiKey);
+  });
+
+  it("passes the optional proximity origin token TTL to domain Workers", () => {
+    const domainEnv = makeDomainWorkerEnv({
+      agentInternalSecret: Redacted.make("agent-secret"),
+      betterAuthSecret: Redacted.make("better-auth-secret"),
+      config: {
+        ...configWithoutCloudflareBootstrapSecrets,
+        proximityOriginTokenTtlSeconds: 600,
+      } satisfies InfraStageConfig,
+    });
+
+    expect(domainEnv.PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS).toBe("600");
   });
 
   it("passes disabled auth rate limits through to preview domain Workers", () => {

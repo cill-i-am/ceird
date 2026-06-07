@@ -161,8 +161,10 @@ Path: `packages/proximity-core`
 Exports shared route-aware proximity contracts used by jobs, sites, the domain
 Worker, the browser app, and agent action schemas:
 
-- current-location and typed-origin discriminated-union inputs
+- current-location and signed typed-origin discriminated-union inputs
 - Google Maps origin autocomplete/place-details request and response DTOs
+- short-lived typed-origin proof token schemas and HMAC signing/verification
+  helpers for server-issued typed origins
 - route summary, display-only route-line, normalized metadata, and result-limit
   schemas
 - proximity provider, provider request-kind, cost-guard scope, and exclusion

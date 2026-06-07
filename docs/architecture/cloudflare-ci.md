@@ -140,6 +140,7 @@ Secrets:
 Variables:
 
 - `AUTH_EMAIL_FROM_NAME`
+- `CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS` (optional typed-origin proof TTL override)
 - `NEON_ORG_ID` (optional)
 
 The `main` environment is used by `.github/workflows/deploy-main.yml` only after
@@ -166,6 +167,7 @@ Secrets:
 Variables:
 
 - `AUTH_EMAIL_FROM_NAME`
+- `CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS` (optional typed-origin proof TTL override)
 - `NEON_ORG_ID` (optional)
 
 Preview E2E and push-to-main cloud E2E do not store

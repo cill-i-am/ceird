@@ -104,7 +104,7 @@ export const siteAgentActions = [
     executionStatus: "executable",
     kind: "read",
     modelDescription:
-      "Rank mapped Ceird sites near a current or typed origin by traffic-aware driving time, respecting supplied site filters.",
+      "Rank mapped Ceird sites near a current-location or app-resolved signed origin by traffic-aware driving time, respecting supplied site filters.",
     modelName: "rankNearbySites",
     name: "ceird.sites.proximity",
   }),
@@ -122,7 +122,7 @@ export const siteAgentActions = [
     executionStatus: "executable",
     kind: "read",
     modelDescription:
-      "Preview traffic-aware driving distance and duration from an origin to a specific Ceird site.",
+      "Preview traffic-aware driving distance and duration from a current-location or app-resolved signed origin to a specific Ceird site.",
     modelName: "getSiteRoutePreview",
     name: "ceird.sites.route_preview",
   }),

@@ -16,6 +16,7 @@ import type {
   ProximityOriginInput,
   ProximityOriginPlaceDetailsInput,
   ProximityOriginPlaceDetailsResponse,
+  TypedOrigin,
 } from "@ceird/proximity-core";
 import type { SiteIdType } from "@ceird/sites-core";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -122,6 +123,7 @@ describe("jobs proximity panel", () => {
           coordinates: { latitude: 53.35, longitude: -6.27 },
           displayText: "Dublin",
           mode: "typed_origin",
+          originToken: typedOriginToken,
           placeId: dublinPortPlaceId,
         },
       })
@@ -669,6 +671,7 @@ describe("jobs proximity panel", () => {
         coordinates: { latitude: 53.35, longitude: -6.27 },
         displayText: "Dublin",
         mode: "typed_origin",
+        originToken: typedOriginToken,
         placeId: dublinPortPlaceId,
       },
     });
@@ -775,6 +778,8 @@ const labelId = "label_123" as LabelIdType;
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
 const jobId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
 const dublinPortPlaceId = "ChIJDublinPort" as GooglePlaceIdType;
+const typedOriginToken =
+  "v1.typedOrigin.testSignature" as TypedOrigin["originToken"];
 
 const heatingLabel = {
   createdAt: "2026-06-06T09:00:00.000Z",

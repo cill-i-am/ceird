@@ -7,7 +7,9 @@ import {
 import {
   GooglePlaceId,
   ProximityAccessDeniedError,
+  signProximityOriginToken,
 } from "@ceird/proximity-core";
+import type { TypedOrigin, UnsignedTypedOrigin } from "@ceird/proximity-core";
 import type {
   GooglePlaceIdType,
   GooglePlacesSessionTokenType,
@@ -26,6 +28,10 @@ import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
+import {
+  configProviderFromMap,
+  withConfigProvider,
+} from "../../test/effect-test-helpers.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
@@ -55,12 +61,37 @@ const decodeGooglePlaceId = Schema.decodeUnknownSync(GooglePlaceId);
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
+const PROXIMITY_ORIGIN_TOKEN_SECRET = "proximity-origin-secret";
+const proximityOriginConfigProvider = configProviderFromMap(
+  new Map([["AGENT_INTERNAL_SECRET", PROXIMITY_ORIGIN_TOKEN_SECRET]])
+);
 
 const actor = {
   organizationId: decodeOrganizationId("org_123"),
   role: "admin",
   userId: decodeUserId("user_admin"),
 } satisfies OrganizationActor;
+
+async function makeSignedTypedOrigin(
+  input: Partial<UnsignedTypedOrigin> = {}
+): Promise<TypedOrigin> {
+  const origin = {
+    coordinates: input.coordinates ?? { latitude: 53.34, longitude: -6.26 },
+    displayText: input.displayText ?? "Heuston Station",
+    mode: "typed_origin" as const,
+    placeId: input.placeId ?? decodeGooglePlaceId("google-place-origin"),
+  } satisfies UnsignedTypedOrigin;
+
+  return {
+    ...origin,
+    originToken: await signProximityOriginToken({
+      now: new Date("2026-06-07T10:00:00.000Z"),
+      origin,
+      secret: PROXIMITY_ORIGIN_TOKEN_SECRET,
+      ttlSeconds: 300,
+    }),
+  };
+}
 
 describe("SitesService contracts", () => {
   it("keeps site creation focused on optional location and access details", () => {
@@ -937,16 +968,12 @@ describe("SitesService contracts", () => {
 
   it("allows typed-origin site ranking when location preference is disabled", async () => {
     let candidateCalls = 0;
+    const origin = await makeSignedTypedOrigin();
 
     const result = await runSitesServiceEffect(
       sitesServiceCall((sites) =>
         sites.rankNearbySites({
-          origin: {
-            coordinates: { latitude: 53.34, longitude: -6.26 },
-            displayText: "Heuston Station",
-            mode: "typed_origin",
-            placeId: decodeGooglePlaceId("google-place-origin"),
-          },
+          origin,
         })
       ),
       {
@@ -970,7 +997,8 @@ describe("SitesService contracts", () => {
             unavailableDestinationIds: [],
           }),
         routeProximityLocationEnabled: false,
-      }
+      },
+      { withProximityOriginConfig: true }
     );
 
     expect(candidateCalls).toBe(1);
@@ -978,6 +1006,51 @@ describe("SitesService contracts", () => {
       displayText: "Heuston Station",
       mode: "typed_origin",
     });
+  });
+
+  it("rejects tampered typed-origin site ranking before loading candidates", async () => {
+    let candidateCalls = 0;
+    const signedOrigin = await makeSignedTypedOrigin();
+
+    const exit = await Effect.runPromiseExit(
+      sitesServiceCall((sites) =>
+        sites.rankNearbySites({
+          origin: {
+            ...signedOrigin,
+            coordinates: { latitude: 53.35, longitude: -6.27 },
+          },
+        })
+      ).pipe(
+        Effect.provide(SitesService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeSitesServiceTestLayer({
+            listProximityCandidates: () => {
+              candidateCalls += 1;
+              return Effect.die(
+                "SitesRepository.listProximityCandidates should not be called"
+              );
+            },
+            previewRoute: () =>
+              Effect.die("RouteProvider.previewRoute should not be called"),
+            rankRoutes: () =>
+              Effect.die("RouteProvider.rankRoutes should not be called"),
+            routeProximityLocationEnabled: false,
+          })
+        ),
+        withConfigProvider(proximityOriginConfigProvider)
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
+      expect(failure).toBeInstanceOf(ProximityAccessDeniedError);
+      expect(failure).toMatchObject({
+        message: "Typed origin access could not be verified.",
+      });
+    }
+    expect(candidateCalls).toBe(0);
   });
 
   it("rejects current-location site route previews before loading the site when location preference is unavailable", async () => {
@@ -1116,13 +1189,18 @@ function runSitesServiceEffect<Value, Error>(
     Error,
     SitesService | TestSitesServiceRequirements
   >,
-  options: Partial<TestSitesDependencies> = {}
+  options: Partial<TestSitesDependencies> = {},
+  testOptions: { readonly withProximityOriginConfig?: boolean } = {}
 ) {
+  const provided = effect.pipe(
+    Effect.provide(SitesService.DefaultWithoutDependencies),
+    Effect.provide(makeSitesServiceTestLayer(options))
+  );
+
   return Effect.runPromise(
-    effect.pipe(
-      Effect.provide(SitesService.DefaultWithoutDependencies),
-      Effect.provide(makeSitesServiceTestLayer(options))
-    )
+    testOptions.withProximityOriginConfig === true
+      ? provided.pipe(withConfigProvider(proximityOriginConfigProvider))
+      : provided
   );
 }
 

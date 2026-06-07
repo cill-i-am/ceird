@@ -13,6 +13,7 @@ export {
   ProximityLatitudeSchema,
   ProximityLimitSchema,
   ProximityLongitudeSchema,
+  ProximityOriginToken,
   ProximityProviderRequestKindSchema,
   ProximityProviderSchema,
 } from "./domain.js";
@@ -26,6 +27,7 @@ export type {
   ProximityLatitude,
   ProximityLimit,
   ProximityLongitude,
+  ProximityOriginToken as ProximityOriginTokenType,
   ProximityProvider,
   ProximityProviderRequestKind,
 } from "./domain.js";
@@ -46,6 +48,7 @@ export {
   RouteDisplayLineSchema,
   RouteSummarySchema,
   TypedOriginSchema,
+  UnsignedTypedOriginSchema,
 } from "./dto.js";
 export type {
   CurrentLocationOrigin,
@@ -63,6 +66,7 @@ export type {
   RouteDisplayLineResponse,
   RouteSummary,
   TypedOrigin,
+  UnsignedTypedOrigin,
 } from "./dto.js";
 export {
   PROXIMITY_ACCESS_DENIED_ERROR_TAG,
@@ -79,3 +83,12 @@ export {
 export type { ProximityError } from "./errors.js";
 export { ProximityApi, ProximityApiGroup } from "./http-api.js";
 export type { ProximityApiGroupType, ProximityApiType } from "./http-api.js";
+export {
+  ProximityOriginTokenInvalidError,
+  signProximityOriginToken,
+  verifyProximityOriginToken,
+} from "./origin-token.js";
+export type {
+  SignProximityOriginTokenInput,
+  VerifyProximityOriginTokenInput,
+} from "./origin-token.js";

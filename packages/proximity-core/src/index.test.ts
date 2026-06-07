@@ -2,19 +2,24 @@ import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 
+import type { GooglePlaceIdType } from "./index.js";
 import {
   ProximityApi,
   ProximityApiGroup,
   ProximityCostGuardError,
   ProximityLimitSchema,
   ProximityOriginInputSchema,
+  ProximityOriginTokenInvalidError,
   RouteDisplayLineSchema,
   RouteSummarySchema,
+  signProximityOriginToken,
+  verifyProximityOriginToken,
 } from "./index.js";
 
 describe("proximity-core", () => {
-  it("decodes current-location and typed-origin inputs as strict discriminated unions", () => {
+  it("decodes current-location and typed-origin inputs as strict discriminated unions", async () => {
     const decodeOrigin = Schema.decodeUnknownSync(ProximityOriginInputSchema);
+    const placeId = "ChIJL6wn6oAOZ0gRoHExl6nHAAo" as GooglePlaceIdType;
 
     expect(
       decodeOrigin({
@@ -28,14 +33,34 @@ describe("proximity-core", () => {
       mode: "current_location",
     });
 
-    expect(
+    const typedOrigin = {
+      coordinates: { latitude: 53.342_886, longitude: -6.267_428 },
+      displayText: "Dublin 8",
+      mode: "typed_origin" as const,
+      originToken: await signProximityOriginToken({
+        now: new Date("2026-06-07T10:00:00.000Z"),
+        origin: {
+          coordinates: { latitude: 53.342_886, longitude: -6.267_428 },
+          displayText: "Dublin 8",
+          mode: "typed_origin",
+          placeId,
+        },
+        secret: "origin-secret",
+        ttlSeconds: 300,
+      }),
+      placeId,
+    };
+
+    expect(decodeOrigin(typedOrigin).mode).toBe("typed_origin");
+
+    expect(() =>
       decodeOrigin({
         coordinates: { latitude: 53.342_886, longitude: -6.267_428 },
         displayText: "Dublin 8",
         mode: "typed_origin",
-        placeId: "ChIJL6wn6oAOZ0gRoHExl6nHAAo",
-      }).mode
-    ).toBe("typed_origin");
+        placeId,
+      })
+    ).toThrow(/originToken/);
 
     expect(() =>
       decodeOrigin({
@@ -49,7 +74,7 @@ describe("proximity-core", () => {
       decodeOrigin({
         coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
         mode: "typed_origin",
-        placeId: "ChIJL6wn6oAOZ0gRoHExl6nHAAo",
+        placeId,
       })
     ).toThrow(/displayText/);
   });
@@ -130,6 +155,50 @@ describe("proximity-core", () => {
         scope: "actor",
       })._tag
     ).toBe("@ceird/proximity-core/ProximityCostGuardError");
+  });
+
+  it("signs typed origins and rejects tampered or expired origin tokens", async () => {
+    const placeId = "ChIJL6wn6oAOZ0gRoHExl6nHAAo" as GooglePlaceIdType;
+    const origin = {
+      coordinates: { latitude: 53.342_886, longitude: -6.267_428 },
+      displayText: "Dublin 8",
+      mode: "typed_origin" as const,
+      placeId,
+    };
+    const token = await signProximityOriginToken({
+      now: new Date("2026-06-07T10:00:00.000Z"),
+      origin,
+      secret: "origin-secret",
+      ttlSeconds: 60,
+    });
+
+    await expect(
+      verifyProximityOriginToken({
+        now: new Date("2026-06-07T10:00:30.000Z"),
+        origin,
+        secret: "origin-secret",
+        token,
+      })
+    ).resolves.toBeUndefined();
+    await expect(
+      verifyProximityOriginToken({
+        now: new Date("2026-06-07T10:00:30.000Z"),
+        origin: {
+          ...origin,
+          coordinates: { ...origin.coordinates, latitude: 53.35 },
+        },
+        secret: "origin-secret",
+        token,
+      })
+    ).rejects.toBeInstanceOf(ProximityOriginTokenInvalidError);
+    await expect(
+      verifyProximityOriginToken({
+        now: new Date("2026-06-07T10:02:00.000Z"),
+        origin,
+        secret: "origin-secret",
+        token,
+      })
+    ).rejects.toBeInstanceOf(ProximityOriginTokenInvalidError);
   });
 
   it("exposes temporary origin endpoints", () => {

@@ -118,7 +118,7 @@ export const jobAgentActions = [
     executionStatus: "executable",
     kind: "read",
     modelDescription:
-      "Rank Ceird jobs near a current or typed origin by traffic-aware driving time, respecting supplied job filters.",
+      "Rank Ceird jobs near a current-location or app-resolved signed origin by traffic-aware driving time, respecting supplied job filters.",
     modelName: "rankNearbyJobs",
     name: "ceird.jobs.proximity",
   }),
@@ -133,7 +133,7 @@ export const jobAgentActions = [
     executionStatus: "executable",
     kind: "read",
     modelDescription:
-      "Preview traffic-aware driving distance and duration from an origin to a specific Ceird job.",
+      "Preview traffic-aware driving distance and duration from a current-location or app-resolved signed origin to a specific Ceird job.",
     modelName: "getJobRoutePreview",
     name: "ceird.jobs.route_preview",
   }),

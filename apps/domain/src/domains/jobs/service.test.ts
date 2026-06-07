@@ -17,12 +17,18 @@ import type { JobCollaborator, JobProximityFilters } from "@ceird/jobs-core";
 import {
   GooglePlaceId,
   ProximityAccessDeniedError,
+  signProximityOriginToken,
 } from "@ceird/proximity-core";
+import type { TypedOrigin, UnsignedTypedOrigin } from "@ceird/proximity-core";
 import { SiteOptionSchema } from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
+import {
+  configProviderFromMap,
+  withConfigProvider,
+} from "../../test/effect-test-helpers.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -59,6 +65,10 @@ const decodeGooglePlaceId = Schema.decodeUnknownSync(GooglePlaceId);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
+const PROXIMITY_ORIGIN_TOKEN_SECRET = "proximity-origin-secret";
+const proximityOriginConfigProvider = configProviderFromMap(
+  new Map([["AGENT_INTERNAL_SECRET", PROXIMITY_ORIGIN_TOKEN_SECRET]])
+);
 
 const internalActor = {
   organizationId: decodeOrganizationId("org_123"),
@@ -92,6 +102,27 @@ const existingJob = decodeJob({
   title: "Inspect boiler",
   updatedAt: "2026-05-20T09:00:00.000Z",
 });
+
+async function makeSignedTypedOrigin(
+  input: Partial<UnsignedTypedOrigin> = {}
+): Promise<TypedOrigin> {
+  const origin = {
+    coordinates: input.coordinates ?? { latitude: 53.34, longitude: -6.26 },
+    displayText: input.displayText ?? "Heuston Station",
+    mode: "typed_origin" as const,
+    placeId: input.placeId ?? decodeGooglePlaceId("google-place-origin"),
+  } satisfies UnsignedTypedOrigin;
+
+  return {
+    ...origin,
+    originToken: await signProximityOriginToken({
+      now: new Date("2026-06-07T10:00:00.000Z"),
+      origin,
+      secret: PROXIMITY_ORIGIN_TOKEN_SECRET,
+      ttlSeconds: 300,
+    }),
+  };
+}
 
 describe("JobsService contracts", () => {
   it("keeps job creation focused on title, priority, site, and contact", () => {
@@ -463,18 +494,14 @@ describe("JobsService contracts", () => {
 
   it("allows typed-origin job ranking when location preference is disabled", async () => {
     let candidateCalls = 0;
+    const origin = await makeSignedTypedOrigin();
 
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const jobs = yield* JobsService;
 
         return yield* jobs.rankNearbyJobs({
-          origin: {
-            coordinates: { latitude: 53.34, longitude: -6.26 },
-            displayText: "Heuston Station",
-            mode: "typed_origin",
-            placeId: decodeGooglePlaceId("google-place-origin"),
-          },
+          origin,
         });
       }).pipe(
         Effect.provide(JobsService.DefaultWithoutDependencies),
@@ -501,7 +528,8 @@ describe("JobsService contracts", () => {
               }),
             routeProximityLocationEnabled: false,
           })
-        )
+        ),
+        withConfigProvider(proximityOriginConfigProvider)
       )
     );
 
@@ -510,6 +538,53 @@ describe("JobsService contracts", () => {
       displayText: "Heuston Station",
       mode: "typed_origin",
     });
+  });
+
+  it("rejects tampered typed-origin job ranking before loading candidates", async () => {
+    let candidateCalls = 0;
+    const signedOrigin = await makeSignedTypedOrigin();
+
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.rankNearbyJobs({
+          origin: {
+            ...signedOrigin,
+            coordinates: { latitude: 53.35, longitude: -6.27 },
+          },
+        });
+      }).pipe(
+        Effect.provide(JobsService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsProximityTestLayer({
+            listProximityCandidates: () => {
+              candidateCalls += 1;
+              return Effect.die(
+                "JobsRepository.listProximityCandidates should not be called"
+              );
+            },
+            previewRoute: () =>
+              Effect.die("RouteProvider.previewRoute should not be called"),
+            rankRoutes: () =>
+              Effect.die("RouteProvider.rankRoutes should not be called"),
+            routeProximityLocationEnabled: false,
+          })
+        ),
+        withConfigProvider(proximityOriginConfigProvider)
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
+      expect(failure).toBeInstanceOf(ProximityAccessDeniedError);
+      expect(failure).toMatchObject({
+        message: "Typed origin access could not be verified.",
+      });
+    }
+    expect(candidateCalls).toBe(0);
   });
 
   it("rejects current-location job route previews before loading job detail when location preference is unavailable", async () => {

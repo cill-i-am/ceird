@@ -606,7 +606,7 @@ function AgentConversation({
       if (!contextSent) {
         setLocationNotice({
           message:
-            "Ceird could not attach your current location to the agent request. Try again, or include a specific origin such as an address or Eircode in the message.",
+            "Ceird could not attach your current location to the agent request. Try again, or enable location access in Settings.",
           status: "blocked",
         });
 
@@ -1174,7 +1174,7 @@ function getAgentLocationFailureMessage(
     ? formatBrowserGeolocationError(failure.value)
     : "Ceird could not get your current location.";
 
-  return `${failureMessage} Allow location access and send again, or include a specific origin such as an address or Eircode in the message.`;
+  return `${failureMessage} Allow location access and send again, or enable location access in Settings.`;
 }
 
 function createAgentProximityOriginContextId(): AgentProximityOriginContextIdType {
@@ -1297,8 +1297,8 @@ function getAgentLocationPreferenceBlockedMessage(
   status: Exclude<RouteProximityLocationPreferenceStatus, "enabled">
 ) {
   return status === "disabled"
-    ? "Location access is off. Enable location access in Settings or ask with a typed origin."
-    : "Ceird could not check location access. Try again, or ask with a typed origin.";
+    ? "Location access is off. Enable location access in Settings to use near-me agent requests."
+    : "Ceird could not check location access. Try again, or enable location access in Settings.";
 }
 
 function resolveBrowserAgentHost() {

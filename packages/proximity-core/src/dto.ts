@@ -7,6 +7,7 @@ import {
   ProximityCoordinatesSchema,
   ProximityLimitSchema,
   ProximityCountrySchema,
+  ProximityOriginToken,
   ProximityProviderRequestKindSchema,
   ProximityProviderSchema,
 } from "./domain.js";
@@ -38,11 +39,21 @@ export type CurrentLocationOrigin = Schema.Schema.Type<
   typeof CurrentLocationOriginSchema
 >;
 
-export const TypedOriginSchema = Schema.Struct({
+export const UnsignedTypedOriginSchema = Schema.Struct({
   coordinates: ProximityCoordinatesSchema,
   displayText: ProximityOriginDisplayTextSchema,
   mode: Schema.Literal("typed_origin"),
   placeId: GooglePlaceId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type UnsignedTypedOrigin = Schema.Schema.Type<
+  typeof UnsignedTypedOriginSchema
+>;
+
+export const TypedOriginSchema = Schema.Struct({
+  ...UnsignedTypedOriginSchema.fields,
+  originToken: ProximityOriginToken,
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });

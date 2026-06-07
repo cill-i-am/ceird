@@ -149,11 +149,13 @@ fields are dropped. Before storing a sideband current-location frame,
 Disabled or unverifiable preference state is fail-closed: the frame is consumed
 and the Agent behaves as if no current location was supplied. Valid frames are
 resolved against the in-memory sideband cache, pruned after a short TTL, deleted
-as the turn starts, and added to turn-scoped system guidance so nearby and
-route-preview tools use that explicit origin instead of asking the user to type
-one. If the Durable Object is evicted between the sideband frame and the chat
-turn, the id is harmless and the Agent behaves as if no current location was
-supplied.
+as the turn starts, and passed to the generated Ceird tools as hidden runtime
+context. The system prompt tells the model to use a placeholder
+`current_location` origin for relevant tools; the tool executor swaps that
+placeholder for the hidden origin before calling the domain. Raw coordinates
+are not serialized into prompt text. If the Durable Object is evicted between
+the sideband frame and the chat turn, the id is harmless and the Agent behaves
+as if no current location was supplied.
 Because AI chat messages and resumable stream chunks are also persisted,
 `CeirdAgent` redacts proximity tool `origin` payloads, route display lines, and
 exact current-location coordinate strings before those records are stored; live
@@ -252,17 +254,23 @@ The shared request shape lives in `@ceird/proximity-core`: origins are explicit
 discriminated unions (`current_location` or `typed_origin`), result rows are
 limited to 25 for v1, and responses include normalized metadata for candidate
 limits/exclusions. Generic origin lookup handlers reuse the existing site
-Google Places provider behind proximity-native DTOs and errors. Origin
-autocomplete and place-details calls are guarded separately from Routes work
-with warm-isolate actor and organization limits because they spend Google Places
-quota before route ranking begins. Route ranking/preview handlers perform auth
-and target existence checks. They then reject `current_location` origins unless
-the actor's `routeProximityLocationEnabled` preference is enabled; if preference
-state cannot be read, the request fails closed before route-provider work.
-`typed_origin` requests are not gated by this preference. Handlers apply the
-selected filters first, cap routing work to the first 100 route-eligible
-candidates, and then call the route provider. Job proximity defaults to active
-jobs; site proximity ranks mapped sites and includes active-job summary fields
+Google Places provider behind proximity-native DTOs and errors. The
+place-details endpoint returns a short-lived server-signed `originToken` with
+the resolved typed origin. Route ranking/preview handlers verify that token
+against the exact typed-origin coordinates, display text, and place id before
+provider work, so clients cannot mint or tamper with typed-origin coordinates.
+Origin autocomplete and place-details calls are guarded separately from Routes
+work with warm-isolate actor and organization limits because they spend Google
+Places quota before route ranking begins. Route ranking/preview handlers
+perform auth and target existence checks. They then reject `current_location`
+origins unless the actor's `routeProximityLocationEnabled` preference is
+enabled; if preference state cannot be read, the request fails closed before
+route-provider work. `typed_origin` requests are not gated by this preference
+but must carry the signed proof from `/proximity/origins/place-details`.
+Handlers apply the selected filters first, cap routing work to the first 100
+route-eligible candidates, and then call the route provider. Job proximity
+defaults to active jobs; site proximity ranks mapped sites and includes
+active-job summary fields
 for the returned rows. When more than 100 route-eligible records match, response
 metadata marks the candidate cap so clients can explain that the route ranking
 was limited.
@@ -293,8 +301,9 @@ errors if the key is missing.
 Route provider errors are normalized to proximity-core typed errors and never
 return raw Google payloads. Logs include operation, status, reason, and safe
 ids/counts only; they intentionally avoid raw origin coordinates, typed-origin
-addresses, route geometry, and raw provider messages. The provider reads
-`GOOGLE_MAPS_ROUTES_API_KEY` when present and falls back to the existing
+addresses, typed-origin proof tokens, route geometry, and raw provider
+messages. The provider reads `GOOGLE_MAPS_ROUTES_API_KEY` when present and
+falls back to the existing
 `GOOGLE_MAPS_API_KEY`, so split key restrictions can be introduced later
 without changing product API contracts. Google Cloud quota caps for Routes
 `computeRouteMatrix` and `computeRoutes` still need to be configured before
@@ -310,6 +319,9 @@ are rejected as already running. Running action rows older than 15 minutes are
 recovered to a terminal failed state and return the same typed rejection, so a
 crashed Agent request cannot block an operation id forever. Read action results
 are not durably copied into the ledger; a successful replay re-runs the read.
+For route-aware proximity actions, the input hash/size is computed after
+sanitizing `origin` payloads down to their mode, so the ledger does not retain
+coordinate-derived fingerprints or typed-origin proof tokens.
 The ledger does not wrap action execution in a long-lived transaction. Actual
 action implementations use the domain authorization, repository, and
 activity-recording paths rather than bypassing domain behavior, and those

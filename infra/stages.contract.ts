@@ -27,6 +27,7 @@ export const configWithoutCloudflareBootstrapSecrets = {
     Schema.decodeUnknownSync(InfraGoogleMapsApiKey)("google-key")
   ),
   googleMapsRoutesApiKey: undefined,
+  proximityOriginTokenTtlSeconds: undefined,
   hyperdriveName: "ceird-production-postgres",
   hyperdriveOriginConnectionLimit: 5,
   electricContainerInstanceType: "basic",

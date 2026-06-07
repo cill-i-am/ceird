@@ -123,6 +123,7 @@ describe("Alchemy stage identity", () => {
     expect(config.electricContainerInstanceType).toBe("dev");
     expect(config.mcpAuthorizedAppCacheMaxEntries).toBeUndefined();
     expect(config.mcpAuthorizedAppCacheTtlSeconds).toBeUndefined();
+    expect(config.proximityOriginTokenTtlSeconds).toBeUndefined();
     expect(config.neonDatabaseName).toBe("ceird");
     expect(config.neonDefaultBranchName).toBe("base");
     expect(config.neonHistoryRetentionSeconds).toBe(21_600);
@@ -740,6 +741,26 @@ describe("Alchemy stage identity", () => {
     );
 
     expect(config.agentActionRunStaleAfterSeconds).toBe(120);
+  });
+
+  it("allows the proximity origin token TTL to be overridden", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS: "600",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.proximityOriginTokenTtlSeconds).toBe(600);
   });
 
   it("allows parent Neon branch protection to be enabled explicitly", () => {

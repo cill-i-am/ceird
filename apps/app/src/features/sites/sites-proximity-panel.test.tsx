@@ -8,6 +8,7 @@ import type {
   ProximityOriginInput,
   ProximityOriginPlaceDetailsInput,
   ProximityOriginPlaceDetailsResponse,
+  TypedOrigin,
 } from "@ceird/proximity-core";
 import type {
   SiteIdType,
@@ -113,6 +114,7 @@ describe("sites proximity panel", () => {
           coordinates: { latitude: 53.35, longitude: -6.27 },
           displayText: "Dublin",
           mode: "typed_origin",
+          originToken: typedOriginToken,
           placeId: dublinPortPlaceId,
         },
       })
@@ -566,6 +568,7 @@ describe("sites proximity panel", () => {
         coordinates: { latitude: 53.35, longitude: -6.27 },
         displayText: "Dublin",
         mode: "typed_origin",
+        originToken: typedOriginToken,
         placeId: dublinPortPlaceId,
       },
     });
@@ -725,6 +728,8 @@ function ControlledSitesProximityPanel({
 
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
 const dublinPortPlaceId = "ChIJDublinPort" as GooglePlaceIdType;
+const typedOriginToken =
+  "v1.typedOrigin.testSignature" as TypedOrigin["originToken"];
 
 const currentLocationOrigin = {
   accuracyMeters: 8,

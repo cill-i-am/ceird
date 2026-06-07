@@ -36,6 +36,17 @@ export type GooglePlacesSessionToken = Schema.Schema.Type<
   typeof GooglePlacesSessionToken
 >;
 
+export const ProximityOriginToken = Schema.Trim.pipe(
+  Schema.check(Schema.isMinLength(16), Schema.isMaxLength(4096)),
+  Schema.refine((value): value is string => /^[A-Za-z0-9._-]+$/u.test(value), {
+    message: "Proximity origin token must be base64url-compatible",
+  }),
+  Schema.brand("@ceird/proximity-core/ProximityOriginToken")
+);
+export type ProximityOriginToken = Schema.Schema.Type<
+  typeof ProximityOriginToken
+>;
+
 export const ProximityLatitudeSchema = Schema.Number.pipe(
   Schema.check(
     Schema.isGreaterThanOrEqualTo(-90),

@@ -165,7 +165,9 @@ stale sideband origins after a short TTL, so abandoned sends do not keep precise
 coordinates indefinitely. The visible user message is not rewritten with
 coordinates. If the browser cannot provide current location, the composer blocks
 the send, keeps the draft, and shows an inline recovery message asking the user
-to allow location access or provide a typed origin in the conversation.
+to allow location access or enable it in Settings. Free-form typed origins in
+Agent chat are a follow-up until the app can resolve and pass a signed typed
+origin sideband to the Agent Worker.
 Route-aware Agent tool outputs render typed result rows and route preview cards
 inline instead of raw JSON; route-preview cards lazy-load the existing MapLibre
 map only when route geometry and browser map support are available. Stored chat
@@ -326,8 +328,7 @@ Jobs and Sites route loaders read the same preference and fail closed if it is
 disabled or unavailable: Near me stays available, but current-location requests
 are replaced by the typed-origin flow. Agent chat checks the preference only
 when a prompt needs current location; disabled or unavailable preference state
-blocks geolocation and asks the user to enable location access or provide a
-typed origin.
+blocks geolocation and asks the user to enable location access.
 Feature-local form/search schemas live next to the feature that owns them, for
 example:
 

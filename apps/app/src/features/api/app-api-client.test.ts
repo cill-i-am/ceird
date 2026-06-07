@@ -32,6 +32,7 @@ import type {
   GooglePlacesSessionTokenType as ProximityGooglePlacesSessionTokenType,
   ProximityOriginAutocompleteResponse,
   ProximityOriginPlaceDetailsResponse,
+  TypedOrigin,
 } from "@ceird/proximity-core";
 import type {
   CreateSiteResponse,
@@ -211,6 +212,7 @@ const originPlaceDetailsResponse: ProximityOriginPlaceDetailsResponse = {
     coordinates: { latitude: 53.3478, longitude: -6.1956 },
     displayText: "Dublin Port, Dublin, Ireland",
     mode: "typed_origin",
+    originToken: "v1.typedOrigin.testSignature" as TypedOrigin["originToken"],
     placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4" as ProximityGooglePlaceIdType,
   },
 };

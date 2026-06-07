@@ -121,6 +121,7 @@ Common local and Alchemy variables include:
 | `DATABASE_URL`                                      | Package-local domain database URL.                                                                               |
 | `GOOGLE_MAPS_API_KEY`                               | Optional local Google Places key for site autocomplete/place details and fallback key for route-aware proximity. |
 | `GOOGLE_MAPS_ROUTES_API_KEY`                        | Optional dedicated Google Routes key for route-aware proximity; falls back to `GOOGLE_MAPS_API_KEY` when absent. |
+| `PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS`                | Optional TTL for server-signed typed-origin proofs; defaults to 15 minutes.                                      |
 | `AGENT_ACTION_RUN_STALE_AFTER_SECONDS`              | Agent action ledger stale-running recovery window.                                                               |
 | `AGENT_INTERNAL_SECRET`                             | Internal domain/Agent shared secret for package-local runs.                                                      |
 | `AGENT_AI_GATEWAY_ID`                               | Alchemy-managed Cloudflare AI Gateway ID used by the Agent Worker model provider.                                |
@@ -387,6 +388,7 @@ branch names.
 | `BETTER_AUTH_SECRETS`                               | unset           | Optional redacted Better Auth rotation material formatted as comma-delimited `<version>:<secret>` entries.                                                                                    |
 | `GOOGLE_MAPS_API_KEY`                               | required        | Google Maps key for deployed domain Worker Places/location lookup and fallback route-aware proximity calls.                                                                                   |
 | `GOOGLE_MAPS_ROUTES_API_KEY`                        | optional        | Dedicated Google Routes key for deployed route-aware proximity calls; falls back to `GOOGLE_MAPS_API_KEY` when absent.                                                                        |
+| `CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS`          | optional        | Optional deployed override for typed-origin proof TTL; maps to the domain Worker runtime `PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS`, which defaults to 15 minutes.                                  |
 | `CEIRD_HYPERDRIVE_NAME`                             | stage-dependent | Hyperdrive config name; the parent stage defaults to the adopted `ceird-production-postgres` config.                                                                                          |
 | `CEIRD_HYPERDRIVE_ORIGIN_CONNECTION_LIMIT`          | `5`             | Soft maximum Hyperdrive origin database connections.                                                                                                                                          |
 | `CEIRD_NEON_DATABASE_NAME`                          | `ceird`         | Database created in the parent Neon project.                                                                                                                                                  |

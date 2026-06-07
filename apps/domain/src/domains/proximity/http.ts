@@ -4,10 +4,12 @@ import {
   ProximityCostGuardError,
   ProximityOriginResolutionError,
   ProximityProviderError,
+  signProximityOriginToken,
 } from "@ceird/proximity-core";
 import type {
   ProximityOriginAutocompleteInput,
   ProximityOriginPlaceDetailsInput,
+  UnsignedTypedOrigin,
 } from "@ceird/proximity-core";
 import {
   GooglePlaceId as SiteGooglePlaceId,
@@ -22,7 +24,7 @@ import type {
   SiteLocationProviderError,
   SiteLocationResolutionError,
 } from "@ceird/sites-core";
-import { Effect, Layer, Schema } from "effect";
+import { Config, Effect, Layer, Schema } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 
 import { AppApi } from "../../http-api.js";
@@ -41,6 +43,7 @@ import { SiteLocationProvider } from "../sites/location-provider.js";
 const ORIGIN_LOOKUP_COST_GUARD_WINDOW_MS = 60_000;
 const ORIGIN_LOOKUP_COST_GUARD_ACTOR_LIMIT = 120;
 const ORIGIN_LOOKUP_COST_GUARD_ORGANIZATION_LIMIT = 2000;
+const DEFAULT_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS = 15 * 60;
 const originLookupCostGuardCounters = new Map<string, OriginLookupCounter>();
 
 interface OriginLookupCounter {
@@ -63,6 +66,26 @@ const observeProximityOperation = (operation: string) =>
     operation,
     service: "ProximityHttp",
   });
+
+const ProximityHttpConfig = Config.all({
+  originTokenSecret: Config.string("AGENT_INTERNAL_SECRET"),
+  originTokenTtlSeconds: Config.int("PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS").pipe(
+    Config.withDefault(DEFAULT_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS),
+    Config.mapOrFail(
+      decodePositiveIntegerConfig("PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS")
+    )
+  ),
+});
+const loadProximityHttpConfig = ProximityHttpConfig.pipe(
+  Effect.mapError(
+    () =>
+      new ProximityProviderError({
+        message: "Origin proof could not be issued.",
+        provider: "google_places",
+        reason: "origin_token_signing_failed",
+      })
+  )
+);
 
 const ProximityHandlersLive = HttpApiBuilder.group(
   AppApi,
@@ -168,15 +191,26 @@ const ProximityHandlersLive = HttpApiBuilder.group(
                 )
               );
 
+            const origin = {
+              coordinates: {
+                latitude: location.latitude,
+                longitude: location.longitude,
+              },
+              displayText: location.displayLocation,
+              mode: "typed_origin" as const,
+              placeId: decodeProximityGooglePlaceId(location.googlePlaceId),
+            } satisfies UnsignedTypedOrigin;
+            const config = yield* loadProximityHttpConfig;
+            const originToken = yield* signOriginToken({
+              origin,
+              originTokenSecret: config.originTokenSecret,
+              originTokenTtlSeconds: config.originTokenTtlSeconds,
+            });
+
             return {
               origin: {
-                coordinates: {
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                },
-                displayText: location.displayLocation,
-                mode: "typed_origin" as const,
-                placeId: decodeProximityGooglePlaceId(location.googlePlaceId),
+                ...origin,
+                originToken,
               },
             };
           }).pipe(observeProximityOperation("getOriginPlaceDetails"))
@@ -251,6 +285,40 @@ function reserveOriginLookup(actor: OrganizationActor) {
       error === undefined ? Effect.void : Effect.fail(error)
     )
   );
+}
+
+function signOriginToken(input: {
+  readonly origin: UnsignedTypedOrigin;
+  readonly originTokenSecret: string;
+  readonly originTokenTtlSeconds: number;
+}) {
+  return Effect.tryPromise({
+    catch: () =>
+      new ProximityProviderError({
+        message: "Origin proof could not be issued.",
+        provider: "google_places",
+        reason: "origin_token_signing_failed",
+      }),
+    try: () =>
+      signProximityOriginToken({
+        origin: input.origin,
+        secret: input.originTokenSecret,
+        ttlSeconds: input.originTokenTtlSeconds,
+      }),
+  });
+}
+
+function decodePositiveIntegerConfig(configKey: string) {
+  const schema = Schema.Int.check(
+    Schema.isGreaterThanOrEqualTo(1, {
+      message: `${configKey} must be a positive integer`,
+    })
+  );
+
+  return (value: number) =>
+    Schema.decodeUnknownEffect(schema)(value).pipe(
+      Effect.mapError((error) => new Config.ConfigError(error))
+    );
 }
 
 function toSiteAutocompleteInput(

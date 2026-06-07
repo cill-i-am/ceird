@@ -152,4 +152,13 @@ describe("Cloudflare Worker environment config", () => {
 
     expect(config.get("AGENT_ACTION_RUN_STALE_AFTER_SECONDS")).toBe("120");
   });
+
+  it("propagates the proximity origin token TTL override", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS: "600",
+    });
+
+    expect(config.get("PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS")).toBe("600");
+  });
 });

@@ -292,6 +292,7 @@ describe("sites-core", () => {
       coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
       displayText: "Grand Canal Dock, Dublin, Ireland",
       mode: "typed_origin",
+      originToken: "v1.typedOrigin.testSignature",
       placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
     };
     const decodedInput = Schema.decodeUnknownSync(SiteProximityInputSchema)({

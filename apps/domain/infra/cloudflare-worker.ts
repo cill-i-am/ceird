@@ -35,6 +35,7 @@ export interface DomainWorkerStageConfig {
   readonly mcpAuthorizedAppCacheMaxEntries?: number | undefined;
   readonly mcpAuthorizedAppCacheTtlSeconds?: number | undefined;
   readonly mcpHostname: string;
+  readonly proximityOriginTokenTtlSeconds?: number | undefined;
   readonly stage?: string | undefined;
   readonly tenantBaseDomain: string;
   readonly tenantTrustedOriginPattern: string | undefined;
@@ -103,6 +104,7 @@ export interface DomainWorkerConfiguredEnv {
   readonly MCP_RESOURCE_URL: string;
   readonly NODE_ENV: "production";
   readonly OAUTH_ISSUER_URL: string;
+  readonly PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS?: string | undefined;
 }
 
 function optionalDomainWorkerEnv<
@@ -312,6 +314,12 @@ export function makeDomainWorkerEnv(input: {
       "MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS",
       stringifiedNumberWorkerEnvValue(
         input.config.mcpAuthorizedAppCacheTtlSeconds
+      )
+    ),
+    ...optionalDomainWorkerEnv(
+      "PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS",
+      stringifiedNumberWorkerEnvValue(
+        input.config.proximityOriginTokenTtlSeconds
       )
     ),
     MCP_RESOURCE_URL: `${mcpOrigin}/mcp`,

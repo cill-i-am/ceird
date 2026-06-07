@@ -37,6 +37,7 @@ export interface DomainWorkerConfigEnv {
   readonly MCP_RESOURCE_URL?: string;
   readonly NODE_ENV?: string;
   readonly OAUTH_ISSUER_URL?: string;
+  readonly PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS?: string;
 }
 
 export type DomainWorkerEnv = DomainWorkerBindingRuntimeEnv &
@@ -81,6 +82,8 @@ export function domainWorkerEnvConfigMap(env: DomainWorkerEnv) {
       MCP_RESOURCE_URL: env.MCP_RESOURCE_URL,
       NODE_ENV: env.NODE_ENV,
       OAUTH_ISSUER_URL: env.OAUTH_ISSUER_URL,
+      PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS:
+        env.PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS,
     }).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string"
     )

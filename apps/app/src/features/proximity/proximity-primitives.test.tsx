@@ -40,6 +40,7 @@ const typedOrigin: TypedOrigin = {
   },
   displayText: "Dublin Port, Dublin, Ireland",
   mode: "typed_origin",
+  originToken: "v1.typedOrigin.testSignature" as TypedOrigin["originToken"],
   placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4" as TypedOrigin["placeId"],
 };
 

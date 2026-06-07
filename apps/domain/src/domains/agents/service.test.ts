@@ -172,6 +172,103 @@ describe("agent threads service", () => {
     expect(actionCalls).toBe(1);
   });
 
+  it("does not include current-location coordinates in proximity action replay keys", async () => {
+    let actionCalls = 0;
+    let storedInput: BeginAgentActionRunInput["input"] | undefined;
+    const firstInput = {
+      limit: 10,
+      origin: {
+        coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+        mode: "current_location",
+      },
+    };
+    const secondInput = {
+      limit: 10,
+      origin: {
+        coordinates: { latitude: 53.4, longitude: -6.3 },
+        mode: "current_location",
+      },
+    };
+
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+          const first = yield* service.runAction({
+            input: firstInput,
+            name: "ceird.jobs.proximity",
+            operationId,
+            threadId,
+          });
+          const second = yield* service.runAction({
+            input: secondInput,
+            name: "ceird.jobs.proximity",
+            operationId,
+            threadId,
+          });
+
+          return { first, second };
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.sync(() => {
+                actionCalls += 1;
+
+                return { rows: [] };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.sync(() => {
+                if (storedInput === undefined) {
+                  storedInput = input.input;
+
+                  return {
+                    inserted: true,
+                    run: makeBeginRun(input),
+                  };
+                }
+
+                return {
+                  inserted: false,
+                  run: makeBeginRun(
+                    {
+                      ...input,
+                      input: storedInput,
+                    },
+                    {
+                      result: null,
+                      status: "succeeded",
+                    }
+                  ),
+                };
+              }),
+            completeSucceeded: () =>
+              Effect.succeed(
+                makeActionRun({
+                  actionKind: "read",
+                  actionName: "ceird.jobs.proximity",
+                  result: null,
+                  status: "succeeded",
+                })
+              ),
+          },
+        }
+      )
+    );
+
+    expect(response.first).toMatchObject({
+      replayed: false,
+      result: { rows: [] },
+    });
+    expect(response.second).toMatchObject({
+      replayed: true,
+      result: { rows: [] },
+    });
+    expect(actionCalls).toBe(2);
+  });
+
   it("rejects replayed operation ids with different inputs before executing", async () => {
     let actionCalls = 0;
     const error = await Effect.runPromise(
