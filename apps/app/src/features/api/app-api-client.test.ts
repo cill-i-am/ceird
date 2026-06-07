@@ -311,6 +311,30 @@ describe("app API client", () => {
     expect(requestInit?.credentials).toBe("include");
   }, 1000);
 
+  it("uses the local app proxy base path for app.localhost browser clients", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(listResponse));
+
+    const client = await makeBrowserAppApiClient(
+      "http://app.localhost:1337"
+    ).pipe(provideBrowserAppApiHttp, Effect.runPromise);
+
+    await expect(
+      client.jobs
+        .listJobs({
+          query: {},
+        })
+        .pipe(provideBrowserAppApiHttp, Effect.runPromise)
+    ).resolves.toStrictEqual(listResponse);
+
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(String(url)).toBe("http://app.localhost:1337/api/jobs");
+    expect(requestInit?.method).toBe("GET");
+    expect(requestInit?.credentials).toBe("include");
+  }, 1000);
+
   it("creates standalone sites through the shared Ceird API client", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

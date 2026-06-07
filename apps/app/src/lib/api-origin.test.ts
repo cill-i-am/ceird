@@ -1,4 +1,8 @@
-import { resolveApiOrigin } from "./api-origin";
+import {
+  resolveApiOrigin,
+  resolveBrowserApiOrigin,
+  resolveBrowserAppApiBaseURL,
+} from "./api-origin";
 import { readConfiguredServerApiOrigin } from "./api-origin.server";
 
 describe("api origin resolution", () => {
@@ -49,6 +53,39 @@ describe("api origin resolution", () => {
     expect(resolveApiOrigin("http://app.localhost:1337")).toBe(
       "http://api.localhost:1337"
     );
+  }, 1000);
+
+  it("keeps browser requests same-origin for local Alchemy app hosts", () => {
+    expect(
+      resolveBrowserApiOrigin(
+        "http://app.localhost:1337",
+        "http://api.localhost:1337"
+      )
+    ).toBe("http://app.localhost:1337");
+  }, 1000);
+
+  it("uses the app proxy base path for local Alchemy browser API requests", () => {
+    expect(
+      resolveBrowserAppApiBaseURL(
+        "http://app.localhost:1337",
+        "http://api.localhost:1337"
+      )
+    ).toBe("http://app.localhost:1337/api");
+  }, 1000);
+
+  it("uses the configured browser API origin outside the local app proxy", () => {
+    expect(
+      resolveBrowserApiOrigin(
+        "https://app.ceird.example.com",
+        "https://api.ceird.example.com"
+      )
+    ).toBe("https://api.ceird.example.com");
+    expect(
+      resolveBrowserAppApiBaseURL(
+        "https://app.ceird.example.com",
+        "https://api.ceird.example.com"
+      )
+    ).toBe("https://api.ceird.example.com");
   }, 1000);
 
   it("returns undefined when no origin is available", () => {

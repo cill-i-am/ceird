@@ -15,7 +15,10 @@ import {
 } from "effect/unstable/http";
 import { HttpApi, HttpApiClient } from "effect/unstable/httpapi";
 
-import { resolveApiOrigin } from "#/lib/api-origin";
+import {
+  resolveApiOrigin,
+  resolveBrowserAppApiBaseURL,
+} from "#/lib/api-origin";
 import type { ServerApiForwardedHeaders } from "#/lib/server-api-forwarded-headers";
 
 import {
@@ -43,6 +46,7 @@ const AppApiHttpClientLive = Layer.mergeAll(
 );
 
 export interface AppApiClientOptions {
+  readonly apiBaseUrl?: string | undefined;
   readonly requestOrigin?: string | undefined;
   readonly apiOrigin?: string | undefined;
   readonly cookie?: string | undefined;
@@ -56,7 +60,7 @@ function resolveAppApiOrigin(
 }
 
 function makeAppApiClient(options: AppApiClientOptions = {}) {
-  const apiOrigin = resolveAppApiOrigin(options);
+  const apiOrigin = options.apiBaseUrl ?? resolveAppApiOrigin(options);
 
   if (!apiOrigin) {
     return Effect.fail(
@@ -79,7 +83,10 @@ export function makeBrowserAppApiClient(origin?: string | undefined) {
     origin ??
     (typeof window === "undefined" ? undefined : window.location.origin);
 
-  return makeAppApiClient({ requestOrigin });
+  return makeAppApiClient({
+    apiBaseUrl: resolveBrowserAppApiBaseURL(requestOrigin),
+    requestOrigin,
+  });
 }
 
 const BrowserAppApiHttpClientLive = Layer.mergeAll(
