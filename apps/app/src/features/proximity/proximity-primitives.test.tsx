@@ -29,8 +29,8 @@ import {
 
 const currentLocationCoordinates: BrowserGeolocationCoordinates = {
   accuracy: 18,
-  latitude: 53.349805,
-  longitude: -6.26031,
+  latitude: 53.349_805,
+  longitude: -6.260_31,
 };
 
 const typedOrigin: TypedOrigin = {
@@ -54,8 +54,8 @@ describe("proximity shared primitives", () => {
 
   it("defaults result limits to 10 and only allows supported UI limits", () => {
     expect(DEFAULT_PROXIMITY_RESULT_LIMIT).toBe(10);
-    expect(PROXIMITY_RESULT_LIMIT_OPTIONS).toEqual([10, 15, 20, 25]);
-    expect(normalizeProximityResultLimit(undefined)).toBe(10);
+    expect(PROXIMITY_RESULT_LIMIT_OPTIONS).toStrictEqual([10, 15, 20, 25]);
+    expect(normalizeProximityResultLimit()).toBe(10);
     expect(normalizeProximityResultLimit("15")).toBe(15);
     expect(normalizeProximityResultLimit(25)).toBe(25);
     expect(normalizeProximityResultLimit("100")).toBe(10);
@@ -80,7 +80,7 @@ describe("proximity shared primitives", () => {
         limit: 15,
         originState: { origin, status: "current_location_ready" },
       })
-    ).toEqual({
+    ).toStrictEqual({
       includeRouteLines: true,
       limit: 15,
       origin,
@@ -91,7 +91,7 @@ describe("proximity shared primitives", () => {
         origin: typedOrigin,
         status: "typed_origin_selected",
       })
-    ).toEqual(typedOrigin);
+    ).toStrictEqual(typedOrigin);
   });
 
   it("maps browser current location to the current-location origin without persisting coordinates", async () => {
@@ -105,11 +105,11 @@ describe("proximity shared primitives", () => {
       )
     );
 
-    expect(resolvedOrigin).toEqual({
+    expect(resolvedOrigin).toStrictEqual({
       accuracyMeters: 18,
       coordinates: {
-        latitude: 53.349805,
-        longitude: -6.26031,
+        latitude: 53.349_805,
+        longitude: -6.260_31,
       },
       mode: "current_location",
     });
@@ -203,7 +203,7 @@ describe("proximity shared primitives", () => {
         provider: "default",
       })
     ).toMatch(/^maps:\/\//);
-    expect(
+    const androidUrl = new URL(
       buildMapsHandoffUrl({
         destination,
         destinationLabel: "14 Willow Close",
@@ -211,6 +211,10 @@ describe("proximity shared primitives", () => {
         platformUserAgent: "Mozilla/5.0 (Linux; Android 15; Pixel)",
         provider: "default",
       })
-    ).toMatch(/^geo:/);
+    );
+    expect(androidUrl.origin).toBe("https://www.google.com");
+    expect(androidUrl.searchParams.get("origin")).toBe("53.349805,-6.26031");
+    expect(androidUrl.searchParams.get("destination")).toBe("53.351,-6.255");
+    expect(androidUrl.searchParams.get("travelmode")).toBe("driving");
   });
 });

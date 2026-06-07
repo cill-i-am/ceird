@@ -1,14 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import type {
-  JobListItem,
-  JobProximityInput,
-  JobProximityResponse,
-  UserIdType,
-  WorkItemIdType,
-} from "@ceird/jobs-core";
-import type { LabelIdType } from "@ceird/labels-core";
-import type {
   CurrentLocationOrigin,
   GooglePlaceIdType,
   ProximityOriginAutocompleteInput,
@@ -17,7 +9,11 @@ import type {
   ProximityOriginPlaceDetailsInput,
   ProximityOriginPlaceDetailsResponse,
 } from "@ceird/proximity-core";
-import type { SiteIdType } from "@ceird/sites-core";
+import type {
+  SiteIdType,
+  SiteProximityInput,
+  SiteProximityResponse,
+} from "@ceird/sites-core";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
@@ -29,12 +25,11 @@ import type { AppApiError } from "#/features/api/app-api-errors";
 import { BrowserGeolocationPermissionDeniedError } from "#/lib/browser-geolocation";
 import type { BrowserGeolocationError } from "#/lib/browser-geolocation";
 
-import type { JobsProximityPanelProps } from "./jobs-proximity-panel";
-import type { JobsListFilters } from "./jobs-state";
+import type { SitesProximityPanelProps } from "./sites-proximity-panel";
 
 const {
   mockedAutocompleteProximityOrigin,
-  mockedRankNearbyJobs,
+  mockedRankNearbySites,
   mockedRequestCurrentLocationOrigin,
   mockedResolveProximityOriginPlace,
 } = vi.hoisted(() => ({
@@ -44,11 +39,11 @@ const {
         input: ProximityOriginAutocompleteInput
       ) => Effect.Effect<ProximityOriginAutocompleteResponse, AppApiError>
     >(),
-  mockedRankNearbyJobs:
+  mockedRankNearbySites:
     vi.fn<
       (
-        input: JobProximityInput
-      ) => Effect.Effect<JobProximityResponse, AppApiError>
+        input: SiteProximityInput
+      ) => Effect.Effect<SiteProximityResponse, AppApiError>
     >(),
   mockedRequestCurrentLocationOrigin:
     vi.fn<
@@ -86,7 +81,7 @@ vi.mock(import("#/features/proximity/proximity-api"), async (importActual) => {
   return {
     ...actual,
     autocompleteProximityOrigin: mockedAutocompleteProximityOrigin,
-    rankNearbyJobs: mockedRankNearbyJobs,
+    rankNearbySites: mockedRankNearbySites,
     resolveProximityOriginPlace: mockedResolveProximityOriginPlace,
   };
 });
@@ -95,11 +90,7 @@ vi.mock(import("#/features/proximity/proximity-location-access"), () => ({
   requestCurrentLocationOrigin: mockedRequestCurrentLocationOrigin,
 }));
 
-vi.mock(import("./jobs-proximity-map"), () => ({
-  JobsProximityMap: () => <div data-testid="jobs-proximity-map" />,
-}));
-
-describe("jobs proximity panel", () => {
+describe("sites proximity panel", () => {
   beforeEach(() => {
     mockedAutocompleteProximityOrigin.mockReturnValue(
       Effect.succeed({
@@ -112,7 +103,7 @@ describe("jobs proximity panel", () => {
         ],
       })
     );
-    mockedRankNearbyJobs.mockReturnValue(Effect.succeed(buildResponse()));
+    mockedRankNearbySites.mockReturnValue(Effect.succeed(buildResponse()));
     mockedRequestCurrentLocationOrigin.mockReturnValue(
       Effect.succeed(currentLocationOrigin)
     );
@@ -134,37 +125,14 @@ describe("jobs proximity panel", () => {
   });
 
   it("does not request location or route ranking while inactive", async () => {
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
-    const onActiveChange = vi.fn<(active: boolean) => void>();
-    const onClearFilters = vi.fn<() => void>();
-    const onLimitChange = vi.fn<(limit: 10 | 15 | 20 | 25) => void>();
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
 
     render(
-      <JobsProximityPanel
+      <SitesProximityPanel
         active={false}
-        filters={defaultFilters}
         limit={10}
-        viewMode="list"
-        onActiveChange={onActiveChange}
-        onClearFilters={onClearFilters}
-        onLimitChange={onLimitChange}
-      />
-    );
-
-    expect(mockedRequestCurrentLocationOrigin).not.toHaveBeenCalled();
-    expect(mockedRankNearbyJobs).not.toHaveBeenCalled();
-  });
-
-  it("does not request current location from URL-activated Near me until the user confirms", async () => {
-    const user = userEvent.setup();
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
-
-    render(
-      <JobsProximityPanel
-        active
-        filters={defaultFilters}
-        limit={10}
-        viewMode="list"
+        mapFilter="all"
+        query=""
         onActiveChange={vi.fn<(active: boolean) => void>()}
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
@@ -172,7 +140,27 @@ describe("jobs proximity panel", () => {
     );
 
     expect(mockedRequestCurrentLocationOrigin).not.toHaveBeenCalled();
-    expect(mockedRankNearbyJobs).not.toHaveBeenCalled();
+    expect(mockedRankNearbySites).not.toHaveBeenCalled();
+  });
+
+  it("does not request current location from URL-activated Near me until the user confirms", async () => {
+    const user = userEvent.setup();
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
+
+    render(
+      <SitesProximityPanel
+        active
+        limit={10}
+        mapFilter="all"
+        query=""
+        onActiveChange={vi.fn<(active: boolean) => void>()}
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      />
+    );
+
+    expect(mockedRequestCurrentLocationOrigin).not.toHaveBeenCalled();
+    expect(mockedRankNearbySites).not.toHaveBeenCalled();
     expect(screen.getByText("Choose where routes start")).toBeVisible();
 
     await user.click(
@@ -180,7 +168,7 @@ describe("jobs proximity panel", () => {
     );
 
     await waitFor(() => {
-      expect(mockedRankNearbyJobs).toHaveBeenCalledWith(
+      expect(mockedRankNearbySites).toHaveBeenCalledWith(
         expect.objectContaining({
           origin: currentLocationOrigin,
         })
@@ -188,23 +176,16 @@ describe("jobs proximity panel", () => {
     });
   });
 
-  it("requests current location and ranks filtered jobs when Near me is selected", async () => {
+  it("requests current location and ranks query-filtered mapped sites", async () => {
     const user = userEvent.setup();
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
 
     render(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={{
-          ...defaultFilters,
-          assigneeId: { kind: "user", userId },
-          labelId,
-          priority: "urgent",
-          query: "boiler",
-          siteId,
-        }}
-        limit={10}
-        viewMode="list"
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
+        limit={25}
+        mapFilter="mapped"
+        query="boiler"
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
       />
@@ -213,36 +194,53 @@ describe("jobs proximity panel", () => {
     await user.click(screen.getByRole("button", { name: /near me/i }));
 
     await waitFor(() => {
-      expect(mockedRankNearbyJobs).toHaveBeenCalledWith({
-        filters: {
-          assigneeId: { kind: "user", userId },
-          labelId,
-          priority: "urgent",
-          query: "boiler",
-          siteId,
-          status: "active",
-        },
+      expect(mockedRankNearbySites).toHaveBeenCalledWith({
+        filters: { query: "boiler" },
         includeRouteLines: false,
-        limit: 10,
+        limit: 25,
         origin: currentLocationOrigin,
       });
     });
     await expect(
-      screen.findByText("Replace boiler pump")
+      screen.findByRole("heading", { name: "Dublin Estate" })
     ).resolves.toBeVisible();
     expect(screen.getByText("14 min")).toBeVisible();
   });
 
-  it("requests route lines when the Jobs page is in map mode", async () => {
+  it("keeps ordinary site controls visible after route ranking succeeds", async () => {
     const user = userEvent.setup();
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
 
     render(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={defaultFilters}
-        limit={25}
-        viewMode="map"
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
+        limit={10}
+        mapFilter="all"
+        query=""
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      >
+        <label htmlFor="sites-search-control">Search sites</label>
+        <input id="sites-search-control" />
+      </ControlledSitesProximityPanel>
+    );
+
+    await user.click(screen.getByRole("button", { name: /near me/i }));
+    await screen.findByRole("heading", { name: "Dublin Estate" });
+
+    expect(screen.getByLabelText("Search sites")).toBeVisible();
+  });
+
+  it("does not call route ranking when the unmapped filter is active", async () => {
+    const user = userEvent.setup();
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
+
+    render(
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
+        limit={10}
+        mapFilter="unmapped"
+        query=""
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
       />
@@ -250,155 +248,29 @@ describe("jobs proximity panel", () => {
 
     await user.click(screen.getByRole("button", { name: /near me/i }));
 
-    await waitFor(() => {
-      expect(mockedRankNearbyJobs).toHaveBeenCalledWith(
-        expect.objectContaining({
-          includeRouteLines: true,
-          limit: 25,
-        })
-      );
-    });
-  });
-
-  it("reuses map route results when switching back to list mode", async () => {
-    const user = userEvent.setup();
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
-    const onClearFilters = vi.fn<() => void>();
-    const onLimitChange = vi.fn<(limit: 10 | 15 | 20 | 25) => void>();
-    const { rerender } = render(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={defaultFilters}
-        limit={10}
-        viewMode="map"
-        onClearFilters={onClearFilters}
-        onLimitChange={onLimitChange}
-      />
-    );
-
-    await user.click(screen.getByRole("button", { name: /near me/i }));
-
-    await waitFor(() => {
-      expect(mockedRankNearbyJobs).toHaveBeenCalledOnce();
-    });
-    expect(mockedRankNearbyJobs).toHaveBeenLastCalledWith(
-      expect.objectContaining({ includeRouteLines: true })
-    );
-
-    rerender(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={defaultFilters}
-        limit={10}
-        viewMode="list"
-        onClearFilters={onClearFilters}
-        onLimitChange={onLimitChange}
-      />
-    );
-
-    await delay(450);
-
-    expect(mockedRankNearbyJobs).toHaveBeenCalledOnce();
-    expect(screen.getByText("Replace boiler pump")).toBeVisible();
-  });
-
-  it("fetches route line enrichment when switching from list results to map mode", async () => {
-    const user = userEvent.setup();
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
-    const onClearFilters = vi.fn<() => void>();
-    const onLimitChange = vi.fn<(limit: 10 | 15 | 20 | 25) => void>();
-    const { rerender } = render(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={defaultFilters}
-        limit={10}
-        viewMode="list"
-        onClearFilters={onClearFilters}
-        onLimitChange={onLimitChange}
-      />
-    );
-
-    await user.click(screen.getByRole("button", { name: /near me/i }));
-
-    await waitFor(() => {
-      expect(mockedRankNearbyJobs).toHaveBeenCalledOnce();
-    });
-    expect(mockedRankNearbyJobs).toHaveBeenLastCalledWith(
-      expect.objectContaining({ includeRouteLines: false })
-    );
-
-    rerender(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={defaultFilters}
-        limit={10}
-        viewMode="map"
-        onClearFilters={onClearFilters}
-        onLimitChange={onLimitChange}
-      />
-    );
-
-    await waitFor(() => {
-      expect(mockedRankNearbyJobs).toHaveBeenCalledTimes(2);
-    });
-    expect(mockedRankNearbyJobs).toHaveBeenLastCalledWith(
-      expect.objectContaining({ includeRouteLines: true })
-    );
-  });
-
-  it("hides stale route-ranked rows immediately when active filters change", async () => {
-    const user = userEvent.setup();
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
-    const onClearFilters = vi.fn<() => void>();
-    const onLimitChange = vi.fn<(limit: 10 | 15 | 20 | 25) => void>();
-    const { rerender } = render(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={defaultFilters}
-        limit={10}
-        viewMode="list"
-        onClearFilters={onClearFilters}
-        onLimitChange={onLimitChange}
-      />
-    );
-
-    await user.click(screen.getByRole("button", { name: /near me/i }));
     await expect(
-      screen.findByText("Replace boiler pump")
+      screen.findByText("Nearby sites are mapped sites")
     ).resolves.toBeVisible();
-
-    rerender(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={{ ...defaultFilters, query: "sink" }}
-        limit={10}
-        viewMode="list"
-        onClearFilters={onClearFilters}
-        onLimitChange={onLimitChange}
-      />
-    );
-
-    expect(screen.queryByText("Replace boiler pump")).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toBeVisible();
+    expect(mockedRankNearbySites).not.toHaveBeenCalled();
   });
 
   it("shows safe copy instead of raw transport failures", async () => {
     const user = userEvent.setup();
-    mockedRankNearbyJobs.mockReturnValue(
+    mockedRankNearbySites.mockReturnValue(
       Effect.fail(
         new AppApiRequestError({
           message: "https://internal.example.test/google/routes failed",
         })
       )
     );
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
 
     render(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={defaultFilters}
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
         limit={10}
-        viewMode="list"
+        mapFilter="all"
+        query=""
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
       />
@@ -407,11 +279,11 @@ describe("jobs proximity panel", () => {
     await user.click(screen.getByRole("button", { name: /near me/i }));
 
     await expect(
-      screen.findByText("Nearby jobs could not be ranked")
+      screen.findByText("Nearby sites could not be ranked")
     ).resolves.toBeVisible();
     expect(
       screen.getByText(
-        "The route provider could not calculate traffic-aware driving times. Ordinary jobs are still available."
+        "The route provider could not calculate traffic-aware driving times. Ordinary sites are still available."
       )
     ).toBeVisible();
     expect(screen.queryByText(/internal\.example/i)).not.toBeInTheDocument();
@@ -426,14 +298,14 @@ describe("jobs proximity panel", () => {
         })
       )
     );
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
 
     render(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={defaultFilters}
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
         limit={10}
-        viewMode="list"
+        mapFilter="all"
+        query=""
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
       />
@@ -447,7 +319,37 @@ describe("jobs proximity panel", () => {
     expect(
       screen.getByText(/Ceird could not get your current location/i)
     ).toBeVisible();
-    expect(mockedRankNearbyJobs).not.toHaveBeenCalled();
+    expect(mockedRankNearbySites).not.toHaveBeenCalled();
+  });
+
+  it("interrupts a live current-location request when Near me is disabled", async () => {
+    const user = userEvent.setup();
+    const currentLocationRequest = makeNeverCurrentLocationRequest();
+    mockedRequestCurrentLocationOrigin.mockReturnValue(
+      currentLocationRequest.effect
+    );
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
+
+    render(
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
+        limit={10}
+        mapFilter="all"
+        query=""
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /near me/i }));
+    await waitFor(() => {
+      expect(mockedRequestCurrentLocationOrigin).toHaveBeenCalledOnce();
+    });
+    await user.click(screen.getByRole("button", { name: /near me/i }));
+
+    await waitFor(() => {
+      expect(currentLocationRequest.wasInterrupted()).toBeTruthy();
+    });
   });
 
   it("ignores stale current-location results after Near me is disabled", async () => {
@@ -456,14 +358,14 @@ describe("jobs proximity panel", () => {
     mockedRequestCurrentLocationOrigin
       .mockReturnValueOnce(firstOriginRequest.effect)
       .mockReturnValue(Effect.succeed(currentLocationOrigin));
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
 
     render(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={defaultFilters}
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
         limit={10}
-        viewMode="list"
+        mapFilter="all"
+        query=""
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
       />
@@ -472,16 +374,9 @@ describe("jobs proximity panel", () => {
     await user.click(screen.getByRole("button", { name: /near me/i }));
     await user.click(screen.getByRole("button", { name: /near me/i }));
     firstOriginRequest.resolve(currentLocationOrigin);
+    await delay(450);
 
-    await waitFor(() => {
-      expect(mockedRankNearbyJobs).not.toHaveBeenCalled();
-    });
-
-    await user.click(screen.getByRole("button", { name: /near me/i }));
-
-    await waitFor(() => {
-      expect(mockedRequestCurrentLocationOrigin).toHaveBeenCalledTimes(2);
-    });
+    expect(mockedRankNearbySites).not.toHaveBeenCalled();
   });
 
   it("shows typed-origin resolution failures in the origin dialog", async () => {
@@ -500,14 +395,14 @@ describe("jobs proximity panel", () => {
         })
       )
     );
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
 
     render(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={defaultFilters}
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
         limit={10}
-        viewMode="list"
+        mapFilter="all"
+        query=""
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
       />
@@ -549,16 +444,16 @@ describe("jobs proximity panel", () => {
     mockedResolveProximityOriginPlace.mockReturnValue(
       placeDetailsRequest.effect
     );
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
     const onActiveChange = vi.fn<(active: boolean) => void>();
     const onClearFilters = vi.fn<() => void>();
     const onLimitChange = vi.fn<(limit: 10 | 15 | 20 | 25) => void>();
     const { rerender } = render(
-      <JobsProximityPanel
+      <SitesProximityPanel
         active
-        filters={defaultFilters}
         limit={10}
-        viewMode="list"
+        mapFilter="all"
+        query=""
         onActiveChange={onActiveChange}
         onClearFilters={onClearFilters}
         onLimitChange={onLimitChange}
@@ -585,11 +480,11 @@ describe("jobs proximity panel", () => {
       screen.getByRole("button", { name: "Use selected origin" })
     );
     rerender(
-      <JobsProximityPanel
+      <SitesProximityPanel
         active={false}
-        filters={defaultFilters}
         limit={10}
-        viewMode="list"
+        mapFilter="all"
+        query=""
         onActiveChange={onActiveChange}
         onClearFilters={onClearFilters}
         onLimitChange={onLimitChange}
@@ -604,10 +499,61 @@ describe("jobs proximity panel", () => {
         placeId: dublinPortPlaceId,
       },
     });
+    await delay(450);
+
+    expect(mockedRankNearbySites).not.toHaveBeenCalled();
+  });
+
+  it("ignores autocomplete failures without showing raw provider errors", async () => {
+    const user = userEvent.setup();
+    mockedRequestCurrentLocationOrigin.mockReturnValue(
+      Effect.fail(
+        new BrowserGeolocationPermissionDeniedError({
+          message: "Location permission was denied.",
+        })
+      )
+    );
+    mockedAutocompleteProximityOrigin.mockReturnValue(
+      Effect.fail(
+        new AppApiRequestError({
+          message: "https://internal.example.test/places/autocomplete failed",
+        })
+      )
+    );
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
+
+    render(
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
+        limit={10}
+        mapFilter="all"
+        query=""
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /near me/i }));
+    await screen.findByText("Current location unavailable");
+    await user.click(
+      within(screen.getByRole("status")).getByRole("button", {
+        name: "Change origin",
+      })
+    );
+    await user.type(
+      screen.getByLabelText("Search address, Eircode or place"),
+      "Dublin"
+    );
 
     await waitFor(() => {
-      expect(mockedRankNearbyJobs).not.toHaveBeenCalled();
+      expect(mockedAutocompleteProximityOrigin).toHaveBeenCalledWith(
+        expect.objectContaining({ input: "Dublin" })
+      );
     });
+    expect(
+      screen.getByText("Search and select a result before running Near me.")
+    ).toBeVisible();
+    expect(screen.queryByText(/internal\.example/i)).not.toBeInTheDocument();
   });
 
   it("clears stale origin suggestions before a later autocomplete failure", async () => {
@@ -638,14 +584,14 @@ describe("jobs proximity panel", () => {
           })
         )
       );
-    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
 
     render(
-      <ControlledJobsProximityPanel
-        Component={JobsProximityPanel}
-        filters={defaultFilters}
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
         limit={10}
-        viewMode="list"
+        mapFilter="all"
+        query=""
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
       />
@@ -677,47 +623,34 @@ describe("jobs proximity panel", () => {
   });
 });
 
-type JobsProximityPanelComponent = React.ComponentType<JobsProximityPanelProps>;
+type SitesProximityPanelComponent =
+  React.ComponentType<SitesProximityPanelProps>;
 
-function ControlledJobsProximityPanel({
+function ControlledSitesProximityPanel({
+  children,
   Component,
   ...props
-}: Omit<JobsProximityPanelProps, "active" | "onActiveChange"> & {
-  readonly Component: JobsProximityPanelComponent;
+}: Omit<SitesProximityPanelProps, "active" | "onActiveChange"> & {
+  readonly children?: React.ReactNode;
+  readonly Component: SitesProximityPanelComponent;
 }) {
   const [active, setActive] = React.useState(false);
 
-  return <Component {...props} active={active} onActiveChange={setActive} />;
+  return (
+    <Component {...props} active={active} onActiveChange={setActive}>
+      {children}
+    </Component>
+  );
 }
 
-const userId = "user_123" as UserIdType;
-const labelId = "label_123" as LabelIdType;
 const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
-const jobId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
 const dublinPortPlaceId = "ChIJDublinPort" as GooglePlaceIdType;
-
-const heatingLabel = {
-  createdAt: "2026-06-06T09:00:00.000Z",
-  id: labelId,
-  name: "Heating",
-  updatedAt: "2026-06-06T09:00:00.000Z",
-};
 
 const currentLocationOrigin = {
   accuracyMeters: 8,
   coordinates: { latitude: 53.3498, longitude: -6.2603 },
   mode: "current_location",
 } satisfies ProximityOriginInput;
-
-const defaultFilters = {
-  assigneeId: { kind: "all" },
-  coordinatorId: "all",
-  labelId: "all",
-  priority: "all",
-  query: "",
-  siteId: "all",
-  status: "active",
-} satisfies JobsListFilters;
 
 function makeCurrentLocationRequest() {
   const pending = Promise.withResolvers<CurrentLocationOrigin>();
@@ -727,6 +660,24 @@ function makeCurrentLocationRequest() {
     effect,
     resolve(origin: CurrentLocationOrigin) {
       pending.resolve(origin);
+    },
+  };
+}
+
+function makeNeverCurrentLocationRequest() {
+  let interrupted = false;
+  const effect = Effect.never.pipe(
+    Effect.ensuring(
+      Effect.sync(() => {
+        interrupted = true;
+      })
+    )
+  ) as Effect.Effect<CurrentLocationOrigin, BrowserGeolocationError>;
+
+  return {
+    effect,
+    wasInterrupted() {
+      return interrupted;
     },
   };
 }
@@ -743,7 +694,7 @@ function makePlaceDetailsRequest() {
   };
 }
 
-function buildResponse(): JobProximityResponse {
+function buildResponse(): SiteProximityResponse {
   return {
     meta: {
       candidateCount: 1,
@@ -760,7 +711,8 @@ function buildResponse(): JobProximityResponse {
     },
     rows: [
       {
-        job: buildJob(),
+        activeJobCount: 2,
+        highestActiveJobPriority: "urgent",
         routeSummary: {
           computedAt: "2026-06-06T12:00:00.000Z",
           distanceMeters: 1800,
@@ -774,7 +726,7 @@ function buildResponse(): JobProximityResponse {
           displayLocation: "Dublin Estate",
           hasUsableCoordinates: true,
           id: siteId,
-          labels: [heatingLabel],
+          labels: [],
           latitude: 53.36,
           locationStatus: "google_resolved",
           longitude: -6.24,
@@ -782,19 +734,5 @@ function buildResponse(): JobProximityResponse {
         },
       },
     ],
-  };
-}
-
-function buildJob(): JobListItem {
-  return {
-    createdAt: "2026-06-06T10:00:00.000Z",
-    id: jobId,
-    kind: "job",
-    labels: [heatingLabel],
-    priority: "urgent",
-    siteId,
-    status: "triaged",
-    title: "Replace boiler pump",
-    updatedAt: "2026-06-06T11:00:00.000Z",
   };
 }

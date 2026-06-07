@@ -1,4 +1,5 @@
 "use client";
+import type { ProximityLimit } from "@ceird/proximity-core";
 import type { SitesOptionsResponse } from "@ceird/sites-core";
 import {
   Add01Icon,
@@ -55,8 +56,9 @@ import { openWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-
 import { useIsMobile } from "#/hooks/use-mobile";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
-import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
+import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
 
+import { SitesProximityPanel } from "./sites-proximity-panel";
 import { useSitesNotice, useSitesOptions } from "./sites-state";
 
 const SITE_COMMAND_LIMIT = 25;
@@ -69,15 +71,23 @@ interface SiteDirectoryViewItem {
   readonly site: SiteDirectoryItem;
 }
 
-type SitesMapFilter = "all" | "mapped" | "unmapped";
+export type SitesMapFilter = "all" | "mapped" | "unmapped";
 
 // Route-level page coordinates filters, commands, responsive layout, and nested route outlet.
 // react-doctor-disable-next-line
 export function SitesPage({
+  nearMeEnabled: controlledNearMeEnabled,
+  onNearMeChange,
+  onRouteLimitChange,
   routeHotkeysEnabled = true,
+  routeLimit: controlledRouteLimit,
   viewer,
 }: {
+  readonly nearMeEnabled?: boolean | undefined;
+  readonly onNearMeChange?: (value: boolean) => void;
+  readonly onRouteLimitChange?: (value: ProximityLimit) => void;
   readonly routeHotkeysEnabled?: boolean;
+  readonly routeLimit?: ProximityLimit | undefined;
   readonly viewer: OrganizationViewer;
 }) {
   const navigate = useNavigate({ from: "/sites" });
@@ -85,6 +95,16 @@ export function SitesPage({
   const [notice, clearNotice] = useSitesNotice();
   const canCreateSites = hasOrganizationElevatedAccess(viewer.role);
   const isMobile = useIsMobile();
+  const [uncontrolledNearMeEnabled, setUncontrolledNearMeEnabled] =
+    React.useState(false);
+  const nearMeEnabled = controlledNearMeEnabled ?? uncontrolledNearMeEnabled;
+  const [uncontrolledRouteLimit, setUncontrolledRouteLimit] =
+    React.useState<ProximityLimit>(10 as ProximityLimit);
+  const routeLimit = controlledRouteLimit ?? uncontrolledRouteLimit;
+  const [currentLocationRequestKey, requestCurrentLocation] = React.useReducer(
+    (current: number) => current + 1,
+    0
+  );
   const [query, setQuery] = React.useState("");
   const [mapFilter, setMapFilter] = React.useState<SitesMapFilter>("all");
   const siteDirectoryItems = React.useMemo<readonly SiteDirectoryViewItem[]>(
@@ -134,6 +154,49 @@ export function SitesPage({
     });
   }, [mapFilter, query, siteDirectoryItems]);
   const hasFilters = query.trim().length > 0 || mapFilter !== "all";
+  const createSite = React.useCallback(() => {
+    navigate({
+      search: (current) =>
+        openWorkspaceSheetSearch(current, { kind: "site.create" }),
+    });
+  }, [navigate]);
+  const openSite = React.useCallback(
+    (siteId: SiteDirectoryItem["id"]) => {
+      navigate({
+        search: (current) =>
+          openWorkspaceSheetSearch(current, { kind: "site.detail", siteId }),
+      });
+    },
+    [navigate]
+  );
+  const setNearMeEnabled = React.useCallback(
+    (nextEnabled: boolean) => {
+      if (controlledNearMeEnabled === undefined) {
+        setUncontrolledNearMeEnabled(nextEnabled);
+      }
+
+      onNearMeChange?.(nextEnabled);
+    },
+    [controlledNearMeEnabled, onNearMeChange]
+  );
+  const setRouteLimit = React.useCallback(
+    (nextLimit: ProximityLimit) => {
+      if (controlledRouteLimit === undefined) {
+        setUncontrolledRouteLimit(nextLimit);
+      }
+
+      onRouteLimitChange?.(nextLimit);
+    },
+    [controlledRouteLimit, onRouteLimitChange]
+  );
+  const activateNearMeWithCurrentLocation = React.useCallback(() => {
+    setNearMeEnabled(true);
+    requestCurrentLocation();
+  }, [requestCurrentLocation, setNearMeEnabled]);
+  const clearFilters = React.useCallback(() => {
+    setQuery("");
+    setMapFilter("all");
+  }, []);
   const sitesPageCommandActions = React.useMemo<
     readonly CommandAction[]
   >(() => {
@@ -145,14 +208,7 @@ export function SitesPage({
         id: `sites-open-${site.id}`,
         keywords: [addressSummary],
         priority: 60,
-        run: () =>
-          navigate({
-            search: (current) =>
-              openWorkspaceSheetSearch(current, {
-                kind: "site.detail",
-                siteId: site.id,
-              }),
-          }),
+        run: () => openSite(site.id),
         scope: "route",
         subtitle: addressSummary,
         title: `Open ${site.name}`,
@@ -164,46 +220,46 @@ export function SitesPage({
         icon: Add01Icon,
         id: "sites-create",
         priority: 80,
-        run: () =>
-          navigate({
-            search: (current) =>
-              openWorkspaceSheetSearch(current, { kind: "site.create" }),
-          }),
+        run: createSite,
         scope: "route",
         shortcut: HOTKEYS.sitesCreate,
         title: "Create site",
       });
     }
 
+    if (routeHotkeysEnabled) {
+      actions.unshift({
+        disabled: nearMeEnabled,
+        group: "Current page",
+        icon: Location01Icon,
+        id: "sites-near-me",
+        priority: 75,
+        run: activateNearMeWithCurrentLocation,
+        scope: "route",
+        shortcut: HOTKEYS.sitesNearMe,
+        title: "Rank sites near me",
+      });
+    }
+
     return actions;
-  }, [canCreateSites, navigate, routeHotkeysEnabled, siteDirectoryItems]);
+  }, [
+    activateNearMeWithCurrentLocation,
+    canCreateSites,
+    createSite,
+    nearMeEnabled,
+    openSite,
+    routeHotkeysEnabled,
+    siteDirectoryItems,
+  ]);
 
   useRegisterCommandActions(sitesPageCommandActions);
-  useAppHotkey(
-    "sitesCreate",
-    () => {
-      navigate({
-        search: (current) =>
-          openWorkspaceSheetSearch(current, { kind: "site.create" }),
-      });
-    },
-    {
-      enabled: canCreateSites && routeHotkeysEnabled,
-      ignoreInputs: true,
-    }
-  );
-
-  function clearFilters() {
-    setQuery("");
-    setMapFilter("all");
-  }
-
-  function openSite(siteId: SiteDirectoryItem["id"]) {
-    navigate({
-      search: (current) =>
-        openWorkspaceSheetSearch(current, { kind: "site.detail", siteId }),
-    });
-  }
+  useAppHotkey("sitesCreate", createSite, {
+    enabled: canCreateSites && routeHotkeysEnabled,
+    ignoreInputs: true,
+  });
+  useAppHotkeySequence("sitesNearMe", activateNearMeWithCurrentLocation, {
+    enabled: routeHotkeysEnabled && !nearMeEnabled,
+  });
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
@@ -261,92 +317,29 @@ export function SitesPage({
       ) : null}
 
       {options.sites.length > 0 ? (
-        <section aria-labelledby="sites-directory-heading" className="min-h-0">
-          <div className="mb-3 flex flex-col gap-3">
-            <h2
-              id="sites-directory-heading"
-              className="text-sm font-medium text-foreground"
-            >
-              Site directory
-            </h2>
-
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-              <div className="grid min-w-0 gap-2 xl:w-[min(24rem,100%)]">
-                <InputGroup>
-                  <InputGroupAddon>
-                    <HugeiconsIcon icon={Search01Icon} strokeWidth={2} />
-                  </InputGroupAddon>
-                  <InputGroupInput
-                    aria-label="Search sites"
-                    type="search"
-                    placeholder="Search sites..."
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </InputGroup>
-              </div>
-
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <SitesMapFilterButton
-                  active={mapFilter === "all"}
-                  count={siteStats.totalSites}
-                  label="All sites"
-                  onClick={() => setMapFilter("all")}
-                />
-                <SitesMapFilterButton
-                  active={mapFilter === "mapped"}
-                  count={siteStats.mappedSites}
-                  label="Mapped"
-                  onClick={() => setMapFilter("mapped")}
-                />
-                <SitesMapFilterButton
-                  active={mapFilter === "unmapped"}
-                  count={siteStats.unmappedSites}
-                  label="Unmapped"
-                  onClick={() => setMapFilter("unmapped")}
-                />
-                {hasFilters ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={clearFilters}
-                  >
-                    Clear
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          <div className="min-h-0 overflow-hidden rounded-lg border bg-background">
-            {isMobile ? (
-              <SitesMobileDirectory items={filteredSiteItems} />
-            ) : (
-              <SitesDesktopDirectory
-                items={filteredSiteItems}
-                openSite={openSite}
-              />
-            )}
-
-            {filteredSiteItems.length === 0 ? (
-              <Empty className="min-h-72 border-transparent bg-transparent">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <HugeiconsIcon
-                      icon={FilterHorizontalIcon}
-                      strokeWidth={2}
-                    />
-                  </EmptyMedia>
-                  <EmptyTitle>No sites match these filters.</EmptyTitle>
-                  <EmptyDescription>
-                    Clear filters or search for another site or address.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            ) : null}
-          </div>
-        </section>
+        <SitesProximityPanel
+          active={nearMeEnabled}
+          currentLocationRequestKey={currentLocationRequestKey}
+          limit={routeLimit}
+          mapFilter={mapFilter}
+          query={query}
+          onActiveChange={setNearMeEnabled}
+          onClearFilters={clearFilters}
+          onLimitChange={setRouteLimit}
+        >
+          <SitesDirectorySection
+            clearFilters={clearFilters}
+            filteredSiteItems={filteredSiteItems}
+            hasFilters={hasFilters}
+            isMobile={isMobile}
+            mapFilter={mapFilter}
+            openSite={openSite}
+            query={query}
+            setMapFilter={setMapFilter}
+            setQuery={setQuery}
+            siteStats={siteStats}
+          />
+        </SitesProximityPanel>
       ) : (
         <Empty className="min-h-[24rem] border-transparent bg-transparent">
           <EmptyHeader>
@@ -361,6 +354,120 @@ export function SitesPage({
         </Empty>
       )}
     </main>
+  );
+}
+
+function SitesDirectorySection({
+  clearFilters,
+  filteredSiteItems,
+  hasFilters,
+  isMobile,
+  mapFilter,
+  openSite,
+  query,
+  setMapFilter,
+  setQuery,
+  siteStats,
+}: {
+  readonly clearFilters: () => void;
+  readonly filteredSiteItems: readonly SiteDirectoryViewItem[];
+  readonly hasFilters: boolean;
+  readonly isMobile: boolean;
+  readonly mapFilter: SitesMapFilter;
+  readonly openSite: (siteId: SiteDirectoryItem["id"]) => void;
+  readonly query: string;
+  readonly setMapFilter: (filter: SitesMapFilter) => void;
+  readonly setQuery: (query: string) => void;
+  readonly siteStats: {
+    readonly mappedSites: number;
+    readonly totalSites: number;
+    readonly unmappedSites: number;
+  };
+}) {
+  return (
+    <section aria-labelledby="sites-directory-heading" className="min-h-0">
+      <div className="mb-3 flex flex-col gap-3">
+        <h2
+          id="sites-directory-heading"
+          className="text-sm font-medium text-foreground"
+        >
+          Site directory
+        </h2>
+
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+          <div className="grid min-w-0 gap-2 xl:w-[min(24rem,100%)]">
+            <InputGroup>
+              <InputGroupAddon>
+                <HugeiconsIcon icon={Search01Icon} strokeWidth={2} />
+              </InputGroupAddon>
+              <InputGroupInput
+                aria-label="Search sites"
+                type="search"
+                placeholder="Search sites..."
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </InputGroup>
+          </div>
+
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <SitesMapFilterButton
+              active={mapFilter === "all"}
+              count={siteStats.totalSites}
+              label="All sites"
+              onClick={() => setMapFilter("all")}
+            />
+            <SitesMapFilterButton
+              active={mapFilter === "mapped"}
+              count={siteStats.mappedSites}
+              label="Mapped"
+              onClick={() => setMapFilter("mapped")}
+            />
+            <SitesMapFilterButton
+              active={mapFilter === "unmapped"}
+              count={siteStats.unmappedSites}
+              label="Unmapped"
+              onClick={() => setMapFilter("unmapped")}
+            />
+            {hasFilters ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={clearFilters}
+              >
+                Clear
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="min-h-0 overflow-hidden rounded-lg border bg-background">
+        {isMobile ? (
+          <SitesMobileDirectory items={filteredSiteItems} />
+        ) : (
+          <SitesDesktopDirectory
+            items={filteredSiteItems}
+            openSite={openSite}
+          />
+        )}
+
+        {filteredSiteItems.length === 0 ? (
+          <Empty className="min-h-72 border-transparent bg-transparent">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <HugeiconsIcon icon={FilterHorizontalIcon} strokeWidth={2} />
+              </EmptyMedia>
+              <EmptyTitle>No sites match these filters.</EmptyTitle>
+              <EmptyDescription>
+                Clear filters or search for another site or address.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : null}
+      </div>
+    </section>
   );
 }
 

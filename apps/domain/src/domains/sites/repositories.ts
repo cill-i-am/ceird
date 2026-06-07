@@ -107,7 +107,7 @@ interface SiteLocationRecordWriteFields {
   readonly town?: string;
 }
 
-interface SiteProximityCandidateRow extends SiteOptionRow {}
+type SiteProximityCandidateRow = SiteOptionRow;
 
 interface SiteProximityStatsRow {
   readonly candidate_count: number;
@@ -476,7 +476,7 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
             and work_items.site_id = ${siteId}
             and work_items.status not in ('completed', 'canceled')
         `;
-        const row = rows[0];
+        const [row] = rows;
 
         return {
           activeJobCount: row?.active_job_count ?? 0,
@@ -499,13 +499,26 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
 
         if (filters.query !== undefined) {
           const queryPattern = `%${filters.query}%`;
-          clauses.push(sql`(
-            sites.name ilike ${queryPattern}
-            or sites.display_location ilike ${queryPattern}
-            or sites.formatted_address ilike ${queryPattern}
-            or sites.eircode ilike ${queryPattern}
-            or sites.town ilike ${queryPattern}
-          )`);
+          clauses.push(sql`
+            concat_ws(
+              ' ',
+              sites.name,
+              coalesce(
+                nullif(
+                  concat_ws(
+                    ', ',
+                    nullif(concat_ws(', ', sites.address_line_1, sites.address_line_2), ''),
+                    nullif(concat_ws(', ', sites.town, sites.county, sites.eircode), '')
+                  ),
+                  ''
+                ),
+                nullif(sites.display_location, ''),
+                nullif(sites.formatted_address, ''),
+                nullif(sites.raw_location_input, ''),
+                'No address'
+              )
+            ) ilike ${queryPattern}
+          `);
         }
 
         const routeableSiteClause = sql`
@@ -593,7 +606,7 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
           candidateLimitApplied:
             stats.candidate_count > PROXIMITY_CANDIDATE_LIMIT,
           candidates,
-          excluded: Array.from(excluded.entries()).map(([reason, count]) => ({
+          excluded: [...excluded.entries()].map(([reason, count]) => ({
             count,
             reason,
           })),

@@ -387,6 +387,13 @@ export const HOTKEYS = {
     scope: "sites",
     when: "Viewer can create sites",
   },
+  sitesNearMe: {
+    group: "Sites",
+    hotkey: "V N",
+    id: "sitesNearMe",
+    label: "Rank sites near me",
+    scope: "sites",
+  },
   membersInvite: {
     group: "Members",
     hotkey: "N",

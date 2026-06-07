@@ -1,7 +1,6 @@
 "use client";
 
 import type {
-  GooglePlaceIdType,
   ProximityCoordinates,
   ProximityOriginSummary,
   RouteSummary,
@@ -29,6 +28,7 @@ import {
 import { cn } from "#/lib/utils";
 
 import { buildMapsHandoffUrls } from "./maps-handoff";
+import type { MapsHandoffGooglePlaceId } from "./maps-handoff";
 import {
   formatRouteComputedAt,
   formatRouteDistance,
@@ -38,7 +38,7 @@ import {
 export interface ProximityDestination {
   readonly coordinates: ProximityCoordinates;
   readonly label: string;
-  readonly placeId?: GooglePlaceIdType | undefined;
+  readonly placeId?: MapsHandoffGooglePlaceId | undefined;
 }
 
 export function ProximityResultRow({

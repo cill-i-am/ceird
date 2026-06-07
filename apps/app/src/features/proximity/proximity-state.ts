@@ -45,7 +45,7 @@ export interface ProximityRunRequest {
 }
 
 export function normalizeProximityResultLimit(
-  value: number | string | undefined
+  value?: number | string
 ): ProximityLimit {
   const numericValue =
     typeof value === "string" ? Number.parseInt(value, 10) : value;

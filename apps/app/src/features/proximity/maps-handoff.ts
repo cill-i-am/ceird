@@ -1,14 +1,18 @@
 import type {
-  GooglePlaceIdType,
+  GooglePlaceIdType as ProximityGooglePlaceIdType,
   ProximityCoordinates,
 } from "@ceird/proximity-core";
+import type { GooglePlaceIdType as SiteGooglePlaceIdType } from "@ceird/sites-core";
 
 export type MapsHandoffProvider = "default" | "google" | "apple";
+export type MapsHandoffGooglePlaceId =
+  | ProximityGooglePlaceIdType
+  | SiteGooglePlaceIdType;
 
 export interface MapsHandoffInput {
   readonly destination: ProximityCoordinates;
   readonly destinationLabel?: string | undefined;
-  readonly destinationPlaceId?: GooglePlaceIdType | undefined;
+  readonly destinationPlaceId?: MapsHandoffGooglePlaceId | undefined;
   readonly origin: ProximityCoordinates;
   readonly platformUserAgent?: string | undefined;
 }
@@ -50,7 +54,7 @@ export function buildMapsHandoffUrl(
     }
 
     if (platform === "android") {
-      return buildAndroidGeoUrl(input);
+      return buildGoogleMapsUrl(input);
     }
   }
 
@@ -88,16 +92,6 @@ function buildAppleMapsUrl(input: MapsHandoffInput, baseUrl: string) {
   }
 
   return `${baseUrl}?${params.toString()}`;
-}
-
-function buildAndroidGeoUrl(input: MapsHandoffInput) {
-  const destination = formatCoordinatePair(input.destination);
-  const query =
-    input.destinationLabel === undefined
-      ? destination
-      : `${destination}(${input.destinationLabel})`;
-
-  return `geo:0,0?q=${encodeURIComponent(query)}`;
 }
 
 function formatCoordinatePair(coordinates: ProximityCoordinates) {
