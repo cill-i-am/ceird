@@ -208,16 +208,6 @@ export function makeElectricContainerProps(input: {
       },
     },
     ports: [{ name: "http", port: 3000 }],
-    checks: [
-      {
-        interval: "30s",
-        kind: "ready",
-        name: "electric-tcp",
-        port: "3000",
-        timeout: "5s",
-        type: "tcp",
-      },
-    ],
     environmentVariables: Object.entries(
       makeElectricContainerEnv({
         storage: input.storage,
