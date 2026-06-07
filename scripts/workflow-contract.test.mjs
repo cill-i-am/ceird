@@ -24,6 +24,18 @@ function getWorkflowJob(workflow, jobName) {
   return match[0];
 }
 
+function getWorkflowStep(job, stepName) {
+  const escapedStepName = stepName.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = job.match(
+    new RegExp(
+      `(?:^|\\n)      - name: ${escapedStepName}\\n[\\s\\S]*?(?=\\n      - name: |\\n  [A-Za-z0-9_-]+:\\n|\\n*$)`
+    )
+  );
+
+  assert.notEqual(match, null, `workflow job should define step ${stepName}`);
+  return match[0];
+}
+
 function assertContainsInOrder(text, orderedSnippets) {
   let previousIndex = -1;
 
@@ -37,6 +49,17 @@ function assertContainsInOrder(text, orderedSnippets) {
     );
     previousIndex = index;
   }
+}
+
+function assertElectricStorageCredentialsEnv(text) {
+  assert.match(
+    text,
+    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
+  );
+  assert.match(
+    text,
+    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
+  );
 }
 
 const activeTextFileExtensions = new Set([
@@ -670,6 +693,11 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   const ciDeployJob = getWorkflowJob(buildWorkflow, "cloud-e2e-deploy");
   const ciE2eJob = getWorkflowJob(buildWorkflow, "cloud-e2e");
   const ciDestroyJob = getWorkflowJob(buildWorkflow, "cloud-e2e-destroy");
+  const ciAuditStep = getWorkflowStep(ciDeployJob, "Audit CI Alchemy state");
+  const ciDatabaseExportStep = getWorkflowStep(
+    ciE2eJob,
+    "Export Playwright database URL"
+  );
   const playwrightConfig = readFileSync(
     path.join(repoRoot, "apps/app/playwright.config.ts"),
     "utf8"
@@ -787,22 +815,10 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
     ciDeployJob,
     /"\$PLAYWRIGHT_SYNC_URL\/v1\/shapes\/jobs\?offset=-1"/
   );
-  assert.match(
-    ciDeployJob,
-    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
-  );
-  assert.match(
-    ciDeployJob,
-    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
-  );
-  assert.match(
-    ciDestroyJob,
-    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
-  );
-  assert.match(
-    ciDestroyJob,
-    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
-  );
+  assertElectricStorageCredentialsEnv(ciDeployJob);
+  assertElectricStorageCredentialsEnv(ciAuditStep);
+  assertElectricStorageCredentialsEnv(ciDatabaseExportStep);
+  assertElectricStorageCredentialsEnv(ciDestroyJob);
   assert.match(
     buildWorkflow,
     /\[\[ ! "\$CI_STAGE" =~ \^ci-\[0-9\]\+-\[0-9\]\+\$ \]\]/
@@ -902,6 +918,14 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
     "utf8"
   );
   const previewDeployJob = getWorkflowJob(previewWorkflow, "deploy-e2e");
+  const previewAuditStep = getWorkflowStep(
+    previewDeployJob,
+    "Audit preview Alchemy state"
+  );
+  const previewDatabaseExportStep = getWorkflowStep(
+    previewDeployJob,
+    "Export Playwright database URL"
+  );
 
   assert.match(previewWorkflow, /^name: Preview$/m);
   assert.match(previewWorkflow, /pull_request:/);
@@ -1011,14 +1035,9 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assert.match(previewWorkflow, /Preview environment is ready/);
   assert.match(previewWorkflow, /Agent \|/);
   assert.match(previewWorkflow, /Sync \|/);
-  assert.match(
-    previewDeployJob,
-    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
-  );
-  assert.match(
-    previewDeployJob,
-    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
-  );
+  assertElectricStorageCredentialsEnv(previewDeployJob);
+  assertElectricStorageCredentialsEnv(previewAuditStep);
+  assertElectricStorageCredentialsEnv(previewDatabaseExportStep);
   assert.match(previewWorkflow, /pnpm --filter app e2e/);
 });
 
@@ -1032,14 +1051,7 @@ test("preview workflow destroys PR stages from the default branch on close", () 
   assert.match(previewWorkflow, /github\.event\.action == 'closed'/);
   assert.match(previewWorkflow, /github\.event_name == 'workflow_dispatch'/);
   assert.match(previewWorkflow, /environment: preview-cleanup/);
-  assert.match(
-    previewCleanupJob,
-    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
-  );
-  assert.match(
-    previewCleanupJob,
-    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
-  );
+  assertElectricStorageCredentialsEnv(previewCleanupJob);
   assert.match(
     previewWorkflow,
     /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/
