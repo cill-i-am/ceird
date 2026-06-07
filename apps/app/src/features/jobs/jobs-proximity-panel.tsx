@@ -256,6 +256,7 @@ export interface JobsProximityPanelProps {
   readonly onClearFilters: () => void;
   readonly onLimitChange: (limit: ProximityResultLimitOption) => void;
   readonly routeProximityLocationEnabled: boolean;
+  readonly showToolbar?: boolean;
   readonly viewMode: JobsViewMode;
 }
 
@@ -269,6 +270,7 @@ export function JobsProximityPanel({
   onClearFilters,
   onLimitChange,
   routeProximityLocationEnabled,
+  showToolbar = true,
   viewMode,
 }: JobsProximityPanelProps) {
   const {
@@ -306,59 +308,64 @@ export function JobsProximityPanel({
     needsRouteLines: viewMode === "map",
     requestState: request,
   });
+  const shouldRenderProximityShell = showToolbar || active;
 
   return (
     <>
-      <section
-        aria-label="Route-aware job proximity"
-        className={cn(
-          "grid gap-3 rounded-lg border bg-muted/10 p-3",
-          active ? "border-primary/25" : "border-border"
-        )}
-      >
-        <JobsProximityToolbar
-          active={active}
-          currentInputKey={rankingInputKey}
-          limit={limit}
-          originState={origin}
-          requestCurrentOrigin={requestCurrentOrigin}
-          requestState={request}
-          retryRanking={retryRanking}
-          onDisableNearMe={disableNearMe}
-          onEnableNearMe={enableNearMe}
-          onLimitChange={onLimitChange}
-          onOriginDialogOpen={handleOriginDialogOpen}
-        />
+      {shouldRenderProximityShell ? (
+        <section
+          aria-label="Route-aware job proximity"
+          className={cn(
+            "grid gap-3 rounded-lg border bg-muted/10 p-3",
+            active ? "border-primary/25" : "border-border"
+          )}
+        >
+          {showToolbar ? (
+            <JobsProximityToolbar
+              active={active}
+              currentInputKey={rankingInputKey}
+              limit={limit}
+              originState={origin}
+              requestCurrentOrigin={requestCurrentOrigin}
+              requestState={request}
+              retryRanking={retryRanking}
+              onDisableNearMe={disableNearMe}
+              onEnableNearMe={enableNearMe}
+              onLimitChange={onLimitChange}
+              onOriginDialogOpen={handleOriginDialogOpen}
+            />
+          ) : null}
 
-        {active ? (
-          <JobsProximityContent
-            onClearFilters={onClearFilters}
-            currentInputKey={rankingInputKey}
-            originState={origin}
-            requestCurrentOrigin={requestCurrentOrigin}
-            requestState={request}
-            retryRanking={retryRanking}
-            routeProximityLocationEnabled={routeProximityLocationEnabled}
-            selectedJobId={selectedJobId}
-            onOriginDialogOpen={handleOriginDialogOpen}
-            onSelectedJobIdChange={handleSelectedJobIdChange}
-            viewMode={viewMode}
+          {active ? (
+            <JobsProximityContent
+              onClearFilters={onClearFilters}
+              currentInputKey={rankingInputKey}
+              originState={origin}
+              requestCurrentOrigin={requestCurrentOrigin}
+              requestState={request}
+              retryRanking={retryRanking}
+              routeProximityLocationEnabled={routeProximityLocationEnabled}
+              selectedJobId={selectedJobId}
+              onOriginDialogOpen={handleOriginDialogOpen}
+              onSelectedJobIdChange={handleSelectedJobIdChange}
+              viewMode={viewMode}
+            />
+          ) : null}
+
+          <ProximityOriginDialog
+            error={originDialogError}
+            loading={originDialogLoading}
+            onConfirm={confirmTypedOrigin}
+            onOpenChange={handleOriginDialogOpen}
+            onQueryChange={handleOriginQueryChange}
+            onSuggestionSelect={handleSuggestionSelect}
+            open={originDialogOpen}
+            query={originQuery}
+            selectedSuggestion={selectedSuggestion}
+            suggestions={originSuggestions}
           />
-        ) : null}
-
-        <ProximityOriginDialog
-          error={originDialogError}
-          loading={originDialogLoading}
-          onConfirm={confirmTypedOrigin}
-          onOpenChange={handleOriginDialogOpen}
-          onQueryChange={handleOriginQueryChange}
-          onSuggestionSelect={handleSuggestionSelect}
-          open={originDialogOpen}
-          query={originQuery}
-          selectedSuggestion={selectedSuggestion}
-          suggestions={originSuggestions}
-        />
-      </section>
+        </section>
+      ) : null}
       {hasCurrentRouteResults ? null : children}
     </>
   );

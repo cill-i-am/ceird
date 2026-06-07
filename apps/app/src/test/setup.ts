@@ -16,8 +16,13 @@ class TestResizeObserver implements ResizeObserver {
   }
 }
 
+function getElementAnimations() {
+  return [];
+}
+
 globalThis.ResizeObserver ??= TestResizeObserver;
 
 if (typeof Element !== "undefined") {
+  Element.prototype.getAnimations ??= getElementAnimations;
   Element.prototype.scrollIntoView ??= vi.fn();
 }

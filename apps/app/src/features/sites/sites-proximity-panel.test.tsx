@@ -146,6 +146,32 @@ describe("sites proximity panel", () => {
     expect(mockedRankNearbySites).not.toHaveBeenCalled();
   });
 
+  it("can keep inactive route-aware controls out of the page body when the toolbar owns them", async () => {
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
+
+    render(
+      <SitesProximityPanel
+        active={false}
+        limit={10}
+        mapFilter="all"
+        query=""
+        routeProximityLocationEnabled
+        showToolbar={false}
+        onActiveChange={vi.fn<(active: boolean) => void>()}
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      >
+        <div>Ordinary sites</div>
+      </SitesProximityPanel>
+    );
+
+    expect(
+      screen.queryByLabelText("Route-aware site proximity")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /near me/i })).toBeNull();
+    expect(screen.getByText("Ordinary sites")).toBeVisible();
+  });
+
   it("does not request current location from URL-activated Near me until the user confirms", async () => {
     const user = userEvent.setup();
     const { SitesProximityPanel } = await import("./sites-proximity-panel");

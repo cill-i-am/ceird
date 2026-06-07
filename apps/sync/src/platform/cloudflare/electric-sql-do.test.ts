@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "@effect/vitest";
+import { DurableObject } from "cloudflare:workers";
 import { Effect } from "effect";
 
-import { handleElectricSqlFetch } from "./electric-sql-do.js";
+import { ElectricSql, handleElectricSqlFetch } from "./electric-sql-do.js";
 import type { SyncWorkerEnv } from "./env.js";
 
 function makeState(
@@ -38,6 +39,10 @@ const baseEnv = {
 } satisfies SyncWorkerEnv;
 
 describe("ElectricSql Durable Object", () => {
+  it("uses Cloudflare's DurableObject base class for container-backed runtime", () => {
+    expect(ElectricSql.prototype instanceof DurableObject).toBe(true);
+  });
+
   it("starts a stopped container and waits for the port before forwarding", async () => {
     const portFetch = vi
       .fn<

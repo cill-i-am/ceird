@@ -366,13 +366,7 @@ describe("user settings page", () => {
       [...sectionTabs.querySelectorAll('[role="tab"]')].map((tab) =>
         tab.textContent?.trim()
       )
-    ).toStrictEqual([
-      "Profile",
-      "Security",
-      "Location",
-      "Email",
-      "Password",
-    ]);
+    ).toStrictEqual(["Profile", "Security", "Location", "Email", "Password"]);
 
     await selectTab("Profile");
     expect(screen.getByRole("heading", { name: "Profile" })).toBeVisible();

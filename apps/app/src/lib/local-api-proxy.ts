@@ -26,7 +26,7 @@ function readHeaderHostUrl(host: string | null) {
   try {
     return new URL(`http://${host}`);
   } catch {
-    return;
+    // Invalid forwarded hosts cannot be used to infer the public origin.
   }
 }
 

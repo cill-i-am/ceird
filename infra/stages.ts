@@ -120,6 +120,11 @@ export const InfraGoogleMapsApiKey = Schema.NonEmptyString.pipe(
 export type InfraGoogleMapsApiKey = Schema.Schema.Type<
   typeof InfraGoogleMapsApiKey
 >;
+export const InfraRouteProvider = Schema.Literals([
+  "google_routes",
+  "test",
+] as const);
+export type InfraRouteProvider = Schema.Schema.Type<typeof InfraRouteProvider>;
 
 export interface InfraStageConfig {
   readonly agentActionRunStaleAfterSeconds: number;
@@ -147,6 +152,7 @@ export interface InfraStageConfig {
   readonly googleMapsRoutesApiKey:
     | Redacted.Redacted<InfraGoogleMapsApiKey>
     | undefined;
+  readonly routeProvider: InfraRouteProvider;
   readonly proximityOriginTokenTtlSeconds: number | undefined;
   readonly hyperdriveName: ProviderResourceName;
   readonly hyperdriveOriginConnectionLimit: number;
@@ -430,6 +436,12 @@ function isBetterAuthSecretsValue(value: string) {
   }
 }
 
+function decodeRouteProvider(value: string) {
+  return Schema.decodeUnknownEffect(InfraRouteProvider)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
 function decodeHyperdriveOriginConnectionLimit(value: number) {
   return Schema.decodeUnknownEffect(HyperdriveOriginConnectionLimit)(
     value
@@ -663,6 +675,10 @@ export function loadInfraStageConfig(stageInput: string) {
         Config.mapOrFail(decodeGoogleMapsApiKey)
       )
     ).pipe(Effect.map(Option.getOrUndefined));
+    const routeProvider = yield* Config.string("CEIRD_ROUTE_PROVIDER").pipe(
+      Config.withDefault("google_routes"),
+      Config.mapOrFail(decodeRouteProvider)
+    );
     const proximityOriginTokenTtlSeconds = yield* Config.option(
       Config.number("CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS").pipe(
         Config.mapOrFail(decodeProximityOriginTokenTtlSeconds)
@@ -784,6 +800,7 @@ export function loadInfraStageConfig(stageInput: string) {
       authSecrets,
       googleMapsApiKey,
       googleMapsRoutesApiKey,
+      routeProvider,
       proximityOriginTokenTtlSeconds,
       hyperdriveName,
       hyperdriveOriginConnectionLimit,

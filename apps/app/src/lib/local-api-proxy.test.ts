@@ -2,7 +2,7 @@ import { proxyLocalAppApiRequest } from "./local-api-proxy";
 
 describe("local API proxy", () => {
   it("proxies app.localhost API requests to the configured API origin", async () => {
-    const fetch = vi.fn().mockResolvedValue(
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       Response.json(
         { ok: true },
         {
@@ -28,7 +28,7 @@ describe("local API proxy", () => {
       }
     );
 
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledOnce();
     const forwardedRequest = fetch.mock.calls[0]?.[0] as Request;
     expect(forwardedRequest.url).toBe(
       "http://api.localhost:1337/api/auth/sign-in/email?x=1"
@@ -49,7 +49,9 @@ describe("local API proxy", () => {
   });
 
   it("uses the public host header when the Worker request URL is internal", async () => {
-    const fetch = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(Response.json({ ok: true }));
 
     await proxyLocalAppApiRequest(
       new Request("http://internal.local/api/jobs", {
@@ -71,7 +73,9 @@ describe("local API proxy", () => {
   });
 
   it("strips the local proxy API prefix for product API requests", async () => {
-    const fetch = vi.fn().mockResolvedValue(Response.json({ items: [] }));
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(Response.json({ items: [] }));
 
     await proxyLocalAppApiRequest(
       new Request("http://app.localhost:1337/api/jobs?limit=25"),
@@ -88,7 +92,9 @@ describe("local API proxy", () => {
   });
 
   it("keeps Better Auth and public auth paths under the API prefix", async () => {
-    const fetch = vi.fn().mockResolvedValue(Response.json(null));
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(Response.json(null));
 
     await proxyLocalAppApiRequest(
       new Request("http://app.localhost:1337/api/auth/get-session"),
@@ -121,7 +127,7 @@ describe("local API proxy", () => {
   });
 
   it("does not expose the proxy on non-local app hosts", async () => {
-    const fetch = vi.fn();
+    const fetch = vi.fn<typeof globalThis.fetch>();
     const response = await proxyLocalAppApiRequest(
       new Request("https://app.ceird.example.com/api/auth/get-session"),
       {

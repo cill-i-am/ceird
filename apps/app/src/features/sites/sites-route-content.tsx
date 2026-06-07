@@ -7,6 +7,7 @@ import type { DataPlaneSeed } from "#/data-plane/bootstrap";
 import { useApplyDataPlaneSeeds } from "#/data-plane/session";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
 import { SitesPage } from "#/features/sites/sites-page";
+import type { SitesViewMode } from "#/features/sites/sites-search";
 import type { WorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet-search";
 import { WorkspaceSheetStack } from "#/features/workspace-sheets/workspace-sheet-stack";
 
@@ -21,11 +22,13 @@ export function SitesRouteContent({
   nearMeEnabled,
   onNearMeChange,
   onRouteLimitChange,
+  onViewModeChange,
   options,
   queryClient,
   routeLimit,
   routeProximityLocationEnabled,
   stack = EMPTY_WORKSPACE_SHEET_STACK,
+  viewMode,
   viewer,
 }: {
   readonly activeOrganizationId: OrganizationId;
@@ -33,11 +36,13 @@ export function SitesRouteContent({
   readonly nearMeEnabled?: boolean | undefined;
   readonly onNearMeChange?: ((value: boolean) => void) | undefined;
   readonly onRouteLimitChange?: ((value: ProximityLimit) => void) | undefined;
+  readonly onViewModeChange?: ((value: SitesViewMode) => void) | undefined;
   readonly options: SitesOptionsResponse;
   readonly queryClient?: QueryClient | undefined;
   readonly routeLimit?: ProximityLimit | undefined;
   readonly routeProximityLocationEnabled?: boolean | undefined;
   readonly stack?: readonly WorkspaceSheet[] | undefined;
+  readonly viewMode?: SitesViewMode | undefined;
   readonly viewer: OrganizationViewer;
 }) {
   useApplyDataPlaneSeeds(dataPlaneSeeds);
@@ -56,9 +61,11 @@ export function SitesRouteContent({
         routeHotkeysEnabled={stack.length === 0}
         routeLimit={routeLimit}
         routeProximityLocationEnabled={routeProximityLocationEnabled}
+        viewMode={viewMode}
         viewer={viewer}
         onNearMeChange={onNearMeChange}
         onRouteLimitChange={onRouteLimitChange}
+        onViewModeChange={onViewModeChange}
       />
       <WorkspaceSheetStack stack={stack} />
     </SitesStateProvider>

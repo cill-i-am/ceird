@@ -86,6 +86,7 @@ import {
   makeDurableObjectLocationHintForNeonRegion,
   makeTenantReservedHostBypassRoutePatterns,
   makeCloudflareWorkerOrigin,
+  shouldProvisionElectricContainer,
   shouldReconcileTenantRouting,
   shouldProvisionElectricStorage,
 } from "./cloudflare-stack.ts";
@@ -228,6 +229,7 @@ type DomainWorkerStackRuntimeConfigEnv = Required<
     | "AUTH_TRUSTED_ORIGINS"
     | "BETTER_AUTH_BASE_URL"
     | "BETTER_AUTH_SECRET"
+    | "CEIRD_ROUTE_PROVIDER"
     | "CEIRD_WORKER_ANALYTICS_SAMPLE_RATE"
     | "GOOGLE_MAPS_API_KEY"
     | "MCP_RESOURCE_URL"
@@ -721,6 +723,32 @@ describe("Cloudflare stack", () => {
     ).toThrow(/required outside local Alchemy dev/);
   });
 
+  it("creates the Electric container only outside local Alchemy dev", () => {
+    const electricStorageCredentials = {
+      accessKeyId: "electric-access-key-id",
+      secretAccessKey: "electric-secret-access-key",
+    };
+
+    expect(
+      shouldProvisionElectricContainer({
+        electricStorageCredentials,
+        localDev: true,
+      })
+    ).toBe(false);
+    expect(
+      shouldProvisionElectricContainer({
+        electricStorageCredentials,
+        localDev: false,
+      })
+    ).toBe(true);
+    expect(
+      shouldProvisionElectricContainer({
+        electricStorageCredentials: undefined,
+        localDev: false,
+      })
+    ).toBe(false);
+  });
+
   it("sets cross-subdomain auth cookies from the configured tenant base domain", () => {
     const betterAuthSecret = Redacted.make("better-auth-secret");
     const agentInternalSecret = Redacted.make("agent-secret");
@@ -758,6 +786,19 @@ describe("Cloudflare stack", () => {
       configWithoutCloudflareBootstrapSecrets.googleMapsApiKey
     );
     expect(domainEnv.GOOGLE_MAPS_ROUTES_API_KEY).toBe(googleMapsRoutesApiKey);
+  });
+
+  it("passes the selected route provider to domain Workers", () => {
+    const domainEnv = makeDomainWorkerEnv({
+      agentInternalSecret: Redacted.make("agent-secret"),
+      betterAuthSecret: Redacted.make("better-auth-secret"),
+      config: {
+        ...configWithoutCloudflareBootstrapSecrets,
+        routeProvider: "test",
+      } satisfies InfraStageConfig,
+    });
+
+    expect(domainEnv.CEIRD_ROUTE_PROVIDER).toBe("test");
   });
 
   it("passes the optional proximity origin token TTL to domain Workers", () => {
@@ -1301,6 +1342,33 @@ describe("Cloudflare stack", () => {
       localDev: true,
       name: "ceird-main-agent",
     });
+    const apiWorkerProps = makeApiWorkerProps({
+      analytics: workerAnalytics,
+      config: configWithoutCloudflareBootstrapSecrets,
+      domain,
+      hostname: "api.example.com",
+      localDev: true,
+      name: "ceird-main-api",
+    });
+    const mcpWorkerProps = makeMcpWorkerProps({
+      analytics: workerAnalytics,
+      config: configWithoutCloudflareBootstrapSecrets,
+      domain,
+      hostname: "mcp.example.com",
+      localDev: true,
+      name: "ceird-main-mcp",
+    });
+    const syncWorkerProps = makeSyncWorkerProps({
+      analytics: workerAnalytics,
+      config: configWithoutCloudflareBootstrapSecrets,
+      domain,
+      electricSqlLocationHint: "weur",
+      electricSourceSecret: Redacted.make("electric-secret"),
+      hostname: "sync.example.com",
+      localDev: true,
+      localAppOrigin: localOrigins.app,
+      name: "ceird-main-sync",
+    });
     const appEnv = makeAppWorkerEnv({
       agentOrigin: localOrigins.agent,
       apiOrigin: localOrigins.api,
@@ -1310,9 +1378,19 @@ describe("Cloudflare stack", () => {
       syncOrigin: localOrigins.sync,
     });
 
-    expect(Object.keys(domainBindings)).toStrictEqual(["ANALYTICS"]);
+    expect(Object.keys(domainBindings)).toStrictEqual([]);
     expect(domainWorkerProps.bindings).toStrictEqual(domainBindings);
-    expect(domainWorkerProps.bindings.ANALYTICS).toBe(workerAnalytics);
+    expect(domainWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
+    expect(agentWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
+    expect(apiWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
+    expect(mcpWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
+    expect(syncWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
+    expect(syncWorkerProps.env).not.toHaveProperty(
+      "ELECTRIC_CONTAINER_DATABASE_URL"
+    );
+    expect(syncWorkerProps.env).not.toHaveProperty(
+      "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+    );
     const localDatabaseUrl = domainWorkerProps.env.DATABASE_URL;
 
     if (!Redacted.isRedacted(localDatabaseUrl)) {

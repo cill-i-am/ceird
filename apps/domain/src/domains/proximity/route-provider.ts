@@ -42,6 +42,9 @@ const DEFAULT_ROUTE_COST_GUARD_WINDOW = Duration.seconds(60);
 const DEFAULT_ROUTE_COST_GUARD_ACTOR_LIMIT = 500;
 const DEFAULT_ROUTE_COST_GUARD_AGENT_THREAD_LIMIT = 200;
 const DEFAULT_ROUTE_COST_GUARD_ORGANIZATION_LIMIT = 5000;
+const TEST_ROUTE_DISTANCE_FACTOR = 1.35;
+const TEST_ROUTE_AVERAGE_METERS_PER_SECOND = 9.7;
+const EARTH_RADIUS_METERS = 6_371_000;
 const GOOGLE_ROUTES_PROVIDER_FAILED_MESSAGE = "Google Routes provider failed";
 const GOOGLE_ROUTES_PROVIDER_CONFIGURATION_FAILED_MESSAGE =
   "Google Routes provider is not configured";
@@ -86,6 +89,14 @@ const decodeGoogleRouteMatrixResponse = Schema.decodeUnknownEffect(
 );
 const decodeGoogleComputeRoutesResponse = Schema.decodeUnknownEffect(
   GoogleComputeRoutesResponseSchema
+);
+const RouteProviderNameSchema = Schema.Literals([
+  "google_routes",
+  "test",
+] as const);
+type RouteProviderName = Schema.Schema.Type<typeof RouteProviderNameSchema>;
+const decodeRouteProviderName = Schema.decodeUnknownEffect(
+  RouteProviderNameSchema
 );
 
 export interface RouteDestination {
@@ -330,6 +341,71 @@ export function makeInMemoryRouteCostGuard(options?: {
         Effect.flatMap((error) =>
           error === undefined ? Effect.void : Effect.fail(error)
         )
+      ),
+  };
+}
+
+export function makeTestRouteProvider(options?: {
+  readonly costGuard?: RouteCostGuardImplementation | undefined;
+}): RouteProviderImplementation {
+  const costGuard = options?.costGuard ?? makeNoopRouteCostGuard();
+
+  return {
+    previewRoute: (input) =>
+      Effect.gen(function* previewTestRouteEffect() {
+        yield* costGuard.reserve({
+          context: input.context,
+          operation: "route_preview",
+          units: 1,
+        });
+
+        return makeTestRoutePreview(input);
+      }).pipe(
+        Effect.withSpan("RouteProvider.Test.previewRoute", {
+          attributes: {
+            provider: "test",
+          },
+        })
+      ),
+    rankRoutes: (input) =>
+      Effect.gen(function* rankTestRoutesEffect() {
+        yield* costGuard.reserve({
+          context: input.context,
+          operation: "matrix",
+          units: input.destinations.length,
+        });
+
+        const computedAt = nowIsoString();
+        const rows = input.destinations
+          .map((destination) => ({
+            destinationId: destination.destinationId,
+            routeSummary: makeTestRouteSummary({
+              computedAt,
+              destination: destination.coordinates,
+              origin: input.origin,
+              providerRequestKind: "matrix",
+            }),
+          }))
+          .toSorted(
+            (left, right) =>
+              left.routeSummary.durationSeconds -
+                right.routeSummary.durationSeconds ||
+              left.routeSummary.distanceMeters -
+                right.routeSummary.distanceMeters ||
+              left.destinationId.localeCompare(right.destinationId)
+          );
+
+        return {
+          rows,
+          unavailableDestinationIds: [],
+        } satisfies RankRoutesResult;
+      }).pipe(
+        Effect.withSpan("RouteProvider.Test.rankRoutes", {
+          attributes: {
+            destinationCount: input.destinations.length,
+            provider: "test",
+          },
+        })
       ),
   };
 }
@@ -1060,6 +1136,129 @@ const googleRoutesApiKeyConfig = Config.redacted(
   Config.mapOrFail(decodeRedactedGoogleRoutesApiKey),
   Config.orElse(() => googleMapsApiKeyConfig)
 );
+const routeProviderNameConfig = Config.string("CEIRD_ROUTE_PROVIDER").pipe(
+  Config.withDefault("google_routes"),
+  Config.mapOrFail(decodeConfiguredRouteProviderName)
+);
+
+function decodeConfiguredRouteProviderName(value: string) {
+  return decodeRouteProviderName(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
+function makeConfiguredRouteProviderImplementation(
+  routeProviderName: RouteProviderName
+): RouteProviderImplementation {
+  if (routeProviderName === "test") {
+    return makeTestRouteProvider();
+  }
+
+  return {
+    previewRoute: (input) =>
+      getConfiguredWarmGoogleRoutesProvider().pipe(
+        Effect.flatMap((provider) => provider.previewRoute(input))
+      ),
+    rankRoutes: (input) =>
+      getConfiguredWarmGoogleRoutesProvider().pipe(
+        Effect.flatMap((provider) => provider.rankRoutes(input))
+      ),
+  };
+}
+
+function makeTestRoutePreview(input: RoutePreviewInput): RoutePreviewResult {
+  const routeSummary = makeTestRouteSummary({
+    computedAt: nowIsoString(),
+    destination: input.destination.coordinates,
+    origin: input.origin,
+    providerRequestKind: input.includeLine ? "route_line" : "route_preview",
+  });
+
+  return {
+    ...(input.includeLine
+      ? {
+          line: {
+            coordinates: [
+              input.origin,
+              midpointCoordinates(input.origin, input.destination.coordinates),
+              input.destination.coordinates,
+            ],
+            format: "geojson_linestring" as const,
+          },
+        }
+      : {}),
+    routeSummary,
+  };
+}
+
+function makeTestRouteSummary(input: {
+  readonly computedAt: IsoDateTimeString;
+  readonly destination: ProximityCoordinates;
+  readonly origin: ProximityCoordinates;
+  readonly providerRequestKind: "matrix" | "route_line" | "route_preview";
+}): RouteSummary {
+  const directDistanceMeters = haversineDistanceMeters(
+    input.origin,
+    input.destination
+  );
+  const distanceMeters = Math.max(
+    1,
+    Math.round(directDistanceMeters * TEST_ROUTE_DISTANCE_FACTOR)
+  );
+  const durationSeconds = Math.max(
+    60,
+    Math.round(distanceMeters / TEST_ROUTE_AVERAGE_METERS_PER_SECOND)
+  );
+
+  return {
+    computedAt: input.computedAt,
+    distanceMeters,
+    durationSeconds,
+    provider: "test",
+    providerRequestKind: input.providerRequestKind,
+    routeStatus: "ok",
+    trafficAware: false,
+  };
+}
+
+function midpointCoordinates(
+  origin: ProximityCoordinates,
+  destination: ProximityCoordinates
+): ProximityCoordinates {
+  return {
+    latitude: (origin.latitude + destination.latitude) / 2,
+    longitude: (origin.longitude + destination.longitude) / 2,
+  };
+}
+
+function haversineDistanceMeters(
+  origin: ProximityCoordinates,
+  destination: ProximityCoordinates
+) {
+  const originLatitude = degreesToRadians(origin.latitude);
+  const destinationLatitude = degreesToRadians(destination.latitude);
+  const latitudeDelta = degreesToRadians(
+    destination.latitude - origin.latitude
+  );
+  const longitudeDelta = degreesToRadians(
+    destination.longitude - origin.longitude
+  );
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(originLatitude) *
+      Math.cos(destinationLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
+
+  return (
+    2 *
+    EARTH_RADIUS_METERS *
+    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+  );
+}
+
+function degreesToRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
 
 export class RouteProvider extends Context.Service<
   RouteProvider,
@@ -1083,5 +1282,19 @@ export class RouteProvider extends Context.Service<
           Effect.flatMap((provider) => provider.rankRoutes(input))
         ),
     })
+  );
+  static readonly Test = Layer.succeed(
+    RouteProvider,
+    RouteProvider.of(makeTestRouteProvider())
+  );
+  static readonly Configured = Layer.effect(
+    RouteProvider,
+    routeProviderNameConfig.pipe(
+      Effect.map((routeProviderName) =>
+        RouteProvider.of(
+          makeConfiguredRouteProviderImplementation(routeProviderName)
+        )
+      )
+    )
   );
 }

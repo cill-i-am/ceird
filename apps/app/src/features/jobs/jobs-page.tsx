@@ -75,6 +75,8 @@ import {
 } from "#/components/ui/tooltip";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
+import { ProximityLimitSelect } from "#/features/proximity/proximity-limit-select";
+import type { ProximityResultLimitOption } from "#/features/proximity/proximity-state";
 import { openWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
 import { useIsMobile } from "#/hooks/use-mobile";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
@@ -457,6 +459,17 @@ export function JobsPage({
         filters={filters}
         options={options}
         presentation={{ hasCustomFilters, isMobile, savedViewsOpen }}
+        proximityControl={
+          canUseInternalOptions ? (
+            <JobsProximityFilterControl
+              active={nearMeEnabled}
+              limit={routeLimit}
+              onDisableNearMe={() => setNearMeEnabled(false)}
+              onEnableNearMe={activateNearMeWithCurrentLocation}
+              onLimitChange={setRouteLimit}
+            />
+          ) : null
+        }
         savedViews={savedViews}
         searchInputRef={searchInputRef}
         statusCounts={statusCounts}
@@ -508,6 +521,7 @@ export function JobsPage({
           filters={filters}
           limit={routeLimit}
           routeProximityLocationEnabled={routeProximityLocationEnabled}
+          showToolbar={false}
           viewMode={visibleViewMode}
           onActiveChange={setNearMeEnabled}
           onClearFilters={clearFilters}
@@ -602,6 +616,7 @@ function JobsPageHeader({
   onViewModeChange,
   options,
   presentation,
+  proximityControl,
   savedViews,
   searchInputRef,
   statusCounts,
@@ -625,6 +640,7 @@ function JobsPageHeader({
     readonly isMobile: boolean;
     readonly savedViewsOpen: boolean;
   };
+  readonly proximityControl?: React.ReactNode;
   readonly savedViews: readonly JobSavedView[];
   readonly searchInputRef: React.RefObject<HTMLInputElement | null>;
   readonly statusCounts: ReturnType<typeof buildJobStatusCounts>;
@@ -677,6 +693,7 @@ function JobsPageHeader({
         filters={filters}
         hasCustomFilters={hasCustomFilters}
         optionsState={options}
+        proximityControl={proximityControl}
         savedViewsControl={mobileSavedViewsControl}
         searchInputRef={searchInputRef}
         showInternalFilters={canUseInternalOptions}
@@ -864,6 +881,7 @@ function JobsCommandToolbar({
   onFiltersChange,
   savedViewsControl,
   optionsState,
+  proximityControl,
   searchInputRef,
   showInternalFilters,
 }: {
@@ -872,6 +890,7 @@ function JobsCommandToolbar({
   readonly onClearFilters: () => void;
   readonly onFiltersChange: (patch: Partial<JobsListFilters>) => void;
   readonly savedViewsControl?: React.ReactNode;
+  readonly proximityControl?: React.ReactNode;
   readonly optionsState: {
     readonly labels: readonly { readonly id: string; readonly name: string }[];
     readonly members: readonly {
@@ -904,6 +923,7 @@ function JobsCommandToolbar({
 
         <div className="no-scrollbar flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-x-auto pb-1 xl:justify-end xl:pb-0">
           {savedViewsControl}
+          {proximityControl}
           {showInternalFilters ? (
             <>
               <CommandFilter
@@ -1005,6 +1025,65 @@ function JobsCommandToolbar({
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+function JobsProximityFilterControl({
+  active,
+  limit,
+  onDisableNearMe,
+  onEnableNearMe,
+  onLimitChange,
+}: {
+  readonly active: boolean;
+  readonly limit: ProximityLimit;
+  readonly onDisableNearMe: () => void;
+  readonly onEnableNearMe: () => void;
+  readonly onLimitChange: (limit: ProximityResultLimitOption) => void;
+}) {
+  const label = active
+    ? "Stop ranking jobs by driving time"
+    : "Rank jobs by driving time from your current location";
+
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              size="sm"
+              variant={active ? "default" : "outline"}
+              className={cn(!active && "bg-background")}
+              aria-pressed={active}
+              onClick={active ? onDisableNearMe : onEnableNearMe}
+            />
+          }
+        >
+          <HugeiconsIcon
+            icon={active ? Cancel01Icon : Location01Icon}
+            strokeWidth={2}
+            data-icon="inline-start"
+          />
+          Near me
+        </TooltipTrigger>
+        <TooltipContent>
+          <span>{label}</span>
+          {active ? null : (
+            <ShortcutHint
+              hotkey={HOTKEYS.jobsNearMe.hotkey}
+              label={HOTKEYS.jobsNearMe.label}
+            />
+          )}
+        </TooltipContent>
+      </Tooltip>
+      <ProximityLimitSelect
+        disabled={!active}
+        id="jobs-toolbar-route-limit"
+        value={limit}
+        onLimitChange={onLimitChange}
+      />
     </div>
   );
 }

@@ -31,22 +31,26 @@ export type WorkerServiceBinding = Service;
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for service bindings.
 export type AgentWorkerBindings = {
   readonly AI: Cloudflare.AiGateway;
-  readonly ANALYTICS: Cloudflare.AnalyticsEngineDataset;
+  readonly ANALYTICS?: Cloudflare.AnalyticsEngineDataset | undefined;
   readonly CeirdAgent: Cloudflare.DurableObjectNamespaceLike;
   readonly DOMAIN: DomainWorkerResource;
 };
 
 export interface AgentWorkerBindingEnv {
   readonly AI: Ai;
-  readonly ANALYTICS: AnalyticsEngineDataset;
+  readonly ANALYTICS?: AnalyticsEngineDataset | undefined;
   readonly CeirdAgent: DurableObjectNamespace;
   readonly DOMAIN: WorkerServiceBinding;
 }
 
 type AgentWorkerBindingProps = {
   readonly [BindingName in keyof AgentWorkerBindings]:
-    | AgentWorkerBindings[BindingName]
-    | Effect.Effect<AgentWorkerBindings[BindingName], never, never>;
+    | NonNullable<AgentWorkerBindings[BindingName]>
+    | Effect.Effect<
+        NonNullable<AgentWorkerBindings[BindingName]>,
+        never,
+        never
+      >;
 };
 
 type WorkerConfiguredEnvValue = Input<NonNullable<WorkerProps["env"]>[string]>;
@@ -75,10 +79,11 @@ export function makeAgentWorkerBindings(input: {
   readonly aiGateway: Cloudflare.AiGateway;
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly domain: DomainWorkerResource;
+  readonly localDev?: boolean | undefined;
 }) {
   return {
     AI: input.aiGateway,
-    ANALYTICS: input.analytics,
+    ...(input.localDev === true ? {} : { ANALYTICS: input.analytics }),
     CeirdAgent: Cloudflare.DurableObjectNamespace("CeirdAgent", {
       className: "CeirdAgent",
     }),
@@ -156,6 +161,7 @@ export function makeAgentWorkerProps(input: {
       aiGateway: input.aiGateway,
       analytics: input.analytics,
       domain: input.domain,
+      localDev: input.localDev,
     }),
     env: {
       ...makeAgentWorkerEnv({

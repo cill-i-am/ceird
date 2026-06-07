@@ -4,7 +4,9 @@ import type { SitesOptionsResponse } from "@ceird/sites-core";
 import {
   Add01Icon,
   ArrowRight01Icon,
+  Cancel01Icon,
   FilterHorizontalIcon,
+  LeftToRightListBulletIcon,
   Location01Icon,
   MapPinCheckIcon,
   MapPinXIcon,
@@ -44,10 +46,17 @@ import {
   TableHeader,
   TableRow,
 } from "#/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/components/ui/tooltip";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
 import { hasOrganizationElevatedAccess } from "#/features/organizations/organization-viewer";
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
+import { ProximityLimitSelect } from "#/features/proximity/proximity-limit-select";
+import type { ProximityResultLimitOption } from "#/features/proximity/proximity-state";
 import {
   buildSiteAddressLines,
   hasSiteCoordinates,
@@ -57,11 +66,19 @@ import { useIsMobile } from "#/hooks/use-mobile";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
+import { cn } from "#/lib/utils";
 
 import { SitesProximityPanel } from "./sites-proximity-panel";
+import type { SitesViewMode } from "./sites-search";
 import { useSitesNotice, useSitesOptions } from "./sites-state";
 
 const SITE_COMMAND_LIMIT = 25;
+
+const SitesCoverageMap = React.lazy(async () => {
+  const module = await import("./sites-coverage-map");
+
+  return { default: module.SitesCoverageMap };
+});
 
 type SiteDirectoryItem = SitesOptionsResponse["sites"][number];
 interface SiteDirectoryViewItem {
@@ -73,42 +90,99 @@ interface SiteDirectoryViewItem {
 
 export type SitesMapFilter = "all" | "mapped" | "unmapped";
 
+interface SitesPageLocalState {
+  readonly mapFilter: SitesMapFilter;
+  readonly nearMeEnabled: boolean;
+  readonly query: string;
+  readonly routeLimit: ProximityLimit;
+  readonly viewMode: SitesViewMode;
+}
+
+type SitesPageLocalStateAction =
+  | { readonly type: "clear_filters" }
+  | { readonly mapFilter: SitesMapFilter; readonly type: "set_map_filter" }
+  | { readonly nearMeEnabled: boolean; readonly type: "set_near_me" }
+  | { readonly query: string; readonly type: "set_query" }
+  | { readonly routeLimit: ProximityLimit; readonly type: "set_route_limit" }
+  | { readonly viewMode: SitesViewMode; readonly type: "set_view_mode" };
+
+const initialSitesPageLocalState = {
+  mapFilter: "all",
+  nearMeEnabled: false,
+  query: "",
+  routeLimit: 10 as ProximityLimit,
+  viewMode: "list",
+} satisfies SitesPageLocalState;
+
+function sitesPageLocalStateReducer(
+  state: SitesPageLocalState,
+  action: SitesPageLocalStateAction
+): SitesPageLocalState {
+  switch (action.type) {
+    case "clear_filters": {
+      return { ...state, mapFilter: "all", query: "" };
+    }
+    case "set_map_filter": {
+      return { ...state, mapFilter: action.mapFilter };
+    }
+    case "set_near_me": {
+      return { ...state, nearMeEnabled: action.nearMeEnabled };
+    }
+    case "set_query": {
+      return { ...state, query: action.query };
+    }
+    case "set_route_limit": {
+      return { ...state, routeLimit: action.routeLimit };
+    }
+    case "set_view_mode": {
+      return { ...state, viewMode: action.viewMode };
+    }
+    default: {
+      return state;
+    }
+  }
+}
+
 // Route-level page coordinates filters, commands, responsive layout, and nested route outlet.
 // react-doctor-disable-next-line
 export function SitesPage({
   nearMeEnabled: controlledNearMeEnabled,
   onNearMeChange,
   onRouteLimitChange,
+  onViewModeChange,
   routeHotkeysEnabled = true,
   routeLimit: controlledRouteLimit,
   routeProximityLocationEnabled = false,
+  viewMode: controlledViewMode,
   viewer,
 }: {
   readonly nearMeEnabled?: boolean | undefined;
   readonly onNearMeChange?: (value: boolean) => void;
   readonly onRouteLimitChange?: (value: ProximityLimit) => void;
+  readonly onViewModeChange?: (value: SitesViewMode) => void;
   readonly routeHotkeysEnabled?: boolean;
   readonly routeLimit?: ProximityLimit | undefined;
   readonly routeProximityLocationEnabled?: boolean | undefined;
+  readonly viewMode?: SitesViewMode | undefined;
   readonly viewer: OrganizationViewer;
 }) {
   const navigate = useNavigate({ from: "/sites" });
+  const [localState, dispatchLocalState] = React.useReducer(
+    sitesPageLocalStateReducer,
+    initialSitesPageLocalState
+  );
+  const viewMode = controlledViewMode ?? localState.viewMode;
   const options = useSitesOptions();
   const [notice, clearNotice] = useSitesNotice();
   const canCreateSites = hasOrganizationElevatedAccess(viewer.role);
   const isMobile = useIsMobile();
-  const [uncontrolledNearMeEnabled, setUncontrolledNearMeEnabled] =
-    React.useState(false);
-  const nearMeEnabled = controlledNearMeEnabled ?? uncontrolledNearMeEnabled;
-  const [uncontrolledRouteLimit, setUncontrolledRouteLimit] =
-    React.useState<ProximityLimit>(10 as ProximityLimit);
-  const routeLimit = controlledRouteLimit ?? uncontrolledRouteLimit;
+  const nearMeEnabled = controlledNearMeEnabled ?? localState.nearMeEnabled;
+  const routeLimit = controlledRouteLimit ?? localState.routeLimit;
   const [currentLocationRequestKey, requestCurrentLocation] = React.useReducer(
     (current: number) => current + 1,
     0
   );
-  const [query, setQuery] = React.useState("");
-  const [mapFilter, setMapFilter] = React.useState<SitesMapFilter>("all");
+  const { mapFilter, query } = localState;
   const siteDirectoryItems = React.useMemo<readonly SiteDirectoryViewItem[]>(
     () =>
       options.sites.map((site) => {
@@ -155,7 +229,28 @@ export function SitesPage({
       return matchesQuery && matchesMap;
     });
   }, [mapFilter, query, siteDirectoryItems]);
+  const filteredSites = React.useMemo(
+    () => filteredSiteItems.map((item) => item.site),
+    [filteredSiteItems]
+  );
   const hasFilters = query.trim().length > 0 || mapFilter !== "all";
+  const setViewMode = React.useCallback(
+    (nextViewMode: SitesViewMode) => {
+      if (nextViewMode === viewMode) {
+        return;
+      }
+
+      if (controlledViewMode === undefined) {
+        dispatchLocalState({
+          type: "set_view_mode",
+          viewMode: nextViewMode,
+        });
+      }
+
+      onViewModeChange?.(nextViewMode);
+    },
+    [controlledViewMode, onViewModeChange, viewMode]
+  );
   const createSite = React.useCallback(() => {
     navigate({
       search: (current) =>
@@ -174,7 +269,10 @@ export function SitesPage({
   const setNearMeEnabled = React.useCallback(
     (nextEnabled: boolean) => {
       if (controlledNearMeEnabled === undefined) {
-        setUncontrolledNearMeEnabled(nextEnabled);
+        dispatchLocalState({
+          nearMeEnabled: nextEnabled,
+          type: "set_near_me",
+        });
       }
 
       onNearMeChange?.(nextEnabled);
@@ -184,7 +282,10 @@ export function SitesPage({
   const setRouteLimit = React.useCallback(
     (nextLimit: ProximityLimit) => {
       if (controlledRouteLimit === undefined) {
-        setUncontrolledRouteLimit(nextLimit);
+        dispatchLocalState({
+          routeLimit: nextLimit,
+          type: "set_route_limit",
+        });
       }
 
       onRouteLimitChange?.(nextLimit);
@@ -196,8 +297,16 @@ export function SitesPage({
     requestCurrentLocation();
   }, [requestCurrentLocation, setNearMeEnabled]);
   const clearFilters = React.useCallback(() => {
-    setQuery("");
-    setMapFilter("all");
+    dispatchLocalState({ type: "clear_filters" });
+  }, []);
+  const setQuery = React.useCallback((nextQuery: string) => {
+    dispatchLocalState({ query: nextQuery, type: "set_query" });
+  }, []);
+  const setMapFilter = React.useCallback((nextMapFilter: SitesMapFilter) => {
+    dispatchLocalState({
+      mapFilter: nextMapFilter,
+      type: "set_map_filter",
+    });
   }, []);
   const sitesPageCommandActions = React.useMemo<
     readonly CommandAction[]
@@ -230,17 +339,41 @@ export function SitesPage({
     }
 
     if (routeHotkeysEnabled) {
-      actions.unshift({
-        disabled: nearMeEnabled,
-        group: "Current page",
-        icon: Location01Icon,
-        id: "sites-near-me",
-        priority: 75,
-        run: activateNearMeWithCurrentLocation,
-        scope: "route",
-        shortcut: HOTKEYS.sitesNearMe,
-        title: "Rank sites near me",
-      });
+      actions.unshift(
+        {
+          disabled: viewMode === "list",
+          group: "Current page",
+          icon: LeftToRightListBulletIcon,
+          id: "sites-switch-list-view",
+          priority: 70,
+          run: () => setViewMode("list"),
+          scope: "route",
+          shortcut: HOTKEYS.sitesListView,
+          title: "Switch to list view",
+        },
+        {
+          disabled: viewMode === "map",
+          group: "Current page",
+          icon: MapsSquare01Icon,
+          id: "sites-switch-map-view",
+          priority: 60,
+          run: () => setViewMode("map"),
+          scope: "route",
+          shortcut: HOTKEYS.sitesMapView,
+          title: "Switch to map view",
+        },
+        {
+          disabled: nearMeEnabled,
+          group: "Current page",
+          icon: Location01Icon,
+          id: "sites-near-me",
+          priority: 75,
+          run: activateNearMeWithCurrentLocation,
+          scope: "route",
+          shortcut: HOTKEYS.sitesNearMe,
+          title: "Rank sites near me",
+        }
+      );
     }
 
     return actions;
@@ -251,7 +384,9 @@ export function SitesPage({
     nearMeEnabled,
     openSite,
     routeHotkeysEnabled,
+    setViewMode,
     siteDirectoryItems,
+    viewMode,
   ]);
 
   useRegisterCommandActions(sitesPageCommandActions);
@@ -262,6 +397,20 @@ export function SitesPage({
   useAppHotkeySequence("sitesNearMe", activateNearMeWithCurrentLocation, {
     enabled: routeHotkeysEnabled && !nearMeEnabled,
   });
+  useAppHotkeySequence(
+    "sitesListView",
+    () => {
+      setViewMode("list");
+    },
+    { enabled: routeHotkeysEnabled }
+  );
+  useAppHotkeySequence(
+    "sitesMapView",
+    () => {
+      setViewMode("map");
+    },
+    { enabled: routeHotkeysEnabled }
+  );
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-3 sm:p-4 lg:p-5">
@@ -269,28 +418,31 @@ export function SitesPage({
         title="Sites"
         leading={<HugeiconsIcon icon={Location01Icon} strokeWidth={2} />}
         actions={
-          canCreateSites ? (
-            <Link
-              to="/sites"
-              search={(current) =>
-                openWorkspaceSheetSearch(current, { kind: "site.create" })
-              }
-              className={buttonVariants({ size: "sm" })}
-            >
-              <HugeiconsIcon
-                icon={Add01Icon}
-                strokeWidth={2}
-                data-icon="inline-start"
-              />
-              New site
-              <ShortcutHint
-                surface="button"
-                hotkey={HOTKEYS.sitesCreate.hotkey}
-                label={HOTKEYS.sitesCreate.label}
-                decorative
-              />
-            </Link>
-          ) : null
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <ViewModeSwitch value={viewMode} onValueChange={setViewMode} />
+            {canCreateSites ? (
+              <Link
+                to="/sites"
+                search={(current) =>
+                  openWorkspaceSheetSearch(current, { kind: "site.create" })
+                }
+                className={buttonVariants({ size: "sm" })}
+              >
+                <HugeiconsIcon
+                  icon={Add01Icon}
+                  strokeWidth={2}
+                  data-icon="inline-start"
+                />
+                New site
+                <ShortcutHint
+                  surface="button"
+                  hotkey={HOTKEYS.sitesCreate.hotkey}
+                  label={HOTKEYS.sitesCreate.label}
+                  decorative
+                />
+              </Link>
+            ) : null}
+          </div>
         }
       />
 
@@ -329,18 +481,30 @@ export function SitesPage({
           onActiveChange={setNearMeEnabled}
           onClearFilters={clearFilters}
           onLimitChange={setRouteLimit}
+          showToolbar={false}
         >
           <SitesDirectorySection
             clearFilters={clearFilters}
             filteredSiteItems={filteredSiteItems}
+            filteredSites={filteredSites}
             hasFilters={hasFilters}
             isMobile={isMobile}
             mapFilter={mapFilter}
             openSite={openSite}
+            proximityControl={
+              <SitesProximityFilterControl
+                active={nearMeEnabled}
+                limit={routeLimit}
+                onDisableNearMe={() => setNearMeEnabled(false)}
+                onEnableNearMe={activateNearMeWithCurrentLocation}
+                onLimitChange={setRouteLimit}
+              />
+            }
             query={query}
             setMapFilter={setMapFilter}
             setQuery={setQuery}
             siteStats={siteStats}
+            viewMode={viewMode}
           />
         </SitesProximityPanel>
       ) : (
@@ -363,21 +527,26 @@ export function SitesPage({
 function SitesDirectorySection({
   clearFilters,
   filteredSiteItems,
+  filteredSites,
   hasFilters,
   isMobile,
   mapFilter,
   openSite,
+  proximityControl,
   query,
   setMapFilter,
   setQuery,
   siteStats,
+  viewMode,
 }: {
   readonly clearFilters: () => void;
   readonly filteredSiteItems: readonly SiteDirectoryViewItem[];
+  readonly filteredSites: readonly SiteDirectoryItem[];
   readonly hasFilters: boolean;
   readonly isMobile: boolean;
   readonly mapFilter: SitesMapFilter;
   readonly openSite: (siteId: SiteDirectoryItem["id"]) => void;
+  readonly proximityControl: React.ReactNode;
   readonly query: string;
   readonly setMapFilter: (filter: SitesMapFilter) => void;
   readonly setQuery: (query: string) => void;
@@ -386,6 +555,7 @@ function SitesDirectorySection({
     readonly totalSites: number;
     readonly unmappedSites: number;
   };
+  readonly viewMode: SitesViewMode;
 }) {
   return (
     <section aria-labelledby="sites-directory-heading" className="min-h-0">
@@ -414,6 +584,7 @@ function SitesDirectorySection({
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {proximityControl}
             <SitesMapFilterButton
               active={mapFilter === "all"}
               count={siteStats.totalSites}
@@ -446,31 +617,48 @@ function SitesDirectorySection({
         </div>
       </div>
 
-      <div className="min-h-0 overflow-hidden rounded-lg border bg-background">
-        {isMobile ? (
-          <SitesMobileDirectory items={filteredSiteItems} />
-        ) : (
-          <SitesDesktopDirectory
-            items={filteredSiteItems}
-            openSite={openSite}
-          />
-        )}
+      {viewMode === "list" ? (
+        <div className="min-h-0 overflow-hidden rounded-lg border bg-background">
+          {isMobile ? (
+            <SitesMobileDirectory items={filteredSiteItems} />
+          ) : (
+            <SitesDesktopDirectory
+              items={filteredSiteItems}
+              openSite={openSite}
+            />
+          )}
 
-        {filteredSiteItems.length === 0 ? (
-          <Empty className="min-h-72 border-transparent bg-transparent">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <HugeiconsIcon icon={FilterHorizontalIcon} strokeWidth={2} />
-              </EmptyMedia>
-              <EmptyTitle>No sites match these filters.</EmptyTitle>
-              <EmptyDescription>
-                Clear filters or search for another site or address.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : null}
-      </div>
+          {filteredSiteItems.length === 0 ? (
+            <Empty className="min-h-72 border-transparent bg-transparent">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <HugeiconsIcon icon={FilterHorizontalIcon} strokeWidth={2} />
+                </EmptyMedia>
+                <EmptyTitle>No sites match these filters.</EmptyTitle>
+                <EmptyDescription>
+                  Clear filters or search for another site or address.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : null}
+        </div>
+      ) : (
+        <section data-testid="sites-coverage-panel" className="min-h-0">
+          <React.Suspense fallback={<SitesCoverageMapFallback />}>
+            <SitesCoverageMap sites={filteredSites} />
+          </React.Suspense>
+        </section>
+      )}
     </section>
+  );
+}
+
+function SitesCoverageMapFallback() {
+  return (
+    <div
+      aria-label="Loading site map view"
+      className="min-h-[420px] rounded-2xl border bg-muted/10"
+    />
   );
 }
 
@@ -593,6 +781,91 @@ function SiteDirectoryCard({ item }: { readonly item: SiteDirectoryViewItem }) {
         </div>
       </Link>
     </li>
+  );
+}
+
+function SitesProximityFilterControl({
+  active,
+  limit,
+  onDisableNearMe,
+  onEnableNearMe,
+  onLimitChange,
+}: {
+  readonly active: boolean;
+  readonly limit: ProximityLimit;
+  readonly onDisableNearMe: () => void;
+  readonly onEnableNearMe: () => void;
+  readonly onLimitChange: (limit: ProximityResultLimitOption) => void;
+}) {
+  const label = active
+    ? "Stop ranking sites by driving time"
+    : "Rank sites by driving time from your current location";
+
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              size="sm"
+              variant={active ? "default" : "outline"}
+              className={cn(!active && "bg-background")}
+              aria-pressed={active}
+              onClick={active ? onDisableNearMe : onEnableNearMe}
+            />
+          }
+        >
+          <HugeiconsIcon
+            icon={active ? Cancel01Icon : Location01Icon}
+            strokeWidth={2}
+            data-icon="inline-start"
+          />
+          Near me
+        </TooltipTrigger>
+        <TooltipContent>
+          <span>{label}</span>
+          {active ? null : (
+            <ShortcutHint
+              hotkey={HOTKEYS.sitesNearMe.hotkey}
+              label={HOTKEYS.sitesNearMe.label}
+            />
+          )}
+        </TooltipContent>
+      </Tooltip>
+      <ProximityLimitSelect
+        disabled={!active}
+        id="sites-toolbar-route-limit"
+        value={limit}
+        onLimitChange={onLimitChange}
+      />
+    </div>
+  );
+}
+
+function ViewModeSwitch({
+  onValueChange,
+  value,
+}: {
+  readonly onValueChange: (value: SitesViewMode) => void;
+  readonly value: SitesViewMode;
+}) {
+  const nextView = value === "list" ? "map" : "list";
+  const label = nextView === "map" ? "Map" : "List";
+  const icon =
+    nextView === "map" ? MapsSquare01Icon : LeftToRightListBulletIcon;
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="bg-background"
+      onClick={() => onValueChange(nextView)}
+    >
+      <HugeiconsIcon icon={icon} strokeWidth={2} data-icon="inline-start" />
+      {label}
+    </Button>
   );
 }
 

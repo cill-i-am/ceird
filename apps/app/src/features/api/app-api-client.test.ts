@@ -650,7 +650,7 @@ describe("app API client", () => {
     });
   }, 1000);
 
-  it("preserves identity-core tagged domain errors", () => {
+  it("preserves identity-core user preference tagged domain errors", () => {
     const domainError = new OrganizationSecurityActivityAccessDeniedError({
       message: "Only organization owners and admins can view security activity",
     });

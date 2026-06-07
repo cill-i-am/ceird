@@ -273,7 +273,7 @@ export class RouteProximityService extends Context.Service<
   );
   static readonly Default =
     RouteProximityService.DefaultWithoutDependencies.pipe(
-      Layer.provide(RouteProvider.Google)
+      Layer.provide(RouteProvider.Configured)
     );
 }
 

@@ -16,6 +16,7 @@ import {
   makeGoogleRoutesProvider,
   makeGoogleRoutesProviderFromConfig,
   makeInMemoryRouteCostGuard,
+  makeTestRouteProvider,
   RouteProvider,
 } from "./route-provider.js";
 
@@ -596,6 +597,72 @@ describe("Google Routes provider", () => {
       expect(result.left.message).not.toContain(String(origin.latitude));
       expect(result.left.message).toContain("Google Routes provider failed");
     }
+  });
+});
+
+describe("Test Routes provider", () => {
+  it("ranks destinations deterministically from coordinates", async () => {
+    const provider = makeTestRouteProvider();
+
+    const result = await Effect.runPromise(
+      provider.rankRoutes({
+        context,
+        destinations: [destinationA, destinationB],
+        origin,
+      })
+    );
+
+    expect(result.unavailableDestinationIds).toEqual([]);
+    expect(result.rows.map((row) => row.destinationId)).toEqual([
+      "job-b",
+      "job-a",
+    ]);
+    expect(result.rows[0]?.routeSummary).toMatchObject({
+      provider: "test",
+      providerRequestKind: "matrix",
+      routeStatus: "ok",
+      trafficAware: false,
+    });
+  });
+
+  it("returns a simple GeoJSON display line for preview requests", async () => {
+    const provider = makeTestRouteProvider();
+
+    const result = await Effect.runPromise(
+      provider.previewRoute({
+        context,
+        destination: destinationA,
+        includeLine: true,
+        origin,
+      })
+    );
+
+    expect(result.routeSummary).toMatchObject({
+      provider: "test",
+      providerRequestKind: "route_line",
+      routeStatus: "ok",
+      trafficAware: false,
+    });
+    expect(result.line).toMatchObject({
+      format: "geojson_linestring",
+    });
+  });
+
+  it("is selected by the configured provider layer when CEIRD_ROUTE_PROVIDER=test", async () => {
+    const result = await Effect.runPromise(
+      RouteProvider.rankRoutes({
+        context,
+        destinations: [destinationA],
+        origin,
+      }).pipe(
+        Effect.provide(RouteProvider.Configured),
+        withConfigProvider(
+          configProviderFromMap(new Map([["CEIRD_ROUTE_PROVIDER", "test"]]))
+        )
+      )
+    );
+
+    expect(result.rows[0]?.routeSummary.provider).toBe("test");
   });
 });
 

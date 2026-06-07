@@ -158,6 +158,32 @@ describe("jobs proximity panel", () => {
     expect(mockedRankNearbyJobs).not.toHaveBeenCalled();
   });
 
+  it("can keep the inactive route-aware controls out of the page body when the toolbar owns them", async () => {
+    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+
+    render(
+      <JobsProximityPanel
+        active={false}
+        filters={defaultFilters}
+        limit={10}
+        routeProximityLocationEnabled
+        showToolbar={false}
+        viewMode="map"
+        onActiveChange={vi.fn<(active: boolean) => void>()}
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      >
+        <div>Regular jobs content</div>
+      </JobsProximityPanel>
+    );
+
+    expect(
+      screen.queryByLabelText("Route-aware job proximity")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /near me/i })).toBeNull();
+    expect(screen.getByText("Regular jobs content")).toBeVisible();
+  });
+
   it("does not request current location from URL-activated Near me until the user confirms", async () => {
     const user = userEvent.setup();
     const { JobsProximityPanel } = await import("./jobs-proximity-panel");

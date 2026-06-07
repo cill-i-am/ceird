@@ -116,7 +116,6 @@ async function makeSignedTypedOrigin(
   return {
     ...origin,
     originToken: await signProximityOriginToken({
-      now: new Date("2026-06-07T10:00:00.000Z"),
       origin,
       secret: PROXIMITY_ORIGIN_TOKEN_SECRET,
       ttlSeconds: 300,

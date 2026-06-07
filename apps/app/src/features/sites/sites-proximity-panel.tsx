@@ -239,6 +239,7 @@ export interface SitesProximityPanelProps {
   readonly onLimitChange: (limit: ProximityResultLimitOption) => void;
   readonly query: string;
   readonly routeProximityLocationEnabled: boolean;
+  readonly showToolbar?: boolean;
 }
 
 export function SitesProximityPanel({
@@ -252,6 +253,7 @@ export function SitesProximityPanel({
   onLimitChange,
   query,
   routeProximityLocationEnabled,
+  showToolbar = true,
 }: SitesProximityPanelProps) {
   const {
     confirmTypedOrigin,
@@ -282,58 +284,63 @@ export function SitesProximityPanel({
     query,
     routeProximityLocationEnabled,
   });
+  const shouldRenderProximityShell = showToolbar || active;
   return (
     <>
-      <section
-        aria-label="Route-aware site proximity"
-        className={cn(
-          "grid gap-3 rounded-lg border bg-muted/10 p-3",
-          active ? "border-primary/25" : "border-border"
-        )}
-      >
-        <SitesProximityToolbar
-          active={active}
-          currentInputKey={rankingInputKey}
-          limit={limit}
-          originState={origin}
-          requestCurrentOrigin={requestCurrentOrigin}
-          requestState={request}
-          retryRanking={retryRanking}
-          onDisableNearMe={disableNearMe}
-          onEnableNearMe={enableNearMe}
-          onLimitChange={onLimitChange}
-          onOriginDialogOpen={handleOriginDialogOpen}
-        />
+      {shouldRenderProximityShell ? (
+        <section
+          aria-label="Route-aware site proximity"
+          className={cn(
+            "grid gap-3 rounded-lg border bg-muted/10 p-3",
+            active ? "border-primary/25" : "border-border"
+          )}
+        >
+          {showToolbar ? (
+            <SitesProximityToolbar
+              active={active}
+              currentInputKey={rankingInputKey}
+              limit={limit}
+              originState={origin}
+              requestCurrentOrigin={requestCurrentOrigin}
+              requestState={request}
+              retryRanking={retryRanking}
+              onDisableNearMe={disableNearMe}
+              onEnableNearMe={enableNearMe}
+              onLimitChange={onLimitChange}
+              onOriginDialogOpen={handleOriginDialogOpen}
+            />
+          ) : null}
 
-        {active ? (
-          <SitesProximityContent
-            currentInputKey={rankingInputKey}
-            mapFilter={mapFilter}
-            originState={origin}
-            requestCurrentOrigin={requestCurrentOrigin}
-            requestState={request}
-            retryRanking={retryRanking}
-            routeProximityLocationEnabled={routeProximityLocationEnabled}
-            selectedSiteId={selectedSiteId}
-            onClearFilters={onClearFilters}
-            onOriginDialogOpen={handleOriginDialogOpen}
-            onSelectedSiteIdChange={handleSelectedSiteIdChange}
+          {active ? (
+            <SitesProximityContent
+              currentInputKey={rankingInputKey}
+              mapFilter={mapFilter}
+              originState={origin}
+              requestCurrentOrigin={requestCurrentOrigin}
+              requestState={request}
+              retryRanking={retryRanking}
+              routeProximityLocationEnabled={routeProximityLocationEnabled}
+              selectedSiteId={selectedSiteId}
+              onClearFilters={onClearFilters}
+              onOriginDialogOpen={handleOriginDialogOpen}
+              onSelectedSiteIdChange={handleSelectedSiteIdChange}
+            />
+          ) : null}
+
+          <ProximityOriginDialog
+            error={originDialogError}
+            loading={originDialogLoading}
+            onConfirm={confirmTypedOrigin}
+            onOpenChange={handleOriginDialogOpen}
+            onQueryChange={handleOriginQueryChange}
+            onSuggestionSelect={handleSuggestionSelect}
+            open={originDialogOpen}
+            query={originQuery}
+            selectedSuggestion={selectedSuggestion}
+            suggestions={originSuggestions}
           />
-        ) : null}
-
-        <ProximityOriginDialog
-          error={originDialogError}
-          loading={originDialogLoading}
-          onConfirm={confirmTypedOrigin}
-          onOpenChange={handleOriginDialogOpen}
-          onQueryChange={handleOriginQueryChange}
-          onSuggestionSelect={handleSuggestionSelect}
-          open={originDialogOpen}
-          query={originQuery}
-          selectedSuggestion={selectedSuggestion}
-          suggestions={originSuggestions}
-        />
-      </section>
+        </section>
+      ) : null}
       {children}
     </>
   );

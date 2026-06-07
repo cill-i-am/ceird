@@ -30,6 +30,14 @@ function SitesRoute() {
       activeOrganizationId={activeOrganizationId}
       dataPlaneSeeds={dataPlaneSeeds}
       nearMeEnabled={search.near ?? false}
+      onViewModeChange={(viewMode) => {
+        navigate({
+          search: (current) => ({
+            ...current,
+            view: viewMode === "list" ? undefined : viewMode,
+          }),
+        });
+      }}
       onNearMeChange={(near) => {
         navigate({
           search: (current) => ({
@@ -56,6 +64,7 @@ function SitesRoute() {
       routeLimit={search.routeLimit ?? 10}
       routeProximityLocationEnabled={routeProximityLocationEnabled}
       stack={stack}
+      viewMode={search.view ?? "list"}
       viewer={viewer}
     />
   );

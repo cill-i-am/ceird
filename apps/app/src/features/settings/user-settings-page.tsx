@@ -1,7 +1,4 @@
-import type {
-  OrganizationRole,
-  UserPreferences,
-} from "@ceird/identity-core";
+import type { OrganizationRole, UserPreferences } from "@ceird/identity-core";
 import { useForm } from "@tanstack/react-form";
 import { useRouter } from "@tanstack/react-router";
 import { Schema } from "effect";
@@ -27,11 +24,11 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
 import { LocationPreferencePanel } from "./location-preference-panel";
-import { UserSecuritySessionsPanel } from "./user-security-sessions-panel";
 import {
   DEFAULT_USER_PREFERENCES,
   updateCurrentUserPreferences,
 } from "./user-preferences-api";
+import { UserSecuritySessionsPanel } from "./user-security-sessions-panel";
 import {
   changeEmailSchema,
   changePasswordSchema,
