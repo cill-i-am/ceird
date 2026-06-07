@@ -5,6 +5,7 @@ const schemaExportNames = [
   "agentActionRun",
   "agentsSchema",
   "agentThread",
+  "authSecurityAuditEvent",
   "authSchema",
   "comment",
   "commentsSchema",
@@ -28,6 +29,7 @@ const schemaExportNames = [
   "siteContact",
   "siteLabel",
   "sitesSchema",
+  "twoFactor",
   "user",
   "verification",
   "workItem",
@@ -63,6 +65,9 @@ export const account = requireSchemaExport("account");
 export const agentActionRun = requireSchemaExport("agentActionRun");
 export const agentsSchema = requireSchemaExport("agentsSchema");
 export const agentThread = requireSchemaExport("agentThread");
+export const authSecurityAuditEvent = requireSchemaExport(
+  "authSecurityAuditEvent"
+);
 export const authSchema = requireSchemaExport("authSchema");
 export const comment = requireSchemaExport("comment");
 export const commentsSchema = requireSchemaExport("commentsSchema");
@@ -86,6 +91,7 @@ export const siteComment = requireSchemaExport("siteComment");
 export const siteContact = requireSchemaExport("siteContact");
 export const siteLabel = requireSchemaExport("siteLabel");
 export const sitesSchema = requireSchemaExport("sitesSchema");
+export const twoFactor = requireSchemaExport("twoFactor");
 export const user = requireSchemaExport("user");
 export const verification = requireSchemaExport("verification");
 export const workItem = requireSchemaExport("workItem");

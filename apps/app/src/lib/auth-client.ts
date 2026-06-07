@@ -4,7 +4,10 @@ import type {
   OrganizationRole,
   PublicInvitationPreview,
 } from "@ceird/identity-core";
-import { organizationClient } from "better-auth/client/plugins";
+import {
+  organizationClient,
+  twoFactorClient,
+} from "better-auth/client/plugins";
 import type { Role } from "better-auth/plugins/access";
 import {
   adminAc,
@@ -58,15 +61,20 @@ export function resolveApiBaseURL(
   return new URL(API_BASE_PATH, apiOrigin).toString();
 }
 
+export function createCeirdAuthClientPlugins() {
+  return [
+    organizationClient({
+      roles: BETTER_AUTH_ORGANIZATION_ROLES,
+    }),
+    oauthProviderClient(),
+    twoFactorClient(),
+  ];
+}
+
 export function createCeirdAuthClient(baseURL?: string | undefined) {
   return createAuthClient({
     basePath: AUTH_BASE_PATH,
-    plugins: [
-      organizationClient({
-        roles: BETTER_AUTH_ORGANIZATION_ROLES,
-      }),
-      oauthProviderClient(),
-    ],
+    plugins: createCeirdAuthClientPlugins(),
     ...(baseURL ? { baseURL } : {}),
   });
 }

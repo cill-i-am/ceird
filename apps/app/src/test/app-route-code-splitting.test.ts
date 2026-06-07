@@ -9,6 +9,7 @@ const DOMAIN_HEAVY_ROUTE_FILES = [
   "routes/_app._org.activity.tsx",
   "routes/_app._org.index.tsx",
   "routes/_app._org.jobs.tsx",
+  "routes/_app._org.organization.security.tsx",
   "routes/_app._org.organization.settings.tsx",
   "routes/_app._org.sites.tsx",
 ] as const;
@@ -28,6 +29,7 @@ const ROUTE_SEARCH_FILES = [
   "features/auth/password-reset-search.ts",
   "features/activity/activity-search.ts",
   "features/jobs/jobs-search.ts",
+  "features/organization-security/organization-security-search.ts",
   "features/settings/user-settings-search.ts",
   "features/workspace-sheets/workspace-sheet-search.ts",
 ] as const;

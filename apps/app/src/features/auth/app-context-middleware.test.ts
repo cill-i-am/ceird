@@ -31,6 +31,7 @@ const betterAuthSessionWithActiveOrganization = {
     email: "taylor@example.com",
     image: null,
     emailVerified: false,
+    twoFactorEnabled: false,
     createdAt: "2026-04-04T17:08:12.488Z",
     updatedAt: "2026-04-04T17:08:12.488Z",
   },
@@ -96,6 +97,7 @@ describe("app context request middleware route selection", () => {
     "/login",
     "/members",
     "/oauth/consent",
+    "/organization/security",
     "/organization/settings",
     "/reset-password",
     "/settings",
@@ -118,6 +120,7 @@ describe("app context request middleware route selection", () => {
     "/",
     "/activity",
     "/members",
+    "/organization/security",
     "/organization/settings",
     "/sites",
     "/jobs",
@@ -206,6 +209,25 @@ describe("app context request middleware payload", () => {
       })
     ).resolves.toStrictEqual({
       authSession: null,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves the raw OAuth consent search string for signed query validation", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const requestSearch =
+      "?client_id=signed-client&scope=openid%20ceird%3Aread&sig=abc&client_id=forged-client";
+
+    await expect(
+      loadRequestAppContextMiddlewareContext({
+        pathname: "/oauth/consent",
+        request: new Request(
+          `https://app.example.com/oauth/consent${requestSearch}`
+        ),
+      })
+    ).resolves.toStrictEqual({
+      authSession: null,
+      requestSearch,
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });

@@ -74,6 +74,7 @@ const {
         id: string;
       } | null;
       error: {
+        code?: string;
         message: string;
         status: number;
         statusText: string;
@@ -86,6 +87,7 @@ const {
         id: string;
       } | null;
       error: {
+        code?: string;
         message: string;
         status: number;
         statusText: string;
@@ -96,6 +98,7 @@ const {
     (input: { query: { organizationId: string } }) => Promise<{
       data: InvitationPayload[] | null;
       error: {
+        code?: string;
         message: string;
         status: number;
         statusText: string;
@@ -109,6 +112,7 @@ const {
         total: number;
       } | null;
       error: {
+        code?: string;
         message: string;
         status: number;
         statusText: string;
@@ -124,6 +128,7 @@ const {
         >;
       } | null;
       error: {
+        code?: string;
         message: string;
         status: number;
         statusText: string;
@@ -1523,6 +1528,42 @@ describe("organization members page", () => {
     expect(screen.getByTitle("pending@example.com")).toBeVisible();
   }, 10_000);
 
+  it("shows email-verification copy when pending invitation resend is blocked", async () => {
+    mockedInviteMember.mockResolvedValue({
+      data: null,
+      error: {
+        code: "EMAIL_NOT_VERIFIED",
+        message: "Verify your email before inviting organization members.",
+        status: 403,
+        statusText: "Forbidden",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
+
+    await expect(
+      screen.findByTitle("pending@example.com")
+    ).resolves.toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Invitation actions for pending@example.com",
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Resend invitation" })
+    );
+
+    await expect(
+      screen.findByText(
+        "Verify your email before inviting teammates. Check your inbox, then try again."
+      )
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByTitle("pending@example.com")).toBeVisible();
+  }, 10_000);
+
   it("cancels pending invitations from the pending list", async () => {
     mockedListInvitations.mockResolvedValueOnce({
       data: [createInvitation()],
@@ -1665,6 +1706,43 @@ describe("organization members page", () => {
     await expect(
       screen.findByText(
         "We couldn't send that invitation. Please check the details and try again."
+      )
+    ).resolves.toBeInTheDocument();
+  }, 10_000);
+
+  it("shows targeted email verification copy when inviting requires verification", async () => {
+    mockedInviteMember.mockResolvedValue({
+      data: null,
+      error: {
+        code: "EMAIL_NOT_VERIFIED",
+        message: "Verify your email before inviting organization members.",
+        status: 403,
+        statusText: "Forbidden",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(
+      <OrganizationMembersPage
+        activeOrganizationId={organizationId}
+        currentUserId={currentUserId}
+      />
+    );
+
+    const dialog = await openInviteDialog(user);
+
+    await user.type(
+      within(dialog).getByLabelText("Email"),
+      "member@example.com"
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Send invite" })
+    );
+
+    await expect(
+      screen.findByText(
+        "Verify your email before inviting teammates. Check your inbox, then try again."
       )
     ).resolves.toBeInTheDocument();
   }, 10_000);

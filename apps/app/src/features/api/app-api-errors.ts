@@ -4,6 +4,7 @@ import type {
   AgentStorageError,
   AgentThreadNotFoundError,
 } from "@ceird/agents-core";
+import type { IdentityError } from "@ceird/identity-core";
 import type { JobsError } from "@ceird/jobs-core";
 import type { LabelsError } from "@ceird/labels-core";
 import type { SitesError } from "@ceird/sites-core";
@@ -13,6 +14,7 @@ import { HttpClientError } from "effect/unstable/http";
 
 const APP_API_DOMAIN_ERROR_TAG_PREFIXES = [
   "@ceird/agents-core/",
+  "@ceird/identity-core/",
   "@ceird/jobs-core/",
   "@ceird/labels-core/",
   "@ceird/sites-core/",
@@ -41,7 +43,12 @@ type AgentsError =
   | AgentActionRejectedError
   | AgentStorageError
   | AgentThreadNotFoundError;
-type AppApiDomainError = AgentsError | JobsError | LabelsError | SitesError;
+type AppApiDomainError =
+  | AgentsError
+  | IdentityError
+  | JobsError
+  | LabelsError
+  | SitesError;
 export type AppApiError =
   | AppApiDomainError
   | AppApiOriginResolutionError

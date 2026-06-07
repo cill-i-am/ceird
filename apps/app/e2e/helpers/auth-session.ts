@@ -5,6 +5,7 @@ import type { Page } from "@playwright/test";
 
 import { CreateOrganizationPage } from "../pages/create-organization-page";
 import { SignupPage } from "../pages/signup-page";
+import { markUserEmailVerified } from "./email-verification";
 
 const WORKSPACE_HOME_TIMEOUT_MS = 20_000;
 
@@ -43,7 +44,7 @@ export async function createSignedInOrganization(
   const signupPage = new SignupPage(page);
   const createOrganizationPage = new CreateOrganizationPage(page);
   const email = input?.email ?? createTestEmail("e2e-user");
-  const password = input?.password ?? "password123";
+  const password = input?.password ?? "password1234";
   const organizationName =
     input?.organizationName ?? createTestSlug("ceird-e2e");
 
@@ -52,6 +53,7 @@ export async function createSignedInOrganization(
   await signupPage.email.fill(email);
   await signupPage.password.fill(password);
   await signupPage.submit.click();
+  await markUserEmailVerified(email);
 
   await createOrganizationPage.expectLoaded();
   await createOrganizationPage.name.fill(organizationName);

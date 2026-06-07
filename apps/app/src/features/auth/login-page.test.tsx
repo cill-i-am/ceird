@@ -1,13 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Schema } from "effect";
 import type { ComponentProps } from "react";
 
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
 import { listOrganizations } from "../organizations/organization-access";
 import { clearOrganizationAccessClientCache } from "../organizations/organization-access-cache";
-import { loginSchema } from "./auth-schemas";
 import { LoginPage } from "./login-page";
 
 const {
@@ -16,6 +14,8 @@ const {
   mockedListOrganizations,
   mockedNavigate,
   mockedSignInEmail,
+  mockedVerifyBackupCode,
+  mockedVerifyTotp,
 } = vi.hoisted(() => ({
   mockedClearAppContextClientCache: vi.fn<() => void>(),
   mockedGetSession: vi.fn<
@@ -34,10 +34,31 @@ const {
   mockedSignInEmail: vi.fn<
     (input: { email: string; password: string }) => Promise<{
       data: {
-        session: {
+        session?: {
           id: string;
         };
+        twoFactorRedirect?: boolean;
       } | null;
+      error: {
+        message: string;
+        status: number;
+        statusText: string;
+      } | null;
+    }>
+  >(),
+  mockedVerifyBackupCode: vi.fn<
+    (input: { code: string }) => Promise<{
+      data: { token: string } | null;
+      error: {
+        message: string;
+        status: number;
+        statusText: string;
+      } | null;
+    }>
+  >(),
+  mockedVerifyTotp: vi.fn<
+    (input: { code: string }) => Promise<{
+      data: { token: string } | null;
       error: {
         message: string;
         status: number;
@@ -109,6 +130,10 @@ vi.mock(import("#/lib/auth-client"), () => ({
     signIn: {
       email: mockedSignInEmail,
     },
+    twoFactor: {
+      verifyBackupCode: mockedVerifyBackupCode,
+      verifyTotp: mockedVerifyTotp,
+    },
   } as unknown as typeof AuthClient,
 }));
 
@@ -128,6 +153,14 @@ describe("login page", () => {
       },
       error: null,
     });
+    mockedVerifyBackupCode.mockResolvedValue({
+      data: { token: "two-factor-session-token" },
+      error: null,
+    });
+    mockedVerifyTotp.mockResolvedValue({
+      data: { token: "two-factor-session-token" },
+      error: null,
+    });
   });
 
   afterEach(() => {
@@ -141,13 +174,13 @@ describe("login page", () => {
     render(<LoginPage />);
 
     await user.type(screen.getByLabelText("Email"), "person@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.type(screen.getByLabelText("Password"), "password1234");
     await user.click(screen.getByRole("button", { name: /sign in/i }));
 
     await waitFor(() => {
       expect(mockedSignInEmail).toHaveBeenCalledWith({
         email: "person@example.com",
-        password: "password123",
+        password: "password1234",
       });
     });
     await waitFor(() => {
@@ -178,7 +211,7 @@ describe("login page", () => {
     render(<LoginPage />);
 
     await user.type(screen.getByLabelText("Email"), "person@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.type(screen.getByLabelText("Password"), "password1234");
     await user.click(screen.getByRole("button", { name: /sign in/i }));
 
     await waitFor(() => {
@@ -191,6 +224,111 @@ describe("login page", () => {
       { id: "org_current", name: "Current Org", slug: "current" },
     ]);
     expect(mockedListOrganizations).toHaveBeenCalledTimes(2);
+  }, 10_000);
+
+  it("continues into a TOTP challenge when Better Auth requires 2FA", async () => {
+    mockedSignInEmail.mockResolvedValue({
+      data: { twoFactorRedirect: true },
+      error: null,
+    });
+    const user = userEvent.setup();
+
+    render(<LoginPage search={{ invitation: "inv_123" }} />);
+
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password1234");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
+    await expect(
+      screen.findByRole("heading", { name: "Verify your sign-in" })
+    ).resolves.toBeVisible();
+    expect(mockedNavigate).not.toHaveBeenCalled();
+    expect(mockedClearAppContextClientCache).not.toHaveBeenCalled();
+    expect(screen.getByText("person@example.com")).toBeVisible();
+
+    await user.type(screen.getByLabelText("Authenticator code"), "123456");
+    await user.click(screen.getByRole("button", { name: "Verify sign-in" }));
+
+    await waitFor(() => {
+      expect(mockedVerifyTotp).toHaveBeenCalledWith({ code: "123456" });
+    });
+    expect(mockedVerifyTotp).not.toHaveBeenCalledWith(
+      expect.objectContaining({ trustDevice: expect.any(Boolean) })
+    );
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({ to: "/" });
+    });
+    expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
+  }, 10_000);
+
+  it("lets users complete the 2FA challenge with a backup code", async () => {
+    mockedSignInEmail.mockResolvedValue({
+      data: { twoFactorRedirect: true },
+      error: null,
+    });
+    const user = userEvent.setup();
+
+    render(<LoginPage />);
+
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password1234");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
+    await expect(
+      screen.findByRole("heading", { name: "Verify your sign-in" })
+    ).resolves.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Use a backup code" }));
+    await user.type(screen.getByLabelText("Backup code"), "alpha-0001");
+    await user.click(screen.getByRole("button", { name: "Verify sign-in" }));
+
+    await waitFor(() => {
+      expect(mockedVerifyBackupCode).toHaveBeenCalledWith({
+        code: "alpha-0001",
+      });
+    });
+    expect(mockedVerifyBackupCode).not.toHaveBeenCalledWith(
+      expect.objectContaining({ trustDevice: expect.any(Boolean) })
+    );
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({ to: "/" });
+    });
+  }, 10_000);
+
+  it("returns to sign-in with the email preserved and password cleared after an expired 2FA challenge", async () => {
+    mockedSignInEmail.mockResolvedValue({
+      data: { twoFactorRedirect: true },
+      error: null,
+    });
+    mockedVerifyTotp.mockResolvedValue({
+      data: null,
+      error: {
+        message: "Two-factor verification session expired.",
+        status: 401,
+        statusText: "Unauthorized",
+      },
+    });
+    const user = userEvent.setup();
+
+    render(<LoginPage />);
+
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password1234");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await user.type(
+      await screen.findByLabelText("Authenticator code"),
+      "123456"
+    );
+    await user.click(screen.getByRole("button", { name: "Verify sign-in" }));
+
+    await expect(
+      screen.findByText(
+        "That verification session expired. Sign in again to get a new challenge."
+      )
+    ).resolves.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Sign in again" }));
+
+    expect(screen.getByLabelText("Email")).toHaveValue("person@example.com");
+    expect(screen.getByLabelText("Password")).toHaveValue("");
   }, 10_000);
 
   it("preserves invitation continuation in the forgot-password link", () => {
@@ -223,7 +361,7 @@ describe("login page", () => {
     render(<LoginPage />);
 
     await user.type(screen.getByLabelText("Email"), "person@example.com");
-    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.type(screen.getByLabelText("Password"), "password1234");
     await user.click(screen.getByRole("button", { name: /sign in/i }));
 
     await expect(
@@ -233,23 +371,8 @@ describe("login page", () => {
     ).resolves.toBeInTheDocument();
   }, 10_000);
 
-  it("uses the shared login schema for submit validation", async () => {
+  it("allows short existing passwords to reach Better Auth during sign-in", async () => {
     const user = userEvent.setup();
-    const standardSchema = Schema.toStandardSchemaV1(loginSchema);
-    const result = standardSchema["~standard"].validate({
-      email: "person@example.com",
-      password: "short",
-    });
-
-    if ("issues" in result === false || result.issues === undefined) {
-      throw new Error("Expected login schema validation issues");
-    }
-
-    const expectedMessage = "Use at least 8 characters.";
-
-    if (!expectedMessage) {
-      throw new Error("Expected login schema issue message");
-    }
 
     render(<LoginPage />);
 
@@ -257,8 +380,24 @@ describe("login page", () => {
     await user.type(screen.getByLabelText("Password"), "short");
     await user.click(screen.getByRole("button", { name: /sign in/i }));
 
+    await waitFor(() => {
+      expect(mockedSignInEmail).toHaveBeenCalledWith({
+        email: "person@example.com",
+        password: "short",
+      });
+    });
+  }, 10_000);
+
+  it("requires a password before submitting sign-in", async () => {
+    const user = userEvent.setup();
+
+    render(<LoginPage />);
+
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
     await expect(
-      screen.findByText(expectedMessage)
+      screen.findByText("This field is required.")
     ).resolves.toBeInTheDocument();
     expect(mockedSignInEmail).not.toHaveBeenCalled();
   }, 10_000);

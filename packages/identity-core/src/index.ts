@@ -1,4 +1,6 @@
+/* oxlint-disable eslint/max-classes-per-file */
 import { Schema } from "effect";
+import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
 
 export const ORGANIZATION_NAME_MIN_LENGTH = 2;
 export const ORGANIZATION_SLUG_MAX_LENGTH = 40;
@@ -12,10 +14,27 @@ export const RESERVED_ORGANIZATION_SLUGS = [
 ] as const;
 const ISO_DATE_TIME_UTC_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 
 function isIsoDateTimeString(value: string): boolean {
   return (
     ISO_DATE_TIME_UTC_PATTERN.test(value) && !Number.isNaN(Date.parse(value))
+  );
+}
+
+function isIsoDateString(value: string): boolean {
+  if (!ISO_DATE_PATTERN.test(value)) {
+    return false;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() + 1 === month &&
+    date.getUTCDate() === day
   );
 }
 
@@ -48,6 +67,16 @@ export const IsoDateTimeString = Schema.String.pipe(
   })
 );
 export type IsoDateTimeString = Schema.Schema.Type<typeof IsoDateTimeString>;
+
+export const IsoDateString = Schema.String.pipe(
+  Schema.refine((value): value is string => isIsoDateString(value), {
+    message: "Expected an ISO-8601 date string",
+  }),
+  Schema.annotate({
+    description: "ISO-8601 date string",
+  })
+);
+export type IsoDateString = Schema.Schema.Type<typeof IsoDateString>;
 
 export const ORGANIZATION_ROLES = [
   "owner",
@@ -230,6 +259,189 @@ export type PublicInvitationPreview = Schema.Schema.Type<
   typeof PublicInvitationPreviewSchema
 >;
 
+export const ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES = [
+  "organization_created",
+  "organization_updated",
+  "organization_invitation_created",
+  "organization_invitation_resent",
+  "organization_invitation_canceled",
+  "organization_invitation_accepted",
+  "organization_member_role_updated",
+  "organization_member_removed",
+] as const;
+
+export const ORGANIZATION_SECURITY_ACTIVITY_TARGET_TYPES = [
+  "organization",
+  "invitation",
+  "member",
+] as const;
+
+export const OrganizationSecurityActivityEventId = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/identity-core/OrganizationSecurityActivityEventId")
+);
+export type OrganizationSecurityActivityEventId = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityEventId
+>;
+
+export const OrganizationSecurityActivityCursor = Schema.String.pipe(
+  Schema.brand("@ceird/identity-core/OrganizationSecurityActivityCursor")
+);
+export type OrganizationSecurityActivityCursor = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityCursor
+>;
+
+export const OrganizationSecurityActivityEventType = Schema.Literals(
+  ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES
+);
+export type OrganizationSecurityActivityEventType = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityEventType
+>;
+
+export const OrganizationSecurityActivityTargetType = Schema.Literals(
+  ORGANIZATION_SECURITY_ACTIVITY_TARGET_TYPES
+);
+export type OrganizationSecurityActivityTargetType = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityTargetType
+>;
+
+const OrganizationSecurityActivityTargetSchema = Schema.Struct({
+  label: Schema.optional(Schema.String),
+  memberId: Schema.optional(Schema.NonEmptyString),
+  type: OrganizationSecurityActivityTargetType,
+  userId: Schema.optional(UserId),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationSecurityActivityTarget = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityTargetSchema
+>;
+
+export const OrganizationSecurityActivityActorSchema = Schema.Struct({
+  email: Schema.String,
+  id: UserId,
+  name: Schema.String,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationSecurityActivityActor = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityActorSchema
+>;
+
+const OrganizationSecurityActivityRoleChangeSchema = Schema.Struct({
+  after: Schema.optional(OrganizationRole),
+  before: Schema.optional(OrganizationRole),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationSecurityActivityRoleChange = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityRoleChangeSchema
+>;
+
+export const OrganizationSecurityActivityItemSchema = Schema.Struct({
+  actor: Schema.optional(OrganizationSecurityActivityActorSchema),
+  createdAt: IsoDateTimeString,
+  eventType: OrganizationSecurityActivityEventType,
+  id: OrganizationSecurityActivityEventId,
+  organizationId: OrganizationId,
+  roleChange: Schema.optional(OrganizationSecurityActivityRoleChangeSchema),
+  summary: Schema.String,
+  target: OrganizationSecurityActivityTargetSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationSecurityActivityItem = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityItemSchema
+>;
+
+const NonEmptyTrimmedString = Schema.Trim.pipe(
+  Schema.check(Schema.isMinLength(1))
+);
+
+export const OrganizationSecurityActivityQuerySchema = Schema.Struct({
+  actorUserId: Schema.optional(UserId),
+  cursor: Schema.optional(OrganizationSecurityActivityCursor),
+  eventType: Schema.optional(OrganizationSecurityActivityEventType),
+  fromDate: Schema.optional(IsoDateString),
+  limit: Schema.optional(
+    Schema.NumberFromString.pipe(
+      Schema.check(
+        Schema.isInt(),
+        Schema.isGreaterThan(0),
+        Schema.isLessThanOrEqualTo(100)
+      )
+    )
+  ),
+  targetSearch: Schema.optional(NonEmptyTrimmedString),
+  targetType: Schema.optional(OrganizationSecurityActivityTargetType),
+  toDate: Schema.optional(IsoDateString),
+});
+export type OrganizationSecurityActivityQuery = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityQuerySchema
+>;
+
+export const OrganizationSecurityActivityListResponseSchema = Schema.Struct({
+  items: Schema.Array(OrganizationSecurityActivityItemSchema),
+  nextCursor: Schema.optional(OrganizationSecurityActivityCursor),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationSecurityActivityListResponse = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityListResponseSchema
+>;
+
+export const ORGANIZATION_SECURITY_ACTIVITY_CURSOR_INVALID_ERROR_TAG =
+  "@ceird/identity-core/OrganizationSecurityActivityCursorInvalidError" as const;
+export class OrganizationSecurityActivityCursorInvalidError extends Schema.TaggedErrorClass<OrganizationSecurityActivityCursorInvalidError>()(
+  ORGANIZATION_SECURITY_ACTIVITY_CURSOR_INVALID_ERROR_TAG,
+  {
+    cursor: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 400 }
+) {}
+
+export const ORGANIZATION_SECURITY_ACTIVITY_ACCESS_DENIED_ERROR_TAG =
+  "@ceird/identity-core/OrganizationSecurityActivityAccessDeniedError" as const;
+export class OrganizationSecurityActivityAccessDeniedError extends Schema.TaggedErrorClass<OrganizationSecurityActivityAccessDeniedError>()(
+  ORGANIZATION_SECURITY_ACTIVITY_ACCESS_DENIED_ERROR_TAG,
+  {
+    message: Schema.String,
+  },
+  { httpApiStatus: 403 }
+) {}
+
+export const ORGANIZATION_SECURITY_ACTIVITY_STORAGE_ERROR_TAG =
+  "@ceird/identity-core/OrganizationSecurityActivityStorageError" as const;
+export class OrganizationSecurityActivityStorageError extends Schema.TaggedErrorClass<OrganizationSecurityActivityStorageError>()(
+  ORGANIZATION_SECURITY_ACTIVITY_STORAGE_ERROR_TAG,
+  {
+    cause: Schema.optional(Schema.String),
+    message: Schema.String,
+  },
+  { httpApiStatus: 503 }
+) {}
+
+export type IdentityError =
+  | OrganizationSecurityActivityAccessDeniedError
+  | OrganizationSecurityActivityCursorInvalidError
+  | OrganizationSecurityActivityStorageError;
+
+export const IdentityApiGroup = HttpApiGroup.make("identity").add(
+  HttpApiEndpoint.get(
+    "listOrganizationSecurityActivity",
+    "/organization/security/activity",
+    {
+      error: [
+        OrganizationSecurityActivityAccessDeniedError,
+        OrganizationSecurityActivityCursorInvalidError,
+        OrganizationSecurityActivityStorageError,
+      ],
+      query: OrganizationSecurityActivityQuerySchema,
+      success: OrganizationSecurityActivityListResponseSchema,
+    }
+  )
+);
+
 export function decodeCreateOrganizationInput(
   input: unknown
 ): CreateOrganizationInput {
@@ -264,6 +476,14 @@ export function decodeUserId(input: unknown): UserId {
 
 export function decodeSessionId(input: unknown): SessionId {
   return Schema.decodeUnknownSync(SessionId)(input);
+}
+
+export function decodeOrganizationSecurityActivityListResponse(
+  input: unknown
+): OrganizationSecurityActivityListResponse {
+  return Schema.decodeUnknownSync(
+    OrganizationSecurityActivityListResponseSchema
+  )(input);
 }
 
 export function decodeInvitationId(input: unknown): InvitationId {

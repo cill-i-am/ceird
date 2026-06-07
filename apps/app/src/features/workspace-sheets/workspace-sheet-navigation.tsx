@@ -20,6 +20,7 @@ type WorkspaceSheetNavigationTo =
   | "/activity"
   | "/jobs"
   | "/members"
+  | "/organization/security"
   | "/organization/settings"
   | "/sites";
 
@@ -153,6 +154,7 @@ function getWorkspaceSheetNavigationTo(
     case "/activity":
     case "/jobs":
     case "/members":
+    case "/organization/security":
     case "/organization/settings":
     case "/sites": {
       return pathname;

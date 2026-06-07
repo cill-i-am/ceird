@@ -444,6 +444,45 @@ describe("accept invitation page", () => {
     ).toBeEnabled();
   }, 10_000);
 
+  it("shows membership-limit copy when the organization is full", async () => {
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {
+          id: "session_123",
+        },
+        user: {
+          email: "member@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedAcceptInvitation.mockResolvedValue({
+      data: null,
+      error: {
+        message: "Organization membership limit reached",
+        status: 403,
+        statusText: "Forbidden",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(<AcceptInvitationPage invitationId="inv_123" />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Accept invitation" })
+    );
+
+    await expect(
+      screen.findByText(
+        "This team has reached the 200-member limit. Remove a member before adding someone new."
+      )
+    ).resolves.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Accept invitation" })
+    ).toBeEnabled();
+  }, 10_000);
+
   it("clears organization caches when acceptance succeeds but activation fails", async () => {
     mockedGetSession.mockResolvedValue({
       data: {

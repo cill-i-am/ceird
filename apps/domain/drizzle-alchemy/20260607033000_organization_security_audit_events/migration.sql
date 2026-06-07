@@ -1,0 +1,3 @@
+ALTER TABLE "auth_security_audit_event" DROP CONSTRAINT "auth_security_audit_event_type_chk";
+--> statement-breakpoint
+ALTER TABLE "auth_security_audit_event" ADD CONSTRAINT "auth_security_audit_event_type_chk" CHECK ("event_type" in ('oauth_client_registration_succeeded', 'oauth_client_registration_rejected', 'oauth_consent_granted', 'oauth_consent_denied', 'oauth_token_refreshed', 'oauth_token_revoked', 'organization_created', 'organization_updated', 'organization_active_changed', 'organization_invitation_created', 'organization_invitation_resent', 'organization_invitation_canceled', 'organization_invitation_accepted', 'organization_member_role_updated', 'organization_member_removed'));

@@ -12,9 +12,16 @@ export const configWithoutCloudflareBootstrapSecrets = {
   appHostname: "app.example.com",
   authCookieDomain: "example.com",
   authCookiePrefix: "ceird-main",
+  authCaptchaEnabled: undefined,
+  authCaptchaSiteVerifyUrlOverride: undefined,
+  authCaptchaTurnstileSecretKey: undefined,
+  authCaptchaTurnstileSiteKey: undefined,
   authEmailFrom: Redacted.make("no-reply@example.com"),
   authEmailFromName: "Ceird",
+  authPasswordCompromiseCheckEnabled: undefined,
+  authPasswordCompromiseCheckRangeUrlOverride: undefined,
   authRateLimitEnabled: true,
+  authSecrets: undefined,
   googleMapsApiKey: Redacted.make(
     Schema.decodeUnknownSync(InfraGoogleMapsApiKey)("google-key")
   ),

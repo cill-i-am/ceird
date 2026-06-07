@@ -25,16 +25,57 @@ const organizationRoleValuesSql = sql.raw(
 const reservedOrganizationSlugValuesSql = sql.raw(
   RESERVED_ORGANIZATION_SLUGS.map((value) => `'${value}'`).join(", ")
 );
+export const AUTH_SECURITY_AUDIT_EVENT_TYPES = [
+  "oauth_client_registration_succeeded",
+  "oauth_client_registration_rejected",
+  "oauth_consent_granted",
+  "oauth_consent_denied",
+  "oauth_token_refreshed",
+  "oauth_token_revoked",
+  "organization_created",
+  "organization_updated",
+  "organization_active_changed",
+  "organization_invitation_created",
+  "organization_invitation_resent",
+  "organization_invitation_canceled",
+  "organization_invitation_accepted",
+  "organization_member_role_updated",
+  "organization_member_removed",
+] as const;
+export type AuthSecurityAuditEventType =
+  (typeof AUTH_SECURITY_AUDIT_EVENT_TYPES)[number];
+export type AuthSecurityAuditEventMetadata = Record<string, unknown>;
+const authSecurityAuditEventTypeValuesSql = sql.raw(
+  AUTH_SECURITY_AUDIT_EVENT_TYPES.map((value) => `'${value}'`).join(", ")
+);
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
+  twoFactorEnabled: boolean("two_factor_enabled").default(false).notNull(),
   image: text("image"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const twoFactor = pgTable(
+  "two_factor",
+  {
+    id: text("id").primaryKey(),
+    secret: text("secret").notNull(),
+    backupCodes: text("backup_codes").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    verified: boolean("verified").default(true).notNull(),
+  },
+  (table) => [
+    index("two_factor_secret_idx").on(table.secret),
+    uniqueIndex("two_factor_user_id_idx").on(table.userId),
+  ]
+);
 
 export const organization = pgTable(
   "organization",
@@ -304,6 +345,67 @@ export const oauthConsent = pgTable(
   ]
 );
 
+export const authSecurityAuditEvent = pgTable(
+  "auth_security_audit_event",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => randomUUID()),
+    eventType: text("event_type", {
+      enum: AUTH_SECURITY_AUDIT_EVENT_TYPES,
+    }).notNull(),
+    actorUserId: text("actor_user_id"),
+    organizationId: text("organization_id"),
+    sessionId: text("session_id"),
+    oauthClientId: text("oauth_client_id"),
+    scopes: text("scopes").array(),
+    sourceIp: text("source_ip"),
+    userAgent: text("user_agent"),
+    metadata: jsonb("metadata")
+      .$type<AuthSecurityAuditEventMetadata>()
+      .default(sql`'{}'::jsonb`)
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "auth_security_audit_event_type_chk",
+      sql`${table.eventType} in (${authSecurityAuditEventTypeValuesSql})`
+    ),
+    index("auth_security_audit_event_created_at_idx").on(
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("auth_security_audit_event_type_created_at_idx").on(
+      table.eventType,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("auth_security_audit_event_actor_created_at_idx").on(
+      table.actorUserId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("auth_security_audit_event_organization_created_at_idx").on(
+      table.organizationId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("auth_security_audit_event_session_created_at_idx").on(
+      table.sessionId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("auth_security_audit_event_oauth_client_created_at_idx").on(
+      table.oauthClientId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+  ]
+);
+
 export const authSchema = {
   user,
   organization,
@@ -312,10 +414,12 @@ export const authSchema = {
   session,
   account,
   verification,
+  twoFactor,
   rateLimit,
   jwks,
   oauthClient,
   oauthRefreshToken,
   oauthAccessToken,
   oauthConsent,
+  authSecurityAuditEvent,
 };

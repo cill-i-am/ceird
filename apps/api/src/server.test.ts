@@ -1,12 +1,6 @@
-import { NodeHttpServer } from "@effect/platform-node";
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Logger, References } from "effect";
-import {
-  HttpClient,
-  HttpRouter,
-  HttpServer,
-  HttpServerResponse,
-} from "effect/unstable/http";
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
 import { apiRequestLogger, makeApiWebHandler } from "./server.js";
 
@@ -56,34 +50,22 @@ describe("API request logging", () => {
 
   it("logs request outcomes without query strings", async () => {
     const { logger, logs } = captureLogs();
+    const request = HttpServerRequest.fromWeb(
+      new Request(
+        "http://127.0.0.1:3001/api/auth/callback?token=secret-token&callbackURL=https%3A%2F%2Fexample.com"
+      )
+    );
 
-    await Effect.gen(function* testRedactedRequestLogger() {
-      const app = yield* HttpRouter.toHttpEffect(
-        HttpRouter.add(
-          "GET",
-          "/api/auth/callback",
-          HttpServerResponse.text("callback ok")
-        )
-      );
-
-      yield* HttpServer.serveEffect(app, apiRequestLogger);
-
-      const client = yield* HttpClient.HttpClient;
-      const responseText = yield* client
-        .get(
-          "/api/auth/callback?token=secret-token&callbackURL=https%3A%2F%2Fexample.com"
-        )
-        .pipe(Effect.flatMap((response) => response.text));
-
-      expect(responseText).toBe("callback ok");
-    }).pipe(
+    const response = await apiRequestLogger(
+      Effect.succeed(HttpServerResponse.text("callback ok"))
+    ).pipe(
+      Effect.provideService(HttpServerRequest.HttpServerRequest, request),
       Effect.provide(Logger.layer([logger])),
       Effect.provideService(References.MinimumLogLevel, "Trace"),
-      Effect.provide(NodeHttpServer.layerTest),
-      Effect.scoped,
       Effect.runPromise
     );
 
+    expect(response.status).toBe(200);
     expect(logs).toHaveLength(1);
     expect(logs).toStrictEqual([
       {
@@ -133,28 +115,20 @@ describe("API request logging", () => {
 
   it("skips health probe logging", async () => {
     const { logger, logs } = captureLogs();
+    const request = HttpServerRequest.fromWeb(
+      new Request("http://127.0.0.1:3001/health")
+    );
 
-    await Effect.gen(function* testHealthProbeLogging() {
-      const app = yield* HttpRouter.toHttpEffect(
-        HttpRouter.add("GET", "/health", HttpServerResponse.text("ok"))
-      );
-
-      yield* HttpServer.serveEffect(app, apiRequestLogger);
-
-      const client = yield* HttpClient.HttpClient;
-      const responseText = yield* client
-        .get("/health")
-        .pipe(Effect.flatMap((response) => response.text));
-
-      expect(responseText).toBe("ok");
-    }).pipe(
+    const response = await apiRequestLogger(
+      Effect.succeed(HttpServerResponse.text("ok"))
+    ).pipe(
+      Effect.provideService(HttpServerRequest.HttpServerRequest, request),
       Effect.provide(Logger.layer([logger])),
       Effect.provideService(References.MinimumLogLevel, "Trace"),
-      Effect.provide(NodeHttpServer.layerTest),
-      Effect.scoped,
       Effect.runPromise
     );
 
+    expect(response.status).toBe(200);
     expect(logs).toStrictEqual([]);
   });
 });

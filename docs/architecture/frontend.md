@@ -24,10 +24,11 @@ Current visible routes:
 | `/verify-email`                    | `verify-email.tsx`                    | Show email verification result.                                |
 | `/accept-invitation/$invitationId` | `accept-invitation.$invitationId.tsx` | Accept organization invitation.                                |
 | `/create-organization`             | `_app.create-organization.tsx`        | Create a team and optionally invite initial members.           |
-| `/settings`                        | `_app.settings.tsx`                   | User settings.                                                 |
+| `/settings`                        | `_app.settings.tsx`                   | User profile, email, password, and account security settings.  |
 | `/activity`                        | `_app._org.activity.tsx`              | Organization activity feed.                                    |
 | `/jobs`                            | `_app._org.jobs.tsx`                  | Jobs list and saved views.                                     |
 | `/members`                         | `_app._org.members.tsx`               | Organization members and invitations.                          |
+| `/organization/security`           | `_app._org.organization.security.tsx` | Owner/admin security activity review.                          |
 | `/organization/settings`           | `_app._org.organization.settings.tsx` | Organization settings and labels.                              |
 | `/sites`                           | `_app._org.sites.tsx`                 | Sites list.                                                    |
 | `/health`                          | `health.ts`                           | App stack/stage health response for Alchemy and Worker checks. |
@@ -190,7 +191,7 @@ the package-local fallback and `local` when no Alchemy metadata is available.
 | `features/jobs`          | Jobs list, create flow, detail drawer/sheet, state effects, API client bridge, saved views, location display, maps, collaborators, labels, comments, and visits.                                                                                                                                                                     |
 | `features/sites`         | Sites list, site create flow, detail sheet, and site API state. The first Sites index refresh intentionally uses only supported site fields: name, address, and map readiness. Status, labels, lead, open job counts, saved views, updated timestamps, archive state, and bulk selection are product follow-ups, not placeholder UI. |
 | `features/activity`      | Organization activity feed search and formatting.                                                                                                                                                                                                                                                                                    |
-| `features/settings`      | User settings page schemas, search, and UI.                                                                                                                                                                                                                                                                                          |
+| `features/settings`      | User settings page schemas, search, profile/email/password forms, account security sessions, and 2FA settings UI.                                                                                                                                                                                                                    |
 | `features/command-bar`   | Command palette UI and global app actions.                                                                                                                                                                                                                                                                                           |
 | `features/agent`         | App-level Ceird Agent launcher, thread API helpers, Agent Worker origin resolution, responsive chat drawer, and chat E2E page object.                                                                                                                                                                                                |
 

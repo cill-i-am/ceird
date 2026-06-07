@@ -5,7 +5,12 @@ import type { authClient as AuthClient } from "#/lib/auth-client";
 
 import { OAuthConsentPage, getConsentErrorNotice } from "./oauth-consent-page";
 
-const { mockedConsent } = vi.hoisted(() => ({
+const {
+  mockedConsent,
+  mockedGetSession,
+  mockedOrganizationList,
+  mockedPublicClient,
+} = vi.hoisted(() => ({
   mockedConsent: vi.fn<
     (input: { accept: boolean; oauth_query?: string }) => Promise<{
       data: { url?: string } | null;
@@ -19,12 +24,41 @@ const { mockedConsent } = vi.hoisted(() => ({
       } | null;
     }>
   >(),
+  mockedGetSession: vi.fn<
+    () => Promise<{
+      data: { session: { activeOrganizationId?: string | null } } | null;
+      error: { message?: string } | null;
+    }>
+  >(),
+  mockedOrganizationList: vi.fn<
+    () => Promise<{
+      data: readonly { id: string; name: string; slug: string }[] | null;
+      error: { message?: string } | null;
+    }>
+  >(),
+  mockedPublicClient: vi.fn<
+    (input: { query: { client_id: string } }) => Promise<{
+      data: {
+        client_id: string;
+        client_name?: string;
+        client_uri?: string;
+        policy_uri?: string;
+        tos_uri?: string;
+      } | null;
+      error: { message?: string } | null;
+    }>
+  >(),
 }));
 
 vi.mock(import("#/lib/auth-client"), () => ({
   authClient: {
+    getSession: mockedGetSession,
+    organization: {
+      list: mockedOrganizationList,
+    },
     oauth2: {
       consent: mockedConsent,
+      publicClient: mockedPublicClient,
     },
   } as unknown as typeof AuthClient,
 }));
@@ -46,6 +80,16 @@ function createDeferredResult<Value>() {
   ).withResolvers<Value>();
 }
 
+async function findEnabledAllowAccessButton() {
+  const button = await screen.findByRole("button", { name: "Allow access" });
+
+  await waitFor(() => {
+    expect(button).toBeEnabled();
+  });
+
+  return button;
+}
+
 describe("OAuth consent page", () => {
   let originalLocation: Location;
   let assignedUrl: string | undefined;
@@ -57,6 +101,28 @@ describe("OAuth consent page", () => {
       data: { url: "https://agent.example.com/oauth/callback?code=abc" },
       error: null,
     });
+    mockedGetSession.mockResolvedValue({
+      data: { session: { activeOrganizationId: "org_active" } },
+      error: null,
+    });
+    mockedOrganizationList.mockResolvedValue({
+      data: [
+        {
+          id: "org_active",
+          name: "Northwind Field Ops",
+          slug: "northwind-field-ops",
+        },
+      ],
+      error: null,
+    });
+    mockedPublicClient.mockImplementation(({ query }) =>
+      Promise.resolve({
+        data: {
+          client_id: query.client_id,
+        },
+        error: null,
+      })
+    );
 
     Object.defineProperty(window, "location", {
       configurable: true,
@@ -77,7 +143,7 @@ describe("OAuth consent page", () => {
     vi.clearAllMocks();
   });
 
-  it("renders requested scopes with friendly labels and redirect host", () => {
+  it("renders requested scopes with friendly labels and redirect host", async () => {
     render(<OAuthConsentPage search={validSearch} />);
 
     expect(
@@ -86,11 +152,88 @@ describe("OAuth consent page", () => {
     expect(screen.getByText("mcp-field-agent")).toBeInTheDocument();
     expect(screen.getByText("agent.example.com")).toBeInTheDocument();
     expect(screen.getByText("Confirm your identity")).toBeInTheDocument();
-    expect(screen.getByText("Read your Ceird data")).toBeInTheDocument();
-    expect(screen.getByText("Update your Ceird data")).toBeInTheDocument();
+    expect(screen.getByText("View workspace data")).toBeInTheDocument();
+    expect(screen.getByText("Change workspace data")).toBeInTheDocument();
+    expect(screen.getByText("Review high-risk access")).toBeInTheDocument();
+    await expect(
+      screen.findByText("Northwind Field Ops")
+    ).resolves.toBeInTheDocument();
   }, 10_000);
 
-  it("renders consent details from the signed query prefix", () => {
+  it("fetches and displays public client metadata when available", async () => {
+    mockedPublicClient.mockResolvedValueOnce({
+      data: {
+        client_id: "mcp-field-agent",
+        client_name: "Field Ops Agent",
+        client_uri: "https://agent.example.com/app",
+        policy_uri: "https://agent.example.com/privacy",
+        tos_uri: "https://agent.example.com/terms",
+      },
+      error: null,
+    });
+
+    render(<OAuthConsentPage search={validSearch} />);
+
+    await expect(
+      screen.findByText("Field Ops Agent")
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("mcp-field-agent")).toBeInTheDocument();
+    expect(mockedPublicClient).toHaveBeenCalledWith({
+      query: {
+        client_id: "mcp-field-agent",
+      },
+    });
+    expect(
+      screen.getAllByRole("link", { name: "agent.example.com" })
+    ).toHaveLength(3);
+  }, 10_000);
+
+  it("falls back to signed query details when public client metadata fails", async () => {
+    mockedPublicClient.mockResolvedValueOnce({
+      data: null,
+      error: { message: "not found" },
+    });
+
+    render(<OAuthConsentPage search={validSearch} />);
+
+    expect(screen.getByText("mcp-field-agent")).toBeInTheDocument();
+    await expect(
+      screen.findByText(
+        "Client details unavailable. Showing the signed authorization request."
+      )
+    ).resolves.toBeInTheDocument();
+  }, 10_000);
+
+  it("groups admin, offline, identity, and unknown scopes into semantic rows", async () => {
+    render(
+      <OAuthConsentPage
+        search={{
+          ...validSearch,
+          scope:
+            "openid profile email offline_access ceird:read ceird:write ceird:admin vendor:unknown",
+        }}
+      />
+    );
+
+    expect(
+      screen.getByText("Administer workspace settings")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Change workspace data")).toBeInTheDocument();
+    expect(screen.getByText("View workspace data")).toBeInTheDocument();
+    expect(
+      screen.getByText("Keep access after this session")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Confirm your identity")).toBeInTheDocument();
+    expect(
+      screen.getByText("Requested access Ceird does not recognize")
+    ).toBeInTheDocument();
+    expect(screen.getByText("vendor:unknown")).toBeInTheDocument();
+    await expect(
+      screen.findByText("Northwind Field Ops")
+    ).resolves.toBeInTheDocument();
+  }, 10_000);
+
+  it("renders consent details from the signed query prefix", async () => {
     render(
       <OAuthConsentPage
         rawSearch={
@@ -106,9 +249,14 @@ describe("OAuth consent page", () => {
 
     expect(screen.getByText("signed-client")).toBeInTheDocument();
     expect(screen.getByText("signed.example.com")).toBeInTheDocument();
-    expect(screen.getByText("Administer Ceird data")).toBeInTheDocument();
+    expect(
+      screen.getByText("Administer workspace settings")
+    ).toBeInTheDocument();
     expect(screen.queryByText("forged-client")).not.toBeInTheDocument();
     expect(screen.queryByText("forged.example.com")).not.toBeInTheDocument();
+    await expect(
+      screen.findByText("Northwind Field Ops")
+    ).resolves.toBeInTheDocument();
   }, 10_000);
 
   it("shows an invalid state when client_id is missing", () => {
@@ -124,7 +272,7 @@ describe("OAuth consent page", () => {
       screen.getByRole("heading", { name: "Consent link expired" })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Allow" })
+      screen.queryByRole("button", { name: "Allow access" })
     ).not.toBeInTheDocument();
   }, 10_000);
 
@@ -132,7 +280,7 @@ describe("OAuth consent page", () => {
     const user = userEvent.setup();
     render(<OAuthConsentPage search={validSearch} />);
 
-    await user.click(screen.getByRole("button", { name: "Allow" }));
+    await user.click(await findEnabledAllowAccessButton());
 
     await waitFor(() => {
       expect(mockedConsent).toHaveBeenCalledWith({ accept: true });
@@ -154,7 +302,7 @@ describe("OAuth consent page", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Allow" }));
+    await user.click(await findEnabledAllowAccessButton());
 
     await waitFor(() => {
       expect(mockedConsent).toHaveBeenCalledWith({
@@ -176,11 +324,35 @@ describe("OAuth consent page", () => {
     });
   }, 10_000);
 
+  it("blocks Ceird scope approval when there is no active workspace but still allows denial", async () => {
+    const user = userEvent.setup();
+    mockedGetSession.mockResolvedValueOnce({
+      data: { session: { activeOrganizationId: null } },
+      error: null,
+    });
+
+    render(<OAuthConsentPage search={validSearch} />);
+
+    await expect(
+      screen.findByText("Choose a workspace first")
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Allow access" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Allow access" }));
+    expect(mockedConsent).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Deny" }));
+
+    await waitFor(() => {
+      expect(mockedConsent).toHaveBeenCalledWith({ accept: false });
+    });
+  }, 10_000);
+
   it("redirects to the returned URL after consent", async () => {
     const user = userEvent.setup();
     render(<OAuthConsentPage search={validSearch} />);
 
-    await user.click(screen.getByRole("button", { name: "Allow" }));
+    await user.click(await findEnabledAllowAccessButton());
 
     await waitFor(() => {
       expect(assignedUrl).toBe(
@@ -188,7 +360,7 @@ describe("OAuth consent page", () => {
       );
     });
 
-    expect(screen.getByRole("button", { name: "Allow" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Allow access" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Deny" })).toBeDisabled();
   }, 10_000);
 
@@ -201,14 +373,14 @@ describe("OAuth consent page", () => {
 
     render(<OAuthConsentPage search={validSearch} />);
 
-    await user.click(screen.getByRole("button", { name: "Allow" }));
+    await user.click(await findEnabledAllowAccessButton());
 
     await expect(
       screen.findByText(
         "We couldn't approve this request. Return to the app or agent and try again."
       )
     ).resolves.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Allow" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Allow access" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Deny" })).toBeEnabled();
   }, 10_000);
 
@@ -225,7 +397,7 @@ describe("OAuth consent page", () => {
 
     render(<OAuthConsentPage search={validSearch} />);
 
-    await user.click(screen.getByRole("button", { name: "Allow" }));
+    await user.click(await findEnabledAllowAccessButton());
 
     await expect(
       screen.findByText("Verify your email first")
@@ -261,6 +433,19 @@ describe("OAuth consent page", () => {
         "This authorization request could not be verified. Return to the app or agent and start a fresh request.",
     });
 
+    expect(
+      getConsentErrorNotice("allow", {
+        code: "OAUTH_ACTIVE_ORGANIZATION_REQUIRED",
+        message:
+          "Choose a workspace before approving this Ceird authorization request.",
+        status: 400,
+      })
+    ).toStrictEqual({
+      title: "Choose a workspace first",
+      description:
+        "Select a Ceird workspace, then return to the app or agent and start a fresh authorization request.",
+    });
+
     expect(getConsentErrorNotice("deny", { status: 429 })).toStrictEqual({
       title: "Too many attempts",
       description:
@@ -277,7 +462,7 @@ describe("OAuth consent page", () => {
 
     render(<OAuthConsentPage search={validSearch} />);
 
-    await user.click(screen.getByRole("button", { name: "Allow" }));
+    await user.click(await findEnabledAllowAccessButton());
     await user.click(screen.getByRole("button", { name: "Deny" }));
 
     expect(mockedConsent).toHaveBeenCalledExactlyOnceWith({ accept: true });

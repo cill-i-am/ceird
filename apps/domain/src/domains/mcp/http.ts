@@ -1,5 +1,5 @@
 import { mcpHandler } from "@better-auth/oauth-provider";
-import { SessionId, UserId } from "@ceird/identity-core";
+import { OrganizationId, SessionId, UserId } from "@ceird/identity-core";
 import { Effect, Layer, Option, Schema } from "effect";
 import { McpServer } from "effect/unstable/ai";
 import { HttpRouter } from "effect/unstable/http";
@@ -43,6 +43,7 @@ const MCP_DISPOSAL_SECRET_ASSIGNMENT_PATTERN =
 const MCP_DISPOSAL_SECRET_LIKE_ASSIGNMENT_PATTERN =
   /(["']?(?:access_token|refresh_token|client_secret|token|code|secret|password|key)["']?\s*[:=]\s*["']?)([^"',\s}&]+)/gi;
 const MCP_DISPOSAL_BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const CEIRD_ORGANIZATION_ID_TOKEN_CLAIM = "ceird_org_id";
 type McpPath = `/${string}`;
 
 type McpBaseLayer = Layer.Layer<never, never, never>;
@@ -322,6 +323,7 @@ function makeMcpJwksUrl(oauthIssuerUrl: string) {
 }
 
 const TokenPayloadSchema = Schema.Struct({
+  [CEIRD_ORGANIZATION_ID_TOKEN_CLAIM]: Schema.optional(Schema.String),
   client_id: Schema.optional(Schema.String),
   exp: Schema.optional(Schema.Number),
   scope: Schema.optional(Schema.Unknown),
@@ -355,13 +357,31 @@ async function handleAuthorizedMcpRequest<ERuntime>(
   }
 
   const scopes = decodeScopes(tokenPayloadValue.scope);
+  const organizationId = resolveMcpTokenOrganizationId(
+    tokenPayloadValue,
+    scopes
+  );
+
+  if (organizationId === undefined && mcpScopesRequireOrganization(scopes)) {
+    return new Response(null, {
+      headers: { "WWW-Authenticate": 'Bearer error="invalid_token"' },
+      status: 401,
+    });
+  }
+
   const app = await getOrCreateAuthorizedMcpApp(runtime.authorizedAppCache, {
     baseLive: runtime.baseLive,
     clientId: identity.clientId,
     mcpPath: runtime.mcpPath,
     runtimeLive: runtime.runtimeLive,
     scopes,
-    session: identity.session,
+    session:
+      organizationId === undefined
+        ? identity.session
+        : {
+            ...identity.session,
+            organizationId,
+          },
   });
   const requestWithSession =
     app.fallbackSessionId === undefined || request.headers.has("mcp-session-id")
@@ -420,6 +440,7 @@ function makeAuthorizedMcpAppCacheKey(options: {
   return JSON.stringify([
     options.session.sessionId,
     options.session.userId,
+    options.session.organizationId ?? null,
     options.clientId,
     options.scopes,
   ]);
@@ -603,6 +624,25 @@ function toMcpAuthorizedClientIdentity(
   }
 
   return { clientId, session };
+}
+
+function resolveMcpTokenOrganizationId(
+  jwt: TokenPayload,
+  scopes: readonly string[]
+) {
+  if (!mcpScopesRequireOrganization(scopes)) {
+    return;
+  }
+
+  const organizationId = Schema.decodeUnknownOption(OrganizationId)(
+    jwt[CEIRD_ORGANIZATION_ID_TOKEN_CLAIM]
+  );
+
+  return Option.getOrUndefined(organizationId);
+}
+
+function mcpScopesRequireOrganization(scopes: readonly string[]) {
+  return scopes.some((scope) => scope.startsWith("ceird:"));
 }
 
 function decodeScopes(scope: unknown): string[] {

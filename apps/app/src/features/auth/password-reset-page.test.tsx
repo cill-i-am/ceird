@@ -13,6 +13,7 @@ const { mockedNavigate, mockedResetPassword } = vi.hoisted(() => ({
     (input: { token: string; newPassword: string }) => Promise<{
       data: { status: boolean } | null;
       error: {
+        code?: string | undefined;
         message: string;
         status: number;
         statusText: string;
@@ -120,13 +121,13 @@ describe("password reset page", () => {
     expect(
       screen.getByRole("heading", { name: "Reset password" })
     ).toBeInTheDocument();
-    await user.type(screen.getByLabelText("New password"), "password123");
+    await user.type(screen.getByLabelText("New password"), "password1234");
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await waitFor(() => {
       expect(mockedResetPassword).toHaveBeenCalledWith({
         token: "reset-token",
-        newPassword: "password123",
+        newPassword: "password1234",
       });
     });
     await waitFor(() => {
@@ -151,7 +152,7 @@ describe("password reset page", () => {
       />
     );
 
-    await user.type(screen.getByLabelText("New password"), "password123");
+    await user.type(screen.getByLabelText("New password"), "password1234");
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await waitFor(() => {
@@ -185,7 +186,7 @@ describe("password reset page", () => {
       />
     );
 
-    await user.type(screen.getByLabelText("New password"), "password123");
+    await user.type(screen.getByLabelText("New password"), "password1234");
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await waitFor(() => {
@@ -214,11 +215,38 @@ describe("password reset page", () => {
 
     render(<PasswordResetPage search={{ token: "reset-token" }} />);
 
-    await user.type(screen.getByLabelText("New password"), "password123");
+    await user.type(screen.getByLabelText("New password"), "password1234");
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await expect(
       screen.findByText("We couldn't reset your password. Please try again.")
+    ).resolves.toBeInTheDocument();
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("shows password safety copy instead of expiring the link when reset password is compromised", async () => {
+    mockedResetPassword.mockResolvedValue({
+      data: null,
+      error: {
+        code: "PASSWORD_COMPROMISED",
+        message:
+          "The password you entered has been compromised. Please choose a different password.",
+        status: 400,
+        statusText: "Bad Request",
+      },
+    });
+
+    const user = userEvent.setup();
+
+    render(<PasswordResetPage search={{ token: "reset-token" }} />);
+
+    await user.type(screen.getByLabelText("New password"), "password1234");
+    await user.click(screen.getByRole("button", { name: /reset password/i }));
+
+    await expect(
+      screen.findByText(
+        "Choose a different password; this one appears in known data breaches."
+      )
     ).resolves.toBeInTheDocument();
     expect(mockedNavigate).not.toHaveBeenCalled();
   }, 10_000);
@@ -232,7 +260,7 @@ describe("password reset page", () => {
     await user.click(screen.getByRole("button", { name: /reset password/i }));
 
     await expect(
-      screen.findByText("Use at least 8 characters.")
+      screen.findByText("Use 12 to 256 characters.")
     ).resolves.toBeInTheDocument();
     expect(mockedResetPassword).not.toHaveBeenCalled();
     expect(mockedNavigate).not.toHaveBeenCalled();

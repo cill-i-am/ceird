@@ -3,6 +3,10 @@ import {
   AgentThreadId,
   AgentThreadNotFoundError,
 } from "@ceird/agents-core";
+import {
+  ORGANIZATION_SECURITY_ACTIVITY_ACCESS_DENIED_ERROR_TAG,
+  OrganizationSecurityActivityAccessDeniedError,
+} from "@ceird/identity-core";
 import { JOB_NOT_FOUND_ERROR_TAG, JobNotFoundError } from "@ceird/jobs-core";
 import type {
   JobDetailResponse,
@@ -392,6 +396,18 @@ describe("app API client", () => {
     expect(normalizeAppApiError(domainError)).toMatchObject({
       _tag: JOB_NOT_FOUND_ERROR_TAG,
       message: "Job not found",
+    });
+  }, 1000);
+
+  it("preserves identity-core tagged domain errors", () => {
+    const domainError = new OrganizationSecurityActivityAccessDeniedError({
+      message: "Only organization owners and admins can view security activity",
+    });
+
+    expect(normalizeAppApiError(domainError)).toBe(domainError);
+    expect(normalizeAppApiError(domainError)).toMatchObject({
+      _tag: ORGANIZATION_SECURITY_ACTIVITY_ACCESS_DENIED_ERROR_TAG,
+      message: "Only organization owners and admins can view security activity",
     });
   }, 1000);
 

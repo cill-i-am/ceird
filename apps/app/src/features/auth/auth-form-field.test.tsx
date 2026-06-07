@@ -39,7 +39,7 @@ describe("auth form field", () => {
           label="Password"
           htmlFor="password"
           descriptionText="Private to your account."
-          errorText="Use at least 8 characters."
+          errorText="Use 12 to 256 characters."
         >
           <AuthPasswordInput
             id="password"
@@ -84,7 +84,7 @@ describe("auth form field", () => {
               id="password"
               name="password"
               autoComplete="current-password"
-              defaultValue="password123"
+              defaultValue="password1234"
             />
           </AuthFormField>
         </form>
@@ -95,7 +95,7 @@ describe("auth form field", () => {
 
       expect(password).toHaveAttribute("type", "password");
       expect(password).toHaveAttribute("name", "password");
-      expect(password).toHaveValue("password123");
+      expect(password).toHaveValue("password1234");
       expect(password).toHaveAttribute("autocomplete", "current-password");
 
       await user.click(toggle);
@@ -103,7 +103,7 @@ describe("auth form field", () => {
       expect(handleSubmit).not.toHaveBeenCalled();
       expect(password).toHaveAttribute("type", "text");
       expect(password).toHaveAttribute("name", "password");
-      expect(password).toHaveValue("password123");
+      expect(password).toHaveValue("password1234");
       expect(password).toHaveAttribute("autocomplete", "current-password");
       expect(
         screen.getByRole("button", { name: "Hide password" })

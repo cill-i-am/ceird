@@ -1,3 +1,4 @@
+import type { OrganizationRole } from "@ceird/identity-core";
 import { useForm } from "@tanstack/react-form";
 import { useRouter } from "@tanstack/react-router";
 import { Schema } from "effect";
@@ -22,6 +23,7 @@ import { authClient, buildEmailChangeRedirectTo } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
+import { UserSecuritySessionsPanel } from "./user-security-sessions-panel";
 import {
   changeEmailSchema,
   changePasswordSchema,
@@ -31,15 +33,18 @@ import {
   profileSettingsSchema,
 } from "./user-settings-schemas";
 import type { EmailChangeStatus } from "./user-settings-search";
+import { UserTwoFactorPanel } from "./user-two-factor-panel";
+import type { UserTwoFactorPanelSubmitControls } from "./user-two-factor-panel";
 
 export interface UserSettingsAccount {
   readonly email: string;
   readonly emailVerified?: boolean | null;
   readonly image?: string | null;
   readonly name: string;
+  readonly twoFactorEnabled: boolean;
 }
 
-type AccountSettingsTab = "email" | "password" | "profile";
+type AccountSettingsTab = "email" | "password" | "profile" | "security";
 
 interface UserSettingsState {
   readonly activeTab: AccountSettingsTab;
@@ -151,9 +156,11 @@ function FormStatus({
 // The settings page still carries the three account forms until these sections split into route-owned modules.
 // react-doctor-disable-next-line
 export function UserSettingsPage({
+  currentOrganizationRole,
   user,
   emailChangeStatus,
 }: {
+  readonly currentOrganizationRole?: OrganizationRole | undefined;
   readonly user: UserSettingsAccount;
   readonly emailChangeStatus?: EmailChangeStatus | undefined;
 }) {
@@ -178,6 +185,8 @@ export function UserSettingsPage({
   const emailFormRef = React.useRef<HTMLFormElement | null>(null);
   const passwordFormRef = React.useRef<HTMLFormElement | null>(null);
   const profileFormRef = React.useRef<HTMLFormElement | null>(null);
+  const twoFactorSubmitControlsRef =
+    React.useRef<UserTwoFactorPanelSubmitControls | null>(null);
 
   const visibleEmailMessage =
     emailMessage ??
@@ -347,7 +356,10 @@ export function UserSettingsPage({
         }
 
         passwordFormRef.current?.requestSubmit();
+        return;
       }
+
+      twoFactorSubmitControlsRef.current?.submitActiveForm();
     },
     { enabled: isHydrated }
   );
@@ -372,6 +384,7 @@ export function UserSettingsPage({
             className="h-10"
           >
             <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="email">Email</TabsTrigger>
             <TabsTrigger value="password">Password</TabsTrigger>
           </TabsList>
@@ -490,6 +503,18 @@ export function UserSettingsPage({
               </profileForm.Subscribe>
             </form>
           </AppUtilityPanel>
+        </TabsContent>
+
+        <TabsContent value="security" keepMounted>
+          <div className="flex flex-col gap-5">
+            <UserTwoFactorPanel
+              user={user}
+              currentOrganizationRole={currentOrganizationRole}
+              onTwoFactorStatusChange={() => router.invalidate()}
+              submitControlsRef={twoFactorSubmitControlsRef}
+            />
+            {activeTab === "security" ? <UserSecuritySessionsPanel /> : null}
+          </div>
         </TabsContent>
 
         <TabsContent value="email" keepMounted>
@@ -742,7 +767,12 @@ export function UserSettingsPage({
 function isAccountSettingsTab(
   value: string | null
 ): value is AccountSettingsTab {
-  return value === "email" || value === "password" || value === "profile";
+  return (
+    value === "email" ||
+    value === "password" ||
+    value === "profile" ||
+    value === "security"
+  );
 }
 
 function getEmailChangeStatusMessage(

@@ -62,11 +62,23 @@ export class OrganizationAuthorization extends Context.Service<OrganizationAutho
               })
             );
 
+      const ensureCanViewOrganizationSecurityActivity: OrganizationAuthorizationCheck =
+        (actor: OrganizationActor) =>
+          hasElevatedOrganizationAccess(actor)
+            ? Effect.void
+            : Effect.fail(
+                new OrganizationAuthorizationDeniedError({
+                  message:
+                    "Only organization owners and admins can view security activity",
+                })
+              );
+
       return {
         ensureCanCreateSite,
         ensureCanManageConfiguration,
         ensureCanManageLabels,
         ensureCanViewOrganizationData,
+        ensureCanViewOrganizationSecurityActivity,
       };
     }),
   }

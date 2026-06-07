@@ -307,6 +307,7 @@ async function seedOwnerOrganization(
     cookieJar,
     forwardedFor,
   });
+  await markUserEmailVerified(input.email);
   const organizationResponse = await sendAuthRequest(
     request,
     "/organization/create",
@@ -510,7 +511,7 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner");
-    const ownerPassword = "password123";
+    const ownerPassword = "password1234";
     const invitedEmail = createTestEmail("invitee-signup");
 
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
@@ -545,7 +546,7 @@ test.describe("organization invitations", () => {
       );
       await invitedSignupPage.name.fill("Invited Example");
       await invitedSignupPage.email.fill(invitedEmail);
-      await invitedSignupPage.password.fill("password123");
+      await invitedSignupPage.password.fill("password1234");
       await invitedSignupPage.submit.click();
 
       await expect(invitedPage).toHaveURL(
@@ -557,7 +558,7 @@ test.describe("organization invitations", () => {
         request,
         invitedPage,
         invitedEmail,
-        "password123"
+        "password1234"
       );
       await acceptInvitationWithCurrentSession(
         request,
@@ -578,9 +579,9 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner-existing");
-    const ownerPassword = "password123";
+    const ownerPassword = "password1234";
     const invitedEmail = createTestEmail("invitee-login");
-    const invitedPassword = "password123";
+    const invitedPassword = "password1234";
 
     await createExistingUser(request, invitedEmail, invitedPassword);
 
@@ -627,9 +628,9 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner-member-access");
-    const ownerPassword = "password123";
+    const ownerPassword = "password1234";
     const invitedEmail = createTestEmail("invitee-member-access");
-    const invitedPassword = "password123";
+    const invitedPassword = "password1234";
 
     await createExistingUser(request, invitedEmail, invitedPassword);
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
@@ -677,9 +678,9 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner-forgot-password");
-    const ownerPassword = "password123";
+    const ownerPassword = "password1234";
     const invitedEmail = createTestEmail("invitee-forgot-password");
-    const invitedPassword = "password123";
+    const invitedPassword = "password1234";
 
     await createExistingUser(request, invitedEmail, invitedPassword);
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
@@ -730,11 +731,11 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner-wrong-account");
-    const ownerPassword = "password123";
+    const ownerPassword = "password1234";
     const invitedEmail = createTestEmail("invitee-wrong-account");
-    const invitedPassword = "password123";
+    const invitedPassword = "password1234";
     const wrongAccountEmail = createTestEmail("wrong-account");
-    const wrongAccountPassword = "password123";
+    const wrongAccountPassword = "password1234";
 
     await createExistingUser(
       request,
@@ -792,7 +793,7 @@ test.describe("organization invitations", () => {
     request,
   }) => {
     const ownerEmail = createTestEmail("invite-owner-load-error");
-    const ownerPassword = "password123";
+    const ownerPassword = "password1234";
 
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
     await page.route(

@@ -48,6 +48,7 @@ declare module "@tanstack/react-router" {
         | "/activity"
         | "/jobs"
         | "/members"
+        | "/organization/security"
         | "/organization/settings"
         | "/settings"
         | "/sites";

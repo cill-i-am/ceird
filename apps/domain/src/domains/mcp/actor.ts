@@ -19,6 +19,7 @@ interface SessionRow {
 }
 
 export interface McpSessionIdentity {
+  readonly organizationId?: OrganizationId | undefined;
   readonly sessionId: SessionId;
   readonly userId: UserId;
 }
@@ -104,6 +105,9 @@ export const resolveCurrentOrganizationActorFromMcpSession = Effect.fn(
     );
   }
 
+  const organizationId =
+    options.session.organizationId ?? sessionRow?.activeOrganizationId ?? null;
+
   return yield* resolveCurrentOrganizationActor({
     headers: new Headers(),
     getSession: () =>
@@ -112,7 +116,7 @@ export const resolveCurrentOrganizationActorFromMcpSession = Effect.fn(
           ? null
           : {
               session: {
-                activeOrganizationId: sessionRow.activeOrganizationId,
+                activeOrganizationId: organizationId,
               },
               user: {
                 id: sessionRow.userId,

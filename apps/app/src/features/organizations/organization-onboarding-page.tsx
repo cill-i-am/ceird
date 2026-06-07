@@ -34,6 +34,10 @@ import { cn } from "#/lib/utils";
 
 import { clearOrganizationAccessClientCache } from "./organization-access-cache";
 import {
+  getCreateOrganizationFailureMessage,
+  getInviteMemberFailureMessage,
+} from "./organization-auth-errors";
+import {
   INVITE_ROLE_SELECTION_GROUPS,
   isInviteRole,
 } from "./organization-invite-role-options";
@@ -82,10 +86,13 @@ export function OrganizationOnboardingPage() {
 
       try {
         organization = await createCurrentServerOrganization({ data: input });
-      } catch {
+      } catch (error) {
         formApi.setErrorMap({
           onSubmit: {
-            form: CREATE_ORGANIZATION_FAILURE_MESSAGE,
+            form: getCreateOrganizationFailureMessage(
+              error,
+              CREATE_ORGANIZATION_FAILURE_MESSAGE
+            ),
             fields: {},
           },
         });
@@ -240,7 +247,10 @@ function InviteMembersStep({
       if (result.error) {
         formApi.setErrorMap({
           onSubmit: {
-            form: INVITE_FAILURE_MESSAGE,
+            form: getInviteMemberFailureMessage(
+              result.error,
+              INVITE_FAILURE_MESSAGE
+            ),
             fields: {},
           },
         });

@@ -21,6 +21,65 @@ const domainNamePattern = /^[a-z0-9.-]+$/;
 const emailAddressPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const providerResourceNamePattern = /^[a-z0-9-]+$/;
 
+function isLoopbackHostname(hostname: string) {
+  const normalizedHostname = hostname
+    .toLowerCase()
+    .replace(/^\[(?<hostname>.*)\]$/, "$<hostname>");
+
+  return (
+    normalizedHostname === "localhost" ||
+    normalizedHostname === "::1" ||
+    normalizedHostname.endsWith(".localhost") ||
+    isIPv4LoopbackHostname(normalizedHostname) ||
+    isIPv4MappedIPv6LoopbackHostname(normalizedHostname)
+  );
+}
+
+function isIPv4LoopbackHostname(hostname: string) {
+  const parts = hostname.split(".");
+
+  return (
+    parts.length === 4 &&
+    parts[0] === "127" &&
+    parts.every((part) => {
+      if (!/^\d{1,3}$/.test(part)) {
+        return false;
+      }
+
+      const octet = Number(part);
+      return Number.isInteger(octet) && octet >= 0 && octet <= 255;
+    })
+  );
+}
+
+function isIPv4MappedIPv6LoopbackHostname(hostname: string) {
+  const dottedIPv4Prefix = "::ffff:";
+
+  if (hostname.startsWith(dottedIPv4Prefix)) {
+    return isIPv4LoopbackHostname(hostname.slice(dottedIPv4Prefix.length));
+  }
+
+  const hexMappedIPv4Match =
+    /^::ffff:(?<high>[0-9a-f]{1,4}):(?<low>[0-9a-f]{1,4})$/.exec(hostname);
+
+  if (!hexMappedIPv4Match?.groups) {
+    return false;
+  }
+
+  const high = Number.parseInt(hexMappedIPv4Match.groups.high, 16);
+  const low = Number.parseInt(hexMappedIPv4Match.groups.low, 16);
+
+  return (
+    Number.isInteger(high) &&
+    Number.isInteger(low) &&
+    high >= 0 &&
+    high <= 65_535 &&
+    low >= 0 &&
+    low <= 65_535 &&
+    Math.floor(high / 256) === 127
+  );
+}
+
 export type TenantHostMode = "disabled" | "production" | "stage";
 
 export const DomainName = Schema.NonEmptyString.check(
@@ -59,9 +118,16 @@ export interface InfraStageConfig {
   readonly mcpHostname: DomainName;
   readonly authCookiePrefix: string;
   readonly authCookieDomain: DomainName | undefined;
+  readonly authCaptchaEnabled: boolean | undefined;
+  readonly authCaptchaSiteVerifyUrlOverride: string | undefined;
+  readonly authCaptchaTurnstileSecretKey: Redacted.Redacted<string> | undefined;
+  readonly authCaptchaTurnstileSiteKey: string | undefined;
   readonly authEmailFrom: Redacted.Redacted<string>;
   readonly authEmailFromName: string;
+  readonly authPasswordCompromiseCheckEnabled: boolean | undefined;
+  readonly authPasswordCompromiseCheckRangeUrlOverride: string | undefined;
   readonly authRateLimitEnabled: boolean;
+  readonly authSecrets: Redacted.Redacted<string> | undefined;
   readonly googleMapsApiKey: Redacted.Redacted<InfraGoogleMapsApiKey>;
   readonly hyperdriveName: ProviderResourceName;
   readonly hyperdriveOriginConnectionLimit: number;
@@ -104,6 +170,57 @@ export interface AlchemyStageIdentity {
 const AuthEmailFromAddress = Schema.String.check(
   Schema.isPattern(emailAddressPattern, {
     message: "AUTH_EMAIL_FROM must be a plain email address",
+  })
+);
+const AuthCaptchaTurnstileSecretKey = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/root-infra/AuthCaptchaTurnstileSecretKey")
+);
+const AuthCaptchaTurnstileSiteKey = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/root-infra/AuthCaptchaTurnstileSiteKey")
+);
+const AuthCaptchaSiteVerifyUrl = Schema.String.pipe(
+  Schema.refine(
+    (value): value is string => {
+      try {
+        const url = new URL(value.trim());
+        return (
+          (url.protocol === "http:" || url.protocol === "https:") &&
+          isLoopbackHostname(url.hostname)
+        );
+      } catch {
+        return false;
+      }
+    },
+    {
+      message:
+        "AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE must be a local absolute HTTP(S) URL for test or development verifier stubs",
+    }
+  )
+);
+const AuthPasswordCompromiseCheckRangeUrl = Schema.String.pipe(
+  Schema.refine(
+    (value): value is string => {
+      try {
+        const url = new URL(value.trim());
+        return (
+          (url.protocol === "http:" || url.protocol === "https:") &&
+          isLoopbackHostname(url.hostname)
+        );
+      } catch {
+        return false;
+      }
+    },
+    {
+      message:
+        "AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE must be a local absolute HTTP(S) URL for test or development range API stubs",
+    }
+  )
+);
+const betterAuthSecretMinLength = 32;
+const BetterAuthSecretsValue = Schema.String.pipe(
+  Schema.refine((value): value is string => isBetterAuthSecretsValue(value), {
+    message:
+      "BETTER_AUTH_SECRETS must be comma-delimited <version>:<secret> entries with unique non-negative integer versions and secrets of at least 32 characters",
   })
 );
 const HyperdriveOriginConnectionLimit = Schema.Int.check(
@@ -181,6 +298,42 @@ function decodeAuthEmailFrom(value: Redacted.Redacted<string>) {
   );
 }
 
+function decodeAuthCaptchaTurnstileSecretKey(value: Redacted.Redacted<string>) {
+  return Schema.decodeUnknownEffect(AuthCaptchaTurnstileSecretKey)(
+    Redacted.value(value).trim()
+  ).pipe(
+    Effect.map((turnstileSecretKey) => Redacted.make(turnstileSecretKey)),
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
+function decodeAuthCaptchaTurnstileSiteKey(value: string) {
+  return Schema.decodeUnknownEffect(AuthCaptchaTurnstileSiteKey)(
+    value.trim()
+  ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+}
+
+function decodeAuthCaptchaSiteVerifyUrl(value: string) {
+  return Schema.decodeUnknownEffect(AuthCaptchaSiteVerifyUrl)(
+    value.trim()
+  ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+}
+
+function decodeAuthPasswordCompromiseCheckRangeUrl(value: string) {
+  return Schema.decodeUnknownEffect(AuthPasswordCompromiseCheckRangeUrl)(
+    value.trim()
+  ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+}
+
+function decodeBetterAuthSecrets(value: Redacted.Redacted<string>) {
+  return Schema.decodeUnknownEffect(BetterAuthSecretsValue)(
+    Redacted.value(value)
+  ).pipe(
+    Effect.as(value),
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
 function decodeGoogleMapsApiKey(value: Redacted.Redacted<string>) {
   return Schema.decodeUnknownEffect(InfraGoogleMapsApiKey)(
     Redacted.value(value).trim()
@@ -188,6 +341,62 @@ function decodeGoogleMapsApiKey(value: Redacted.Redacted<string>) {
     Effect.map((googleMapsApiKey) => Redacted.make(googleMapsApiKey)),
     Effect.mapError((error) => new Config.ConfigError(error))
   );
+}
+
+function validateBetterAuthSecrets(value: string) {
+  const entries = value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+
+  if (entries.length === 0) {
+    throw new Error(
+      "BETTER_AUTH_SECRETS must include at least one <version>:<secret> entry"
+    );
+  }
+
+  const seenVersions = new Set<number>();
+
+  for (const entry of entries) {
+    const separatorIndex = entry.indexOf(":");
+
+    if (separatorIndex <= 0) {
+      throw new Error(
+        "BETTER_AUTH_SECRETS entries must use <version>:<secret>"
+      );
+    }
+
+    const version = Number(entry.slice(0, separatorIndex).trim());
+
+    if (!Number.isInteger(version) || version < 0) {
+      throw new Error(
+        "BETTER_AUTH_SECRETS versions must be non-negative integers"
+      );
+    }
+
+    if (seenVersions.has(version)) {
+      throw new Error("BETTER_AUTH_SECRETS versions must be unique");
+    }
+
+    seenVersions.add(version);
+
+    const secret = entry.slice(separatorIndex + 1).trim();
+
+    if (secret.length < betterAuthSecretMinLength) {
+      throw new Error(
+        "BETTER_AUTH_SECRETS values must be at least 32 characters long"
+      );
+    }
+  }
+}
+
+function isBetterAuthSecretsValue(value: string) {
+  try {
+    validateBetterAuthSecrets(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function decodeHyperdriveOriginConnectionLimit(value: number) {
@@ -293,15 +502,65 @@ export function loadInfraStageConfig(stageInput: string) {
     ];
     const authCookiePrefix = makeAuthCookiePrefix(identity);
     const authCookieDomain = tenantBaseDomain;
+    const authCaptchaEnabled = yield* Config.option(
+      Config.boolean("AUTH_CAPTCHA_ENABLED")
+    ).pipe(Effect.map(Option.getOrUndefined));
+    const authCaptchaTurnstileSecretKey = yield* Config.option(
+      Config.redacted("AUTH_CAPTCHA_TURNSTILE_SECRET_KEY").pipe(
+        Config.mapOrFail(decodeAuthCaptchaTurnstileSecretKey)
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
+    const authCaptchaTurnstileSiteKey = yield* Config.option(
+      Config.string("AUTH_CAPTCHA_TURNSTILE_SITE_KEY").pipe(
+        Config.mapOrFail(decodeAuthCaptchaTurnstileSiteKey)
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
+    const authCaptchaSiteVerifyUrlOverride = yield* Config.option(
+      Config.string("AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE").pipe(
+        Config.mapOrFail(decodeAuthCaptchaSiteVerifyUrl)
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
+
+    if (
+      authCaptchaEnabled === true &&
+      authCaptchaTurnstileSecretKey === undefined
+    ) {
+      throw new Error(
+        "AUTH_CAPTCHA_TURNSTILE_SECRET_KEY is required when AUTH_CAPTCHA_ENABLED is true"
+      );
+    }
+
+    if (
+      authCaptchaEnabled === true &&
+      authCaptchaTurnstileSiteKey === undefined
+    ) {
+      throw new Error(
+        "AUTH_CAPTCHA_TURNSTILE_SITE_KEY is required when AUTH_CAPTCHA_ENABLED is true"
+      );
+    }
+
     const authEmailFrom = yield* Config.redacted("AUTH_EMAIL_FROM").pipe(
       Config.mapOrFail(decodeAuthEmailFrom)
     );
     const authEmailFromName = yield* Config.string("AUTH_EMAIL_FROM_NAME").pipe(
       Config.withDefault("Ceird")
     );
+    const authPasswordCompromiseCheckEnabled = yield* Config.option(
+      Config.boolean("AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED")
+    ).pipe(Effect.map(Option.getOrUndefined));
+    const authPasswordCompromiseCheckRangeUrlOverride = yield* Config.option(
+      Config.string("AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE").pipe(
+        Config.mapOrFail(decodeAuthPasswordCompromiseCheckRangeUrl)
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
     const authRateLimitEnabled = yield* Config.boolean(
       "AUTH_RATE_LIMIT_ENABLED"
     ).pipe(Config.withDefault(!identity.isPullRequestPreview));
+    const authSecrets = yield* Config.option(
+      Config.redacted("BETTER_AUTH_SECRETS").pipe(
+        Config.mapOrFail(decodeBetterAuthSecrets)
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
     const agentActionRunStaleAfterSeconds = yield* Config.number(
       "CEIRD_AGENT_ACTION_RUN_STALE_AFTER_SECONDS"
     ).pipe(
@@ -396,9 +655,16 @@ export function loadInfraStageConfig(stageInput: string) {
       mcpHostname,
       authCookiePrefix,
       authCookieDomain,
+      authCaptchaEnabled,
+      authCaptchaSiteVerifyUrlOverride,
+      authCaptchaTurnstileSecretKey,
+      authCaptchaTurnstileSiteKey,
       authEmailFrom,
       authEmailFromName,
+      authPasswordCompromiseCheckEnabled,
+      authPasswordCompromiseCheckRangeUrlOverride,
       authRateLimitEnabled,
+      authSecrets,
       googleMapsApiKey,
       hyperdriveName,
       hyperdriveOriginConnectionLimit,

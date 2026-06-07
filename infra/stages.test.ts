@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
+import * as Redacted from "effect/Redacted";
 
 import { configWithoutCloudflareBootstrapSecrets } from "./stages.contract.ts";
 import {
@@ -92,6 +93,12 @@ describe("Alchemy stage identity", () => {
     expect(config.appHostname).toBe("app.dev-cillian.example.com");
     expect(config.apiHostname).toBe("api.dev-cillian.example.com");
     expect(config.authRateLimitEnabled).toBeTruthy();
+    expect(config.authCaptchaEnabled).toBeUndefined();
+    expect(config.authCaptchaSiteVerifyUrlOverride).toBeUndefined();
+    expect(config.authCaptchaTurnstileSecretKey).toBeUndefined();
+    expect(config.authCaptchaTurnstileSiteKey).toBeUndefined();
+    expect(config.authPasswordCompromiseCheckEnabled).toBeUndefined();
+    expect(config.authSecrets).toBeUndefined();
     expect(config.agentActionRunStaleAfterSeconds).toBe(900);
     expect(config.mcpHostname).toBe("mcp.dev-cillian.example.com");
     expect(config.hyperdriveName).toBe("ceird-dev-cillian-postgres");
@@ -314,6 +321,256 @@ describe("Alchemy stage identity", () => {
     );
 
     expect(config.authRateLimitEnabled).toBeTruthy();
+  });
+
+  it("loads optional password compromise check override as stage config", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED: "false",
+                AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE:
+                  "http://127.0.0.1:8790/range",
+                CEIRD_ZONE_NAME: "example.com",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.authPasswordCompromiseCheckEnabled).toBe(false);
+    expect(config.authPasswordCompromiseCheckRangeUrlOverride).toBe(
+      "http://127.0.0.1:8790/range"
+    );
+  });
+
+  it("rejects non-local password compromise range API overrides before Worker env mutation", () => {
+    expect(() =>
+      Effect.runSync(
+        loadInfraStageConfig("main").pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  AUTH_EMAIL_FROM: "no-reply@example.com",
+                  AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED: "true",
+                  AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE:
+                    "https://hibp-proxy.example/range",
+                  CEIRD_ZONE_NAME: "example.com",
+                  GOOGLE_MAPS_API_KEY: "google-key",
+                },
+              })
+            )
+          )
+        )
+      )
+    ).toThrow(/AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE/);
+  });
+
+  it("rejects deceptive 127-prefixed password compromise range API overrides before Worker env mutation", () => {
+    expect(() =>
+      Effect.runSync(
+        loadInfraStageConfig("main").pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  AUTH_EMAIL_FROM: "no-reply@example.com",
+                  AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED: "true",
+                  AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE:
+                    "https://127.evil.example/range",
+                  CEIRD_ZONE_NAME: "example.com",
+                  GOOGLE_MAPS_API_KEY: "google-key",
+                },
+              })
+            )
+          )
+        )
+      )
+    ).toThrow(/AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE/);
+  });
+
+  it("loads optional Turnstile captcha config as stage config", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_CAPTCHA_ENABLED: "true",
+                AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE:
+                  "http://127.0.0.1:8787/siteverify",
+                AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: "turnstile-secret-key",
+                AUTH_CAPTCHA_TURNSTILE_SITE_KEY: "turnstile-site-key",
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                CEIRD_ZONE_NAME: "example.com",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.authCaptchaEnabled).toBe(true);
+    expect(config.authCaptchaSiteVerifyUrlOverride).toBe(
+      "http://127.0.0.1:8787/siteverify"
+    );
+    expect(config.authCaptchaTurnstileSiteKey).toBe("turnstile-site-key");
+    if (!Redacted.isRedacted(config.authCaptchaTurnstileSecretKey)) {
+      throw new Error("Expected Turnstile secret key to be redacted");
+    }
+    expect(Redacted.value(config.authCaptchaTurnstileSecretKey)).toBe(
+      "turnstile-secret-key"
+    );
+  });
+
+  it("rejects non-local captcha site verify URL overrides before Worker env mutation", () => {
+    expect(() =>
+      Effect.runSync(
+        loadInfraStageConfig("main").pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  AUTH_CAPTCHA_ENABLED: "true",
+                  AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE:
+                    "https://turnstile.test/siteverify",
+                  AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: "turnstile-secret-key",
+                  AUTH_CAPTCHA_TURNSTILE_SITE_KEY: "turnstile-site-key",
+                  AUTH_EMAIL_FROM: "no-reply@example.com",
+                  CEIRD_ZONE_NAME: "example.com",
+                  GOOGLE_MAPS_API_KEY: "google-key",
+                },
+              })
+            )
+          )
+        )
+      )
+    ).toThrow(/AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE/);
+  });
+
+  it("rejects deceptive 127-prefixed captcha site verify URL overrides before Worker env mutation", () => {
+    expect(() =>
+      Effect.runSync(
+        loadInfraStageConfig("main").pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  AUTH_CAPTCHA_ENABLED: "true",
+                  AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE:
+                    "https://127.evil.example/siteverify",
+                  AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: "turnstile-secret-key",
+                  AUTH_CAPTCHA_TURNSTILE_SITE_KEY: "turnstile-site-key",
+                  AUTH_EMAIL_FROM: "no-reply@example.com",
+                  CEIRD_ZONE_NAME: "example.com",
+                  GOOGLE_MAPS_API_KEY: "google-key",
+                },
+              })
+            )
+          )
+        )
+      )
+    ).toThrow(/AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE/);
+  });
+
+  it("rejects enabled captcha without a Turnstile secret before Worker env mutation", () => {
+    expect(() =>
+      Effect.runSync(
+        loadInfraStageConfig("main").pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  AUTH_CAPTCHA_ENABLED: "true",
+                  AUTH_CAPTCHA_TURNSTILE_SITE_KEY: "turnstile-site-key",
+                  AUTH_EMAIL_FROM: "no-reply@example.com",
+                  CEIRD_ZONE_NAME: "example.com",
+                  GOOGLE_MAPS_API_KEY: "google-key",
+                },
+              })
+            )
+          )
+        )
+      )
+    ).toThrow(/AUTH_CAPTCHA_TURNSTILE_SECRET_KEY/);
+  });
+
+  it("rejects enabled captcha without a Turnstile site key before Worker env mutation", () => {
+    expect(() =>
+      Effect.runSync(
+        loadInfraStageConfig("main").pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  AUTH_CAPTCHA_ENABLED: "true",
+                  AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: "turnstile-secret-key",
+                  AUTH_EMAIL_FROM: "no-reply@example.com",
+                  CEIRD_ZONE_NAME: "example.com",
+                  GOOGLE_MAPS_API_KEY: "google-key",
+                },
+              })
+            )
+          )
+        )
+      )
+    ).toThrow(/AUTH_CAPTCHA_TURNSTILE_SITE_KEY/);
+  });
+
+  it("loads optional Better Auth rotation secrets as redacted stage config", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                BETTER_AUTH_SECRETS:
+                  "2:current-secret-value-0123456789abcdef,1:previous-secret-value-0123456789abcdef",
+                CEIRD_ZONE_NAME: "example.com",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    if (!Redacted.isRedacted(config.authSecrets)) {
+      throw new Error("Expected Better Auth rotation secrets to be redacted");
+    }
+
+    expect(Redacted.value(config.authSecrets)).toBe(
+      "2:current-secret-value-0123456789abcdef,1:previous-secret-value-0123456789abcdef"
+    );
+  });
+
+  it("rejects malformed Better Auth rotation secrets before Worker env mutation", () => {
+    expect(() =>
+      Effect.runSync(
+        loadInfraStageConfig("main").pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  AUTH_EMAIL_FROM: "no-reply@example.com",
+                  BETTER_AUTH_SECRETS: "current-secret-value-0123456789abcdef",
+                  CEIRD_ZONE_NAME: "example.com",
+                  GOOGLE_MAPS_API_KEY: "google-key",
+                },
+              })
+            )
+          )
+        )
+      )
+    ).toThrow(/BETTER_AUTH_SECRETS/);
   });
 
   it("allows provider-normalized Hyperdrive and Neon retention settings to be overridden", () => {

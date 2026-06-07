@@ -104,7 +104,13 @@ describe("Alchemy Drizzle integration", () => {
     const schemaModule = loadConfiguredSchemaWithPlainNode();
 
     expect(schemaModule.exportNames).toStrictEqual(
-      expect.arrayContaining(["comment", "databaseSchema", "workItem"])
+      expect.arrayContaining([
+        "authSecurityAuditEvent",
+        "comment",
+        "databaseSchema",
+        "twoFactor",
+        "workItem",
+      ])
     );
     expect(schemaModule.tableCount).toBeGreaterThan(0);
   });

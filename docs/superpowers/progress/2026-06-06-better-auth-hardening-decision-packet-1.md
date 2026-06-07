@@ -2,21 +2,18 @@
 
 Last updated: 2026-06-06
 
-This packet is the immediate human approval gate for the baseline
-Better Auth hardening work. The canonical decision history lives in
-`docs/architecture/better-auth-decision-log.md`; this file is the compact reply
-surface.
+This packet is the historical human approval gate for the baseline Better Auth
+hardening work. The user approved these defaults on 2026-06-06, and the
+canonical decision history now lives in
+`docs/architecture/better-auth-decision-log.md`.
 
-## How To Reply
+## Status
 
-Reply with one of:
+Approved and implemented in the current hardening branch. Current implementation
+state and verification live in:
 
-- `Approve packet 1 defaults`
-- `Approve 1, 2, and 4; change 3 to ...`
-- Per-item edits using the item numbers below
-
-No runtime security implementation should start until these four items are
-approved or adjusted.
+- `docs/superpowers/progress/2026-06-06-better-auth-hardening.md`
+- `docs/superpowers/progress/2026-06-06-better-auth-hardening-issue-map.md`
 
 ## 1. Verified Email Gates
 
@@ -50,22 +47,25 @@ approvers, or future integration owners.
 
 **Issues:** `TSK-43`
 
-**Recommended default:** Add structured, ordered versioned secrets through
-`BETTER_AUTH_SECRETS`, while retaining `BETTER_AUTH_SECRET` as a migration
-fallback until every stage is rotated.
+**Recommended default:** Add structured versioned secrets through
+`BETTER_AUTH_SECRETS`, sorted highest-version-first for Better Auth's current
+secret, while retaining `BETTER_AUTH_SECRET` as a migration fallback until every
+stage is rotated.
 
-Example shape:
+Implemented shape:
 
 ```text
-BETTER_AUTH_SECRETS='[
-  {"id":"2026-06-primary","secret":"..."},
-  {"id":"2026-05-previous","secret":"..."}
-]'
+BETTER_AUTH_SECRETS='2:current-secret-value,1:previous-secret-value'
 ```
 
+Each entry is `<version>:<secret>`. Versions are unique non-negative integers,
+every secret must be at least 32 characters, and the highest version is treated
+as current.
+
 **Why:** One structured value is easier for Alchemy/stage-managed secret
-promotion than proliferating numbered env vars, and a fallback keeps current
-local/preview stages working during migration.
+promotion than proliferating numbered env vars, the numeric versions match
+Better Auth's `secrets` option, and a fallback keeps current local/preview
+stages working during migration.
 
 **Implementation unlocked after approval:**
 
@@ -139,10 +139,5 @@ incident signal.
 
 ## Verification State
 
-Current branch verification before this packet:
-
-- `git diff --check`
-- `pnpm check-types`
-
-Runtime tests, migrations, and browser verification have not started because no
-runtime behavior has been approved or changed yet.
+See the current progress note and issue map for branch verification. This file
+is retained as decision context only.

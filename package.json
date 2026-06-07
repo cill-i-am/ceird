@@ -15,7 +15,7 @@
     "format": "oxfmt --check .",
     "format:write": "oxfmt --write .",
     "knip": "knip --no-config-hints",
-    "lint": "oxlint --config .oxlintrc.mjs . --ignore-pattern '.agents/**' --ignore-pattern 'opensrc/**' --ignore-pattern 'apps/app/src/routeTree.gen.ts'",
+    "lint": "oxlint .",
     "opensrc:sync": "node scripts/sync-opensrc.mjs",
     "postinstall": "pnpm run opensrc:sync",
     "prebuild": "pnpm run opensrc:sync",

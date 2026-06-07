@@ -20,6 +20,9 @@
 - First decision packet: `docs/superpowers/progress/2026-06-06-better-auth-hardening-decision-packet-1.md`
 - Second decision packet: `docs/superpowers/progress/2026-06-06-better-auth-hardening-decision-packet-2.md`
 - Third decision packet: `docs/superpowers/progress/2026-06-06-better-auth-hardening-decision-packet-3.md`
+- Fourth decision packet: `docs/superpowers/progress/2026-06-07-better-auth-hardening-decision-packet-4.md`
+- Stage verification runbook:
+  `docs/superpowers/progress/2026-06-07-better-auth-hardening-stage-verification-runbook.md`
 - Proposed Alchemy stage for browser verification: `codex-better-auth-hardening`
 - Baseline already verified on the integration worktree:
   - `pnpm install`
@@ -71,6 +74,32 @@ Use `$impeccable shape` before implementation for these issues:
 Do not use `imagegen` for these unless the user explicitly asks for bitmap
 mockups. These are product UI surfaces, so code-native shape artifacts and
 implementation-ready UX notes are the right default.
+
+## Per-Stage Review Discipline
+
+Apply these checks at each milestone before marking the issue ready for review:
+
+- Use `$effect-review` for touched Effect, Schema, service, test, and
+  observability code. Small documentation-only stages may record a local
+  no-code review instead of launching subagents.
+- Use `$review-swarm` for material implementation diffs, especially auth,
+  security, persistence, migrations, cross-package contracts, and user-visible
+  workflows. Treat subagent reports as review input, then fix only findings with
+  concrete correctness, security, privacy, reliability, contract, or coverage
+  value.
+- Use `$vercel-composition-patterns` for React surfaces, reusable component
+  APIs, and settings/activity/consent UI work. Prefer composition and explicit
+  variants over boolean prop growth.
+- Use `$drizzle-orm` and `$postgres` for schema, migration, query, index,
+  retention, and cardinality work. Generate and inspect migrations where the
+  schema changes, and keep query behavior explicit at trust boundaries.
+- Use TanStack Start and TanStack Router best practices for app routes,
+  loaders, server functions, and auth guards. Keep server-only work inside
+  `createServerFn` or server-only modules, use typed search validation for
+  filterable routes, and avoid Next.js or Remix patterns.
+- For new or materially changed UI, run focused tests first, then browser
+  verification on the confirmed Alchemy stage with desktop and mobile viewport
+  spot checks.
 
 ## Worktree Strategy
 
@@ -138,7 +167,7 @@ git diff --check
 For database schema changes:
 
 ```bash
-pnpm --filter domain drizzle:generate
+pnpm --filter domain db:generate
 git diff -- apps/domain/drizzle apps/domain/src/domains/identity/authentication/schema.ts
 pnpm --filter domain test
 ```
@@ -287,7 +316,7 @@ git diff --check
 
 Expected: PASS.
 
-- [ ] **Step 4: Record decisions for `TSK-42`, `TSK-43`, `TSK-44`, and `TSK-46`**
+- [x] **Step 4: Record decisions for `TSK-42`, `TSK-43`, `TSK-44`, and `TSK-46`**
 
 Create or update architecture sections for:
 
@@ -299,14 +328,16 @@ Create or update architecture sections for:
 Expected: each policy issue has a concrete decision or is explicitly marked
 deferred/rejected in Linear and docs.
 
-Current state: the source-backed current authorization matrix exists at
-`docs/architecture/auth-organization-permission-matrix.md`, but the future
-external-role policy remains pending user approval.
+Current state: the user approved the recommended defaults on 2026-06-06.
+Verified-email gates and Better Auth secret rotation config have focused tests
+and architecture docs. The source-backed current authorization matrix exists at
+`docs/architecture/auth-organization-permission-matrix.md`; external-role
+regression coverage remains tracked under `TSK-70`.
 
 Traceability: current issue states and next gates are tracked in
 `docs/superpowers/progress/2026-06-06-better-auth-hardening-issue-map.md`.
 
-- [ ] **Step 5: Verify baseline policy docs**
+- [x] **Step 5: Verify baseline policy docs**
 
 Run:
 
@@ -317,13 +348,17 @@ git diff --check
 
 Expected: PASS.
 
+Status: `pnpm check-types`, `pnpm test`, `pnpm lint`, `pnpm format`, and
+`git diff --check` have passed on the integration branch. Browser verification
+remains gated on confirmed Alchemy stage credentials.
+
 ## Task 3: Shape UI Surfaces Before Implementation
 
 **Issues:** `TSK-49`, `TSK-59`, `TSK-62`, `TSK-66`, `TSK-74`
 
 **Required skill:** `$impeccable shape`
 
-- [ ] **Step 1: Run shape for account security settings**
+- [x] **Step 1: Run shape for account security settings**
 
 Scope:
 
@@ -336,7 +371,11 @@ Scope:
 Expected output: implementation-ready UX notes attached to `TSK-49` and linked
 from dependent issues `TSK-50` and `TSK-51`.
 
-- [ ] **Step 2: Run shape for 2FA enrollment, recovery, and login challenge**
+Output: `docs/superpowers/progress/2026-06-07-account-security-settings-shape.md`.
+Implementation remains gated on human confirmation for session metadata,
+revocation behavior, and first-release account security surface scope.
+
+- [x] **Step 2: Run shape for 2FA enrollment, recovery, and login challenge**
 
 Scope:
 
@@ -348,7 +387,11 @@ Scope:
 
 Expected output: implementation-ready UX notes attached to `TSK-59` and `TSK-62`.
 
-- [ ] **Step 3: Run shape for OAuth consent**
+Output: `docs/superpowers/progress/2026-06-07-two-factor-auth-shape.md`.
+Implementation remains gated on human confirmation for enrollment, backup-code,
+trusted-device, and login-challenge decisions.
+
+- [x] **Step 3: Run shape for OAuth consent**
 
 Scope:
 
@@ -362,7 +405,11 @@ Scope:
 
 Expected output: implementation-ready UX notes attached to `TSK-66`.
 
-- [ ] **Step 4: Run shape for organization security activity**
+Output: `docs/superpowers/progress/2026-06-07-oauth-consent-shape.md`.
+Implementation remains gated on human confirmation for admin-scope blocking,
+organization-scoped consent, public-client metadata enrichment, and deferrals.
+
+- [x] **Step 4: Run shape for organization security activity**
 
 Scope:
 
@@ -373,6 +420,10 @@ Scope:
 - retention copy
 
 Expected output: implementation-ready UX notes attached to `TSK-74`.
+
+Output: `docs/superpowers/progress/2026-06-07-organization-security-activity-shape.md`.
+Implementation remains gated on human confirmation for visible event scope,
+route placement, row behavior, and source IP/user-agent visibility.
 
 ## Task 4: Implement Credential And Session Security
 
@@ -399,7 +450,7 @@ Expected output: implementation-ready UX notes attached to `TSK-74`.
 - `apps/app/src/features/settings/user-settings-page.test.tsx`
 - `apps/app/src/features/settings/user-settings-schemas.test.ts`
 
-- [ ] **Step 1: Write failing tests for explicit password policy**
+- [x] **Step 1: Write failing tests for explicit password policy**
 
 Add tests for signup, reset, and change-password schemas to reject the chosen
 minimum and accept a valid password.
@@ -412,7 +463,7 @@ pnpm --filter app test user-settings-schemas.test.ts auth-schemas.test.ts
 
 Expected: FAIL until policy is implemented.
 
-- [ ] **Step 2: Implement password policy**
+- [x] **Step 2: Implement password policy**
 
 Set Better Auth server config and app schemas to the chosen policy. Update copy
 in affected forms.
@@ -426,7 +477,7 @@ pnpm --filter domain test src/domains/identity/authentication/authentication.tes
 
 Expected: PASS.
 
-- [ ] **Step 3: Add HIBP plugin after failure behavior is decided**
+- [x] **Step 3: Add HIBP plugin after failure behavior is decided**
 
 Follow the plugin adoption checklist. Add server config, any needed runtime
 configuration, tests for compromised password rejection, and tests for provider
@@ -440,6 +491,10 @@ pnpm --filter app test
 ```
 
 Expected: PASS.
+
+Status: implemented through a Ceird-owned Better Auth password compromise check
+plugin with the approved fail-open provider outage behavior and focused domain
+tests. Browser verification remains gated on stage confirmation.
 
 - [ ] **Step 4: Implement active-session listing**
 
@@ -503,7 +558,7 @@ Expected: workflow screenshots captured for final report.
 - `apps/app/src/features/auth/email-verification-banner.tsx`
 - `docs/architecture/auth.md`
 
-- [ ] **Step 1: Ask the user the abuse decision packet**
+- [x] **Step 1: Ask the user the abuse decision packet**
 
 Ask:
 
@@ -514,7 +569,7 @@ Ask:
 
 Expected: decisions recorded in Linear/docs.
 
-- [ ] **Step 2: Implement rate-limit failure policy**
+- [x] **Step 2: Implement rate-limit failure policy**
 
 Update custom rate-limit storage behavior and tests to match the decision.
 
@@ -526,7 +581,7 @@ pnpm --filter domain test src/domains/identity/authentication/authentication.tes
 
 Expected: PASS.
 
-- [ ] **Step 3: Implement captcha plugin for selected endpoints**
+- [x] **Step 3: Implement captcha plugin for selected endpoints**
 
 Follow the plugin checklist. Add provider config, test bypass behavior, app token
 submission, and focused endpoint/app tests.
@@ -540,7 +595,7 @@ pnpm --filter app test
 
 Expected: PASS.
 
-- [ ] **Step 4: Add delivery abuse controls and telemetry**
+- [x] **Step 4: Add delivery abuse controls and telemetry**
 
 Inventory delivery flows, add missing rate limits/observability, and preserve
 anti-enumeration behavior.
@@ -552,6 +607,11 @@ pnpm --filter domain test
 ```
 
 Expected: PASS.
+
+Status: implemented for password reset, verification resend, change-email
+confirmation, organization invitations, and dynamic client registration where
+applicable. Review follow-ups created backlog spikes for retention,
+deduplication, conditional captcha, and atomic reservation semantics.
 
 - [ ] **Step 5: Browser verify selected auth flows**
 
@@ -584,7 +644,7 @@ Expected: no CAPTCHA is solved by the agent; visual states are verified where po
 - `apps/app/src/features/settings/user-settings-page.test.tsx`
 - `apps/app/src/features/auth/login-page.test.tsx`
 
-- [ ] **Step 1: Ask the user the privileged-account decision packet**
+- [x] **Step 1: Ask the user the privileged-account decision packet**
 
 Ask:
 
@@ -595,7 +655,12 @@ Ask:
 
 Expected: decisions recorded in Linear/docs.
 
-- [ ] **Step 2: Add Better Auth two-factor plugin and schema**
+Status: recommended defaults were approved for optional 2FA, owner/admin
+prompts, verified-email enrollment, and passkey deferral. 2FA implementation
+may proceed under the approved shape; backend, settings management, and login
+challenge work are implemented locally.
+
+- [x] **Step 2: Add Better Auth two-factor plugin and schema**
 
 Write failing tests first, add plugin config, update auth schema, generate and
 inspect Drizzle migration, and wire client plugin APIs.
@@ -604,13 +669,19 @@ Run:
 
 ```bash
 pnpm --filter domain test src/domains/identity/authentication/authentication.test.ts
-pnpm --filter domain drizzle:generate
+pnpm --filter domain db:generate
 git diff -- apps/domain/drizzle apps/domain/src/domains/identity/authentication/schema.ts
 ```
 
 Expected: tests pass and migration diff is inspected.
 
-- [ ] **Step 3: Implement 2FA settings management**
+Status: Better Auth two-factor is configured for optional TOTP plus encrypted
+backup codes, the auth schema and Drizzle migrations include
+`user.twoFactorEnabled` and `two_factor`, verified email is required before
+enrollment, trusted-device requests are rejected until policy is approved, and
+focused domain/app/infra checks pass.
+
+- [x] **Step 3: Implement 2FA settings management**
 
 Implement TOTP enrollment, verification, backup code handling, regeneration, and
 disable behavior according to policy.
@@ -623,7 +694,11 @@ pnpm --filter app test user-settings-page.test.tsx
 
 Expected: PASS.
 
-- [ ] **Step 4: Implement login 2FA challenge**
+Status: implemented locally with focused tests, typecheck, lint, format, React
+Doctor, and app build passing. Browser smoke is deferred by user request while
+the Codex browser/sandbox environment is repaired.
+
+- [x] **Step 4: Implement login 2FA challenge**
 
 Update login flow for Better Auth 2FA challenge responses, recovery-code entry,
 errors, and invitation continuation.
@@ -636,6 +711,12 @@ pnpm --filter app test login-page.test.tsx
 
 Expected: PASS.
 
+Status: implemented locally. The login page handles Better Auth
+`twoFactorRedirect`, verifies TOTP and backup-code challenges through the
+native Better Auth client, preserves invitation continuation, and returns to the
+password form with email preserved/password cleared if the temporary challenge
+session expires.
+
 - [ ] **Step 5: Browser verify 2FA**
 
 Use Browser against the confirmed stage/app URL:
@@ -647,6 +728,9 @@ Use Browser against the confirmed stage/app URL:
 - verify invitation continuation remains intact
 
 Expected: screenshots captured for final report.
+
+Status: deferred by user request while the Codex browser/sandbox environment is
+repaired.
 
 ## Task 7: Implement OAuth/MCP Hardening
 
@@ -670,7 +754,7 @@ Expected: screenshots captured for final report.
 - `docs/architecture/auth.md`
 - `docs/architecture/api.md`
 
-- [ ] **Step 1: Ask the user the OAuth/MCP decision packet**
+- [x] **Step 1: Ask the user the OAuth/MCP decision packet**
 
 Ask:
 
@@ -682,7 +766,7 @@ Ask:
 
 Expected: decisions recorded in Linear/docs.
 
-- [ ] **Step 2: Constrain registration policy**
+- [x] **Step 2: Constrain registration policy**
 
 Implement registration settings or wrapper policy to match the decision. Add
 tests for read/write/admin scope attempts and malformed metadata/redirects.
@@ -694,6 +778,11 @@ pnpm --filter domain test src/domains/identity/authentication/authentication.tes
 ```
 
 Expected: PASS.
+
+Status: unauthenticated dynamic registration is constrained to identity/read
+scopes and public clients; unsafe redirects, unsupported metadata, privileged
+scopes, and consent-skipping attempts are rejected before Better Auth persists
+the client. Browser/runtime verification remains gated on stage confirmation.
 
 - [ ] **Step 3: Implement OAuth consent UX updates**
 
@@ -708,7 +797,7 @@ pnpm --filter app test oauth-consent-page.test.tsx
 
 Expected: PASS.
 
-- [ ] **Step 4: Add OAuth/MCP audit events**
+- [x] **Step 4: Add OAuth/MCP audit events**
 
 Emit events for registration, consent grant/denial, refresh/revocation, and
 suspicious registration failures. Redact tokens and secrets.
@@ -720,6 +809,10 @@ pnpm --filter domain test
 ```
 
 Expected: PASS.
+
+Status: durable audit-event capture exists for registration success/rejection,
+consent grant/denial, refresh-token grants, and revocation acceptance with token,
+secret, authorization-code, query-string, and redirect URL redaction.
 
 - [ ] **Step 5: Browser verify OAuth consent**
 
@@ -752,7 +845,7 @@ Expected: scope grouping and high-risk treatment are visible and understandable.
 - `docs/architecture/organization-next-steps.md`
 - `docs/architecture/auth.md`
 
-- [ ] **Step 1: Ask the user the organization decision packet**
+- [x] **Step 1: Ask the user the organization decision packet**
 
 Ask:
 
@@ -763,7 +856,7 @@ Ask:
 
 Expected: decisions recorded in Linear/docs.
 
-- [ ] **Step 2: Add external-role regression coverage**
+- [x] **Step 2: Add external-role regression coverage**
 
 Write focused tests proving external users cannot access owner/admin member and
 invitation actions or domain workflows where they should be blocked.
@@ -777,7 +870,7 @@ pnpm --filter app test organization-members-page.test.tsx
 
 Expected: PASS.
 
-- [ ] **Step 3: Implement organization limits**
+- [x] **Step 3: Implement organization limits**
 
 Add Better Auth plugin options or Ceird server guards according to policy. Add
 tests for allowed, boundary, and rejected cases.
@@ -791,7 +884,7 @@ pnpm --filter app test organization-members-page.test.tsx
 
 Expected: PASS.
 
-- [ ] **Step 4: Add organization security audit events**
+- [x] **Step 4: Add organization security audit events**
 
 Emit events for organization creation, invitation create/resend/cancel/accept,
 role changes, member removal, and sensitive configuration changes.
@@ -803,6 +896,10 @@ pnpm --filter domain test
 ```
 
 Expected: PASS.
+
+Status: policy and implementation are ready for review on the integration
+branch. Strict database-atomic cardinality enforcement is deferred to `TSK-115`,
+and owner/admin activity UI remains gated on `TSK-74` confirmation.
 
 - [ ] **Step 5: Implement or defer organization security activity UI**
 

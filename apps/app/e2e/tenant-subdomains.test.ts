@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
+import { markUserEmailVerified } from "./helpers/email-verification";
 import {
   API_ORIGIN,
   APP_ORIGIN,
@@ -138,7 +139,7 @@ async function createAuthenticatedOrganizationSession(
   const forwardedFor = createForwardedFor();
   const email = createTenantHealthEmail();
   const organizationSlug = deriveTenantOrganizationSlug(TENANT_ORIGIN);
-  const password = "password123";
+  const password = "password1234";
 
   const signupResponse = await fetchAuthRequest(request, "/sign-up/email", {
     body: {
@@ -162,6 +163,7 @@ async function createAuthenticatedOrganizationSession(
       forwardedFor,
     });
   }
+  await markUserEmailVerified(email);
 
   const createOrganizationResponse = await fetchAuthRequest(
     request,

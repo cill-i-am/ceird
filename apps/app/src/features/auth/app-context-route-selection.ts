@@ -11,6 +11,7 @@ export function shouldHydrateAuthContext(pathname: string) {
     pathname === "/login" ||
     pathname === "/members" ||
     pathname === "/oauth/consent" ||
+    pathname === "/organization/security" ||
     pathname === "/organization/settings" ||
     pathname === "/reset-password" ||
     pathname === "/settings" ||
@@ -28,6 +29,7 @@ export function shouldHydrateOrganizationContext(pathname: string) {
     pathname === "/" ||
     pathname === "/activity" ||
     pathname === "/members" ||
+    pathname === "/organization/security" ||
     pathname === "/organization/settings" ||
     pathname === "/sites" ||
     pathname.startsWith("/jobs") ||
