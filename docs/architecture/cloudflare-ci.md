@@ -346,11 +346,13 @@ environments `main`, `preview-deploy`, and `preview-cleanup` as
 `CLOUDFLARE_API_TOKEN`, writes the state-store JSON from
 `CEIRD_ALCHEMY_STATE_STORE_CREDENTIALS` to the matching environment secret
 `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`, writes `CLOUDFLARE_ACCOUNT_ID`
-as an environment secret, and manages the non-secret repository variables
-`CEIRD_CLOUDFLARE_ZONE_ID` and `CEIRD_ZONE_NAME`. Reconcile that stack only
-with a bootstrap Cloudflare token that can manage account API tokens and a
-GitHub token that can write repository and environment Actions
-secrets/variables.
+as an environment secret, creates the Electric R2 runtime token, writes
+`CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` and
+`CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` to those same environments, and
+manages the non-secret repository variables `CEIRD_CLOUDFLARE_ZONE_ID` and
+`CEIRD_ZONE_NAME`. Reconcile that stack only with a bootstrap Cloudflare token
+that can manage account API tokens and a GitHub token that can write repository
+and environment Actions secrets/variables.
 
 ## Alchemy Docs Notes
 
