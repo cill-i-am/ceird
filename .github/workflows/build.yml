@@ -279,10 +279,12 @@ jobs:
       CEIRD_API_HOSTNAME: api-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       CEIRD_APP_HOSTNAME: app-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       CEIRD_MCP_HOSTNAME: mcp-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_SYNC_HOSTNAME: sync-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       CI_STAGE: ci-${{ github.run_number }}-${{ github.run_attempt }}
       PLAYWRIGHT_AGENT_URL: https://agent-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       PLAYWRIGHT_API_URL: https://api-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       PLAYWRIGHT_BASE_URL: https://app-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      PLAYWRIGHT_SYNC_URL: https://sync-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       PLAYWRIGHT_TENANT_URL: https://ci-tenant-health--ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
 
     steps:
@@ -458,11 +460,40 @@ jobs:
             done
           }
 
+          wait_for_sync_authorization() {
+            local label="Sync domain authorization"
+
+            for attempt in {1..120}; do
+              local status
+
+              status=$(curl --silent --show-error --max-time 10 \
+                -o /dev/null \
+                -w '%{http_code}' \
+                -H "origin: $PLAYWRIGHT_BASE_URL" \
+                "$PLAYWRIGHT_SYNC_URL/v1/shapes/jobs?offset=-1" || true)
+
+              if [[ "$status" == "401" ]]; then
+                echo "$label is healthy"
+                return 0
+              fi
+
+              if [[ "$attempt" == "120" ]]; then
+                echo "$label did not become healthy; expected 401 and got $status"
+                return 1
+              fi
+
+              echo "$label check attempt $attempt returned $status; waiting for sync/domain binding propagation"
+              sleep 5
+            done
+          }
+
           wait_for_health "$PLAYWRIGHT_API_URL/health" "API"
           wait_for_health "$PLAYWRIGHT_API_URL/api/auth/get-session" "API domain forwarding"
           wait_for_auth_domain_forwarding
           wait_for_health "$PLAYWRIGHT_AGENT_URL/health" "Agent"
           wait_for_health "$PLAYWRIGHT_BASE_URL/health" "App"
+          wait_for_health "$PLAYWRIGHT_SYNC_URL/health" "Sync"
+          wait_for_sync_authorization
           wait_for_health "$PLAYWRIGHT_TENANT_URL/health" "Tenant app"
           wait_for_app_authenticated_navigation
 
@@ -486,10 +517,12 @@ jobs:
       CEIRD_API_HOSTNAME: api-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       CEIRD_APP_HOSTNAME: app-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       CEIRD_MCP_HOSTNAME: mcp-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_SYNC_HOSTNAME: sync-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       CI_STAGE: ci-${{ github.run_number }}-${{ github.run_attempt }}
       PLAYWRIGHT_AGENT_URL: https://agent-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       PLAYWRIGHT_API_URL: https://api-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       PLAYWRIGHT_BASE_URL: https://app-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      PLAYWRIGHT_SYNC_URL: https://sync-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       PLAYWRIGHT_TENANT_URL: https://ci-tenant-health--ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
 
     steps:
@@ -559,6 +592,7 @@ jobs:
       CEIRD_API_HOSTNAME: api-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       CEIRD_APP_HOSTNAME: app-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       CEIRD_MCP_HOSTNAME: mcp-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
+      CEIRD_SYNC_HOSTNAME: sync-ci-${{ github.run_number }}-${{ github.run_attempt }}.ceird.app
       CI_STAGE: ci-${{ github.run_number }}-${{ github.run_attempt }}
 
     steps:

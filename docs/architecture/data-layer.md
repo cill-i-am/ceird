@@ -179,15 +179,17 @@ Electric stores shape logs and metadata on a filesystem that must survive sync
 service restarts. Cloudflare Container disks are ephemeral, so the Alchemy stack
 provisions a stage-scoped R2 bucket for Electric storage. In local
 `alchemy dev` stages, the stack also mints a bucket-scoped R2 API token so the
-local cloud-backed loop stays self-contained. In CI and deployed stages, the
-separate GitHub credential stack owns the long-lived Electric R2 API token and
-stores `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
-`CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` as GitHub environment secrets. The
-main app stack consumes those values instead of creating API tokens during
-routine deploys, so the deploy token does not need `API Tokens Write`.
-Pull-request previews and push-to-main cloud E2E stages can temporarily omit
-those secrets; in that bootstrap mode the stack deploys the sync Worker but
-skips the Electric Container and R2 bucket.
+local cloud-backed loop stays self-contained. In production, the separate
+GitHub credential stack owns a bucket-scoped Electric R2 API token for the
+`ceird-main-electric-storage` bucket and stores
+`CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
+`CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` only on the `main` deployment
+environment. The main app stack consumes those values instead of creating API
+tokens during routine deploys, so the deploy token does not need `API Tokens
+Write`. Pull-request previews and push-to-main cloud E2E stages intentionally
+deploy the sync Worker without shared Electric storage credentials; those
+stages skip the Electric Container and R2 bucket until they have stage-scoped
+storage credentials.
 
 The token id is passed to the container as `AWS_ACCESS_KEY_ID`; the SHA-256 hash
 of the token value is passed as `AWS_SECRET_ACCESS_KEY`, which matches

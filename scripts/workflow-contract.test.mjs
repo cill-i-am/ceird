@@ -732,6 +732,10 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   );
   assert.match(
     buildWorkflow,
+    /CEIRD_SYNC_HOSTNAME: sync-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
     /PLAYWRIGHT_BASE_URL: https:\/\/app-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
   );
   assert.match(
@@ -741,6 +745,10 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   assert.match(
     buildWorkflow,
     /PLAYWRIGHT_AGENT_URL: https:\/\/agent-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
+  );
+  assert.match(
+    buildWorkflow,
+    /PLAYWRIGHT_SYNC_URL: https:\/\/sync-ci-\$\{\{ github\.run_number \}\}-\$\{\{ github\.run_attempt \}\}\.ceird\.app/
   );
   assert.match(
     buildWorkflow,
@@ -773,6 +781,17 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
     /pnpm --silent alchemy state get ceird "\$CI_STAGE" PostgresBranch --stage "\$CI_STAGE"/
   );
   assert.match(ciDeployJob, /Wait for CI deploy health/);
+  assert.match(ciDeployJob, /"\$PLAYWRIGHT_SYNC_URL\/health"/);
+  assert.match(ciDeployJob, /wait_for_sync_authorization/);
+  assert.match(
+    ciDeployJob,
+    /"\$PLAYWRIGHT_SYNC_URL\/v1\/shapes\/jobs\?offset=-1"/
+  );
+  assert.doesNotMatch(
+    ciDeployJob + ciE2eJob + ciDestroyJob,
+    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID|CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY/,
+    "ephemeral CI stages should not receive shared Electric storage credentials"
+  );
   assert.match(
     buildWorkflow,
     /\[\[ ! "\$CI_STAGE" =~ \^ci-\[0-9\]\+-\[0-9\]\+\$ \]\]/
@@ -917,6 +936,10 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   );
   assert.match(
     previewWorkflow,
+    /PLAYWRIGHT_SYNC_URL: https:\/\/sync\.pr-\$\{\{ github\.event\.pull_request\.number \}\}\.ceird\.app/
+  );
+  assert.match(
+    previewWorkflow,
     /pnpm alchemy deploy --stage "\$PREVIEW_STAGE" --yes/
   );
   assert.match(
@@ -957,6 +980,12 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assert.match(previewWorkflow, /waiting for service binding propagation/);
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_AGENT_URL\/health"/);
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_BASE_URL\/health"/);
+  assert.match(previewWorkflow, /"\$PLAYWRIGHT_SYNC_URL\/health"/);
+  assert.match(previewWorkflow, /wait_for_sync_authorization/);
+  assert.match(
+    previewWorkflow,
+    /"\$PLAYWRIGHT_SYNC_URL\/v1\/shapes\/jobs\?offset=-1"/
+  );
   assert.match(previewWorkflow, /wait_for_app_authenticated_navigation/);
   assert.match(previewWorkflow, /preview-app-health-%s@example\.com/);
   assert.match(previewWorkflow, /\^location: \/create-organization/);
@@ -965,6 +994,12 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assert.match(previewWorkflow, /ceird-preview-environment/);
   assert.match(previewWorkflow, /Preview environment is ready/);
   assert.match(previewWorkflow, /Agent \|/);
+  assert.match(previewWorkflow, /Sync \|/);
+  assert.doesNotMatch(
+    previewWorkflow,
+    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID|CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY/,
+    "preview stages should not receive shared Electric storage credentials"
+  );
   assert.match(previewWorkflow, /pnpm --filter app e2e/);
 });
 

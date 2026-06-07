@@ -57,7 +57,7 @@ describe("GitHub CI credentials stack", () => {
     });
   });
 
-  it("keeps Electric runtime R2 credentials in a separate object-scoped token", () => {
+  it("keeps Electric runtime R2 credentials in a separate bucket-scoped token", () => {
     expect(
       makeCloudflareElectricStorageTokenProps({
         cloudflareAccountId: "account-id",
@@ -73,9 +73,8 @@ describe("GitHub CI credentials stack", () => {
             "Workers R2 Storage Bucket Item Write",
           ],
           resources: {
-            "com.cloudflare.api.account.account-id": {
-              "com.cloudflare.edge.r2.bucket.*": "*",
-            },
+            "com.cloudflare.edge.r2.bucket.account-id_default_ceird-main-electric-storage":
+              "*",
           },
         },
       ],

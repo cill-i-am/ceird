@@ -5,6 +5,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import type { Input, InputProps } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Array from "effect/Array";
+import type * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
@@ -28,7 +29,11 @@ import {
 } from "./cloudflare-tenant-routing.ts";
 import type { NeonPostgresResources } from "./neon.ts";
 import type { InfraStageConfig } from "./stages.ts";
-import { makeAlchemyStageIdentity, resourceName } from "./stages.ts";
+import {
+  makeAlchemyStageIdentity,
+  makeInfraConfigSourceError,
+  resourceName,
+} from "./stages.ts";
 
 export interface CloudflareStackInput {
   readonly config: InfraStageConfig;
@@ -163,7 +168,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     input.config,
     "electric-storage"
   );
-  const electricStorageProvisioned = shouldProvisionElectricStorage({
+  const electricStorageProvisioned = yield* shouldProvisionElectricStorage({
     config: input.config,
     localDev,
   });
@@ -196,9 +201,8 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
       config: input.config,
     });
   } else if (electricStorageProvisioned) {
-    electricStorageCredentials = readConfiguredElectricStorageCredentials(
-      input.config
-    );
+    electricStorageCredentials =
+      yield* readConfiguredElectricStorageCredentials(input.config);
   }
   const localOrigins = {
     agent: makeAlchemyLocalWorkerOrigin("agent"),
@@ -511,21 +515,7 @@ export function shouldProvisionElectricStorage(input: {
   readonly localDev: boolean;
 }) {
   if (input.localDev) {
-    return true;
-  }
-
-  const hasAccessKey = input.config.electricStorageAccessKeyId !== undefined;
-  const hasSecretKey =
-    input.config.electricStorageSecretAccessKey !== undefined;
-
-  if (hasAccessKey && hasSecretKey) {
-    return true;
-  }
-
-  if (hasAccessKey !== hasSecretKey) {
-    throw new Error(
-      "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY must be configured together"
-    );
+    return Effect.succeed(true);
   }
 
   const identity = makeAlchemyStageIdentity({
@@ -534,28 +524,51 @@ export function shouldProvisionElectricStorage(input: {
   });
 
   if (identity.isPullRequestPreview || identity.isEphemeralCi) {
-    return false;
+    return Effect.succeed(false);
   }
 
-  throw new Error(
-    "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
+  const hasAccessKey = input.config.electricStorageAccessKeyId !== undefined;
+  const hasSecretKey =
+    input.config.electricStorageSecretAccessKey !== undefined;
+
+  if (hasAccessKey && hasSecretKey) {
+    return Effect.succeed(true);
+  }
+
+  if (hasAccessKey !== hasSecretKey) {
+    return Effect.fail(
+      makeInfraConfigSourceError(
+        "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY must be configured together"
+      )
+    );
+  }
+
+  return Effect.fail(
+    makeInfraConfigSourceError(
+      "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
+    )
   );
 }
 
 function readConfiguredElectricStorageCredentials(
   config: InfraStageConfig
-): Pick<ElectricContainerStorageConfig, "accessKeyId" | "secretAccessKey"> {
+): Effect.Effect<
+  Pick<ElectricContainerStorageConfig, "accessKeyId" | "secretAccessKey">,
+  Config.ConfigError
+> {
   if (
     config.electricStorageAccessKeyId === undefined ||
     config.electricStorageSecretAccessKey === undefined
   ) {
-    throw new Error(
-      "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
+    return Effect.fail(
+      makeInfraConfigSourceError(
+        "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
+      )
     );
   }
 
-  return {
+  return Effect.succeed({
     accessKeyId: Redacted.value(config.electricStorageAccessKeyId),
     secretAccessKey: Redacted.value(config.electricStorageSecretAccessKey),
-  };
+  });
 }

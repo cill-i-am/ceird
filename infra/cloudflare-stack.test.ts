@@ -625,54 +625,70 @@ describe("Cloudflare stack", () => {
     ).toBe(false);
   });
 
-  it("bootstraps ephemeral deploys without Electric R2 credentials but fails closed elsewhere", () => {
+  it("bootstraps local Electric storage, skips preview storage, and fails closed for production credentials", () => {
     expect(
-      shouldProvisionElectricStorage({
-        config: configWithoutCloudflareBootstrapSecrets,
-        localDev: true,
-      })
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: configWithoutCloudflareBootstrapSecrets,
+          localDev: true,
+        })
+      )
     ).toBe(true);
     expect(
-      shouldProvisionElectricStorage({
-        config: {
-          ...previewTenantConfig,
-          electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
-          electricStorageSecretAccessKey: Redacted.make(
-            "electric-secret-access-key"
-          ),
-        },
-        localDev: false,
-      })
-    ).toBe(true);
-    expect(
-      shouldProvisionElectricStorage({
-        config: previewTenantConfig,
-        localDev: false,
-      })
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: {
+            ...previewTenantConfig,
+            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
+            electricStorageSecretAccessKey: Redacted.make(
+              "electric-secret-access-key"
+            ),
+          },
+          localDev: false,
+        })
+      )
     ).toBe(false);
     expect(
-      shouldProvisionElectricStorage({
-        config: {
-          ...configWithoutCloudflareBootstrapSecrets,
-          stage: "ci-517-1",
-        },
-        localDev: false,
-      })
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: previewTenantConfig,
+          localDev: false,
+        })
+      )
+    ).toBe(false);
+    expect(
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: {
+            ...configWithoutCloudflareBootstrapSecrets,
+            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
+            electricStorageSecretAccessKey: Redacted.make(
+              "electric-secret-access-key"
+            ),
+            stage: "ci-517-1",
+          },
+          localDev: false,
+        })
+      )
     ).toBe(false);
     expect(() =>
-      shouldProvisionElectricStorage({
-        config: {
-          ...previewTenantConfig,
-          electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
-        },
-        localDev: false,
-      })
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: {
+            ...configWithoutCloudflareBootstrapSecrets,
+            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
+          },
+          localDev: false,
+        })
+      )
     ).toThrow(/must be configured together/);
     expect(() =>
-      shouldProvisionElectricStorage({
-        config: configWithoutCloudflareBootstrapSecrets,
-        localDev: false,
-      })
+      Effect.runSync(
+        shouldProvisionElectricStorage({
+          config: configWithoutCloudflareBootstrapSecrets,
+          localDev: false,
+        })
+      )
     ).toThrow(/required outside local Alchemy dev/);
   });
 
@@ -1023,6 +1039,7 @@ describe("Cloudflare stack", () => {
     ).toBe("apac");
     expect(electricContainerProps).toMatchObject({
       autoInstallExternals: false,
+      isExternal: true,
       instanceType: "basic",
       instances: 1,
       maxInstances: 1,

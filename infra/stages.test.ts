@@ -360,6 +360,19 @@ describe("Alchemy stage identity", () => {
         configured.electricStorageSecretAccessKey ?? Redacted.make("")
       )
     ).toBe("secret-access-key");
+    expect(() =>
+      Effect.runSync(
+        loadInfraStageConfig("pr-104").pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              makeConfigProvider({
+                CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: "access-key-id",
+              })
+            )
+          )
+        )
+      )
+    ).toThrow(/must be configured together/);
   });
 
   it("allows PR preview auth rate limits to be enabled explicitly", () => {
