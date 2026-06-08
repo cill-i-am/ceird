@@ -1,5 +1,5 @@
-import { CurrentLocationOriginSchema } from "@ceird/proximity-core/dto";
-import type { CurrentLocationOrigin } from "@ceird/proximity-core/dto";
+import { ProximityOriginInputSchema } from "@ceird/proximity-core/dto";
+import type { ProximityOriginInput } from "@ceird/proximity-core/dto";
 import { Option, Schema } from "effect";
 
 export const AGENT_PROXIMITY_ORIGIN_CONTEXT_MESSAGE_TYPE =
@@ -18,7 +18,7 @@ export type AgentProximityOriginContextId = Schema.Schema.Type<
 
 export const AgentProximityOriginContextFrameSchema = Schema.Struct({
   contextId: AgentProximityOriginContextId,
-  origin: CurrentLocationOriginSchema,
+  origin: ProximityOriginInputSchema,
   type: Schema.Literal(AGENT_PROXIMITY_ORIGIN_CONTEXT_MESSAGE_TYPE),
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
@@ -42,7 +42,7 @@ export function makeAgentProximityOriginContextBody(
 
 export function makeAgentProximityOriginContextFrame(
   contextId: AgentProximityOriginContextId,
-  origin: CurrentLocationOrigin
+  origin: ProximityOriginInput
 ): AgentProximityOriginContextFrame {
   return {
     contextId,

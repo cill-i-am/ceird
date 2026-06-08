@@ -10,7 +10,10 @@ import type {
   PreparedAgentSession,
 } from "@ceird/agents-core";
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
-import type { CurrentLocationOrigin } from "@ceird/proximity-core";
+import type {
+  ProximityOriginInput,
+  ProximityOriginSuggestion,
+} from "@ceird/proximity-core";
 import {
   getToolApproval,
   getToolInput,
@@ -58,9 +61,16 @@ import {
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Separator } from "#/components/ui/separator";
 import { Textarea } from "#/components/ui/textarea";
+import {
+  autocompleteProximityOrigin,
+  resolveProximityOriginPlace,
+} from "#/features/proximity/proximity-api";
 import { requestCurrentLocationOrigin } from "#/features/proximity/proximity-location-access";
+import { createProximityOriginSessionToken } from "#/features/proximity/proximity-origin";
+import { ProximityOriginDialog } from "#/features/proximity/proximity-origin-dialog";
 import { loadRouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
 import type { RouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
+import { updateCurrentUserPreferences } from "#/features/settings/user-preferences-api";
 import { activeElementIsInside } from "#/hotkeys/focus";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
@@ -84,6 +94,8 @@ const AGENT_HOST_MISSING_MESSAGE = "The Agent Worker origin is not configured.";
 const AGENT_CONNECT_TOKEN_CACHE_SAFETY_MS = 60_000;
 const AGENT_CONNECT_TOKEN_MAX_CACHE_MS = 240_000;
 const AGENT_PROXIMITY_CONTEXT_ID_PREFIX = "agent-origin-";
+const AGENT_ORIGIN_AUTOCOMPLETE_DEBOUNCE_MS = 250;
+const AGENT_ORIGIN_AUTOCOMPLETE_MIN_LENGTH = 3;
 
 function AgentIcon({
   icon,
@@ -127,7 +139,130 @@ interface ToolApprovalResponse {
 
 type AgentComposerLocationNotice =
   | { readonly status: "requesting" }
-  | { readonly message: string; readonly status: "blocked" };
+  | {
+      readonly canChooseOrigin: boolean;
+      readonly canShareCurrentLocation: boolean;
+      readonly message: string;
+      readonly status: "blocked";
+    };
+
+interface AgentSendMessageOptions {
+  readonly forceEnableLocationPreference?: boolean;
+  readonly originOverride?: ProximityOriginInput | undefined;
+}
+
+interface AgentOriginDialogState {
+  readonly error: string | null;
+  readonly open: boolean;
+  readonly query: string;
+  readonly resolving: boolean;
+  readonly selectedSuggestion: ProximityOriginSuggestion | null;
+  readonly suggestions: readonly ProximityOriginSuggestion[];
+}
+
+type AgentOriginDialogAction =
+  | { readonly type: "autocompleteFailed"; readonly error: string }
+  | {
+      readonly type: "autocompleteSucceeded";
+      readonly suggestions: readonly ProximityOriginSuggestion[];
+    }
+  | { readonly type: "open" }
+  | { readonly type: "queryChanged"; readonly query: string }
+  | { readonly type: "reset" }
+  | { readonly type: "resolveFailed"; readonly error: string }
+  | { readonly type: "resolveStarted" }
+  | { readonly type: "resolveStopped" }
+  | {
+      readonly type: "suggestionSelected";
+      readonly suggestion: ProximityOriginSuggestion | null;
+    }
+  | { readonly type: "suggestionsCleared" };
+
+const initialAgentOriginDialogState: AgentOriginDialogState = {
+  error: null,
+  open: false,
+  query: "",
+  resolving: false,
+  selectedSuggestion: null,
+  suggestions: [],
+};
+
+function agentOriginDialogReducer(
+  state: AgentOriginDialogState,
+  action: AgentOriginDialogAction
+): AgentOriginDialogState {
+  switch (action.type) {
+    case "autocompleteFailed": {
+      return {
+        ...state,
+        error: action.error,
+        suggestions: [],
+      };
+    }
+    case "autocompleteSucceeded": {
+      return {
+        ...state,
+        error: null,
+        suggestions: action.suggestions,
+      };
+    }
+    case "open": {
+      return {
+        ...state,
+        open: true,
+      };
+    }
+    case "queryChanged": {
+      return {
+        ...state,
+        error: null,
+        query: action.query,
+        selectedSuggestion: null,
+        suggestions: [],
+      };
+    }
+    case "reset": {
+      return initialAgentOriginDialogState;
+    }
+    case "resolveFailed": {
+      return {
+        ...state,
+        error: action.error,
+        resolving: false,
+      };
+    }
+    case "resolveStarted": {
+      return {
+        ...state,
+        error: null,
+        resolving: true,
+      };
+    }
+    case "resolveStopped": {
+      return {
+        ...state,
+        resolving: false,
+      };
+    }
+    case "suggestionSelected": {
+      return {
+        ...state,
+        selectedSuggestion: action.suggestion,
+      };
+    }
+    case "suggestionsCleared": {
+      return state.suggestions.length === 0
+        ? state
+        : {
+            ...state,
+            suggestions: [],
+          };
+    }
+    default: {
+      return state;
+    }
+  }
+}
 
 interface AgentConversationContextValue {
   readonly actionLookup: ReadonlyMap<string, AgentActionManifestItem>;
@@ -526,7 +661,51 @@ function AgentConversation({
     [actionLookup, addToolApprovalResponse]
   );
   const sendMessageWithRouteContext = React.useCallback(
-    async (message: { readonly text: string }) => {
+    async (
+      message: { readonly text: string },
+      options: AgentSendMessageOptions = {}
+    ) => {
+      const sendWithHiddenOrigin = async (
+        origin: ProximityOriginInput,
+        attachFailureMessage: string
+      ) => {
+        const contextId = createAgentProximityOriginContextId();
+        const contextSent = sendAgentProximityOriginContext(
+          agent,
+          contextId,
+          origin
+        );
+
+        if (!contextSent) {
+          setLocationNotice({
+            canChooseOrigin: true,
+            canShareCurrentLocation: false,
+            message: attachFailureMessage,
+            status: "blocked",
+          });
+
+          return false;
+        }
+
+        proximityOriginContextIdRef.current = contextId;
+        setLocationNotice(null);
+        try {
+          await sendMessage(message);
+        } catch (sendError) {
+          proximityOriginContextIdRef.current = null;
+          throw sendError;
+        }
+
+        return true;
+      };
+
+      if (options.originOverride !== undefined) {
+        return await sendWithHiddenOrigin(
+          options.originOverride,
+          "Ceird could not attach the selected origin to the agent request. Choose the origin again, or send without route ranking."
+        );
+      }
+
       if (!shouldAttachCurrentLocationToAgentMessage(message.text)) {
         setLocationNotice(null);
         await sendMessage(message);
@@ -544,8 +723,21 @@ function AgentConversation({
         return false;
       }
 
-      const locationPreferenceStatus =
-        await loadRouteProximityLocationPreferenceStatus();
+      let locationPreferenceStatus: RouteProximityLocationPreferenceStatus;
+
+      if (options.forceEnableLocationPreference === true) {
+        try {
+          await updateCurrentUserPreferences({
+            routeProximityLocationEnabled: true,
+          });
+          locationPreferenceStatus = "enabled";
+        } catch {
+          locationPreferenceStatus = "unavailable";
+        }
+      } else {
+        locationPreferenceStatus =
+          await loadRouteProximityLocationPreferenceStatus();
+      }
       const requestWasCancelled =
         !mountedRef.current || activeLocationRequestRef.current !== requestId;
 
@@ -555,6 +747,8 @@ function AgentConversation({
         }
 
         setLocationNotice({
+          canChooseOrigin: true,
+          canShareCurrentLocation: true,
           message: getAgentLocationPreferenceBlockedMessage(
             locationPreferenceStatus
           ),
@@ -582,6 +776,8 @@ function AgentConversation({
         }
 
         setLocationNotice({
+          canChooseOrigin: true,
+          canShareCurrentLocation: false,
           message: getAgentLocationFailureMessage(originExit.cause),
           status: "blocked",
         });
@@ -596,33 +792,10 @@ function AgentConversation({
         return false;
       }
 
-      const contextId = createAgentProximityOriginContextId();
-      const contextSent = sendAgentProximityOriginContext(
-        agent,
-        contextId,
-        originExit.value
+      return await sendWithHiddenOrigin(
+        originExit.value,
+        "Ceird could not attach your current location to the agent request. Try again, or choose an origin."
       );
-
-      if (!contextSent) {
-        setLocationNotice({
-          message:
-            "Ceird could not attach your current location to the agent request. Try again, or enable location access in Settings.",
-          status: "blocked",
-        });
-
-        return false;
-      }
-
-      proximityOriginContextIdRef.current = contextId;
-      setLocationNotice(null);
-      try {
-        await sendMessage(message);
-      } catch (sendError) {
-        proximityOriginContextIdRef.current = null;
-        throw sendError;
-      }
-
-      return true;
     },
     [agent, sendMessage]
   );
@@ -770,33 +943,142 @@ function AgentComposer({
 }: {
   readonly busy: boolean;
   readonly locationNotice: AgentComposerLocationNotice | null;
-  readonly sendMessage: (message: {
-    readonly text: string;
-  }) => Promise<boolean>;
+  readonly sendMessage: (
+    message: { readonly text: string },
+    options?: AgentSendMessageOptions
+  ) => Promise<boolean>;
 }) {
   const [draft, setDraft] = React.useState("");
+  const [originDialogState, dispatchOriginDialog] = React.useReducer(
+    agentOriginDialogReducer,
+    initialAgentOriginDialogState
+  );
   const [submitting, setSubmitting] = React.useState(false);
   const composerRef = React.useRef<HTMLDivElement | null>(null);
+  const sessionTokenRef = React.useRef(createProximityOriginSessionToken());
   const isBusy = busy || submitting;
+  const trimmedOriginQuery = originDialogState.query.trim();
 
-  const submitDraft = React.useCallback(async () => {
-    const text = draft.trim();
-
-    if (!text || isBusy) {
+  React.useEffect(() => {
+    if (
+      !originDialogState.open ||
+      trimmedOriginQuery.length < AGENT_ORIGIN_AUTOCOMPLETE_MIN_LENGTH
+    ) {
+      dispatchOriginDialog({ type: "suggestionsCleared" });
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const sent = await sendMessage({ text });
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      void runAutocomplete();
+    }, AGENT_ORIGIN_AUTOCOMPLETE_DEBOUNCE_MS);
 
-      if (sent) {
-        setDraft("");
+    async function runAutocomplete() {
+      if (cancelled) {
+        return;
       }
-    } finally {
-      setSubmitting(false);
+
+      const exit = await Effect.runPromiseExit(
+        autocompleteProximityOrigin({
+          country: "IE",
+          input: trimmedOriginQuery,
+          sessionToken: sessionTokenRef.current,
+        })
+      );
+
+      if (!cancelled && Exit.isSuccess(exit)) {
+        dispatchOriginDialog({
+          suggestions: exit.value.suggestions,
+          type: "autocompleteSucceeded",
+        });
+        return;
+      }
+
+      if (!cancelled) {
+        dispatchOriginDialog({
+          error: "Ceird could not search origins. Try again.",
+          type: "autocompleteFailed",
+        });
+      }
     }
-  }, [draft, isBusy, sendMessage]);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [originDialogState.open, trimmedOriginQuery]);
+
+  const resetOriginDialog = React.useCallback(() => {
+    dispatchOriginDialog({ type: "reset" });
+    sessionTokenRef.current = createProximityOriginSessionToken();
+  }, []);
+
+  const submitDraft = React.useCallback(
+    async (options?: AgentSendMessageOptions) => {
+      const text = draft.trim();
+
+      if (!text || isBusy) {
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        const sent = await sendMessage({ text }, options);
+
+        if (sent) {
+          setDraft("");
+        }
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [draft, isBusy, sendMessage]
+  );
+
+  const confirmSelectedOrigin = React.useCallback(
+    async (suggestion: ProximityOriginSuggestion) => {
+      const text = draft.trim();
+
+      if (!text || isBusy) {
+        return;
+      }
+
+      dispatchOriginDialog({ type: "resolveStarted" });
+      const originExit = await Effect.runPromiseExit(
+        resolveProximityOriginPlace({
+          placeId: suggestion.placeId,
+          rawInput: trimmedOriginQuery || suggestion.displayText,
+          sessionToken: sessionTokenRef.current,
+        })
+      );
+
+      if (Exit.isFailure(originExit)) {
+        dispatchOriginDialog({
+          error: "Ceird could not confirm that origin. Select another result.",
+          type: "resolveFailed",
+        });
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        const sent = await sendMessage(
+          { text },
+          { originOverride: originExit.value.origin }
+        );
+
+        if (sent) {
+          setDraft("");
+          resetOriginDialog();
+        } else {
+          dispatchOriginDialog({ type: "resolveStopped" });
+        }
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [draft, isBusy, resetOriginDialog, sendMessage, trimmedOriginQuery]
+  );
 
   useAppHotkey("agentSubmit", () => {
     if (activeElementIsInside(composerRef)) {
@@ -808,7 +1090,18 @@ function AgentComposer({
     <DrawerFooter className="shrink-0 gap-3 border-t bg-background px-5 py-3 sm:px-6">
       <div ref={composerRef} className="flex w-full flex-col gap-2">
         {locationNotice ? (
-          <AgentLocationNotice notice={locationNotice} />
+          <AgentLocationNotice
+            busy={isBusy}
+            notice={locationNotice}
+            onChooseOrigin={() => {
+              if (draft.trim() && !isBusy) {
+                dispatchOriginDialog({ type: "open" });
+              }
+            }}
+            onShareCurrentLocation={() => {
+              void submitDraft({ forceEnableLocationPreference: true });
+            }}
+          />
         ) : null}
         <Textarea
           aria-label="Message Ask Ceird"
@@ -843,15 +1136,48 @@ function AgentComposer({
             Send
           </Button>
         </div>
+        <ProximityOriginDialog
+          error={originDialogState.error}
+          loading={originDialogState.resolving || submitting}
+          open={originDialogState.open}
+          query={originDialogState.query}
+          selectedSuggestion={originDialogState.selectedSuggestion}
+          suggestions={originDialogState.suggestions}
+          onConfirm={(suggestion) => {
+            void confirmSelectedOrigin(suggestion);
+          }}
+          onOpenChange={(open) => {
+            if (open) {
+              dispatchOriginDialog({ type: "open" });
+            } else {
+              resetOriginDialog();
+            }
+          }}
+          onQueryChange={(query) => {
+            dispatchOriginDialog({ query, type: "queryChanged" });
+          }}
+          onSuggestionSelect={(suggestion) => {
+            dispatchOriginDialog({
+              suggestion,
+              type: "suggestionSelected",
+            });
+          }}
+        />
       </div>
     </DrawerFooter>
   );
 }
 
 function AgentLocationNotice({
+  busy,
   notice,
+  onChooseOrigin,
+  onShareCurrentLocation,
 }: {
+  readonly busy: boolean;
   readonly notice: AgentComposerLocationNotice;
+  readonly onChooseOrigin: () => void;
+  readonly onShareCurrentLocation: () => void;
 }) {
   if (notice.status === "requesting") {
     return (
@@ -869,7 +1195,37 @@ function AgentLocationNotice({
     <Alert variant="destructive" className="py-2">
       <AgentIcon icon={AlertCircleIcon} strokeWidth={2} />
       <AlertTitle>Current location unavailable</AlertTitle>
-      <AlertDescription>{notice.message}</AlertDescription>
+      <AlertDescription className="flex flex-col gap-3">
+        <span>{notice.message}</span>
+        <span>
+          Ceird uses the origin only for this route request and does not save
+          the coordinates.
+        </span>
+        <span className="flex flex-wrap gap-2">
+          {notice.canShareCurrentLocation ? (
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={onShareCurrentLocation}
+            >
+              Share current location
+            </Button>
+          ) : null}
+          {notice.canChooseOrigin ? (
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={onChooseOrigin}
+            >
+              Choose origin
+            </Button>
+          ) : null}
+        </span>
+      </AlertDescription>
     </Alert>
   );
 }
@@ -1214,7 +1570,7 @@ function createFallbackUuid() {
 function sendAgentProximityOriginContext(
   agent: AgentConnection,
   contextId: AgentProximityOriginContextIdType,
-  origin: CurrentLocationOrigin
+  origin: ProximityOriginInput
 ) {
   const frame = makeAgentProximityOriginContextFrame(contextId, origin);
 

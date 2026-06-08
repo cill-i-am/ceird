@@ -482,6 +482,7 @@ export function SitesPage({
           onClearFilters={clearFilters}
           onLimitChange={setRouteLimit}
           showToolbar={false}
+          viewMode={viewMode}
         >
           <SitesDirectorySection
             clearFilters={clearFilters}

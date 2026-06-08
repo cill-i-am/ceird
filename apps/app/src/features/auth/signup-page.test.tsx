@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
+import type * as UserPreferencesApiModule from "#/features/settings/user-preferences-api";
 import type * as AuthClientModule from "#/lib/auth-client";
 
 import { listOrganizations } from "../organizations/organization-access";
@@ -16,6 +17,7 @@ const {
   mockedNavigate,
   mockedSignInEmail,
   mockedSignUpEmail,
+  mockedUpdateCurrentUserPreferences,
 } = vi.hoisted(() => ({
   mockedClearAppContextClientCache: vi.fn<() => void>(),
   mockedGetSession: vi.fn<
@@ -69,6 +71,8 @@ const {
       } | null;
     }>
   >(),
+  mockedUpdateCurrentUserPreferences:
+    vi.fn<typeof UserPreferencesApiModule.updateCurrentUserPreferences>(),
 }));
 
 vi.mock(import("./app-context-client-cache-state"), async (importActual) => {
@@ -145,6 +149,10 @@ vi.mock(import("#/lib/auth-client"), async () => {
   };
 });
 
+vi.mock(import("#/features/settings/user-preferences-api"), () => ({
+  updateCurrentUserPreferences: mockedUpdateCurrentUserPreferences,
+}));
+
 describe("signup page", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "http://localhost:3000/signup");
@@ -175,6 +183,12 @@ describe("signup page", () => {
         },
       },
       error: null,
+    });
+    mockedUpdateCurrentUserPreferences.mockResolvedValue({
+      preferences: {
+        routeProximityLocationEnabled: true,
+        updatedAt: "2026-06-06T10:00:00.000Z",
+      },
     });
   });
 
@@ -211,6 +225,64 @@ describe("signup page", () => {
     });
     expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
     expect(mockedSignInEmail).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("asks for route-aware location access during account creation without requesting coordinates", async () => {
+    const user = userEvent.setup();
+    const getCurrentPosition = vi.fn<Geolocation["getCurrentPosition"]>();
+
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition },
+    });
+
+    render(<SignupPage />);
+
+    expect(
+      screen.getByText(/traffic-aware nearby jobs and sites/i)
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /ask this device for location when i use near me/i,
+      })
+    );
+    await user.type(screen.getByLabelText("Name"), "Taylor Example");
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password1234");
+    await user.click(screen.getByRole("button", { name: /sign up/i }));
+
+    await waitFor(() => {
+      expect(mockedUpdateCurrentUserPreferences).toHaveBeenCalledWith({
+        routeProximityLocationEnabled: true,
+      });
+    });
+    expect(getCurrentPosition).not.toHaveBeenCalled();
+    expect(
+      JSON.stringify(mockedUpdateCurrentUserPreferences.mock.calls)
+    ).not.toContain("latitude");
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/",
+      });
+    });
+  }, 10_000);
+
+  it("lets new users skip the location access preference during signup", async () => {
+    const user = userEvent.setup();
+
+    render(<SignupPage />);
+
+    await user.type(screen.getByLabelText("Name"), "Taylor Example");
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password1234");
+    await user.click(screen.getByRole("button", { name: /sign up/i }));
+
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/",
+      });
+    });
+    expect(mockedUpdateCurrentUserPreferences).not.toHaveBeenCalled();
   }, 10_000);
 
   it("passes the Turnstile token header when signup captcha is enabled", async () => {
