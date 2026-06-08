@@ -2,6 +2,7 @@ import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
 import { APP_ORIGIN } from "../test-urls";
+import { skipLocationAccessIfPresent } from "./location-access-page";
 import { waitForSubmitHydration } from "./wait-for-submit-hydration";
 
 export class CreateOrganizationPage {
@@ -33,6 +34,8 @@ export class CreateOrganizationPage {
   }
 
   async expectLoaded() {
+    await skipLocationAccessIfPresent(this.page);
+
     await Promise.all([
       expect(this.page).toHaveURL(`${APP_ORIGIN}/create-organization`, {
         timeout: 15_000,

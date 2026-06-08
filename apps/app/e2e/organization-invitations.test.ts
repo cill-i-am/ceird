@@ -6,6 +6,7 @@ import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
 import { createTestPassword } from "./helpers/test-account";
+import { skipLocationAccessIfPresent } from "./pages/location-access-page";
 import { MembersPage } from "./pages/members-page";
 import { SignupPage } from "./pages/signup-page";
 import { API_ORIGIN, APP_ORIGIN, readPlaywrightDatabaseUrl } from "./test-urls";
@@ -58,6 +59,7 @@ function createForwardedFor() {
 async function expectAuthenticatedHome(page: Page) {
   const workspaceHome = page.getByRole("main", { name: "Workspace home" });
 
+  await skipLocationAccessIfPresent(page);
   await expect(page).toHaveURL(/\/$/, { timeout: 20_000 });
   await expect(workspaceHome).toBeVisible({ timeout: 15_000 });
   await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();

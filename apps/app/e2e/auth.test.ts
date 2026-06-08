@@ -10,6 +10,7 @@ import {
 } from "./helpers/email-verification";
 import { createTestPassword } from "./helpers/test-account";
 import { CreateOrganizationPage } from "./pages/create-organization-page";
+import { skipLocationAccessIfPresent } from "./pages/location-access-page";
 import { LoginPage } from "./pages/login-page";
 import { SignupPage } from "./pages/signup-page";
 import {
@@ -52,6 +53,7 @@ function createTestEmail(prefix: string): string {
 async function expectAuthenticatedHome(page: Page) {
   const workspaceHome = page.getByRole("main", { name: "Workspace home" });
 
+  await skipLocationAccessIfPresent(page);
   await expect(page).toHaveURL(/\/$/, { timeout: AUTH_ACTION_TIMEOUT_MS });
   await expect(workspaceHome).toBeVisible({ timeout: 15_000 });
   await expect(workspaceHome.getByRole("heading", { level: 1 })).toBeVisible();
