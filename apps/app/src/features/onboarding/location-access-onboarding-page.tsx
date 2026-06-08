@@ -19,15 +19,12 @@ export function LocationAccessOnboardingPage({
   readonly preferencesUnavailable?: boolean | undefined;
 }) {
   const navigate = useNavigate({ from: "/location-access" });
-  const [preferences, setPreferences] =
-    React.useState<UserPreferences>(initialPreferences);
+  const [savedPreferences, setSavedPreferences] =
+    React.useState<UserPreferences | null>(null);
   const [locationPreferenceSaving, setLocationPreferenceSaving] =
     React.useState(false);
+  const preferences = savedPreferences ?? initialPreferences;
   const hasEnabledLocationAccess = preferences.routeProximityLocationEnabled;
-
-  React.useEffect(() => {
-    setPreferences(initialPreferences);
-  }, [initialPreferences]);
 
   return (
     <main className="flex min-h-screen">
@@ -74,7 +71,7 @@ export function LocationAccessOnboardingPage({
                 const response = await updateCurrentUserPreferences({
                   routeProximityLocationEnabled,
                 });
-                setPreferences(response.preferences);
+                setSavedPreferences(response.preferences);
                 return response.preferences;
               } finally {
                 setLocationPreferenceSaving(false);

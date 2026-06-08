@@ -1055,19 +1055,22 @@ function AgentComposer({
       const resolveRequestId = originResolveRequestRef.current + 1;
       originResolveRequestRef.current = resolveRequestId;
       dispatchOriginDialog({ type: "resolveStarted" });
-      const originExit = await Effect.runPromiseExit(
+      const resolvedOrigin = await Effect.runPromiseExit(
         resolveProximityOriginPlace({
           placeId: suggestion.placeId,
           rawInput: trimmedOriginQuery || suggestion.displayText,
           sessionToken: sessionTokenRef.current,
         })
-      );
+      ).then((originExit) => ({
+        isCurrentRequest: originResolveRequestRef.current === resolveRequestId,
+        originExit,
+      }));
 
-      if (originResolveRequestRef.current !== resolveRequestId) {
+      if (!resolvedOrigin.isCurrentRequest) {
         return;
       }
 
-      if (Exit.isFailure(originExit)) {
+      if (Exit.isFailure(resolvedOrigin.originExit)) {
         dispatchOriginDialog({
           error: "Ceird could not confirm that origin. Select another result.",
           type: "resolveFailed",
@@ -1079,7 +1082,7 @@ function AgentComposer({
       try {
         const sent = await sendMessage(
           { text },
-          { originOverride: originExit.value.origin }
+          { originOverride: resolvedOrigin.originExit.value.origin }
         );
 
         if (sent) {
