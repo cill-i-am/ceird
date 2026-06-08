@@ -18,6 +18,7 @@ import { readPlaywrightDatabaseUrl } from "./test-urls";
 type CookieJar = Map<string, string>;
 
 const ORGANIZATION_NAME = "Preview Tenant Health";
+const USER_NAME = "Tenant Example";
 const apiRequire = createRequire(
   new URL("../../api/package.json", import.meta.url)
 );
@@ -66,6 +67,35 @@ function createForwardedFor() {
   );
 
   return octets.join(".");
+}
+
+async function resetTenantHealthIdentity(input: {
+  readonly email: string;
+  readonly organizationSlug: string;
+}) {
+  const client = new PgClient({
+    connectionString: readPlaywrightDatabaseUrl(),
+  });
+
+  await client.connect();
+
+  try {
+    await client.query("begin");
+    await client.query(
+      `delete from "organization" where slug = $1 and name = $2`,
+      [input.organizationSlug, ORGANIZATION_NAME]
+    );
+    await client.query(`delete from "user" where email = $1 and name = $2`, [
+      input.email,
+      USER_NAME,
+    ]);
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    await client.end();
+  }
 }
 
 function updateCookieJarFromResponse(
@@ -214,10 +244,15 @@ async function createAuthenticatedOrganizationSession(
   const organizationSlug = deriveTenantOrganizationSlug(TENANT_ORIGIN);
   const password = createTestPassword("CeirdTenantE2E");
 
+  await resetTenantHealthIdentity({
+    email,
+    organizationSlug,
+  });
+
   const signupResponse = await fetchAuthRequest(request, "/sign-up/email", {
     body: {
       email,
-      name: "Tenant Example",
+      name: USER_NAME,
       password,
     },
     cookieJar,

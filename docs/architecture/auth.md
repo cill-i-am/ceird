@@ -124,12 +124,19 @@ Current config decisions:
   defaulting newly registered clients to the identity scopes plus `ceird:read`
   and rejecting `ceird:write` or `ceird:admin`; write/admin clients must be
   manually registered or approved through a future accountable owner/admin flow
+- dynamic client registration follows Better Auth's native grant default:
+  clients that omit `grant_types` are persisted with `authorization_code` only,
+  even though Ceird's default registration scope includes `offline_access`;
+  clients that need their registered metadata to advertise refresh-token support
+  must request `grant_types: ["authorization_code", "refresh_token"]`. Runtime
+  token issuance remains Better Auth-native in this policy-only spike; Ceird
+  does not add a separate per-client grant enforcement layer here
 - Ceird normalizes accepted dynamic client registration requests to public
   OAuth clients by forwarding `token_endpoint_auth_method: "none"` to Better
   Auth, including authenticated registrations that omit the field. Explicit
-  confidential client metadata such as `token_endpoint_auth_method:
-"client_secret_basic"` or `type: "web"` is rejected before Better Auth can
-  issue a client secret.
+  confidential client metadata such as
+  `token_endpoint_auth_method: "client_secret_basic"` or `type: "web"` is
+  rejected before Better Auth can issue a client secret.
 - Better Auth's authenticated OAuth client write endpoints
   (`/oauth2/create-client`, `/oauth2/update-client`, client secret rotation,
   delete-client, and their admin variants) are disabled at the Ceird auth
