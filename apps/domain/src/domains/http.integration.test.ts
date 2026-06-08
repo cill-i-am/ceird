@@ -196,6 +196,101 @@ describe("domain HTTP API", () => {
     });
   }, 30_000);
 
+  it("serves and updates authenticated user preferences without storing coordinates", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "preferences_http",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Preferences integration database unavailable; skipping request-scoped preference coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    await withJobsEnvironment(databaseUrl, async () => {
+      const api = makeApiWebHandler();
+      cleanup.push(api.dispose);
+
+      const noSessionResponse = await api.handler(
+        makeRequest("/user/preferences")
+      );
+      expect(noSessionResponse.status).toBe(403);
+
+      const cookieJar = new Map<string, string>();
+      const email = `preferences-${randomUUID()}@example.com`;
+      await signUpUser(api, cookieJar, {
+        email,
+        name: "Preferences User",
+      });
+
+      const defaultResponse = await api.handler(
+        makeRequest("/user/preferences", { cookieJar })
+      );
+      expect(defaultResponse.status).toBe(200);
+      await expect(defaultResponse.json()).resolves.toMatchObject({
+        preferences: {
+          routeProximityLocationEnabled: false,
+        },
+      });
+
+      const updateResponse = await api.handler(
+        makeJsonRequest(
+          "/user/preferences",
+          {
+            routeProximityLocationEnabled: true,
+          },
+          {
+            cookieJar,
+            method: "PATCH",
+          }
+        )
+      );
+      expect(updateResponse.status).toBe(200);
+      await expect(updateResponse.json()).resolves.toMatchObject({
+        preferences: {
+          routeProximityLocationEnabled: true,
+        },
+      });
+
+      const updatedResponse = await api.handler(
+        makeRequest("/user/preferences", { cookieJar })
+      );
+      expect(updatedResponse.status).toBe(200);
+      await expect(updatedResponse.json()).resolves.toMatchObject({
+        preferences: {
+          routeProximityLocationEnabled: true,
+        },
+      });
+
+      await withPool(databaseUrl, async (pool) => {
+        const userId = await queryUserIdByEmail(pool, email);
+        const storedPreference = await pool.query<{
+          readonly route_proximity_location_enabled: boolean;
+        }>(
+          `select route_proximity_location_enabled
+           from user_preferences
+           where user_id = $1`,
+          [userId]
+        );
+
+        expect(storedPreference.rows).toStrictEqual([
+          { route_proximity_location_enabled: true },
+        ]);
+      });
+    });
+  }, 30_000);
+
   it("protects internal Agent routes with the domain bearer secret", async (context: {
     skip: (note?: string) => never;
   }) => {

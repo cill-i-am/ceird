@@ -104,7 +104,10 @@ systems, and other road layouts.
 - The shared proximity boundary owns the public HTTP API group for temporary
   origin selection, such as `/proximity/origins/autocomplete` and
   `/proximity/origins/place-details`. These endpoints support typed-origin
-  selection for Jobs, Sites, and Agent proximity.
+  selection for Jobs, Sites, and Agent proximity. Place-details returns a
+  short-lived server-signed typed-origin proof; Jobs/Sites route endpoints
+  reject typed-origin bodies whose proof is missing, expired, or does not match
+  the exact resolved origin.
 - V1 keeps the existing `GOOGLE_MAPS_API_KEY` environment variable as the
   underlying Google credential. Do not block route-aware proximity on splitting
   production secrets into separate Places and Routes environment variables.
@@ -282,8 +285,10 @@ systems, and other road layouts.
   tools.
 - Near me clients perform a location preflight before calling proximity
   endpoints or agent actions. If browser current location is denied,
-  unavailable, or times out, show the typed-origin fallback instead of calling
-  the backend with no origin.
+  unavailable, or times out, Jobs/Sites screens show the typed-origin fallback
+  instead of calling the backend with no origin. Agent chat keeps the draft and
+  asks for location access until a future app-resolved signed typed-origin
+  sideband is implemented.
 - The backend still validates that every proximity or route preview request has
   exactly one usable origin. Missing, conflicting, or invalid origins fail with a
   typed input error; the client preflight is a UX optimization, not the
@@ -419,11 +424,11 @@ systems, and other road layouts.
   excluded counts by reason, cap-hit count, provider latency bucket, provider
   error type, and route cost-guard blocks.
 - Route telemetry must not include raw current-location coordinates, typed-origin
-  addresses, destination addresses, route geometry, Google response payloads, or
-  per-user movement history.
-- Typed-origin fallback is available uniformly in the Jobs UI, Sites UI, and
-  Ceird agent. It supports desktop planning, denied-permission browsers, and
-  planning from somewhere other than the user's current location.
+  addresses, typed-origin proof tokens, destination addresses, route geometry,
+  Google response payloads, or per-user movement history.
+- Typed-origin fallback is available uniformly in the Jobs UI and Sites UI. It
+  supports desktop planning, denied-permission browsers, and planning from
+  somewhere other than the user's current location.
 - If browser location is denied or unavailable, or if the user chooses to plan
   from another place, they can provide a typed origin such as a town, address,
   or Eircode. The backend resolves typed origins through a server-side Google
@@ -437,7 +442,10 @@ systems, and other road layouts.
   typed-origin payload, not raw ambiguous free text.
 - Typed-origin autocomplete/details should use Google session tokens so the
   selection flow is grouped correctly for billing and result quality.
-- In the agent, typed-origin requests that are ambiguous should ask for
+- Agent typed-origin chat support is a follow-up. It should use the same
+  app-resolved signed origin contract as the dashboard flow, either by passing a
+  typed-origin sideband from the app or by giving the Agent a dedicated
+  autocomplete/details tool. Ambiguous typed-origin requests must ask for
   confirmation rather than silently choosing the first Google result.
 - V1 considers active jobs by default: new, triaged, in progress, and blocked.
   Completed and canceled jobs are excluded unless a later feature explicitly

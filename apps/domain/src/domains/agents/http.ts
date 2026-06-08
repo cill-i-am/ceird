@@ -81,6 +81,11 @@ const AgentInternalHandlersLive = HttpApiBuilder.group(
           agentThreadsService
             .touchActivity(params.threadId)
             .pipe(observeAgentsOperation("touchAgentThreadActivity"))
+        )
+        .handle("validateCurrentLocationAccess", ({ params }) =>
+          agentThreadsService
+            .validateCurrentLocationAccess(params.threadId)
+            .pipe(observeAgentsOperation("validateCurrentLocationAccess"))
         );
     })
 );

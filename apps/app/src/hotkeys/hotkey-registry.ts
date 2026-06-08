@@ -263,6 +263,14 @@ export const HOTKEYS = {
     label: "Map view",
     scope: "jobs",
   },
+  jobsNearMe: {
+    group: "Jobs",
+    hotkey: "V N",
+    id: "jobsNearMe",
+    label: "Rank jobs near me",
+    scope: "jobs",
+    when: "Internal job filters are available",
+  },
   jobsSavedViews: {
     group: "Jobs",
     hotkey: "V S",
@@ -378,6 +386,27 @@ export const HOTKEYS = {
     label: "Create site",
     scope: "sites",
     when: "Viewer can create sites",
+  },
+  sitesListView: {
+    group: "Sites",
+    hotkey: "V L",
+    id: "sitesListView",
+    label: "List view",
+    scope: "sites",
+  },
+  sitesMapView: {
+    group: "Sites",
+    hotkey: "V M",
+    id: "sitesMapView",
+    label: "Map view",
+    scope: "sites",
+  },
+  sitesNearMe: {
+    group: "Sites",
+    hotkey: "V N",
+    id: "sitesNearMe",
+    label: "Rank sites near me",
+    scope: "sites",
   },
   membersInvite: {
     group: "Members",

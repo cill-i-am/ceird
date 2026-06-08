@@ -1,5 +1,11 @@
 import { LabelId, LabelNotFoundError } from "@ceird/labels-core";
 import {
+  ProximityAccessDeniedError,
+  ProximityCostGuardError,
+  ProximityProviderError,
+  ProximityRouteUnavailableError,
+} from "@ceird/proximity-core";
+import {
   HttpApi,
   HttpApiEndpoint,
   HttpApiGroup,
@@ -20,6 +26,10 @@ import {
   SiteLocationAutocompleteResponseSchema,
   SiteLocationPlaceDetailsInputSchema,
   SiteLocationPlaceDetailsResponseSchema,
+  SiteProximityInputSchema,
+  SiteProximityResponseSchema,
+  SiteRoutePreviewInputSchema,
+  SiteRoutePreviewResponseSchema,
   SitesOptionsResponseSchema,
   UpdateSiteInputSchema,
   UpdateSiteResponseSchema,
@@ -94,6 +104,40 @@ const sitesGroup = HttpApiGroup.make("sites")
         SiteStorageError,
       ],
     })
+  )
+  .add(
+    HttpApiEndpoint.post("rankNearbySites", "/sites/proximity", {
+      payload: SiteProximityInputSchema,
+      success: SiteProximityResponseSchema,
+      error: [
+        SiteAccessDeniedError,
+        ProximityAccessDeniedError,
+        ProximityCostGuardError,
+        ProximityProviderError,
+        ProximityRouteUnavailableError,
+        SiteStorageError,
+      ],
+    })
+  )
+  .add(
+    HttpApiEndpoint.post(
+      "getSiteRoutePreview",
+      "/sites/:siteId/route-preview",
+      {
+        params: { siteId: SiteId },
+        payload: SiteRoutePreviewInputSchema,
+        success: SiteRoutePreviewResponseSchema,
+        error: [
+          SiteAccessDeniedError,
+          SiteNotFoundError,
+          ProximityAccessDeniedError,
+          ProximityCostGuardError,
+          ProximityProviderError,
+          ProximityRouteUnavailableError,
+          SiteStorageError,
+        ],
+      }
+    )
   )
   .add(
     HttpApiEndpoint.patch("updateSite", "/sites/:siteId", {

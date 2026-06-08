@@ -124,6 +124,7 @@ describe("Alchemy stage identity", () => {
     expect(config.electricContainerInstanceType).toBe("dev");
     expect(config.mcpAuthorizedAppCacheMaxEntries).toBeUndefined();
     expect(config.mcpAuthorizedAppCacheTtlSeconds).toBeUndefined();
+    expect(config.proximityOriginTokenTtlSeconds).toBeUndefined();
     expect(config.neonDatabaseName).toBe("ceird");
     expect(config.neonDefaultBranchName).toBe("base");
     expect(config.neonHistoryRetentionSeconds).toBe(21_600);
@@ -167,6 +168,52 @@ describe("Alchemy stage identity", () => {
     expect(config.syncHostname).toBe(
       "sync.codex-alchemy-v2-native-migration.ceird.app"
     );
+  });
+
+  it("loads an optional dedicated Google Routes key", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                GOOGLE_MAPS_API_KEY: "google-key",
+                GOOGLE_MAPS_ROUTES_API_KEY: "google-routes-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    const { googleMapsRoutesApiKey } = config;
+
+    expect(googleMapsRoutesApiKey).toBeDefined();
+    if (googleMapsRoutesApiKey === undefined) {
+      throw new Error("Expected Google Maps Routes API key to be configured");
+    }
+    expect(Redacted.value(googleMapsRoutesApiKey)).toBe("google-routes-key");
+  });
+
+  it("loads an optional test route provider for deterministic local route ranking", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                CEIRD_ROUTE_PROVIDER: "test",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.routeProvider).toBe("test");
   });
 
   it("defaults the parent stage to stage-scoped app/API hostnames", () => {
@@ -736,6 +783,26 @@ describe("Alchemy stage identity", () => {
     );
 
     expect(config.agentActionRunStaleAfterSeconds).toBe(120);
+  });
+
+  it("allows the proximity origin token TTL to be overridden", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS: "600",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.proximityOriginTokenTtlSeconds).toBe(600);
   });
 
   it("allows parent Neon branch protection to be enabled explicitly", () => {

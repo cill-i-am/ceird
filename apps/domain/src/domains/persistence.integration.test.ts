@@ -25,6 +25,7 @@ describe("domain persistence", () => {
     expect(tableNames).toContain("workItemLabel");
     expect(tableNames).toContain("siteLabel");
     expect(tableNames).toContain("workItemCollaborator");
+    expect(tableNames).toContain("userPreferences");
   });
 
   it("applies migrations with retained Jobs V1 tables and removed scope absent", async (context: {
@@ -61,6 +62,7 @@ describe("domain persistence", () => {
             "labels",
             "sites",
             "site_labels",
+            "user_preferences",
             "work_items",
             "work_item_activity",
             "work_item_collaborators",
@@ -74,11 +76,39 @@ describe("domain persistence", () => {
         "labels",
         "site_labels",
         "sites",
+        "user_preferences",
         "work_item_activity",
         "work_item_collaborators",
         "work_item_labels",
         "work_item_visits",
         "work_items",
+      ]);
+
+      const userPreferenceColumns = await pool.query<{
+        readonly column_name: string;
+        readonly data_type: string;
+      }>(
+        `select column_name, data_type
+         from information_schema.columns
+         where table_schema = 'public'
+           and table_name = 'user_preferences'
+         order by ordinal_position asc`
+      );
+
+      expect(userPreferenceColumns.rows).toStrictEqual([
+        { column_name: "user_id", data_type: "text" },
+        {
+          column_name: "route_proximity_location_enabled",
+          data_type: "boolean",
+        },
+        {
+          column_name: "created_at",
+          data_type: "timestamp with time zone",
+        },
+        {
+          column_name: "updated_at",
+          data_type: "timestamp with time zone",
+        },
       ]);
     });
   }, 30_000);

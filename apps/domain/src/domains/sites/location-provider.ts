@@ -383,13 +383,7 @@ function logAndFailSiteLocationProvider(
         ? {}
         : { httpStatus: details.httpStatus }),
       operation: details.operation,
-      ...(details.placeId === undefined ? {} : { placeId: details.placeId }),
       provider: details.provider,
-      ...(details.providerMessage === undefined
-        ? {}
-        : {
-            providerMessage: sanitizeProviderMessage(details.providerMessage),
-          }),
       ...(details.providerStatus === undefined
         ? {}
         : { providerStatus: details.providerStatus }),

@@ -65,6 +65,7 @@ const APP_AUTH_SERVER_FUNCTION_LANE_MODULES = new Set([
   "features/auth/app-context-client-cache-state",
   "features/auth/app-context-functions",
   "features/auth/app-context-middleware",
+  "features/auth/app-context-request-middleware",
   "features/auth/app-server-context",
   "features/auth/auth-request-context.server",
   "features/auth/server-session",

@@ -32,14 +32,17 @@ export interface DomainWorkerConfigEnv {
   readonly BETTER_AUTH_SECRET: string;
   readonly BETTER_AUTH_SECRETS?: string;
   readonly CEIRD_LOCAL_DEV?: "true";
+  readonly CEIRD_ROUTE_PROVIDER?: "google_routes" | "test";
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE?: string;
   readonly DATABASE_URL?: string;
   readonly GOOGLE_MAPS_API_KEY: string;
+  readonly GOOGLE_MAPS_ROUTES_API_KEY?: string;
   readonly MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES?: string;
   readonly MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS?: string;
   readonly MCP_RESOURCE_URL?: string;
   readonly NODE_ENV?: string;
   readonly OAUTH_ISSUER_URL?: string;
+  readonly PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS?: string;
 }
 
 export type DomainWorkerEnv = DomainWorkerBindingRuntimeEnv &
@@ -78,10 +81,12 @@ export function domainWorkerEnvConfigMap(env: DomainWorkerEnv) {
       BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
       BETTER_AUTH_SECRETS: env.BETTER_AUTH_SECRETS,
       CEIRD_LOCAL_DEV: env.CEIRD_LOCAL_DEV,
+      CEIRD_ROUTE_PROVIDER: env.CEIRD_ROUTE_PROVIDER,
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE:
         env.CEIRD_WORKER_ANALYTICS_SAMPLE_RATE,
       DATABASE_URL: env.DATABASE_URL,
       GOOGLE_MAPS_API_KEY: env.GOOGLE_MAPS_API_KEY,
+      GOOGLE_MAPS_ROUTES_API_KEY: env.GOOGLE_MAPS_ROUTES_API_KEY,
       MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES:
         env.MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES,
       MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS:
@@ -89,6 +94,8 @@ export function domainWorkerEnvConfigMap(env: DomainWorkerEnv) {
       MCP_RESOURCE_URL: env.MCP_RESOURCE_URL,
       NODE_ENV: env.NODE_ENV,
       OAUTH_ISSUER_URL: env.OAUTH_ISSUER_URL,
+      PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS:
+        env.PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS,
     }).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string"
     )

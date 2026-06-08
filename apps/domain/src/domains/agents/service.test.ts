@@ -12,7 +12,12 @@ import {
   verifyAgentConnectToken,
 } from "@ceird/agents-core";
 import type { AgentThread } from "@ceird/agents-core";
-import { OrganizationId, UserId } from "@ceird/identity-core";
+import {
+  decodeUserPreferences,
+  OrganizationId,
+  UserId,
+  UserPreferencesStorageError,
+} from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
@@ -22,6 +27,7 @@ import {
   configProviderFromMap,
   withConfigProvider,
 } from "../../test/effect-test-helpers.js";
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
@@ -164,6 +170,103 @@ describe("agent threads service", () => {
       result: { items: [] },
     });
     expect(actionCalls).toBe(1);
+  });
+
+  it("does not include current-location coordinates in proximity action replay keys", async () => {
+    let actionCalls = 0;
+    let storedInput: BeginAgentActionRunInput["input"] | undefined;
+    const firstInput = {
+      limit: 10,
+      origin: {
+        coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+        mode: "current_location",
+      },
+    };
+    const secondInput = {
+      limit: 10,
+      origin: {
+        coordinates: { latitude: 53.4, longitude: -6.3 },
+        mode: "current_location",
+      },
+    };
+
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+          const first = yield* service.runAction({
+            input: firstInput,
+            name: "ceird.jobs.proximity",
+            operationId,
+            threadId,
+          });
+          const second = yield* service.runAction({
+            input: secondInput,
+            name: "ceird.jobs.proximity",
+            operationId,
+            threadId,
+          });
+
+          return { first, second };
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.sync(() => {
+                actionCalls += 1;
+
+                return { rows: [] };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.sync(() => {
+                if (storedInput === undefined) {
+                  storedInput = input.input;
+
+                  return {
+                    inserted: true,
+                    run: makeBeginRun(input),
+                  };
+                }
+
+                return {
+                  inserted: false,
+                  run: makeBeginRun(
+                    {
+                      ...input,
+                      input: storedInput,
+                    },
+                    {
+                      result: null,
+                      status: "succeeded",
+                    }
+                  ),
+                };
+              }),
+            completeSucceeded: () =>
+              Effect.succeed(
+                makeActionRun({
+                  actionKind: "read",
+                  actionName: "ceird.jobs.proximity",
+                  result: null,
+                  status: "succeeded",
+                })
+              ),
+          },
+        }
+      )
+    );
+
+    expect(response.first).toMatchObject({
+      replayed: false,
+      result: { rows: [] },
+    });
+    expect(response.second).toMatchObject({
+      replayed: true,
+      result: { rows: [] },
+    });
+    expect(actionCalls).toBe(2);
   });
 
   it("rejects replayed operation ids with different inputs before executing", async () => {
@@ -470,6 +573,60 @@ describe("agent threads service", () => {
     expect(actionCalls).toBe(1);
   });
 
+  it("passes the current thread id into fresh action execution", async () => {
+    let receivedThreadId: AgentThreadId | undefined;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: {},
+            name: "ceird.labels.list",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          actions: {
+            execute: (_actor, _name, _input, context) =>
+              Effect.sync(() => {
+                receivedThreadId = context?.threadId;
+
+                return { labels: [] };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: true,
+                run: makeBeginRun(input),
+              }),
+            completeSucceeded: (
+              completedActionRunId: AgentActionRunId,
+              result: unknown
+            ) =>
+              Effect.succeed(
+                makeActionRun({
+                  actionKind: "read",
+                  actionName: "ceird.labels.list",
+                  id: completedActionRunId,
+                  result,
+                  status: "succeeded",
+                })
+              ),
+          },
+        }
+      )
+    );
+
+    expect(response).toMatchObject({
+      replayed: false,
+      result: { labels: [] },
+    });
+    expect(receivedThreadId).toBe(threadId);
+  });
+
   it("preserves the failure category when replaying failed operations", async () => {
     const error = await Effect.runPromise(
       runAgentThreadsService(
@@ -565,6 +722,79 @@ describe("agent threads service", () => {
     expect(failureResult).toStrictEqual({
       tag: AGENT_ACCESS_DENIED_ERROR_TAG,
     });
+  });
+
+  it("validates internal current-location access for an enabled thread owner", async () => {
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.validateCurrentLocationAccess(threadId);
+        })
+      )
+    );
+
+    expect(response).toStrictEqual({ allowed: true });
+  });
+
+  it("denies internal current-location access when the thread owner preference is disabled", async () => {
+    const error = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service
+            .validateCurrentLocationAccess(threadId)
+            .pipe(Effect.flip);
+        }),
+        {
+          userPreferencesRepository: {
+            get: () =>
+              Effect.succeed(
+                decodeUserPreferences({
+                  routeProximityLocationEnabled: false,
+                  updatedAt: "2026-05-20T10:00:00.000Z",
+                })
+              ),
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentAccessDeniedError);
+    expect(error.message).toBe(
+      "Current location access is disabled for this user."
+    );
+  });
+
+  it("fails closed when current-location access cannot be verified", async () => {
+    const error = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service
+            .validateCurrentLocationAccess(threadId)
+            .pipe(Effect.flip);
+        }),
+        {
+          userPreferencesRepository: {
+            get: () =>
+              Effect.fail(
+                new UserPreferencesStorageError({
+                  message: "Preferences unavailable",
+                })
+              ),
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentAccessDeniedError);
+    expect(error.message).toBe(
+      "Current location access could not be verified."
+    );
   });
 
   it("prepares an idempotent agent session with the current thread, token, and action manifest", async () => {
@@ -764,6 +994,20 @@ function makeAgentThreadsServiceTestLayer(
         ensureCanViewOrganizationData: () => Effect.void,
         ...options.organizationAuthorization,
       } as unknown as ContextService<typeof OrganizationAuthorization>)
+    ),
+    Layer.succeed(
+      UserPreferencesRepository,
+      UserPreferencesRepository.of({
+        get: () =>
+          Effect.succeed(
+            decodeUserPreferences({
+              routeProximityLocationEnabled: true,
+              updatedAt: "2026-05-20T10:00:00.000Z",
+            })
+          ),
+        update: () => Effect.die("Unexpected UserPreferencesRepository.update"),
+        ...options.userPreferencesRepository,
+      } as unknown as ContextService<typeof UserPreferencesRepository>)
     )
   );
 }
@@ -778,6 +1022,9 @@ interface AgentThreadsServiceTestOptions {
   >;
   readonly organizationAuthorization?: Partial<
     ContextService<typeof OrganizationAuthorization>
+  >;
+  readonly userPreferencesRepository?: Partial<
+    ContextService<typeof UserPreferencesRepository>
   >;
 }
 

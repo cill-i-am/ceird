@@ -210,6 +210,9 @@ export const workItem = pgTable(
       table.updatedAt.desc(),
       table.id.desc()
     ),
+    index("work_items_organization_site_active_priority_idx")
+      .on(table.organizationId, table.siteId, table.status, table.priority)
+      .where(sql`${table.status} not in ('completed', 'canceled')`),
     index("work_items_organization_active_updated_at_idx")
       .on(table.organizationId, table.updatedAt.desc(), table.id.desc())
       .where(sql`${table.status} not in ('completed', 'canceled')`),

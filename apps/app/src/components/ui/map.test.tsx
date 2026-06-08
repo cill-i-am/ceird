@@ -12,16 +12,23 @@ import type MapLibreGL from "maplibre-gl";
 
 import { ShortcutHelpOverlay } from "#/hotkeys/shortcut-help-overlay";
 
-import { Map, MapControls } from "./map";
+import { Map, MapControls, MapRouteLine } from "./map";
 
 const {
+  mockedAddLayer,
+  mockedAddSource,
   mockedExitFullscreen,
   mockedFlyTo,
   mockedRequestBrowserGeolocation,
   mockedRequestFullscreen,
+  mockedRemoveLayer,
+  mockedRemoveSource,
   mockedResetNorthPitch,
+  mockedSetSourceData,
   mockedZoomTo,
 } = vi.hoisted(() => ({
+  mockedAddLayer: vi.fn<(layer: unknown, before?: string) => void>(),
+  mockedAddSource: vi.fn<(id: string, source: unknown) => void>(),
   mockedExitFullscreen: vi.fn<() => Promise<void>>(),
   mockedFlyTo:
     vi.fn<
@@ -38,7 +45,10 @@ const {
     }>
   >(),
   mockedRequestFullscreen: vi.fn<() => Promise<void>>(),
+  mockedRemoveLayer: vi.fn<(id: string) => void>(),
+  mockedRemoveSource: vi.fn<(id: string) => void>(),
   mockedResetNorthPitch: vi.fn<(options: { duration: number }) => void>(),
+  mockedSetSourceData: vi.fn<(id: string, data: unknown) => void>(),
   mockedZoomTo:
     vi.fn<(nextZoom: number, options: { duration: number }) => void>(),
 }));
@@ -60,11 +70,22 @@ function MockPopup() {
 }
 
 vi.mock(import("maplibre-gl"), () => {
+  type MockEventHandler = () => void;
+  interface MockSource {
+    readonly setData: (data: unknown) => void;
+  }
+
   class MockMap {
     private bearing = 0;
     private readonly canvas: HTMLCanvasElement;
     private readonly container: HTMLElement;
+    private readonly eventHandlers = new globalThis.Map<
+      string,
+      Set<MockEventHandler>
+    >();
+    private readonly layers = new globalThis.Map<string, unknown>();
     private pitch = 0;
+    private readonly sources = new globalThis.Map<string, MockSource>();
     private zoom: number;
 
     constructor(options: { container: HTMLElement; zoom?: number }) {
@@ -74,6 +95,23 @@ vi.mock(import("maplibre-gl"), () => {
       this.canvas = document.createElement("canvas");
       this.canvas.tabIndex = 0;
       this.container.append(this.canvas);
+    }
+
+    addLayer(layer: { id: string }, before?: string) {
+      this.layers.set(layer.id, layer);
+      mockedAddLayer(layer, before);
+      return this;
+    }
+
+    addSource(id: string, source: { data?: unknown }) {
+      const mockSource = {
+        setData: (data: unknown) => {
+          mockedSetSourceData(id, data);
+        },
+      };
+      this.sources.set(id, mockSource);
+      mockedAddSource(id, source);
+      return this;
     }
 
     easeTo() {
@@ -110,8 +148,16 @@ vi.mock(import("maplibre-gl"), () => {
       return this.container;
     }
 
+    getLayer(id: string) {
+      return this.layers.get(id);
+    }
+
     getPitch() {
       return this.pitch;
+    }
+
+    getSource(id: string) {
+      return this.sources.get(id);
     }
 
     getZoom() {
@@ -127,16 +173,32 @@ vi.mock(import("maplibre-gl"), () => {
       void this.container;
     }
 
-    off() {
-      void this.container;
+    off(event: string, handler: MockEventHandler) {
+      this.eventHandlers.get(event)?.delete(handler);
     }
 
-    on() {
-      void this.container;
+    on(event: string, handler: MockEventHandler) {
+      const handlers = this.eventHandlers.get(event) ?? new Set();
+      handlers.add(handler);
+      this.eventHandlers.set(event, handlers);
+
+      if (event === "load" || event === "styledata") {
+        queueMicrotask(handler);
+      }
     }
 
     remove() {
       void this.container;
+    }
+
+    removeLayer(id: string) {
+      this.layers.delete(id);
+      mockedRemoveLayer(id);
+    }
+
+    removeSource(id: string) {
+      this.sources.delete(id);
+      mockedRemoveSource(id);
     }
 
     resetNorthPitch(options: { duration: number }) {
@@ -150,7 +212,13 @@ vi.mock(import("maplibre-gl"), () => {
     }
 
     setStyle() {
-      void this.container;
+      const handlers = this.eventHandlers.get("styledata");
+
+      if (handlers !== undefined) {
+        for (const handler of handlers) {
+          queueMicrotask(handler);
+        }
+      }
     }
 
     zoomTo(nextZoom: number, options: { duration: number }) {
@@ -198,9 +266,15 @@ describe("map controls hotkeys", () => {
     mockedRequestBrowserGeolocation.mockReturnValue(
       Effect.succeed({ latitude: 53.3498, longitude: -6.2603 })
     );
+    mockedAddLayer.mockClear();
+    mockedAddSource.mockClear();
+    mockedRemoveLayer.mockClear();
+    mockedRemoveSource.mockClear();
+    mockedSetSourceData.mockClear();
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -217,6 +291,9 @@ describe("map controls hotkeys", () => {
 
   it("runs visible map controls from their hotkeys and lists them in shortcut help", async () => {
     const user = userEvent.setup();
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
 
     const { rerender } = render(
       <HotkeysProvider>
@@ -273,6 +350,9 @@ describe("map controls hotkeys", () => {
     expect(within(dialog).getByText("Reset bearing")).toBeVisible();
     expect(within(dialog).getByText("Locate")).toBeVisible();
     expect(within(dialog).getByText("Fullscreen")).toBeVisible();
+    expect(
+      consoleErrorSpy.mock.calls.map((call) => call.join(" ")).join("\n")
+    ).not.toContain("Cannot update a component");
   }, 10_000);
 
   it("does not run or list map shortcuts for controls that are not rendered", async () => {
@@ -314,4 +394,171 @@ describe("map controls hotkeys", () => {
     expect(within(dialog).queryByText("Locate")).not.toBeInTheDocument();
     expect(within(dialog).queryByText("Fullscreen")).not.toBeInTheDocument();
   }, 10_000);
+});
+
+describe("map route line", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn<(query: string) => MediaQueryList>((query) => ({
+        addEventListener: vi.fn<() => void>(),
+        addListener: vi.fn<() => void>(),
+        dispatchEvent: vi.fn<() => boolean>(),
+        matches: false,
+        media: query,
+        onchange: null,
+        removeEventListener: vi.fn<() => void>(),
+        removeListener: vi.fn<() => void>(),
+      })),
+    });
+    mockedAddLayer.mockClear();
+    mockedAddSource.mockClear();
+    mockedRemoveLayer.mockClear();
+    mockedRemoveSource.mockClear();
+    mockedSetSourceData.mockClear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it("adds a GeoJSON source and line layer once the map style is ready", async () => {
+    render(
+      <Map center={[-6.2603, 53.3498]} zoom={12}>
+        <MapRouteLine
+          id="nearest-job-route"
+          beforeId="job-markers"
+          color="#0f766e"
+          coordinates={[
+            [-6.2603, 53.3498],
+            [-6.251, 53.343],
+            [-6.244, 53.338],
+          ]}
+          width={5}
+        />
+      </Map>
+    );
+
+    await waitFor(() => {
+      expect(mockedAddSource).toHaveBeenCalledWith(
+        "nearest-job-route-source",
+        expect.objectContaining({
+          data: expect.objectContaining({
+            geometry: {
+              coordinates: [
+                [-6.2603, 53.3498],
+                [-6.251, 53.343],
+                [-6.244, 53.338],
+              ],
+              type: "LineString",
+            },
+            type: "Feature",
+          }),
+          type: "geojson",
+        })
+      );
+    });
+
+    expect(mockedAddLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "nearest-job-route-layer",
+        layout: {
+          "line-cap": "round",
+          "line-join": "round",
+        },
+        paint: expect.objectContaining({
+          "line-color": "#0f766e",
+          "line-width": 5,
+        }),
+        source: "nearest-job-route-source",
+        type: "line",
+      }),
+      "job-markers"
+    );
+  });
+
+  it("updates route geometry without rebuilding the map layer", async () => {
+    const { rerender } = render(
+      <Map center={[-6.2603, 53.3498]} zoom={12}>
+        <MapRouteLine
+          id="selected-route"
+          coordinates={[
+            [-6.2603, 53.3498],
+            [-6.251, 53.343],
+          ]}
+        />
+      </Map>
+    );
+
+    await waitFor(() => {
+      expect(mockedAddLayer).toHaveBeenCalledOnce();
+    });
+
+    rerender(
+      <Map center={[-6.2603, 53.3498]} zoom={12}>
+        <MapRouteLine
+          id="selected-route"
+          coordinates={[
+            [-6.2603, 53.3498],
+            [-6.22, 53.331],
+          ]}
+        />
+      </Map>
+    );
+
+    await waitFor(() => {
+      expect(mockedSetSourceData).toHaveBeenCalledWith(
+        "selected-route-source",
+        expect.objectContaining({
+          geometry: {
+            coordinates: [
+              [-6.2603, 53.3498],
+              [-6.22, 53.331],
+            ],
+            type: "LineString",
+          },
+        })
+      );
+    });
+
+    expect(mockedAddLayer).toHaveBeenCalledOnce();
+    expect(mockedRemoveLayer).not.toHaveBeenCalledWith("selected-route-layer");
+  });
+
+  it("removes its layer and source when unmounted", async () => {
+    const { unmount } = render(
+      <Map center={[-6.2603, 53.3498]} zoom={12}>
+        <MapRouteLine
+          id="preview-route"
+          coordinates={[
+            [-6.2603, 53.3498],
+            [-6.251, 53.343],
+          ]}
+        />
+      </Map>
+    );
+
+    await waitFor(() => {
+      expect(mockedAddLayer).toHaveBeenCalledOnce();
+    });
+
+    unmount();
+
+    expect(mockedRemoveLayer).toHaveBeenCalledWith("preview-route-layer");
+    expect(mockedRemoveSource).toHaveBeenCalledWith("preview-route-source");
+  });
+
+  it("does not create a route layer without at least two coordinates", async () => {
+    render(
+      <Map center={[-6.2603, 53.3498]} zoom={12}>
+        <MapRouteLine id="empty-route" coordinates={[[-6.2603, 53.3498]]} />
+      </Map>
+    );
+
+    await waitFor(() => {
+      expect(mockedAddLayer).not.toHaveBeenCalled();
+    });
+    expect(mockedAddSource).not.toHaveBeenCalled();
+  });
 });

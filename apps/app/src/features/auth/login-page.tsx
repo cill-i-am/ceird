@@ -87,6 +87,9 @@ const initialLoginChallengeState: LoginChallengeState = {
   status: "credentials",
 };
 
+const SESSION_ESTABLISHMENT_FAILURE_MESSAGE =
+  "We couldn't start your session. Refresh and try signing in again.";
+
 export function LoginPage({
   search,
 }: {
@@ -131,6 +134,19 @@ export function LoginPage({
           email: credentials.email,
           type: "start-two-factor",
         });
+        return;
+      }
+
+      const sessionResult = await authClient.getSession();
+
+      if (sessionResult.error || !sessionResult.data) {
+        formApi.setErrorMap({
+          onSubmit: {
+            form: SESSION_ESTABLISHMENT_FAILURE_MESSAGE,
+            fields: {},
+          },
+        });
+
         return;
       }
 

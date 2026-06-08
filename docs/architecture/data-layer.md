@@ -189,9 +189,12 @@ Electric stores shape logs and metadata on a filesystem that must survive sync
 service restarts. Cloudflare Container disks are ephemeral, so the Alchemy stack
 provisions a stage-scoped R2 bucket for Electric storage. In local
 `alchemy dev` stages, the stack also mints a bucket-scoped R2 API token so the
-local cloud-backed loop stays self-contained. In deployed stages, the separate
-GitHub credential stack owns an account-scoped Electric R2 API token with R2
-read/write permissions and stores `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
+storage path is ready, but it does not create the Cloudflare Container
+application. Alchemy local Workers run in workerd with local Durable Object
+namespaces, and the cloud Containers API can only attach a container to a cloud
+Durable Object namespace. In deployed stages, the separate GitHub credential
+stack owns an account-scoped Electric R2 API token with R2 read/write
+permissions and stores `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
 `CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` in the GitHub environments that
 deploy or destroy app stacks. The app stack consumes those values instead of
 creating API tokens during routine deploys, so the deploy token does not need
@@ -202,7 +205,11 @@ During reconciliation, the app stack passes the R2 credentials, stage Neon
 connection URL, and generated Electric source secret into the Sync Worker as
 secrets. The `ElectricSql` Durable Object passes those values to the Cloudflare
 Container as startup environment variables, so the Containers application
-configuration does not need account-secret references.
+configuration does not need account-secret references. `ElectricSql` must remain
+an exported `cloudflare:workers` `DurableObject` subclass whose class name
+matches the Alchemy container `className`; Cloudflare validates that class as
+the container-enabled Durable Object when the Containers application is
+attached.
 
 The token id is exposed to the container as `AWS_ACCESS_KEY_ID`; the SHA-256
 hash of the token value is exposed as `AWS_SECRET_ACCESS_KEY`, which matches
@@ -239,8 +246,11 @@ Object and container. Postgres remains the source of truth; Electric provides
 client-facing shape replication for selected domain tables.
 Pull-request previews can temporarily deploy the sync Worker without the
 Electric Container when the GitHub environment has not yet received the
-separate Electric R2 runtime credentials; local dev and production stages
-provision the full Worker, Durable Object, Container, R2, and Neon path.
+separate Electric R2 runtime credentials. Local Alchemy dev also runs without
+the Cloudflare Container application; its local `ElectricSql` Durable Object
+fails explicitly with `electric_container_unavailable` if a shape request
+reaches the container bridge. Production and cloud E2E stages provision the
+full Worker, Durable Object, Container, R2, and Neon path.
 
 The deployed sync path is ready for Electric/TanStack DB clients, but the app's
 existing route-scoped TanStack DB collections remain query-backed in this

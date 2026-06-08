@@ -13,6 +13,8 @@ export type {
   AttachJobCollaboratorRecordInput,
   CreateContactRecordInput,
   CreateJobRecordInput,
+  JobProximityCandidate,
+  JobProximityCandidateSet,
   LabelAssignmentResult,
   JobsRepositoryAccess,
   LinkSiteContactRecordInput,

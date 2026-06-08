@@ -17,6 +17,7 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as OauthConsentRouteImport } from './routes/oauth.consent'
+import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppCreateOrganizationRouteImport } from './routes/_app.create-organization'
@@ -66,6 +67,11 @@ const AppRoute = AppRouteImport.update({
 const OauthConsentRoute = OauthConsentRouteImport.update({
   id: '/oauth/consent',
   path: '/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSplatRoute = ApiSplatRouteImport.update({
+  id: '/api/$',
+  path: '/api/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AcceptInvitationInvitationIdRoute =
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/create-organization': typeof AppCreateOrganizationRoute
   '/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/api/$': typeof ApiSplatRoute
   '/oauth/consent': typeof OauthConsentRoute
   '/activity': typeof AppOrgActivityRoute
   '/jobs': typeof AppOrgJobsRoute
@@ -156,6 +163,7 @@ export interface FileRoutesByTo {
   '/create-organization': typeof AppCreateOrganizationRoute
   '/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/api/$': typeof ApiSplatRoute
   '/oauth/consent': typeof OauthConsentRoute
   '/activity': typeof AppOrgActivityRoute
   '/jobs': typeof AppOrgJobsRoute
@@ -177,6 +185,7 @@ export interface FileRoutesById {
   '/_app/create-organization': typeof AppCreateOrganizationRoute
   '/_app/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
+  '/api/$': typeof ApiSplatRoute
   '/oauth/consent': typeof OauthConsentRoute
   '/_app/_org/activity': typeof AppOrgActivityRoute
   '/_app/_org/jobs': typeof AppOrgJobsRoute
@@ -199,6 +208,7 @@ export interface FileRouteTypes {
     | '/create-organization'
     | '/settings'
     | '/accept-invitation/$invitationId'
+    | '/api/$'
     | '/oauth/consent'
     | '/activity'
     | '/jobs'
@@ -218,6 +228,7 @@ export interface FileRouteTypes {
     | '/create-organization'
     | '/settings'
     | '/accept-invitation/$invitationId'
+    | '/api/$'
     | '/oauth/consent'
     | '/activity'
     | '/jobs'
@@ -238,6 +249,7 @@ export interface FileRouteTypes {
     | '/_app/create-organization'
     | '/_app/settings'
     | '/accept-invitation/$invitationId'
+    | '/api/$'
     | '/oauth/consent'
     | '/_app/_org/activity'
     | '/_app/_org/jobs'
@@ -257,6 +269,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   AcceptInvitationInvitationIdRoute: typeof AcceptInvitationInvitationIdRoute
+  ApiSplatRoute: typeof ApiSplatRoute
   OauthConsentRoute: typeof OauthConsentRoute
 }
 
@@ -316,6 +329,13 @@ declare module '@tanstack/react-router' {
       path: '/oauth/consent'
       fullPath: '/oauth/consent'
       preLoaderRoute: typeof OauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/$': {
+      id: '/api/$'
+      path: '/api/$'
+      fullPath: '/api/$'
+      preLoaderRoute: typeof ApiSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/accept-invitation/$invitationId': {
@@ -444,6 +464,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   AcceptInvitationInvitationIdRoute: AcceptInvitationInvitationIdRoute,
+  ApiSplatRoute: ApiSplatRoute,
   OauthConsentRoute: OauthConsentRoute,
 }
 export const routeTree = rootRouteImport

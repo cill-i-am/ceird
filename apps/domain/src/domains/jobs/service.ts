@@ -24,9 +24,15 @@ import type {
   JobCollaboratorIdType as JobCollaboratorId,
   JobCollaboratorsResponse,
   JobDetail,
+  JobListItem,
   JobExternalMemberOptionsResponse,
   JobMemberOptionsResponse,
   JobListQuery,
+  JobProximityInput,
+  JobProximityFilters,
+  JobProximityResponse,
+  JobRoutePreviewInput,
+  JobRoutePreviewResponse,
   OrganizationActivityQuery,
   OrganizationMemberNotFoundError,
   OrganizationIdType as OrganizationId,
@@ -36,12 +42,19 @@ import type {
   WorkItemIdType as WorkItemId,
 } from "@ceird/jobs-core";
 import type { LabelIdType as LabelId } from "@ceird/labels-core";
+import { ProximityRouteUnavailableError } from "@ceird/proximity-core";
 import type { SiteIdType as SiteId } from "@ceird/sites-core";
 import { Layer, Context, Effect, Option } from "effect";
 
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
+import { ensureCurrentLocationOriginAllowed } from "../proximity/current-location-access.js";
+import {
+  makeCurrentRouteCostContext,
+  RouteProximityService,
+} from "../proximity/service.js";
 import { SiteLocationProvider } from "../sites/location-provider.js";
 import type { ResolvedSiteLocationRecord } from "../sites/location-resolution.js";
 import { resolveCreateSiteLocation } from "../sites/location-resolution.js";
@@ -91,8 +104,10 @@ export class JobsService extends Context.Service<JobsService>()(
         yield* JobLabelAssignmentsRepository;
       const labelsRepository = yield* LabelsRepository;
       const jobsRepository = yield* JobsRepository;
+      const routeProximityService = yield* RouteProximityService;
       const siteLocationProvider = yield* SiteLocationProvider;
       const sitesRepository = yield* SitesRepository;
+      const userPreferencesRepository = yield* UserPreferencesRepository;
 
       const loadActor = Effect.fn("JobsService.loadActor")(function* (
         workItemId?: WorkItemId
@@ -172,6 +187,148 @@ export class JobsService extends Context.Service<JobsService>()(
           .listOrganizationActivity(actor.organizationId, query)
           .pipe(Effect.catchTag("SqlError", failJobsStorageError));
       });
+
+      const rankNearbyJobs = Effect.fn("JobsService.rankNearbyJobs")(function* (
+        input: JobProximityInput
+      ) {
+        const actor = yield* loadActor();
+        yield* authorization.ensureCanView(actor);
+        yield* Effect.annotateCurrentSpan("action", "rankNearbyJobs");
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          actor.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+        yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+        yield* Effect.annotateCurrentSpan("limit", input.limit ?? 10);
+        yield* Effect.annotateCurrentSpan(
+          "includeRouteLines",
+          input.includeRouteLines === true
+        );
+        yield* ensureCurrentLocationOriginAllowed({
+          origin: input.origin,
+          userId: actor.userId,
+          userPreferencesRepository,
+        });
+
+        const candidateSet = yield* jobsRepository
+          .listProximityCandidates(
+            actor.organizationId,
+            normalizeJobProximityFilters(input.filters),
+            getRepositoryAccess(actor)
+          )
+          .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+        const routeCostContext = yield* makeCurrentRouteCostContext({
+          actorUserId: actor.userId,
+          organizationId: actor.organizationId,
+        });
+        const ranked = yield* routeProximityService.rank({
+          candidateCount: candidateSet.candidateCount,
+          candidateLimitApplied: candidateSet.candidateLimitApplied,
+          candidates: candidateSet.candidates.flatMap((candidate) =>
+            candidate.site.latitude === undefined ||
+            candidate.site.longitude === undefined
+              ? []
+              : [
+                  {
+                    coordinates: {
+                      latitude: candidate.site.latitude,
+                      longitude: candidate.site.longitude,
+                    },
+                    destinationId: candidate.job.id,
+                    row: candidate,
+                  },
+                ]
+          ),
+          context: routeCostContext,
+          excluded: candidateSet.excluded,
+          includeRouteLines: input.includeRouteLines,
+          limit: input.limit,
+          origin: input.origin,
+        });
+
+        return {
+          meta: ranked.meta,
+          origin: ranked.origin,
+          rows: ranked.rows.map((row) => ({
+            job: row.row.job,
+            routeLine: row.routeLine,
+            routeSummary: row.routeSummary,
+            site: row.row.site,
+          })),
+        } satisfies JobProximityResponse;
+      });
+
+      const getJobRoutePreview = Effect.fn("JobsService.getJobRoutePreview")(
+        function* (workItemId: WorkItemId, input: JobRoutePreviewInput) {
+          const actor = yield* loadActor(workItemId);
+          const grant = yield* loadExternalGrantIfNeeded(
+            actor,
+            workItemId,
+            jobsRepository
+          );
+          yield* authorization.ensureCanViewJobDetail(actor, workItemId, grant);
+          yield* ensureCurrentLocationOriginAllowed({
+            origin: input.origin,
+            userId: actor.userId,
+            userPreferencesRepository,
+          });
+          const detail = yield* loadJobDetailOrFail(
+            actor.organizationId,
+            workItemId,
+            jobsRepository,
+            getRepositoryAccess(actor, grant)
+          );
+          yield* Effect.annotateCurrentSpan("action", "getJobRoutePreview");
+          yield* Effect.annotateCurrentSpan(
+            "organizationId",
+            actor.organizationId
+          );
+          yield* Effect.annotateCurrentSpan("workItemId", workItemId);
+          yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+          yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+          yield* Effect.annotateCurrentSpan(
+            "includeRouteLine",
+            input.includeRouteLine === true
+          );
+
+          if (
+            detail.site === undefined ||
+            detail.site.latitude === undefined ||
+            detail.site.longitude === undefined
+          ) {
+            return yield* failDestinationUnmapped(
+              "Job does not have a mapped site with usable coordinates."
+            );
+          }
+
+          const routeCostContext = yield* makeCurrentRouteCostContext({
+            actorUserId: actor.userId,
+            organizationId: actor.organizationId,
+          });
+          const preview = yield* routeProximityService.preview({
+            context: routeCostContext,
+            destination: {
+              coordinates: {
+                latitude: detail.site.latitude,
+                longitude: detail.site.longitude,
+              },
+              destinationId: workItemId,
+            },
+            includeRouteLine: input.includeRouteLine,
+            origin: input.origin,
+          });
+
+          return {
+            job: toJobListItem(detail.job),
+            origin: preview.origin,
+            routeLine: preview.routeLine,
+            routeSummary: preview.routeSummary,
+            site: detail.site,
+          } satisfies JobRoutePreviewResponse;
+        }
+      );
+
       const create = Effect.fn("JobsService.create")(function* (
         input: CreateJobInput
       ) {
@@ -833,6 +990,7 @@ export class JobsService extends Context.Service<JobsService>()(
         assignLabel,
         create,
         getDetail,
+        getJobRoutePreview,
         getExternalMemberOptions,
         getMemberOptions,
         getOptions,
@@ -840,6 +998,7 @@ export class JobsService extends Context.Service<JobsService>()(
         listCollaborators,
         listOrganizationActivity,
         patch,
+        rankNearbyJobs,
         removeCollaborator,
         removeLabel,
         reopen,
@@ -866,6 +1025,11 @@ export class JobsService extends Context.Service<JobsService>()(
   static readonly list = (
     ...args: Parameters<Context.Service.Shape<typeof JobsService>["list"]>
   ) => JobsService.use((service) => service.list(...args));
+  static readonly rankNearbyJobs = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsService>["rankNearbyJobs"]
+    >
+  ) => JobsService.use((service) => service.rankNearbyJobs(...args));
   static readonly listOrganizationActivity = (
     ...args: Parameters<
       Context.Service.Shape<typeof JobsService>["listOrganizationActivity"]
@@ -888,9 +1052,48 @@ export class JobsService extends Context.Service<JobsService>()(
         JobsActivityRecorder.Default,
         JobsRepositoriesLive,
         LabelsRepository.Default,
-        SitesRepository.Default
+        RouteProximityService.Default,
+        SitesRepository.Default,
+        UserPreferencesRepository.Default
       )
     )
+  );
+}
+
+function normalizeJobProximityFilters(
+  filters: JobProximityInput["filters"] | undefined
+): JobProximityFilters {
+  return {
+    ...filters,
+    status: filters?.status ?? "active",
+  };
+}
+
+function toJobListItem(job: Job): JobListItem {
+  return {
+    assigneeId: job.assigneeId,
+    contactId: job.contactId,
+    coordinatorId: job.coordinatorId,
+    createdAt: job.createdAt,
+    id: job.id,
+    kind: job.kind,
+    labels: job.labels,
+    priority: job.priority,
+    siteId: job.siteId,
+    status: job.status,
+    title: job.title,
+    updatedAt: job.updatedAt,
+  };
+}
+
+function failDestinationUnmapped(
+  message: string
+): Effect.Effect<never, ProximityRouteUnavailableError> {
+  return Effect.fail(
+    new ProximityRouteUnavailableError({
+      message,
+      reason: "destination_unmapped",
+    })
   );
 }
 

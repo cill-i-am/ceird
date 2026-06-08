@@ -1,4 +1,5 @@
 import type { LabelIdType as LabelId } from "@ceird/labels-core";
+import { ProximityRouteUnavailableError } from "@ceird/proximity-core";
 import type {
   AddSiteCommentInput,
   AssignSiteLabelInput,
@@ -9,6 +10,10 @@ import type {
   SiteLocationInput,
   SiteLocationAutocompleteInput,
   SiteLocationPlaceDetailsInput,
+  SiteProximityInput,
+  SiteProximityResponse,
+  SiteRoutePreviewInput,
+  SiteRoutePreviewResponse,
   UpdateSiteInput,
 } from "@ceird/sites-core";
 import {
@@ -19,6 +24,7 @@ import {
 import { Layer, Context, Effect, Option } from "effect";
 
 import { CommentsRepository } from "../comments/repository.js";
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import {
   isExternalOrganizationActor,
@@ -30,6 +36,11 @@ import {
   ORGANIZATION_ACTOR_STORAGE_ERROR_TAG,
   ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
 } from "../organizations/errors.js";
+import { ensureCurrentLocationOriginAllowed } from "../proximity/current-location-access.js";
+import {
+  makeCurrentRouteCostContext,
+  RouteProximityService,
+} from "../proximity/service.js";
 import { SiteLocationProvider } from "./location-provider.js";
 import {
   resolveCreateSiteLocation,
@@ -56,7 +67,9 @@ export class SitesService extends Context.Service<SitesService>()(
       const siteLabelAssignmentsRepository =
         yield* SiteLabelAssignmentsRepository;
       const siteLocationProvider = yield* SiteLocationProvider;
+      const routeProximityService = yield* RouteProximityService;
       const sitesRepository = yield* SitesRepository;
+      const userPreferencesRepository = yield* UserPreferencesRepository;
 
       const loadActor = Effect.fn("SitesService.loadActor")(function* () {
         return yield* currentOrganizationActor
@@ -248,6 +261,138 @@ export class SitesService extends Context.Service<SitesService>()(
           sites,
         } as const;
       });
+
+      const rankNearbySites = Effect.fn("SitesService.rankNearbySites")(
+        function* (input: SiteProximityInput) {
+          const actor = yield* loadActor();
+          yield* ensureCanViewOrganizationSiteOptions(actor, authorization);
+          yield* Effect.annotateCurrentSpan("action", "rankNearbySites");
+          yield* Effect.annotateCurrentSpan(
+            "organizationId",
+            actor.organizationId
+          );
+          yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+          yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+          yield* Effect.annotateCurrentSpan("limit", input.limit ?? 10);
+          yield* Effect.annotateCurrentSpan(
+            "includeRouteLines",
+            input.includeRouteLines === true
+          );
+          yield* ensureCurrentLocationOriginAllowed({
+            origin: input.origin,
+            userId: actor.userId,
+            userPreferencesRepository,
+          });
+
+          const candidateSet = yield* sitesRepository
+            .listProximityCandidates(actor.organizationId, input.filters ?? {})
+            .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+          const routeCostContext = yield* makeCurrentRouteCostContext({
+            actorUserId: actor.userId,
+            organizationId: actor.organizationId,
+          });
+          const ranked = yield* routeProximityService.rank({
+            candidateCount: candidateSet.candidateCount,
+            candidateLimitApplied: candidateSet.candidateLimitApplied,
+            candidates: candidateSet.candidates.flatMap((candidate) =>
+              candidate.site.latitude === undefined ||
+              candidate.site.longitude === undefined
+                ? []
+                : [
+                    {
+                      coordinates: {
+                        latitude: candidate.site.latitude,
+                        longitude: candidate.site.longitude,
+                      },
+                      destinationId: candidate.site.id,
+                      row: candidate,
+                    },
+                  ]
+            ),
+            context: routeCostContext,
+            excluded: candidateSet.excluded,
+            includeRouteLines: input.includeRouteLines,
+            limit: input.limit,
+            origin: input.origin,
+          });
+
+          return {
+            meta: ranked.meta,
+            origin: ranked.origin,
+            rows: ranked.rows.map((row) => ({
+              activeJobCount: row.row.activeJobCount,
+              highestActiveJobPriority: row.row.highestActiveJobPriority,
+              routeLine: row.routeLine,
+              routeSummary: row.routeSummary,
+              site: row.row.site,
+            })),
+          } satisfies SiteProximityResponse;
+        }
+      );
+
+      const getSiteRoutePreview = Effect.fn("SitesService.getSiteRoutePreview")(
+        function* (siteId: SiteId, input: SiteRoutePreviewInput) {
+          const actor = yield* loadActor();
+          yield* ensureCanViewOrganizationSiteOptions(actor, authorization);
+          yield* ensureCurrentLocationOriginAllowed({
+            origin: input.origin,
+            userId: actor.userId,
+            userPreferencesRepository,
+          });
+          const site = yield* loadSiteDetailOrFail(
+            actor.organizationId,
+            siteId,
+            sitesRepository
+          );
+          yield* Effect.annotateCurrentSpan("action", "getSiteRoutePreview");
+          yield* Effect.annotateCurrentSpan(
+            "organizationId",
+            actor.organizationId
+          );
+          yield* Effect.annotateCurrentSpan("siteId", siteId);
+          yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
+          yield* Effect.annotateCurrentSpan("actorRole", actor.role);
+          yield* Effect.annotateCurrentSpan(
+            "includeRouteLine",
+            input.includeRouteLine === true
+          );
+
+          if (site.latitude === undefined || site.longitude === undefined) {
+            return yield* failDestinationUnmapped(
+              "Site does not have usable coordinates."
+            );
+          }
+
+          const summary = yield* sitesRepository
+            .getActiveJobSummary(actor.organizationId, siteId)
+            .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+          const routeCostContext = yield* makeCurrentRouteCostContext({
+            actorUserId: actor.userId,
+            organizationId: actor.organizationId,
+          });
+          const preview = yield* routeProximityService.preview({
+            context: routeCostContext,
+            destination: {
+              coordinates: {
+                latitude: site.latitude,
+                longitude: site.longitude,
+              },
+              destinationId: siteId,
+            },
+            includeRouteLine: input.includeRouteLine,
+            origin: input.origin,
+          });
+
+          return {
+            activeJobCount: summary.activeJobCount,
+            highestActiveJobPriority: summary.highestActiveJobPriority,
+            origin: preview.origin,
+            routeLine: preview.routeLine,
+            routeSummary: preview.routeSummary,
+            site,
+          } satisfies SiteRoutePreviewResponse;
+        }
+      );
 
       const autocompleteLocation = Effect.fn(
         "SitesService.autocompleteLocation"
@@ -447,8 +592,10 @@ export class SitesService extends Context.Service<SitesService>()(
         create,
         getLocationPlaceDetails,
         getOptions,
+        getSiteRoutePreview,
         list,
         listComments,
+        rankNearbySites,
         removeLabel,
         update,
       };
@@ -460,6 +607,11 @@ export class SitesService extends Context.Service<SitesService>()(
       Context.Service.Shape<typeof SitesService>["getOptions"]
     >
   ) => SitesService.use((service) => service.getOptions(...args));
+  static readonly rankNearbySites = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof SitesService>["rankNearbySites"]
+    >
+  ) => SitesService.use((service) => service.rankNearbySites(...args));
   static readonly DefaultWithoutDependencies = Layer.effect(
     SitesService,
     SitesService.make
@@ -470,10 +622,23 @@ export class SitesService extends Context.Service<SitesService>()(
         CommentsRepository.Default,
         CurrentOrganizationActor.Default,
         OrganizationAuthorization.Default,
+        RouteProximityService.Default,
         SiteLabelAssignmentsRepository.Default,
-        SitesRepository.Default
+        SitesRepository.Default,
+        UserPreferencesRepository.Default
       )
     )
+  );
+}
+
+function failDestinationUnmapped(
+  message: string
+): Effect.Effect<never, ProximityRouteUnavailableError> {
+  return Effect.fail(
+    new ProximityRouteUnavailableError({
+      message,
+      reason: "destination_unmapped",
+    })
   );
 }
 

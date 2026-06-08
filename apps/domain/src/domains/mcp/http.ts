@@ -7,6 +7,7 @@ import { SqlClient } from "effect/unstable/sql";
 
 import { CommentsRepository } from "../comments/repository.js";
 import type { AuthenticationConfig } from "../identity/authentication/config.js";
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
 import { JobsAuthorization } from "../jobs/authorization.js";
 import { JobsRepositoriesLive } from "../jobs/repositories.js";
@@ -14,6 +15,7 @@ import { JobsService } from "../jobs/service.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { LabelsService } from "../labels/service.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
+import { RouteProximityService } from "../proximity/service.js";
 import { SiteLocationProvider } from "../sites/location-provider.js";
 import {
   SiteLabelAssignmentsRepository,
@@ -727,6 +729,7 @@ function makeMcpToolLayer<ERuntime>(
     JobsService.DefaultWithoutDependencies,
     SitesService.DefaultWithoutDependencies
   ).pipe(
+    Layer.provide(McpRouteProximityUnavailable),
     Layer.provide(
       Layer.mergeAll(
         OrganizationAuthorization.Default,
@@ -737,6 +740,7 @@ function makeMcpToolLayer<ERuntime>(
         CommentsRepository.Default,
         SiteLabelAssignmentsRepository.Default,
         SitesRepository.Default,
+        UserPreferencesRepository.Default,
         makeCurrentOrganizationActorFromMcpSessionLayer(session)
       )
     )
@@ -744,6 +748,16 @@ function makeMcpToolLayer<ERuntime>(
 
   return domainServiceLayer.pipe(Layer.provide(runtimeLive));
 }
+
+const McpRouteProximityUnavailable = Layer.succeed(
+  RouteProximityService,
+  RouteProximityService.of({
+    preview: () =>
+      Effect.die(new Error("MCP route proximity tools are not enabled")),
+    rank: () =>
+      Effect.die(new Error("MCP route proximity tools are not enabled")),
+  })
+);
 
 const MissingMcpRuntimeLive = Layer.mergeAll(
   Layer.effect(
