@@ -134,11 +134,13 @@ Secrets:
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `GOOGLE_MAPS_API_KEY`
+- `GOOGLE_MAPS_ROUTES_API_KEY` (optional dedicated Routes key; falls back to `GOOGLE_MAPS_API_KEY`)
 - `NEON_API_KEY`
 
 Variables:
 
 - `AUTH_EMAIL_FROM_NAME`
+- `CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS` (optional typed-origin proof TTL override)
 - `NEON_ORG_ID` (optional)
 
 The `main` environment is used by `.github/workflows/deploy-main.yml` only after
@@ -159,11 +161,13 @@ Secrets:
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 - `GOOGLE_MAPS_API_KEY`
+- `GOOGLE_MAPS_ROUTES_API_KEY` (optional dedicated Routes key; falls back to `GOOGLE_MAPS_API_KEY`)
 - `NEON_API_KEY`
 
 Variables:
 
 - `AUTH_EMAIL_FROM_NAME`
+- `CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS` (optional typed-origin proof TTL override)
 - `NEON_ORG_ID` (optional)
 
 Preview E2E and push-to-main cloud E2E do not store

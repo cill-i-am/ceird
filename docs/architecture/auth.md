@@ -748,6 +748,18 @@ The app resolves its auth base URL in two steps:
 The fallback host-rewrite behavior is intentionally limited to local and legacy
 localhost-alias development.
 
+Local Alchemy stages run the app and API on sibling hosts such as
+`app.localhost:1337` and `api.localhost:1337`. Browser auth and product API
+traffic uses the app-owned local proxy at `app.localhost:<port>/api` when the
+configured API origin is the matching `api.localhost:<port>` origin. The proxy is
+local-only, accepts only `app.localhost` callers, preserves Better Auth and
+public auth paths under `/api/auth` and `/api/public`, and strips the app-local
+`/api` prefix for product API calls such as `/api/jobs -> /jobs`.
+
+This keeps local browser traffic same-origin with the app so Better Auth session
+cookies are retained by the browser. Server-side app helpers continue to call the
+configured API origin directly.
+
 ### OAuth Consent UI
 
 `apps/app/src/features/auth/oauth-consent-page.tsx` owns the public
@@ -1125,6 +1137,7 @@ Current behavior:
 - validates submit payloads with `Effect/Schema`
 - decodes and normalizes input through shared auth schemas
 - calls `authClient.signIn.email`
+- verifies `authClient.getSession()` after successful sign-in before navigating
 - displays field-level validation inline
 - displays safe form-level failure messaging for server/auth errors
 - navigates to `/` after success

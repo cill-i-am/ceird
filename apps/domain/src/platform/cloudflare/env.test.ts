@@ -45,6 +45,24 @@ describe("Cloudflare Worker environment config", () => {
     expect(config.get("GOOGLE_MAPS_API_KEY")).toBe("google-key");
   });
 
+  it("exposes the optional Google Routes API key to Effect config", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      GOOGLE_MAPS_ROUTES_API_KEY: "google-routes-key",
+    });
+
+    expect(config.get("GOOGLE_MAPS_ROUTES_API_KEY")).toBe("google-routes-key");
+  });
+
+  it("exposes the selected route provider to Effect config", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      CEIRD_ROUTE_PROVIDER: "test",
+    });
+
+    expect(config.get("CEIRD_ROUTE_PROVIDER")).toBe("test");
+  });
+
   it("propagates explicit local Alchemy runtime settings", () => {
     const config = domainWorkerEnvConfigMap({
       ...makeWorkerEnv(),
@@ -142,5 +160,14 @@ describe("Cloudflare Worker environment config", () => {
     });
 
     expect(config.get("AGENT_ACTION_RUN_STALE_AFTER_SECONDS")).toBe("120");
+  });
+
+  it("propagates the proximity origin token TTL override", () => {
+    const config = domainWorkerEnvConfigMap({
+      ...makeWorkerEnv(),
+      PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS: "600",
+    });
+
+    expect(config.get("PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS")).toBe("600");
   });
 });

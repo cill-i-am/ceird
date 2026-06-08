@@ -56,17 +56,29 @@ invocation logs, and traces with an explicit `0.1` head sampling rate. Keep the
 sampling rate named in `infra/cloudflare-worker-defaults.ts`; do not inline
 per-Worker values unless a Worker has a documented volume or privacy reason.
 
-All app-owned Workers bind the native Alchemy
-`Cloudflare.AnalyticsEngineDataset` named `WorkerAnalytics`. Runtime request
-analytics are written through the Effect-native `WorkerObservability` service
-from `@ceird/worker-observability`, which wraps a small Analytics Engine
-boundary primitive. The service applies the stage-wide
+Deployed app-owned Workers bind the native Alchemy
+`Cloudflare.AnalyticsEngineDataset` named `WorkerAnalytics`; local Alchemy dev
+omits that binding because workerd rejects Analytics Engine bindings. Runtime
+request analytics are written through the Effect-native `WorkerObservability`
+service from `@ceird/worker-observability`, which wraps a small Analytics
+Engine boundary primitive. The service applies the stage-wide
 `CEIRD_WORKER_ANALYTICS_SAMPLE_RATE` default of `0.1`, omits high-cardinality
 request IDs from the data point payload, normalizes dynamic URL path segments,
 uses a single Analytics Engine index of `{stage}:{adapter}`, and treats write
 failures as telemetry loss only. Raise sampling per stage through
 `CEIRD_WORKER_ANALYTICS_SAMPLE_RATE`; do not fork the request payload shape in
 individual Workers.
+
+## Electric Container Boundary
+
+The Electric SQL Cloudflare Container is deployed only for non-local Alchemy
+stages. Local `alchemy dev` Workers run in workerd with local Durable Object
+namespaces, but the Cloudflare Containers API validates attachment against a
+cloud Durable Object namespace. Keep local dev on the Sync Worker path and let
+`ElectricSql` fail explicitly with `electric_container_unavailable` if a local
+shape request reaches the container bridge. Deployed and cloud E2E stages must
+still provision the Sync Worker, `ElectricSql` Durable Object, Cloudflare
+Container, R2 bucket, and Neon branch together.
 
 The private domain Worker is the only Worker with Smart Placement enabled. It
 owns Hyperdrive/database access, so it is the only current Worker where

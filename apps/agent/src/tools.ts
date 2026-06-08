@@ -5,6 +5,7 @@ import {
 import type {
   AgentActionName,
   AgentInstanceName,
+  AgentProximityOriginContextFrame,
   ExecutableAgentActionName,
 } from "@ceird/agents-core/runtime";
 import { jsonSchema, tool } from "ai";
@@ -35,22 +36,48 @@ let ceirdMutationToolBlueprints: readonly CeirdToolBlueprint[] | undefined;
 let ceirdMutationToolBlueprintsByName:
   | ReadonlyMap<ExecutableAgentActionName, CeirdToolBlueprint>
   | undefined;
+const PROXIMITY_ACTION_NAMES = new Set<ExecutableAgentActionName>([
+  "ceird.jobs.proximity",
+  "ceird.jobs.route_preview",
+  "ceird.sites.proximity",
+  "ceird.sites.route_preview",
+]);
+
+interface CreateCeirdToolsOptions {
+  readonly proximityOrigin?:
+    | AgentProximityOriginContextFrame["origin"]
+    | undefined;
+}
+
+type AgentToolModelJson =
+  | boolean
+  | null
+  | number
+  | string
+  | AgentToolModelJson[]
+  | { [key: string]: AgentToolModelJson };
 
 export function createCeirdTools(
   env: AgentWorkerEnv,
-  agentInstanceName: AgentInstanceName
+  agentInstanceName: AgentInstanceName,
+  toolOptions: CreateCeirdToolsOptions = {}
 ) {
   const threadId = extractAgentThreadId(agentInstanceName);
 
   const runAction = async (
     name: ExecutableAgentActionName,
     input: unknown,
-    options: ToolExecutionOptions
+    executionOptions: ToolExecutionOptions
   ) => {
-    const response = await runDomainAction(env, {
-      input,
+    const actionInput = applyProximityOriginOverride(
       name,
-      operationId: buildOperationId(name, options.toolCallId),
+      input,
+      toolOptions.proximityOrigin
+    );
+    const response = await runDomainAction(env, {
+      input: actionInput,
+      name,
+      operationId: buildOperationId(name, executionOptions.toolCallId),
       threadId,
     });
 
@@ -63,12 +90,21 @@ export function createCeirdTools(
   for (const { action, inputSchema } of getCeirdToolBlueprints(
     mutationToolsEnabled
   )) {
-    tools[action.modelName] = tool({
+    const execute = (input: unknown, executionOptions: ToolExecutionOptions) =>
+      runAction(action.name, input, executionOptions);
+    const baseTool = {
       description: action.modelDescription,
       ...(action.confirmationPolicy === "none" ? {} : { needsApproval: true }),
+      execute,
       inputSchema,
-      execute: (input, options) => runAction(action.name, input, options),
-    });
+    };
+
+    tools[action.modelName] = PROXIMITY_ACTION_NAMES.has(action.name)
+      ? tool<unknown, unknown>({
+          ...baseTool,
+          toModelOutput: proximityToolModelOutput,
+        })
+      : tool<unknown, unknown>(baseTool);
   }
 
   return tools;
@@ -168,6 +204,113 @@ function normalizeJsonSchema(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function applyProximityOriginOverride(
+  actionName: ExecutableAgentActionName,
+  input: unknown,
+  proximityOrigin: AgentProximityOriginContextFrame["origin"] | undefined
+): unknown {
+  if (
+    proximityOrigin === undefined ||
+    !PROXIMITY_ACTION_NAMES.has(actionName)
+  ) {
+    return input;
+  }
+
+  return replaceCurrentLocationOrigins(input, proximityOrigin);
+}
+
+function replaceCurrentLocationOrigins(
+  value: unknown,
+  proximityOrigin: AgentProximityOriginContextFrame["origin"]
+): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      replaceCurrentLocationOrigins(item, proximityOrigin)
+    );
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      key === "origin" && isRecord(entry)
+        ? proximityOrigin
+        : replaceCurrentLocationOrigins(entry, proximityOrigin),
+    ])
+  );
+}
+
+function proximityToolModelOutput(options: { readonly output: unknown }): {
+  readonly type: "json";
+  readonly value: AgentToolModelJson;
+} {
+  return {
+    type: "json",
+    value: redactProximityToolModelOutput(options.output),
+  };
+}
+
+function redactProximityToolModelOutput(value: unknown): AgentToolModelJson {
+  if (value === null) {
+    return null;
+  }
+
+  switch (typeof value) {
+    case "boolean":
+    case "number":
+    case "string": {
+      return value;
+    }
+    case "object": {
+      break;
+    }
+    default: {
+      return null;
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(redactProximityToolModelOutput);
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const entries = Object.entries(value).flatMap(([key, entry]) => {
+    if (key === "coordinates" || key === "originToken" || key === "routeLine") {
+      return [];
+    }
+
+    if (key === "origin" && isRecord(entry)) {
+      return [[key, redactProximityOriginForModel(entry)] as const];
+    }
+
+    return [[key, redactProximityToolModelOutput(entry)] as const];
+  });
+
+  return Object.fromEntries(entries);
+}
+
+function redactProximityOriginForModel(
+  origin: Record<string, unknown>
+): AgentToolModelJson {
+  const redactedOrigin: Record<string, AgentToolModelJson> = {};
+
+  if (typeof origin.mode === "string") {
+    redactedOrigin.mode = origin.mode;
+  }
+
+  if (typeof origin.displayText === "string") {
+    redactedOrigin.displayText = origin.displayText;
+  }
+
+  return redactedOrigin;
 }
 
 function isEffectEmptyStructJsonSchema(schema: EffectJsonSchema): boolean {

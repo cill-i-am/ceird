@@ -1,3 +1,5 @@
+import { OpenApi } from "effect/unstable/httpapi";
+
 import {
   appendOrganizationSlugSuffix,
   createOrganizationSlugFromName,
@@ -11,6 +13,8 @@ import {
   decodeSessionId,
   decodeUpdateOrganizationInput,
   decodeUserId,
+  decodeUpdateUserPreferencesInput,
+  decodeUserPreferences,
   isOrganizationSlug,
   ORGANIZATION_SLUG_MAX_LENGTH,
   RESERVED_ORGANIZATION_SLUGS,
@@ -20,6 +24,10 @@ import {
   ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES,
   ORGANIZATION_SECURITY_ACTIVITY_TARGET_TYPES,
   ORGANIZATION_SLUG_PATTERN,
+  UserPreferencesAccessDeniedError,
+  UserPreferencesApi,
+  UserPreferencesApiGroup,
+  UserPreferencesStorageError,
 } from "./index.js";
 
 describe("createOrganizationInputSchema", () => {
@@ -326,5 +334,74 @@ describe("organization security activity boundary", () => {
       "invitation",
       "member",
     ]);
+  }, 1000);
+});
+
+describe("user preferences boundary", () => {
+  it("decodes strict route proximity location preferences", () => {
+    expect(
+      decodeUserPreferences({
+        routeProximityLocationEnabled: true,
+        updatedAt: "2026-06-06T10:00:00.000Z",
+      })
+    ).toStrictEqual({
+      routeProximityLocationEnabled: true,
+      updatedAt: "2026-06-06T10:00:00.000Z",
+    });
+
+    expect(() =>
+      decodeUserPreferences({
+        currentLatitude: 53.349_805,
+        currentLongitude: -6.260_31,
+        routeProximityLocationEnabled: true,
+        updatedAt: "2026-06-06T10:00:00.000Z",
+      })
+    ).toThrow(/[Uu]nexpected/);
+  }, 1000);
+
+  it("decodes strict user preference updates without coordinate fields", () => {
+    expect(
+      decodeUpdateUserPreferencesInput({
+        routeProximityLocationEnabled: false,
+      })
+    ).toStrictEqual({
+      routeProximityLocationEnabled: false,
+    });
+
+    expect(() =>
+      decodeUpdateUserPreferencesInput({
+        routeProximityLocationEnabled: true,
+        coordinates: {
+          latitude: 53.349_805,
+          longitude: -6.260_31,
+        },
+      })
+    ).toThrow(/[Uu]nexpected/);
+  }, 1000);
+
+  it("exposes non-coordinate user preferences endpoints", () => {
+    const spec = OpenApi.fromApi(UserPreferencesApi);
+
+    expect(UserPreferencesApiGroup.identifier).toBe("userPreferences");
+    expect(spec.paths["/user/preferences"]?.get?.operationId).toBe(
+      "userPreferences.getUserPreferences"
+    );
+    expect(spec.paths["/user/preferences"]?.patch?.operationId).toBe(
+      "userPreferences.updateUserPreferences"
+    );
+  }, 1000);
+
+  it("exposes typed user preference errors", () => {
+    expect(
+      new UserPreferencesAccessDeniedError({
+        message: "Authentication is required",
+      })._tag
+    ).toBe("@ceird/identity-core/UserPreferencesAccessDeniedError");
+    expect(
+      new UserPreferencesStorageError({
+        cause: "database unavailable",
+        message: "User preferences storage failed",
+      })._tag
+    ).toBe("@ceird/identity-core/UserPreferencesStorageError");
   }, 1000);
 });

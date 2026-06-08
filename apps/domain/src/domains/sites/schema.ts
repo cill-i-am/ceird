@@ -91,6 +91,11 @@ export const site = pgTable(
       table.updatedAt.desc(),
       table.id.desc()
     ),
+    index("sites_organization_routeable_updated_at_idx")
+      .on(table.organizationId, table.updatedAt.desc(), table.id.desc())
+      .where(
+        sql`${table.archivedAt} is null and ${table.locationStatus} in ('google_resolved', 'manually_adjusted', 'validated') and ${table.latitude} is not null and ${table.longitude} is not null`
+      ),
     uniqueIndex("sites_id_organization_idx").on(table.id, table.organizationId),
     index("sites_organization_active_name_idx")
       .on(table.organizationId, table.name.asc().nullsLast(), table.id)

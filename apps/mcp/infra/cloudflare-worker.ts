@@ -17,19 +17,19 @@ export type WorkerServiceBinding = Service;
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for service bindings.
 export type McpWorkerBindings = {
-  readonly ANALYTICS: Cloudflare.AnalyticsEngineDataset;
+  readonly ANALYTICS?: Cloudflare.AnalyticsEngineDataset | undefined;
   readonly DOMAIN: DomainWorkerResource;
 };
 
 export interface McpWorkerBindingEnv {
-  readonly ANALYTICS: AnalyticsEngineDataset;
+  readonly ANALYTICS?: AnalyticsEngineDataset | undefined;
   readonly DOMAIN: WorkerServiceBinding;
 }
 
 type McpWorkerBindingProps = {
   readonly [BindingName in keyof McpWorkerBindings]:
-    | McpWorkerBindings[BindingName]
-    | Effect.Effect<McpWorkerBindings[BindingName], never, never>;
+    | NonNullable<McpWorkerBindings[BindingName]>
+    | Effect.Effect<NonNullable<McpWorkerBindings[BindingName]>, never, never>;
 };
 
 export interface McpWorkerConfiguredEnv {
@@ -40,9 +40,10 @@ export interface McpWorkerConfiguredEnv {
 export function makeMcpWorkerBindings(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly domain: DomainWorkerResource;
+  readonly localDev?: boolean | undefined;
 }) {
   return {
-    ANALYTICS: input.analytics,
+    ...(input.localDev === true ? {} : { ANALYTICS: input.analytics }),
     DOMAIN: input.domain,
   } satisfies McpWorkerBindingProps;
 }
@@ -62,6 +63,7 @@ export function makeMcpWorkerProps(input: {
   readonly config: { readonly workerAnalyticsSampleRate: number };
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
+  readonly localDev?: boolean | undefined;
   readonly name: string;
 }) {
   return {
@@ -71,6 +73,7 @@ export function makeMcpWorkerProps(input: {
     bindings: makeMcpWorkerBindings({
       analytics: input.analytics,
       domain: input.domain,
+      localDev: input.localDev,
     }),
     env: {
       ...makeMcpWorkerEnv({
@@ -88,6 +91,7 @@ export function makeMcpWorker(input: {
   readonly config: { readonly workerAnalyticsSampleRate: number };
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
+  readonly localDev?: boolean | undefined;
   readonly name: string;
 }) {
   return Cloudflare.Worker("Mcp", makeMcpWorkerProps(input));

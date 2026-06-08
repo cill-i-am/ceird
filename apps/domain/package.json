@@ -19,6 +19,7 @@
     "@ceird/identity-core": "workspace:*",
     "@ceird/jobs-core": "workspace:*",
     "@ceird/labels-core": "workspace:*",
+    "@ceird/proximity-core": "workspace:*",
     "@ceird/sites-core": "workspace:*",
     "@ceird/worker-observability": "workspace:*",
     "@effect/platform-node": "4.0.0-beta.68",

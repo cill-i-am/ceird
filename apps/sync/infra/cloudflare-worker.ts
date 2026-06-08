@@ -33,21 +33,21 @@ export type WorkerServiceBinding = Service;
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for service bindings.
 export type SyncWorkerBindings = {
-  readonly ANALYTICS: Cloudflare.AnalyticsEngineDataset;
+  readonly ANALYTICS?: Cloudflare.AnalyticsEngineDataset | undefined;
   readonly DOMAIN: DomainWorkerResource;
   readonly ElectricSql: Cloudflare.DurableObjectNamespaceLike;
 };
 
 export interface SyncWorkerBindingEnv {
-  readonly ANALYTICS: AnalyticsEngineDataset;
+  readonly ANALYTICS?: AnalyticsEngineDataset | undefined;
   readonly DOMAIN: WorkerServiceBinding;
   readonly ElectricSql: DurableObjectNamespace;
 }
 
 type SyncWorkerBindingProps = {
   readonly [BindingName in keyof SyncWorkerBindings]:
-    | SyncWorkerBindings[BindingName]
-    | Effect.Effect<SyncWorkerBindings[BindingName], never, never>;
+    | NonNullable<SyncWorkerBindings[BindingName]>
+    | Effect.Effect<NonNullable<SyncWorkerBindings[BindingName]>, never, never>;
 };
 
 type WorkerConfiguredEnvValue = Input<NonNullable<WorkerProps["env"]>[string]>;
@@ -125,9 +125,10 @@ export interface ElectricContainerConfig {
 export function makeSyncWorkerBindings(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly domain: DomainWorkerResource;
+  readonly localDev?: boolean | undefined;
 }) {
   return {
-    ANALYTICS: input.analytics,
+    ...(input.localDev === true ? {} : { ANALYTICS: input.analytics }),
     DOMAIN: input.domain,
     ElectricSql: Cloudflare.DurableObjectNamespace("ElectricSql", {
       className: "ElectricSql",
@@ -293,6 +294,7 @@ export function makeSyncWorkerProps(input: {
     bindings: makeSyncWorkerBindings({
       analytics: input.analytics,
       domain: input.domain,
+      localDev: input.localDev,
     }),
     env: {
       ...makeSyncWorkerEnv({

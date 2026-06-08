@@ -17,19 +17,19 @@ export type WorkerServiceBinding = Service;
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for service bindings.
 export type ApiWorkerBindings = {
-  readonly ANALYTICS: Cloudflare.AnalyticsEngineDataset;
+  readonly ANALYTICS?: Cloudflare.AnalyticsEngineDataset | undefined;
   readonly DOMAIN: DomainWorkerResource;
 };
 
 export interface ApiWorkerBindingEnv {
-  readonly ANALYTICS: AnalyticsEngineDataset;
+  readonly ANALYTICS?: AnalyticsEngineDataset | undefined;
   readonly DOMAIN: WorkerServiceBinding;
 }
 
 type ApiWorkerBindingProps = {
   readonly [BindingName in keyof ApiWorkerBindings]:
-    | ApiWorkerBindings[BindingName]
-    | Effect.Effect<ApiWorkerBindings[BindingName], never, never>;
+    | NonNullable<ApiWorkerBindings[BindingName]>
+    | Effect.Effect<NonNullable<ApiWorkerBindings[BindingName]>, never, never>;
 };
 
 export interface ApiWorkerConfiguredEnv {
@@ -40,9 +40,10 @@ export interface ApiWorkerConfiguredEnv {
 export function makeApiWorkerBindings(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly domain: DomainWorkerResource;
+  readonly localDev?: boolean | undefined;
 }) {
   return {
-    ANALYTICS: input.analytics,
+    ...(input.localDev === true ? {} : { ANALYTICS: input.analytics }),
     DOMAIN: input.domain,
   } satisfies ApiWorkerBindingProps;
 }
@@ -62,6 +63,7 @@ export function makeApiWorkerProps(input: {
   readonly config: { readonly workerAnalyticsSampleRate: number };
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
+  readonly localDev?: boolean | undefined;
   readonly name: string;
 }) {
   return {
@@ -71,6 +73,7 @@ export function makeApiWorkerProps(input: {
     bindings: makeApiWorkerBindings({
       analytics: input.analytics,
       domain: input.domain,
+      localDev: input.localDev,
     }),
     env: {
       ...makeApiWorkerEnv({
@@ -88,6 +91,7 @@ export function makeApiWorker(input: {
   readonly config: { readonly workerAnalyticsSampleRate: number };
   readonly domain: DomainWorkerResource;
   readonly hostname: string;
+  readonly localDev?: boolean | undefined;
   readonly name: string;
 }) {
   return Cloudflare.Worker("Api", makeApiWorkerProps(input));

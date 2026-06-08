@@ -22,6 +22,7 @@ const {
   mockedInviteMember,
   mockedNavigate,
   mockedToastSuccess,
+  mockedUpdateUserPreferences,
 } = vi.hoisted(() => ({
   mockedClearAppContextClientCache: vi.fn<() => void>(),
   mockedCreateOrganization: vi.fn<
@@ -47,6 +48,14 @@ const {
   mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
   mockedToastSuccess:
     vi.fn<(title: string, options: { description: string }) => void>(),
+  mockedUpdateUserPreferences: vi.fn<
+    (input: { routeProximityLocationEnabled: boolean }) => Promise<{
+      preferences: {
+        routeProximityLocationEnabled: boolean;
+        updatedAt: string;
+      };
+    }>
+  >(),
 }));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
@@ -100,6 +109,14 @@ vi.mock(import("sonner"), async (importActual) => {
   };
 });
 
+vi.mock(import("../settings/user-preferences-api"), () => ({
+  DEFAULT_USER_PREFERENCES: {
+    routeProximityLocationEnabled: false,
+    updatedAt: "1970-01-01T00:00:00.000Z",
+  },
+  updateCurrentUserPreferences: mockedUpdateUserPreferences,
+}));
+
 describe("organization onboarding page", () => {
   let originalLocation: Location;
   let assignedUrl: string | undefined;
@@ -120,6 +137,12 @@ describe("organization onboarding page", () => {
       error: null,
     });
     mockedToastSuccess.mockClear();
+    mockedUpdateUserPreferences.mockResolvedValue({
+      preferences: {
+        routeProximityLocationEnabled: true,
+        updatedAt: "2026-06-06T10:01:00.000Z",
+      },
+    });
     mockedClearAppContextClientCache.mockClear();
     vi.unstubAllEnvs();
     Object.defineProperty(window, "location", {
@@ -225,6 +248,67 @@ describe("organization onboarding page", () => {
         .querySelector(".bg-primary")
     ).not.toBeNull();
     expect(mockedNavigate).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("asks for route proximity location preference after team creation without geolocation", async () => {
+    const user = userEvent.setup();
+
+    render(<OrganizationOnboardingPage />);
+
+    await user.type(screen.getByLabelText("Team name"), "Acme Field Ops");
+    await user.click(screen.getByRole("button", { name: "Create team" }));
+
+    await screen.findByRole("heading", { name: "Invite members" });
+
+    expect(
+      screen.getByRole("heading", { name: "Location access" })
+    ).toBeVisible();
+    expect(screen.getByText("Disabled")).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Enable location access" })
+    );
+
+    await waitFor(() => {
+      expect(mockedUpdateUserPreferences).toHaveBeenCalledWith({
+        routeProximityLocationEnabled: true,
+      });
+    });
+    expect(screen.getByText("Enabled")).toBeVisible();
+    expect(navigator.geolocation?.getCurrentPosition).toBeUndefined();
+  }, 10_000);
+
+  it("keeps onboarding navigation disabled while saving location preference", async () => {
+    const user = userEvent.setup();
+    const preferenceUpdate = Promise.withResolvers<{
+      preferences: {
+        routeProximityLocationEnabled: boolean;
+        updatedAt: string;
+      };
+    }>();
+    mockedUpdateUserPreferences.mockReturnValueOnce(preferenceUpdate.promise);
+
+    render(<OrganizationOnboardingPage />);
+
+    await user.type(screen.getByLabelText("Team name"), "Acme Field Ops");
+    await user.click(screen.getByRole("button", { name: "Create team" }));
+    await screen.findByRole("heading", { name: "Invite members" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Enable location access" })
+    );
+
+    expect(screen.getByRole("button", { name: "Skip for now" })).toBeDisabled();
+    preferenceUpdate.resolve({
+      preferences: {
+        routeProximityLocationEnabled: true,
+        updatedAt: "2026-06-06T10:01:00.000Z",
+      },
+    });
+    await expect(screen.findByText("Enabled")).resolves.toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Skip for now" })
+    ).not.toBeDisabled();
   }, 10_000);
 
   it("keeps the generated slug hidden while the team name changes", async () => {

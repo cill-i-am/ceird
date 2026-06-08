@@ -255,6 +255,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     config: input.config,
     domain,
     hostname: input.config.apiHostname,
+    localDev,
     name: resourceName(input.config, "api"),
   });
 
@@ -292,6 +293,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     config: input.config,
     domain,
     hostname: input.config.mcpHostname,
+    localDev,
     name: resourceName(input.config, "mcp"),
   });
 
@@ -338,8 +340,12 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     )
   );
 
+  const electricContainerProvisioning = {
+    electricStorageCredentials,
+    localDev,
+  };
   const electricContainer =
-    electricStorageCredentials === undefined
+    shouldProvisionElectricContainer(electricContainerProvisioning) === false
       ? undefined
       : yield* makeElectricContainerConfig({
           accountId: cloudflareAccountId,
@@ -347,8 +353,13 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
           databaseConnectionUri: input.database.branch.connectionUri,
           electricSourceSecret: electricSourceSecret.text,
           name: resourceName(input.config, "electric"),
-          storageCredentials: electricStorageCredentials,
+          storageCredentials:
+            electricContainerProvisioning.electricStorageCredentials,
         });
+  yield* Effect.annotateCurrentSpan(
+    "electricContainerProvisioned",
+    electricContainer !== undefined
+  );
 
   const sync = yield* makeSyncWorker({
     analytics: workerAnalytics,
@@ -463,7 +474,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   } as const;
 });
 
-interface ElectricStorageCredentialValues {
+export interface ElectricStorageCredentialValues {
   readonly accessKeyId: SecretStringInput;
   readonly secretAccessKey: SecretStringInput;
 }
@@ -573,6 +584,20 @@ export function shouldProvisionElectricStorage(input: {
     makeInfraConfigSourceError(
       "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
     )
+  );
+}
+
+export function shouldProvisionElectricContainer(input: {
+  readonly electricStorageCredentials:
+    | ElectricStorageCredentialValues
+    | undefined;
+  readonly localDev: boolean;
+}): input is {
+  readonly electricStorageCredentials: ElectricStorageCredentialValues;
+  readonly localDev: false;
+} {
+  return (
+    input.localDev === false && input.electricStorageCredentials !== undefined
   );
 }
 
