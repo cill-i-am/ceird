@@ -84,6 +84,7 @@ export function SitesProximityMap({
                   color={selected ? "#2563eb" : "#64748b"}
                   opacity={selected ? 0.95 : 0.45}
                   width={selected ? 5 : 3}
+                  onClick={() => onSelectedSiteIdChange(row.site.id)}
                 />
               ) : null}
               <MapMarker

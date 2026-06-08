@@ -2,20 +2,18 @@
 import { MapsLocation01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
-import MapLibreGL from "maplibre-gl";
 import * as React from "react";
 
 import { Badge } from "#/components/ui/badge";
 import { buttonVariants } from "#/components/ui/button";
-import type { MapRef } from "#/components/ui/map";
 import {
   Map,
   MapControls,
+  MapFitBounds,
   MapMarker,
   MarkerContent,
   MarkerLabel,
   MarkerPopup,
-  useMap,
 } from "#/components/ui/map";
 import {
   buildGoogleMapsUrl,
@@ -33,6 +31,14 @@ export function JobsCoverageMapCanvas({
 }: {
   readonly groups: readonly MappedSiteGroup[];
 }) {
+  const mapCoordinates = React.useMemo(
+    () =>
+      groups.map(
+        (group) => [group.site.longitude, group.site.latitude] as const
+      ),
+    [groups]
+  );
+
   return (
     <div className="h-full min-h-[520px]">
       <Map
@@ -42,7 +48,13 @@ export function JobsCoverageMapCanvas({
         pitchWithRotate={false}
         touchPitch={false}
       >
-        <FitMapToGroups groups={groups} />
+        <MapFitBounds
+          coordinates={mapCoordinates}
+          duration={600}
+          maxZoom={12}
+          padding={72}
+          singleZoom={11}
+        />
         <MapControls
           position="bottom-right"
           controls={["zoom", "fullscreen"]}
@@ -180,50 +192,4 @@ export function JobsCoverageMapCanvas({
       </Map>
     </div>
   );
-}
-
-function FitMapToGroups({
-  groups,
-}: {
-  readonly groups: readonly MappedSiteGroup[];
-}) {
-  const { isLoaded, map } = useMap();
-  const mapRef = React.useRef<MapRef | null>(null);
-
-  React.useEffect(() => {
-    if (!map || !isLoaded) {
-      return;
-    }
-
-    mapRef.current = map;
-
-    if (groups.length === 1) {
-      const [group] = groups;
-
-      if (!group) {
-        return;
-      }
-
-      map.easeTo({
-        center: [group.site.longitude, group.site.latitude],
-        duration: 600,
-        zoom: 11,
-      });
-      return;
-    }
-
-    const bounds = new MapLibreGL.LngLatBounds();
-
-    for (const group of groups) {
-      bounds.extend([group.site.longitude, group.site.latitude]);
-    }
-
-    map.fitBounds(bounds, {
-      duration: 600,
-      maxZoom: 12,
-      padding: 72,
-    });
-  }, [groups, isLoaded, map]);
-
-  return null;
 }
