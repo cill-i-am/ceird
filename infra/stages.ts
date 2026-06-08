@@ -146,6 +146,7 @@ export interface InfraStageConfig {
   readonly authEmailFromName: string;
   readonly authPasswordCompromiseCheckEnabled: boolean | undefined;
   readonly authPasswordCompromiseCheckRangeUrlOverride: string | undefined;
+  readonly authRateLimitCleanupEnabled: boolean | undefined;
   readonly authRateLimitEnabled: boolean;
   readonly authSecrets: Redacted.Redacted<string> | undefined;
   readonly googleMapsApiKey: Redacted.Redacted<InfraGoogleMapsApiKey>;
@@ -656,6 +657,9 @@ export function loadInfraStageConfig(stageInput: string) {
     const authRateLimitEnabled = yield* Config.boolean(
       "AUTH_RATE_LIMIT_ENABLED"
     ).pipe(Config.withDefault(!identity.isPullRequestPreview));
+    const authRateLimitCleanupEnabled = yield* Config.option(
+      Config.boolean("AUTH_RATE_LIMIT_CLEANUP_ENABLED")
+    ).pipe(Effect.map(Option.getOrUndefined));
     const authSecrets = yield* Config.option(
       Config.redacted("BETTER_AUTH_SECRETS").pipe(
         Config.mapOrFail(decodeBetterAuthSecrets)
@@ -796,6 +800,7 @@ export function loadInfraStageConfig(stageInput: string) {
       authEmailFromName,
       authPasswordCompromiseCheckEnabled,
       authPasswordCompromiseCheckRangeUrlOverride,
+      authRateLimitCleanupEnabled,
       authRateLimitEnabled,
       authSecrets,
       googleMapsApiKey,

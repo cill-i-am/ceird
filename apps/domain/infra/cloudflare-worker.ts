@@ -13,6 +13,10 @@ import {
 } from "../../../infra/cloudflare-worker-defaults.ts";
 
 const domainWorkerMain = new URL("../src/worker.ts", import.meta.url).pathname;
+const DOMAIN_WORKER_AUTH_RATE_LIMIT_CLEANUP_CRON = "17 3 * * *" as const;
+const DOMAIN_WORKER_AUTH_RATE_LIMIT_CLEANUP_BATCH_SIZE = 1000;
+const DOMAIN_WORKER_AUTH_RATE_LIMIT_CLEANUP_MAX_BATCHES = 10;
+const DOMAIN_WORKER_AUTH_RATE_LIMIT_RETENTION_HOURS = 48;
 
 export interface DomainWorkerStageConfig {
   readonly agentActionRunStaleAfterSeconds: number;
@@ -29,6 +33,7 @@ export interface DomainWorkerStageConfig {
   readonly authEmailFromName: string;
   readonly authPasswordCompromiseCheckEnabled?: boolean | undefined;
   readonly authPasswordCompromiseCheckRangeUrlOverride?: string | undefined;
+  readonly authRateLimitCleanupEnabled?: boolean | undefined;
   readonly authRateLimitEnabled: boolean;
   readonly googleMapsApiKey: Redacted.Redacted<string>;
   readonly googleMapsRoutesApiKey?: Redacted.Redacted<string> | undefined;
@@ -90,6 +95,10 @@ export interface DomainWorkerConfiguredEnv {
   readonly AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE?:
     | string
     | undefined;
+  readonly AUTH_RATE_LIMIT_CLEANUP_BATCH_SIZE: string;
+  readonly AUTH_RATE_LIMIT_CLEANUP_ENABLED: "false" | "true";
+  readonly AUTH_RATE_LIMIT_CLEANUP_MAX_BATCHES: string;
+  readonly AUTH_RATE_LIMIT_RETENTION_HOURS: string;
   readonly AUTH_RATE_LIMIT_ENABLED: "false" | "true";
   readonly AUTH_TRUSTED_ORIGINS: string;
   readonly BETTER_AUTH_BASE_URL: string;
@@ -185,6 +194,15 @@ function makeDomainWorkerCookieDomainEnvValue(input: {
   return input.authCookieDomain;
 }
 
+function makeDomainWorkerRateLimitCleanupEnabledEnvValue(input: {
+  readonly configuredValue?: boolean | undefined;
+  readonly localDev?: boolean | undefined;
+}) {
+  return booleanWorkerEnvValue(
+    input.configuredValue ?? input.localDev !== true
+  );
+}
+
 export function makeDomainWorkerBindings(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly authEmailQueue: Cloudflare.Queue;
@@ -276,6 +294,20 @@ export function makeDomainWorkerEnv(input: {
     ...optionalDomainWorkerEnv(
       "AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE",
       input.config.authPasswordCompromiseCheckRangeUrlOverride
+    ),
+    AUTH_RATE_LIMIT_CLEANUP_BATCH_SIZE: String(
+      DOMAIN_WORKER_AUTH_RATE_LIMIT_CLEANUP_BATCH_SIZE
+    ),
+    AUTH_RATE_LIMIT_CLEANUP_ENABLED:
+      makeDomainWorkerRateLimitCleanupEnabledEnvValue({
+        configuredValue: input.config.authRateLimitCleanupEnabled,
+        localDev: input.localDev,
+      }) ?? "true",
+    AUTH_RATE_LIMIT_CLEANUP_MAX_BATCHES: String(
+      DOMAIN_WORKER_AUTH_RATE_LIMIT_CLEANUP_MAX_BATCHES
+    ),
+    AUTH_RATE_LIMIT_RETENTION_HOURS: String(
+      DOMAIN_WORKER_AUTH_RATE_LIMIT_RETENTION_HOURS
     ),
     AUTH_RATE_LIMIT_ENABLED: input.config.authRateLimitEnabled
       ? "true"
@@ -370,6 +402,10 @@ export function makeDomainWorkerProps(input: {
         localOrigins: input.localOrigins,
       }),
     },
+    crons:
+      input.localDev === true
+        ? []
+        : [DOMAIN_WORKER_AUTH_RATE_LIMIT_CLEANUP_CRON],
     observability: ceirdWorkerObservability,
     placement: ceirdDomainWorkerPlacement,
     url: false,

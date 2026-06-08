@@ -40,6 +40,13 @@ import {
 } from "../../domains/identity/authentication/auth-observability.js";
 import type { AuthenticationRequestObservation } from "../../domains/identity/authentication/auth-observability.js";
 import {
+  AUTH_RATE_LIMIT_CLEANUP_FAILED_SIGNAL,
+  cleanupRateLimitRows,
+  loadRateLimitCleanupConfig,
+  RateLimitCleanupBatchFailed,
+} from "../../domains/identity/authentication/auth-rate-limit-cleanup.js";
+import type { RateLimitCleanupResult } from "../../domains/identity/authentication/auth-rate-limit-cleanup.js";
+import {
   AuthenticationBackgroundTaskHandler,
   makeAuthenticationLive,
 } from "../../domains/identity/authentication/auth.js";
@@ -776,6 +783,148 @@ export const handleWorkerQueue = Effect.fn("CloudflareWorker.handleQueue")(
     );
   }
 );
+
+export const handleWorkerScheduled = Effect.fn(
+  "CloudflareWorker.handleScheduled"
+)(function* (controller: ScheduledController, env: DomainWorkerEnv) {
+  yield* runWorkerScheduledRateLimitCleanup(controller, env).pipe(
+    Effect.tapCause((cause) =>
+      logRateLimitCleanupFailure(controller, env, Cause.squash(cause))
+    ),
+    Effect.withLogSpan("domain.scheduled"),
+    Effect.withSpan("DomainWorker.handleScheduled", {
+      attributes: makeDomainWorkerScheduledAnnotations(controller, env),
+    })
+  );
+});
+
+function runWorkerScheduledRateLimitCleanup(
+  controller: ScheduledController,
+  env: DomainWorkerEnv
+) {
+  return Effect.gen(function* () {
+    const config = yield* loadRateLimitCleanupConfig.pipe(
+      Effect.provide(makeWorkerBaseLive(env))
+    );
+
+    if (!config.enabled) {
+      yield* Effect.logInfo("Auth rate-limit cleanup skipped").pipe(
+        Effect.annotateLogs({
+          ...makeDomainWorkerScheduledAnnotations(controller, env),
+          authRateLimitCleanupEnabled: false,
+        })
+      );
+      return;
+    }
+
+    const database = yield* readDomainWorkerDatabaseConfiguration(env);
+    const { baseLive, databaseRuntimeLive } = makeDomainWorkerRuntimeLayers(
+      env,
+      database
+    );
+    const result = yield* Effect.scoped(
+      cleanupRateLimitRows(config).pipe(
+        Effect.provide(databaseRuntimeLive),
+        Effect.provide(baseLive)
+      )
+    );
+
+    yield* annotateRateLimitCleanupSpan(result);
+    yield* logRateLimitCleanupSuccess(controller, env, result);
+  });
+}
+
+function annotateRateLimitCleanupSpan(result: RateLimitCleanupResult) {
+  return Effect.all(
+    [
+      Effect.annotateCurrentSpan(
+        "auth.rateLimitCleanupDeletedRows",
+        result.deletedRows
+      ),
+      Effect.annotateCurrentSpan(
+        "auth.rateLimitCleanupBatchCount",
+        result.batchCount
+      ),
+      Effect.annotateCurrentSpan(
+        "auth.rateLimitCleanupRetentionHours",
+        result.retentionHours
+      ),
+      Effect.annotateCurrentSpan(
+        "auth.rateLimitCleanupCutoffMs",
+        result.cutoffMs
+      ),
+      Effect.annotateCurrentSpan(
+        "auth.rateLimitCleanupDurationMs",
+        result.durationMs
+      ),
+    ],
+    { discard: true }
+  );
+}
+
+function logRateLimitCleanupSuccess(
+  controller: ScheduledController,
+  env: DomainWorkerEnv,
+  result: RateLimitCleanupResult
+) {
+  return Effect.logInfo("Auth rate-limit cleanup completed").pipe(
+    Effect.annotateLogs({
+      ...makeDomainWorkerScheduledAnnotations(controller, env),
+      authRateLimitCleanupBatchCount: result.batchCount,
+      authRateLimitCleanupCutoffMs: result.cutoffMs,
+      authRateLimitCleanupDeletedRows: result.deletedRows,
+      authRateLimitCleanupDurationMs: result.durationMs,
+      authRateLimitCleanupRetentionHours: result.retentionHours,
+    })
+  );
+}
+
+function logRateLimitCleanupFailure(
+  controller: ScheduledController,
+  env: DomainWorkerEnv,
+  cause: unknown
+) {
+  return Effect.logError("Auth rate-limit cleanup failed").pipe(
+    Effect.annotateLogs({
+      ...makeDomainWorkerScheduledAnnotations(controller, env),
+      authAbuseAlertPolicy: "alert_on_rate_limit_cleanup_failure",
+      authAbuseSignal: AUTH_RATE_LIMIT_CLEANUP_FAILED_SIGNAL,
+      authAbuseSignalSeverity: "high",
+      authRateLimitCleanupFailureCause: serializeFailureCause(cause),
+      ...makeRateLimitCleanupPartialProgressAnnotations(cause),
+    })
+  );
+}
+
+function makeRateLimitCleanupPartialProgressAnnotations(cause: unknown) {
+  if (!(cause instanceof RateLimitCleanupBatchFailed)) {
+    return {};
+  }
+
+  return {
+    authRateLimitCleanupBatchCount: cause.batchCount,
+    authRateLimitCleanupCutoffMs: cause.cutoffMs,
+    authRateLimitCleanupDeletedRows: cause.deletedRows,
+    authRateLimitCleanupRetentionHours: cause.retentionHours,
+  };
+}
+
+function makeDomainWorkerScheduledAnnotations(
+  controller: ScheduledController,
+  env: DomainWorkerEnv
+) {
+  return {
+    ...(env.ALCHEMY_STACK_NAME === undefined
+      ? {}
+      : { "alchemy.stackName": env.ALCHEMY_STACK_NAME }),
+    ...(env.ALCHEMY_STAGE === undefined
+      ? {}
+      : { "alchemy.stage": env.ALCHEMY_STAGE }),
+    "ceird.adapter": "domain",
+    "cloudflare.cron": controller.cron,
+    "cloudflare.scheduledTime": controller.scheduledTime,
+  };
+}
 
 function requestPathname(url: string) {
   const queryIndex = url.indexOf("?");
