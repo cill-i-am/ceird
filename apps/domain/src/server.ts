@@ -19,11 +19,13 @@ import {
 } from "./domains/identity/authentication/auth.js";
 import { loadAuthenticationConfig } from "./domains/identity/authentication/config.js";
 import { IdentityHttpLive } from "./domains/identity/http.js";
+import { UserPreferencesHttpLive } from "./domains/identity/preferences/http.js";
 import { JobsHttpLive } from "./domains/jobs/http.js";
 import { LabelsHttpLive } from "./domains/labels/http.js";
 import type { McpAuthorizedAppCacheOptions } from "./domains/mcp/cache-config.js";
 import type { McpAuthorizedAppCache } from "./domains/mcp/http.js";
 import { makeMcpWebHandler } from "./domains/mcp/http.js";
+import { ProximityHttpLive } from "./domains/proximity/http.js";
 import { SitesHttpLive } from "./domains/sites/http.js";
 import { SiteLocationProvider } from "./domains/sites/location-provider.js";
 import { SyncHttpLive } from "./domains/sync/http.js";
@@ -54,8 +56,10 @@ const makeApiHandlersLive = () =>
         AgentsHttpLive,
         AuthenticationHttpLive,
         IdentityHttpLive,
+        UserPreferencesHttpLive,
         JobsHttpLive,
         LabelsHttpLive,
+        ProximityHttpLive,
         SitesHttpLive,
         SyncHttpLive
       )

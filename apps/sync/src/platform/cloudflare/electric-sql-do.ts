@@ -2,6 +2,7 @@
 
 /* eslint-disable promise/prefer-await-to-then -- Effect.catch is Effect error handling, not Promise chaining. */
 
+import { DurableObject } from "cloudflare:workers";
 import { Duration, Effect } from "effect";
 
 import {
@@ -21,15 +22,7 @@ const containerReadinessByState = new WeakMap<
 const monitoredContainerStates = new WeakSet<DurableObjectState>();
 const readyContainerStates = new WeakSet<DurableObjectState>();
 
-export class ElectricSql {
-  private readonly ctx: DurableObjectState;
-  readonly env: SyncWorkerEnv;
-
-  constructor(ctx: DurableObjectState, env: SyncWorkerEnv) {
-    this.ctx = ctx;
-    this.env = env;
-  }
-
+export class ElectricSql extends DurableObject<SyncWorkerEnv> {
   async fetch(request: Request): Promise<Response> {
     return await Effect.runPromise(
       handleElectricSqlFetch(request, this.ctx, this.env)

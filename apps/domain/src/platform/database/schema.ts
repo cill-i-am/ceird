@@ -1,6 +1,7 @@
 import { agentsSchema } from "../../domains/agents/schema.js";
 import { commentsSchema } from "../../domains/comments/schema.js";
 import { authSchema } from "../../domains/identity/authentication/schema.js";
+import { identityPreferencesSchema } from "../../domains/identity/preferences/schema.js";
 import { jobsSchema } from "../../domains/jobs/schema.js";
 import { labelsSchema } from "../../domains/labels/schema.js";
 import { sitesSchema } from "../../domains/sites/schema.js";
@@ -35,6 +36,10 @@ export {
   verification,
 } from "../../domains/identity/authentication/schema.js";
 export {
+  identityPreferencesSchema,
+  userPreferences,
+} from "../../domains/identity/preferences/schema.js";
+export {
   contact,
   jobsSchema,
   siteContact,
@@ -50,6 +55,7 @@ export { site, siteLabel, sitesSchema } from "../../domains/sites/schema.js";
 export const databaseSchema = {
   ...agentsSchema,
   ...authSchema,
+  ...identityPreferencesSchema,
   ...commentsSchema,
   ...labelsSchema,
   ...sitesSchema,

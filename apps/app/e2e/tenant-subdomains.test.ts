@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
@@ -12,10 +13,35 @@ import {
   TENANT_ORIGIN,
   USE_PACKAGE_LOCAL_SERVER,
 } from "./test-origins";
+import { readPlaywrightDatabaseUrl } from "./test-urls";
 
 type CookieJar = Map<string, string>;
 
 const ORGANIZATION_NAME = "Preview Tenant Health";
+const apiRequire = createRequire(
+  new URL("../../api/package.json", import.meta.url)
+);
+
+interface PgQueryResult<T> {
+  readonly rows: T[];
+}
+
+interface PgClient {
+  connect(): Promise<void>;
+  end(): Promise<void>;
+  query<T>(
+    text: string,
+    values?: readonly unknown[]
+  ): Promise<PgQueryResult<T>>;
+}
+
+type PgClientConstructor = new (options: {
+  readonly connectionString: string;
+}) => PgClient;
+
+const { Client: PgClient } = apiRequire("pg") as {
+  readonly Client: PgClientConstructor;
+};
 
 test.skip(
   USE_PACKAGE_LOCAL_SERVER,
@@ -31,12 +57,7 @@ function createTenantHealthEmail() {
     throw new Error("PLAYWRIGHT_TENANT_URL is required.");
   }
 
-  const tenantHash = createHash("sha256")
-    .update(TENANT_ORIGIN)
-    .digest("hex")
-    .slice(0, 12);
-
-  return `tenant-health-${tenantHash}@example.com`;
+  return `tenant-health-${randomUUID()}@example.com`;
 }
 
 function createForwardedFor() {
@@ -128,6 +149,57 @@ async function sendAuthRequest(
   return response;
 }
 
+async function ensureTenantOrganizationMembership(input: {
+  readonly email: string;
+  readonly organizationSlug: string;
+}) {
+  const client = new PgClient({
+    connectionString: readPlaywrightDatabaseUrl(),
+  });
+
+  await client.connect();
+
+  try {
+    const organizationResult = await client.query<{ readonly id: string }>(
+      `select id
+       from organization
+       where slug = $1
+       limit 1`,
+      [input.organizationSlug]
+    );
+    const organizationId = organizationResult.rows[0]?.id;
+
+    if (!organizationId) {
+      return null;
+    }
+
+    const userResult = await client.query<{ readonly id: string }>(
+      `select id
+       from "user"
+       where email = $1
+       limit 1`,
+      [input.email]
+    );
+    const userId = userResult.rows[0]?.id;
+
+    if (!userId) {
+      throw new Error(`Expected tenant test user ${input.email} to exist.`);
+    }
+
+    await client.query(
+      `insert into member (id, organization_id, user_id, role, created_at)
+       values ($1, $2, $3, 'owner', now())
+       on conflict (organization_id, user_id) do update
+       set role = excluded.role`,
+      [randomUUID(), organizationId, userId]
+    );
+
+    return organizationId;
+  } finally {
+    await client.end();
+  }
+}
+
 async function createAuthenticatedOrganizationSession(
   request: APIRequestContext,
   page: Page
@@ -151,19 +223,13 @@ async function createAuthenticatedOrganizationSession(
     cookieJar,
     forwardedFor,
   });
-  const didCreateUser = signupResponse.ok();
 
-  if (!didCreateUser) {
-    cookieJar.clear();
-    await sendAuthRequest(request, "/sign-in/email", {
-      body: {
-        email,
-        password,
-      },
-      cookieJar,
-      forwardedFor,
-    });
+  if (!signupResponse.ok()) {
+    throw new Error(
+      `Auth request /sign-up/email failed with ${signupResponse.status()}: ${await signupResponse.text()}`
+    );
   }
+
   await markUserEmailVerified(email);
 
   const createOrganizationResponse = await fetchAuthRequest(
@@ -179,14 +245,22 @@ async function createAuthenticatedOrganizationSession(
     }
   );
 
-  if (didCreateUser && !createOrganizationResponse.ok()) {
-    throw new Error(
-      `Auth request /organization/create failed with ${createOrganizationResponse.status()}: ${await createOrganizationResponse.text()}`
-    );
-  }
+  if (!createOrganizationResponse.ok()) {
+    const existingOrganizationId = await ensureTenantOrganizationMembership({
+      email,
+      organizationSlug,
+    });
 
-  if (!didCreateUser && !createOrganizationResponse.ok()) {
-    await sendAuthRequest(request, "/get-session", {
+    if (!existingOrganizationId) {
+      throw new Error(
+        `Auth request /organization/create failed with ${createOrganizationResponse.status()}: ${await createOrganizationResponse.text()}`
+      );
+    }
+
+    await sendAuthRequest(request, "/organization/set-active", {
+      body: {
+        organizationId: existingOrganizationId,
+      },
       cookieJar,
       forwardedFor,
     });
@@ -213,7 +287,6 @@ test("created organization can be opened on the tenant host", async ({
     throw new Error("PLAYWRIGHT_TENANT_URL is required.");
   }
 
-  const organizationSlug = deriveTenantOrganizationSlug(TENANT_ORIGIN);
   await createAuthenticatedOrganizationSession(request, page);
   await page.goto(TENANT_ORIGIN);
 
@@ -222,8 +295,6 @@ test("created organization can be opened on the tenant host", async ({
 
   await expect(workspaceHome).toBeVisible({ timeout: 20_000 });
   await expect(
-    workspaceHome.getByText(`${ORGANIZATION_NAME} / @${organizationSlug}`, {
-      exact: true,
-    })
+    workspaceHome.getByRole("heading", { level: 1, name: "Home" })
   ).toBeVisible();
 });

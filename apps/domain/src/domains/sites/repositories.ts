@@ -7,6 +7,7 @@ import {
   LabelSchema,
 } from "@ceird/labels-core";
 import type { Label, LabelIdType as LabelId } from "@ceird/labels-core";
+import type { ProximityExcludedCount } from "@ceird/proximity-core";
 import {
   IsoDateTimeString as IsoDateTimeStringSchema,
   SiteId as SiteIdSchema,
@@ -14,12 +15,14 @@ import {
   SiteListCursorInvalidError,
   SiteListResponseSchema,
   SiteNotFoundError,
+  SITE_ACTIVE_JOB_PRIORITIES,
 } from "@ceird/sites-core";
 import type {
   GoogleAddressComponent,
   GooglePlaceIdType,
   IsoDateTimeStringType as IsoDateTimeString,
   SiteCountry,
+  SiteActiveJobPriority,
   SiteIdType as SiteId,
   SiteLatitude,
   SiteListCursorType as SiteListCursor,
@@ -28,6 +31,7 @@ import type {
   SiteLocationStatusType,
   SiteLongitude,
   SiteOption,
+  SiteProximityFilters,
 } from "@ceird/sites-core";
 import {
   Array as Arr,
@@ -103,6 +107,20 @@ interface SiteLocationRecordWriteFields {
   readonly town?: string;
 }
 
+type SiteProximityCandidateRow = SiteOptionRow;
+
+interface SiteProximityStatsRow {
+  readonly candidate_count: number;
+  readonly missing_coordinates_count: number;
+  readonly unmapped_site_count: number;
+}
+
+interface SiteActiveJobSummaryRow {
+  readonly active_job_count: number;
+  readonly highest_active_job_priority: string | null;
+  readonly site_id: string;
+}
+
 export interface CreateSiteRecordInput
   extends SiteRecordBaseWriteFields, SiteLocationRecordWriteFields {
   readonly organizationId: OrganizationId;
@@ -122,6 +140,31 @@ export interface SiteLabelAssignmentResult {
   readonly changed: boolean;
   readonly label: Label;
 }
+
+export interface SiteProximityCandidate {
+  readonly activeJobCount: number;
+  readonly highestActiveJobPriority?: SiteActiveJobPriority;
+  readonly site: SiteOption;
+}
+
+export interface SiteActiveJobSummary {
+  readonly activeJobCount: number;
+  readonly highestActiveJobPriority?: SiteActiveJobPriority;
+}
+
+export interface SiteProximityCandidateSet {
+  readonly candidateCount: number;
+  readonly candidateLimitApplied: boolean;
+  readonly candidates: readonly SiteProximityCandidate[];
+  readonly excluded: readonly ProximityExcludedCount[];
+}
+
+const PROXIMITY_CANDIDATE_LIMIT = 100;
+const USABLE_SITE_LOCATION_STATUSES = [
+  "google_resolved",
+  "manually_adjusted",
+  "validated",
+] as const;
 
 const decodeSiteId = Schema.decodeUnknownSync(SiteIdSchema);
 const decodeSiteListCursor = Schema.decodeUnknownSync(SiteListCursorSchema);
@@ -403,11 +446,180 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         }
       );
 
+      const getActiveJobSummary = Effect.fn(
+        "SitesRepository.getActiveJobSummary"
+      )(function* (organizationId: OrganizationId, siteId: SiteId) {
+        const rows = yield* sql<{
+          readonly active_job_count: number;
+          readonly highest_active_job_priority: string | null;
+        }>`
+          select
+            count(*)::integer as active_job_count,
+            case max(
+              case work_items.priority
+                when 'urgent' then 4
+                when 'high' then 3
+                when 'medium' then 2
+                when 'low' then 1
+                else 0
+              end
+            )
+              when 4 then 'urgent'
+              when 3 then 'high'
+              when 2 then 'medium'
+              when 1 then 'low'
+              when 0 then case when count(*) > 0 then 'none' else null end
+              else null
+            end as highest_active_job_priority
+          from work_items
+          where work_items.organization_id = ${organizationId}
+            and work_items.site_id = ${siteId}
+            and work_items.status not in ('completed', 'canceled')
+        `;
+        const [row] = rows;
+
+        return {
+          activeJobCount: row?.active_job_count ?? 0,
+          highestActiveJobPriority: mapHighestActiveJobPriority(
+            row?.highest_active_job_priority ?? null
+          ),
+        } satisfies SiteActiveJobSummary;
+      });
+
+      const listProximityCandidates = Effect.fn(
+        "SitesRepository.listProximityCandidates"
+      )(function* (
+        organizationId: OrganizationId,
+        filters: SiteProximityFilters
+      ) {
+        const clauses = [
+          sql`sites.organization_id = ${organizationId}`,
+          sql`sites.archived_at is null`,
+        ];
+
+        if (filters.query !== undefined) {
+          const queryPattern = `%${filters.query}%`;
+          clauses.push(sql`
+            concat_ws(
+              ' ',
+              sites.name,
+              coalesce(
+                nullif(
+                  concat_ws(
+                    ', ',
+                    nullif(concat_ws(', ', sites.address_line_1, sites.address_line_2), ''),
+                    nullif(concat_ws(', ', sites.town, sites.county, sites.eircode), '')
+                  ),
+                  ''
+                ),
+                nullif(sites.display_location, ''),
+                nullif(sites.formatted_address, ''),
+                nullif(sites.raw_location_input, ''),
+                'No address'
+              )
+            ) ilike ${queryPattern}
+          `);
+        }
+
+        const routeableSiteClause = sql`
+          sites.location_status in ${sql.in(USABLE_SITE_LOCATION_STATUSES)}
+          and sites.latitude is not null
+          and sites.longitude is not null
+        `;
+        const statsRows = yield* sql<SiteProximityStatsRow>`
+          select
+            count(*) filter (where ${routeableSiteClause})::integer as candidate_count,
+            count(*) filter (
+              where sites.location_status not in ${sql.in(USABLE_SITE_LOCATION_STATUSES)}
+            )::integer as unmapped_site_count,
+            count(*) filter (
+              where sites.location_status in ${sql.in(USABLE_SITE_LOCATION_STATUSES)}
+                and (sites.latitude is null or sites.longitude is null)
+            )::integer as missing_coordinates_count
+          from sites
+          where ${sql.and(clauses)}
+        `;
+        const stats = statsRows[0] ?? {
+          candidate_count: 0,
+          missing_coordinates_count: 0,
+          unmapped_site_count: 0,
+        };
+        const rows = yield* sql<SiteProximityCandidateRow>`
+          select
+            sites.access_notes,
+            sites.address_components,
+            sites.address_line_1,
+            sites.address_line_2,
+            sites.country,
+            sites.county,
+            sites.display_location,
+            sites.eircode,
+            sites.formatted_address,
+            sites.google_place_id,
+            sites.id,
+            sites.latitude,
+            sites.location_provider,
+            sites.location_resolved_at,
+            sites.location_status,
+            sites.longitude,
+            sites.name,
+            sites.raw_location_input,
+            sites.town
+          from sites
+          where ${sql.and([...clauses, routeableSiteClause])}
+          order by sites.updated_at desc, sites.id desc
+          limit ${PROXIMITY_CANDIDATE_LIMIT + 1}
+        `;
+        const pageRows = Arr.take(rows, PROXIMITY_CANDIDATE_LIMIT);
+        const siteIds = pageRows.map((row) => decodeSiteId(row.id));
+        const activeJobSummariesBySiteId =
+          yield* listActiveJobSummariesForSites(sql, organizationId, siteIds);
+        const labelsBySiteId = yield* listSiteLabelsForSites(
+          sql,
+          organizationId,
+          siteIds
+        );
+        const excluded = new Map<ProximityExcludedCount["reason"], number>();
+        addExcluded(excluded, "unmapped_site", stats.unmapped_site_count);
+        addExcluded(
+          excluded,
+          "missing_coordinates",
+          stats.missing_coordinates_count
+        );
+        const candidates: SiteProximityCandidate[] = [];
+
+        for (const row of pageRows) {
+          const siteId = decodeSiteId(row.id);
+          const site = mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? []);
+          const activeJobSummary = activeJobSummariesBySiteId.get(siteId);
+
+          candidates.push({
+            activeJobCount: activeJobSummary?.activeJobCount ?? 0,
+            highestActiveJobPriority:
+              activeJobSummary?.highestActiveJobPriority,
+            site,
+          });
+        }
+
+        return {
+          candidateCount: stats.candidate_count,
+          candidateLimitApplied:
+            stats.candidate_count > PROXIMITY_CANDIDATE_LIMIT,
+          candidates,
+          excluded: [...excluded.entries()].map(([reason, count]) => ({
+            count,
+            reason,
+          })),
+        } satisfies SiteProximityCandidateSet;
+      });
+
       return {
         create,
         findById,
+        getActiveJobSummary,
         getOptionById,
         list,
+        listProximityCandidates,
         listOptions,
         update,
         withTransaction,
@@ -428,9 +640,20 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
       Context.Service.Shape<typeof SitesRepository>["getOptionById"]
     >
   ) => SitesRepository.use((service) => service.getOptionById(...args));
+  static readonly getActiveJobSummary = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof SitesRepository>["getActiveJobSummary"]
+    >
+  ) => SitesRepository.use((service) => service.getActiveJobSummary(...args));
   static readonly list = (
     ...args: Parameters<Context.Service.Shape<typeof SitesRepository>["list"]>
   ) => SitesRepository.use((service) => service.list(...args));
+  static readonly listProximityCandidates = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof SitesRepository>["listProximityCandidates"]
+    >
+  ) =>
+    SitesRepository.use((service) => service.listProximityCandidates(...args));
   static readonly listOptions = (
     ...args: Parameters<
       Context.Service.Shape<typeof SitesRepository>["listOptions"]
@@ -708,6 +931,78 @@ function mapLabelRow(row: LabelRow): Label {
     id: decodeLabelId(row.id),
     name: row.name,
     updatedAt: row.updated_at.toISOString(),
+  });
+}
+
+function mapHighestActiveJobPriority(
+  value: string | null
+): SiteActiveJobPriority | undefined {
+  return SITE_ACTIVE_JOB_PRIORITIES.includes(value as SiteActiveJobPriority)
+    ? (value as SiteActiveJobPriority)
+    : undefined;
+}
+
+function addExcluded(
+  excluded: Map<ProximityExcludedCount["reason"], number>,
+  reason: ProximityExcludedCount["reason"],
+  count: number
+) {
+  if (count <= 0) {
+    return;
+  }
+
+  excluded.set(reason, (excluded.get(reason) ?? 0) + count);
+}
+
+function listActiveJobSummariesForSites(
+  sql: SqlClient.SqlClient,
+  organizationId: OrganizationId,
+  siteIds: readonly SiteId[]
+) {
+  if (siteIds.length === 0) {
+    return Effect.succeed(new Map<SiteId, SiteActiveJobSummary>());
+  }
+
+  return Effect.gen(function* () {
+    const rows = yield* sql<SiteActiveJobSummaryRow>`
+      select
+        work_items.site_id,
+        count(*)::integer as active_job_count,
+        case max(
+          case work_items.priority
+            when 'urgent' then 4
+            when 'high' then 3
+            when 'medium' then 2
+            when 'low' then 1
+            else 0
+          end
+        )
+          when 4 then 'urgent'
+          when 3 then 'high'
+          when 2 then 'medium'
+          when 1 then 'low'
+          when 0 then case when count(*) > 0 then 'none' else null end
+          else null
+        end as highest_active_job_priority
+      from work_items
+      where work_items.organization_id = ${organizationId}
+        and work_items.site_id in ${sql.in(siteIds)}
+        and work_items.status not in ('completed', 'canceled')
+      group by work_items.site_id
+    `;
+    const summaries = new Map<SiteId, SiteActiveJobSummary>();
+
+    for (const row of rows) {
+      const siteId = decodeSiteId(row.site_id);
+      summaries.set(siteId, {
+        activeJobCount: row.active_job_count,
+        highestActiveJobPriority: mapHighestActiveJobPriority(
+          row.highest_active_job_priority
+        ),
+      });
+    }
+
+    return summaries;
   });
 }
 

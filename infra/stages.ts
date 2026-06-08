@@ -120,6 +120,11 @@ export const InfraGoogleMapsApiKey = Schema.NonEmptyString.pipe(
 export type InfraGoogleMapsApiKey = Schema.Schema.Type<
   typeof InfraGoogleMapsApiKey
 >;
+export const InfraRouteProvider = Schema.Literals([
+  "google_routes",
+  "test",
+] as const);
+export type InfraRouteProvider = Schema.Schema.Type<typeof InfraRouteProvider>;
 
 export interface InfraStageConfig {
   readonly agentActionRunStaleAfterSeconds: number;
@@ -144,6 +149,11 @@ export interface InfraStageConfig {
   readonly authRateLimitEnabled: boolean;
   readonly authSecrets: Redacted.Redacted<string> | undefined;
   readonly googleMapsApiKey: Redacted.Redacted<InfraGoogleMapsApiKey>;
+  readonly googleMapsRoutesApiKey:
+    | Redacted.Redacted<InfraGoogleMapsApiKey>
+    | undefined;
+  readonly routeProvider: InfraRouteProvider;
+  readonly proximityOriginTokenTtlSeconds: number | undefined;
   readonly hyperdriveName: ProviderResourceName;
   readonly hyperdriveOriginConnectionLimit: number;
   readonly electricContainerInstanceType: ElectricContainerInstanceType;
@@ -257,6 +267,12 @@ const AgentActionRunStaleAfterSeconds = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(1, {
     message:
       "CEIRD_AGENT_ACTION_RUN_STALE_AFTER_SECONDS must be a positive integer",
+  })
+);
+const ProximityOriginTokenTtlSeconds = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(1, {
+    message:
+      "CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS must be a positive integer",
   })
 );
 const NeonHistoryRetentionSeconds = Schema.Int.check(
@@ -420,6 +436,12 @@ function isBetterAuthSecretsValue(value: string) {
   }
 }
 
+function decodeRouteProvider(value: string) {
+  return Schema.decodeUnknownEffect(InfraRouteProvider)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
 function decodeHyperdriveOriginConnectionLimit(value: number) {
   return Schema.decodeUnknownEffect(HyperdriveOriginConnectionLimit)(
     value
@@ -430,6 +452,12 @@ function decodeAgentActionRunStaleAfterSeconds(value: number) {
   return Schema.decodeUnknownEffect(AgentActionRunStaleAfterSeconds)(
     value
   ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+}
+
+function decodeProximityOriginTokenTtlSeconds(value: number) {
+  return Schema.decodeUnknownEffect(ProximityOriginTokenTtlSeconds)(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
 }
 
 function decodeNeonHistoryRetentionSeconds(value: number) {
@@ -642,6 +670,20 @@ export function loadInfraStageConfig(stageInput: string) {
     const googleMapsApiKey = yield* Config.redacted("GOOGLE_MAPS_API_KEY").pipe(
       Config.mapOrFail(decodeGoogleMapsApiKey)
     );
+    const googleMapsRoutesApiKey = yield* Config.option(
+      Config.redacted("GOOGLE_MAPS_ROUTES_API_KEY").pipe(
+        Config.mapOrFail(decodeGoogleMapsApiKey)
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
+    const routeProvider = yield* Config.string("CEIRD_ROUTE_PROVIDER").pipe(
+      Config.withDefault("google_routes"),
+      Config.mapOrFail(decodeRouteProvider)
+    );
+    const proximityOriginTokenTtlSeconds = yield* Config.option(
+      Config.number("CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS").pipe(
+        Config.mapOrFail(decodeProximityOriginTokenTtlSeconds)
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
     const hyperdriveName = yield* Config.string("CEIRD_HYPERDRIVE_NAME").pipe(
       Config.withDefault(defaultHyperdriveName),
       Config.mapOrFail(decodeProviderResourceName)
@@ -757,6 +799,9 @@ export function loadInfraStageConfig(stageInput: string) {
       authRateLimitEnabled,
       authSecrets,
       googleMapsApiKey,
+      googleMapsRoutesApiKey,
+      routeProvider,
+      proximityOriginTokenTtlSeconds,
       hyperdriveName,
       hyperdriveOriginConnectionLimit,
       electricContainerInstanceType,

@@ -4,9 +4,10 @@ import type {
   AgentStorageError,
   AgentThreadNotFoundError,
 } from "@ceird/agents-core";
-import type { IdentityError } from "@ceird/identity-core";
+import type { IdentityError as IdentityDomainError } from "@ceird/identity-core";
 import type { JobsError } from "@ceird/jobs-core";
 import type { LabelsError } from "@ceird/labels-core";
+import type { ProximityError } from "@ceird/proximity-core";
 import type { SitesError } from "@ceird/sites-core";
 import { Schema } from "effect";
 /* oxlint-disable eslint/max-classes-per-file */
@@ -17,6 +18,7 @@ const APP_API_DOMAIN_ERROR_TAG_PREFIXES = [
   "@ceird/identity-core/",
   "@ceird/jobs-core/",
   "@ceird/labels-core/",
+  "@ceird/proximity-core/",
   "@ceird/sites-core/",
 ] as const;
 
@@ -45,9 +47,10 @@ type AgentsError =
   | AgentThreadNotFoundError;
 type AppApiDomainError =
   | AgentsError
-  | IdentityError
+  | IdentityDomainError
   | JobsError
   | LabelsError
+  | ProximityError
   | SitesError;
 export type AppApiError =
   | AppApiDomainError

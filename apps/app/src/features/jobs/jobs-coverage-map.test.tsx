@@ -1,6 +1,8 @@
+import { setTimeout as sleep } from "node:timers/promises";
+
 import type { JobListItem, WorkItemIdType } from "@ceird/jobs-core";
 import type { SiteIdType } from "@ceird/sites-core";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import { JobsCoverageMap } from "./jobs-coverage-map";
@@ -118,6 +120,7 @@ describe("jobs coverage map", () => {
       "href",
       expect.stringContaining("Main+Street")
     );
+    await flushScrollAreaEffects();
   }, 5000);
 
   it("keeps mapped site context visible when every job is on the map", async () => {
@@ -164,9 +167,16 @@ describe("jobs coverage map", () => {
     expect(
       screen.getByRole("link", { name: "Replace plant room valve" })
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Jobs coverage map")).toHaveClass(
+      "h-[clamp(20rem,calc(100vh-24rem),42rem)]"
+    );
+    const railScrollArea = screen.getByTestId("jobs-map-site-rail-scroll");
+
+    expect(railScrollArea).toHaveAttribute("data-slot", "scroll-area");
     expect(
       screen.queryByRole("heading", { name: /unverified location/i })
     ).not.toBeInTheDocument();
+    await flushScrollAreaEffects();
   }, 5000);
 
   it("routes overflow grouped jobs to the site detail", async () => {
@@ -213,6 +223,7 @@ describe("jobs coverage map", () => {
     expect(
       screen.getByRole("link", { name: "View 1 more on site" })
     ).toHaveAttribute("href", "/sites");
+    await flushScrollAreaEffects();
   }, 5000);
 
   it("renders the empty state when no visible jobs have mapped sites", () => {
@@ -225,6 +236,12 @@ describe("jobs coverage map", () => {
     expect(screen.queryByTestId("coverage-map-canvas")).not.toBeInTheDocument();
   }, 5000);
 });
+
+async function flushScrollAreaEffects() {
+  await act(async () => {
+    await sleep(0);
+  });
+}
 
 function buildJob(
   overrides: Partial<JobListItem> & Pick<JobListItem, "id" | "status" | "title">

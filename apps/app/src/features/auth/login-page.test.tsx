@@ -20,8 +20,8 @@ const {
   mockedClearAppContextClientCache: vi.fn<() => void>(),
   mockedGetSession: vi.fn<
     () => Promise<{
-      data: null;
-      error: null;
+      data: { session: { id: string } } | null;
+      error: { message: string } | null;
     }>
   >(),
   mockedListOrganizations: vi.fn<
@@ -139,7 +139,10 @@ vi.mock(import("#/lib/auth-client"), () => ({
 
 describe("login page", () => {
   beforeEach(() => {
-    mockedGetSession.mockResolvedValue({ data: null, error: null });
+    mockedGetSession.mockResolvedValue({
+      data: { session: { id: "session_123" } },
+      error: null,
+    });
     mockedListOrganizations.mockResolvedValue({
       data: [{ id: "org_current", name: "Current Org", slug: "current" }],
       error: null,
@@ -189,6 +192,29 @@ describe("login page", () => {
       });
     });
     expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
+  }, 10_000);
+
+  it("shows an error when sign-in succeeds but no browser session is available", async () => {
+    mockedGetSession.mockResolvedValue({
+      data: null,
+      error: null,
+    });
+
+    const user = userEvent.setup();
+
+    render(<LoginPage />);
+
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password123");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
+    await expect(
+      screen.findByText(
+        "We couldn't start your session. Refresh and try signing in again."
+      )
+    ).resolves.toBeInTheDocument();
+    expect(mockedNavigate).not.toHaveBeenCalled();
+    expect(mockedClearAppContextClientCache).not.toHaveBeenCalled();
   }, 10_000);
 
   it("clears stale organization cache after successful sign-in", async () => {

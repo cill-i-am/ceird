@@ -1,11 +1,16 @@
 import { render } from "@testing-library/react";
 
-const { mockedUseRouteContext, mockedUseSearch, mockedUserSettingsPage } =
-  vi.hoisted(() => ({
-    mockedUseRouteContext: vi.fn<() => unknown>(),
-    mockedUseSearch: vi.fn<() => unknown>(),
-    mockedUserSettingsPage: vi.fn<(props: unknown) => null>(() => null),
-  }));
+const {
+  mockedUseLoaderData,
+  mockedUseRouteContext,
+  mockedUseSearch,
+  mockedUserSettingsPage,
+} = vi.hoisted(() => ({
+  mockedUseLoaderData: vi.fn<() => unknown>(),
+  mockedUseRouteContext: vi.fn<() => unknown>(),
+  mockedUseSearch: vi.fn<() => unknown>(),
+  mockedUserSettingsPage: vi.fn<(props: unknown) => null>(() => null),
+}));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -14,6 +19,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     ...actual,
     createFileRoute: (() => (options: unknown) => ({
       options,
+      useLoaderData: mockedUseLoaderData,
       useSearch: mockedUseSearch,
     })) as unknown as typeof actual.createFileRoute,
     useRouteContext: mockedUseRouteContext as typeof actual.useRouteContext,
@@ -50,6 +56,13 @@ describe("settings route", () => {
       currentOrganizationRole: "owner",
       session: { user },
     });
+    mockedUseLoaderData.mockReturnValue({
+      preferences: {
+        routeProximityLocationEnabled: true,
+        updatedAt: "2026-06-07T10:00:00.000Z",
+      },
+      preferencesUnavailable: false,
+    });
     mockedUseSearch.mockReturnValue({ emailChange: "complete" });
 
     const { Route } = await import("./_app.settings");
@@ -66,6 +79,11 @@ describe("settings route", () => {
       {
         currentOrganizationRole: "owner",
         emailChangeStatus: "complete",
+        preferences: {
+          routeProximityLocationEnabled: true,
+          updatedAt: "2026-06-07T10:00:00.000Z",
+        },
+        preferencesUnavailable: false,
         user,
       },
       undefined

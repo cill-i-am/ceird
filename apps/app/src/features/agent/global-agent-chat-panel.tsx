@@ -1,10 +1,16 @@
 "use client";
 
+import {
+  makeAgentProximityOriginContextBody,
+  makeAgentProximityOriginContextFrame,
+} from "@ceird/agents-core";
 import type {
   AgentActionManifestItem,
+  AgentProximityOriginContextIdType,
   PreparedAgentSession,
 } from "@ceird/agents-core";
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
+import type { CurrentLocationOrigin } from "@ceird/proximity-core";
 import {
   getToolApproval,
   getToolInput,
@@ -27,6 +33,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useAgent } from "agents/react";
 import type { UIMessage } from "ai";
+import { Cause, Effect, Exit, Option } from "effect";
 import * as React from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
@@ -51,21 +58,32 @@ import {
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Separator } from "#/components/ui/separator";
 import { Textarea } from "#/components/ui/textarea";
+import { requestCurrentLocationOrigin } from "#/features/proximity/proximity-location-access";
+import { loadRouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
+import type { RouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
 import { activeElementIsInside } from "#/hotkeys/focus";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { resolveAgentHost } from "#/lib/agent-origin";
+import { formatBrowserGeolocationError } from "#/lib/browser-geolocation";
+import type { BrowserGeolocationError } from "#/lib/browser-geolocation";
 import { cn } from "#/lib/utils";
 
 import {
   authorizeCurrentAgentThread,
   prepareCurrentAgentSession,
 } from "./agent-client";
+import { shouldAttachCurrentLocationToAgentMessage } from "./agent-proximity-intent";
+import {
+  isAgentProximityToolName,
+  renderAgentProximityToolOutput,
+} from "./agent-proximity-tool-renderers";
 
 const AGENT_HOST_MISSING_MESSAGE = "The Agent Worker origin is not configured.";
 const AGENT_CONNECT_TOKEN_CACHE_SAFETY_MS = 60_000;
 const AGENT_CONNECT_TOKEN_MAX_CACHE_MS = 240_000;
+const AGENT_PROXIMITY_CONTEXT_ID_PREFIX = "agent-origin-";
 
 function AgentIcon({
   icon,
@@ -106,6 +124,10 @@ interface ToolApprovalResponse {
   readonly approved: boolean;
   readonly id: string;
 }
+
+type AgentComposerLocationNotice =
+  | { readonly status: "requesting" }
+  | { readonly message: string; readonly status: "blocked" };
 
 interface AgentConversationContextValue {
   readonly actionLookup: ReadonlyMap<string, AgentActionManifestItem>;
@@ -461,6 +483,28 @@ function AgentConversation({
   readonly role: OrganizationRole;
   readonly threadTitle: string;
 }) {
+  const proximityOriginContextIdRef =
+    React.useRef<AgentProximityOriginContextIdType | null>(null);
+  const activeLocationRequestRef = React.useRef(0);
+  const mountedRef = React.useRef(true);
+  const [locationNotice, setLocationNotice] =
+    React.useState<AgentComposerLocationNotice | null>(null);
+  React.useEffect(
+    () => () => {
+      mountedRef.current = false;
+      activeLocationRequestRef.current += 1;
+      proximityOriginContextIdRef.current = null;
+    },
+    []
+  );
+  const prepareSendMessagesRequest = React.useCallback(() => {
+    const contextId = proximityOriginContextIdRef.current;
+    proximityOriginContextIdRef.current = null;
+
+    return contextId === null
+      ? {}
+      : { body: makeAgentProximityOriginContextBody(contextId) };
+  }, []);
   const {
     addToolApprovalResponse,
     error,
@@ -468,7 +512,7 @@ function AgentConversation({
     messages,
     sendMessage,
     status,
-  } = useAgentChat({ agent });
+  } = useAgentChat({ agent, prepareSendMessagesRequest });
   const busy = status === "submitted" || status === "streaming" || isStreaming;
   const actionLookup = React.useMemo(
     () => buildActionLookup(actions),
@@ -480,6 +524,107 @@ function AgentConversation({
       onToolApprovalResponse: addToolApprovalResponse,
     }),
     [actionLookup, addToolApprovalResponse]
+  );
+  const sendMessageWithRouteContext = React.useCallback(
+    async (message: { readonly text: string }) => {
+      if (!shouldAttachCurrentLocationToAgentMessage(message.text)) {
+        setLocationNotice(null);
+        await sendMessage(message);
+
+        return true;
+      }
+
+      const requestId = activeLocationRequestRef.current + 1;
+      activeLocationRequestRef.current = requestId;
+
+      if (
+        !mountedRef.current ||
+        activeLocationRequestRef.current !== requestId
+      ) {
+        return false;
+      }
+
+      const locationPreferenceStatus =
+        await loadRouteProximityLocationPreferenceStatus();
+      const requestWasCancelled =
+        !mountedRef.current || activeLocationRequestRef.current !== requestId;
+
+      if (locationPreferenceStatus !== "enabled") {
+        if (requestWasCancelled) {
+          return false;
+        }
+
+        setLocationNotice({
+          message: getAgentLocationPreferenceBlockedMessage(
+            locationPreferenceStatus
+          ),
+          status: "blocked",
+        });
+
+        return false;
+      }
+
+      if (requestWasCancelled) {
+        return false;
+      }
+
+      setLocationNotice({ status: "requesting" });
+      const originExit = await Effect.runPromiseExit(
+        requestCurrentLocationOrigin()
+      );
+
+      if (Exit.isFailure(originExit)) {
+        if (
+          !mountedRef.current ||
+          activeLocationRequestRef.current !== requestId
+        ) {
+          return false;
+        }
+
+        setLocationNotice({
+          message: getAgentLocationFailureMessage(originExit.cause),
+          status: "blocked",
+        });
+
+        return false;
+      }
+
+      if (
+        !mountedRef.current ||
+        activeLocationRequestRef.current !== requestId
+      ) {
+        return false;
+      }
+
+      const contextId = createAgentProximityOriginContextId();
+      const contextSent = sendAgentProximityOriginContext(
+        agent,
+        contextId,
+        originExit.value
+      );
+
+      if (!contextSent) {
+        setLocationNotice({
+          message:
+            "Ceird could not attach your current location to the agent request. Try again, or enable location access in Settings.",
+          status: "blocked",
+        });
+
+        return false;
+      }
+
+      proximityOriginContextIdRef.current = contextId;
+      setLocationNotice(null);
+      try {
+        await sendMessage(message);
+      } catch (sendError) {
+        proximityOriginContextIdRef.current = null;
+        throw sendError;
+      }
+
+      return true;
+    },
+    [agent, sendMessage]
   );
 
   return (
@@ -515,7 +660,11 @@ function AgentConversation({
           </Alert>
         ) : null}
       </div>
-      <AgentComposer busy={busy} sendMessage={sendMessage} />
+      <AgentComposer
+        busy={busy}
+        locationNotice={locationNotice}
+        sendMessage={sendMessageWithRouteContext}
+      />
     </>
   );
 }
@@ -616,24 +765,38 @@ function CapabilityTile({
 
 function AgentComposer({
   busy,
+  locationNotice,
   sendMessage,
 }: {
   readonly busy: boolean;
-  readonly sendMessage: (message: { readonly text: string }) => Promise<void>;
+  readonly locationNotice: AgentComposerLocationNotice | null;
+  readonly sendMessage: (message: {
+    readonly text: string;
+  }) => Promise<boolean>;
 }) {
   const [draft, setDraft] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
   const composerRef = React.useRef<HTMLDivElement | null>(null);
+  const isBusy = busy || submitting;
 
   const submitDraft = React.useCallback(async () => {
     const text = draft.trim();
 
-    if (!text || busy) {
+    if (!text || isBusy) {
       return;
     }
 
-    setDraft("");
-    await sendMessage({ text });
-  }, [busy, draft, sendMessage]);
+    setSubmitting(true);
+    try {
+      const sent = await sendMessage({ text });
+
+      if (sent) {
+        setDraft("");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }, [draft, isBusy, sendMessage]);
 
   useAppHotkey("agentSubmit", () => {
     if (activeElementIsInside(composerRef)) {
@@ -644,6 +807,9 @@ function AgentComposer({
   return (
     <DrawerFooter className="shrink-0 gap-3 border-t bg-background px-5 py-3 sm:px-6">
       <div ref={composerRef} className="flex w-full flex-col gap-2">
+        {locationNotice ? (
+          <AgentLocationNotice notice={locationNotice} />
+        ) : null}
         <Textarea
           aria-label="Message Ask Ceird"
           className="max-h-36 min-h-20 resize-none"
@@ -663,7 +829,8 @@ function AgentComposer({
             type="button"
             size="sm"
             aria-label="Send"
-            disabled={!draft.trim() || busy}
+            disabled={!draft.trim() || isBusy}
+            loading={submitting}
             onClick={() => {
               void submitDraft();
             }}
@@ -678,6 +845,32 @@ function AgentComposer({
         </div>
       </div>
     </DrawerFooter>
+  );
+}
+
+function AgentLocationNotice({
+  notice,
+}: {
+  readonly notice: AgentComposerLocationNotice;
+}) {
+  if (notice.status === "requesting") {
+    return (
+      <Alert className="py-2">
+        <AgentIcon icon={Clock03Icon} strokeWidth={2} />
+        <AlertTitle>Getting current location</AlertTitle>
+        <AlertDescription>
+          Ceird uses this once for the route request and does not save it.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert variant="destructive" className="py-2">
+      <AgentIcon icon={AlertCircleIcon} strokeWidth={2} />
+      <AlertTitle>Current location unavailable</AlertTitle>
+      <AlertDescription>{notice.message}</AlertDescription>
+    </Alert>
   );
 }
 
@@ -743,7 +936,7 @@ function AgentMessagePart({ part }: { readonly part: ChatPart }) {
 
     return (
       <AgentToolCard action={action} state={state} toolName={toolName}>
-        <ToolPayloadPreview input={input} output={output} />
+        <ToolPayloadPreview input={input} output={output} toolName={toolName} />
       </AgentToolCard>
     );
   }
@@ -820,7 +1013,11 @@ function ApprovalReview({
           {action?.display.target ?? toolName}.
         </span>
       </div>
-      <ToolPayloadPreview input={input} output={undefined} />
+      <ToolPayloadPreview
+        input={input}
+        output={undefined}
+        toolName={toolName}
+      />
       <Separator />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">
@@ -855,12 +1052,29 @@ function ApprovalReview({
 function ToolPayloadPreview({
   input,
   output,
+  toolName,
 }: {
   readonly input: unknown;
   readonly output: unknown;
+  readonly toolName: string;
 }) {
+  const proximityOutput = React.useMemo(() => {
+    if (!isAgentProximityToolName(toolName) || output === undefined) {
+      return null;
+    }
+
+    return renderAgentProximityToolOutput({
+      output,
+      toolName,
+    });
+  }, [output, toolName]);
+
   if (input === undefined && output === undefined) {
     return null;
+  }
+
+  if (proximityOutput !== null) {
+    return <div className="text-xs">{proximityOutput}</div>;
   }
 
   return (
@@ -952,6 +1166,67 @@ function formatPayload(value: unknown) {
   return JSON.stringify(value, null, 2) ?? "null";
 }
 
+function getAgentLocationFailureMessage(
+  cause: Cause.Cause<BrowserGeolocationError>
+) {
+  const failure = Cause.findErrorOption(cause);
+  const failureMessage = Option.isSome(failure)
+    ? formatBrowserGeolocationError(failure.value)
+    : "Ceird could not get your current location.";
+
+  return `${failureMessage} Allow location access and send again, or enable location access in Settings.`;
+}
+
+function createAgentProximityOriginContextId(): AgentProximityOriginContextIdType {
+  const randomId =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : createFallbackUuid();
+
+  return `${AGENT_PROXIMITY_CONTEXT_ID_PREFIX}${randomId}`;
+}
+
+function createFallbackUuid() {
+  const bytes = new Uint8Array(16);
+
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  bytes[6] = (bytes[6] % 16) + 64;
+  bytes[8] = (bytes[8] % 64) + 128;
+
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0"));
+
+  return [
+    hex.slice(0, 4).join(""),
+    hex.slice(4, 6).join(""),
+    hex.slice(6, 8).join(""),
+    hex.slice(8, 10).join(""),
+    hex.slice(10, 16).join(""),
+  ].join("-");
+}
+
+function sendAgentProximityOriginContext(
+  agent: AgentConnection,
+  contextId: AgentProximityOriginContextIdType,
+  origin: CurrentLocationOrigin
+) {
+  const frame = makeAgentProximityOriginContextFrame(contextId, origin);
+
+  try {
+    agent.send(JSON.stringify(frame));
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function getConnectTokenCacheTtl(tokenExpiresInSeconds: number) {
   return Math.max(
     0,
@@ -1016,6 +1291,14 @@ function hashKey(value: unknown) {
   }
 
   return Math.abs(hash).toString(36);
+}
+
+function getAgentLocationPreferenceBlockedMessage(
+  status: Exclude<RouteProximityLocationPreferenceStatus, "enabled">
+) {
+  return status === "disabled"
+    ? "Location access is off. Enable location access in Settings to use near-me agent requests."
+    : "Ceird could not check location access. Try again, or enable location access in Settings.";
 }
 
 function resolveBrowserAgentHost() {

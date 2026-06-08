@@ -1,5 +1,13 @@
 import { AddCommentInputSchema, CommentSchema } from "@ceird/comments-core";
 import { LabelId, LabelSchema } from "@ceird/labels-core";
+import {
+  ProximityLimitSchema,
+  ProximityOriginInputSchema,
+  ProximityOriginSummarySchema,
+  ProximityResultMetadataSchema,
+  RouteDisplayLineSchema,
+  RouteSummarySchema,
+} from "@ceird/proximity-core";
 import { Schema } from "effect";
 
 import {
@@ -163,6 +171,95 @@ export const SiteListResponseSchema = Schema.Struct({
 });
 export type SiteListResponse = Schema.Schema.Type<
   typeof SiteListResponseSchema
+>;
+
+export const SITE_ACTIVE_JOB_PRIORITIES = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "urgent",
+] as const;
+export const SiteActiveJobPrioritySchema = Schema.Literals(
+  SITE_ACTIVE_JOB_PRIORITIES
+);
+export type SiteActiveJobPriority = Schema.Schema.Type<
+  typeof SiteActiveJobPrioritySchema
+>;
+
+export const SiteProximityFiltersSchema = Schema.Struct({
+  query: Schema.optional(
+    NonEmptyTrimmedString.pipe(Schema.check(Schema.isMaxLength(256)))
+  ),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type SiteProximityFilters = Schema.Schema.Type<
+  typeof SiteProximityFiltersSchema
+>;
+
+export const SiteProximityInputSchema = Schema.Struct({
+  filters: Schema.optional(SiteProximityFiltersSchema),
+  includeRouteLines: Schema.optional(Schema.Boolean),
+  limit: Schema.optional(ProximityLimitSchema),
+  origin: ProximityOriginInputSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type SiteProximityInput = Schema.Schema.Type<
+  typeof SiteProximityInputSchema
+>;
+
+export const SiteProximityRowSchema = Schema.Struct({
+  activeJobCount: Schema.Number.pipe(
+    Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+  ),
+  highestActiveJobPriority: Schema.optional(SiteActiveJobPrioritySchema),
+  routeLine: Schema.optional(RouteDisplayLineSchema),
+  routeSummary: RouteSummarySchema,
+  site: SiteOptionSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type SiteProximityRow = Schema.Schema.Type<
+  typeof SiteProximityRowSchema
+>;
+
+export const SiteProximityResponseSchema = Schema.Struct({
+  meta: ProximityResultMetadataSchema,
+  origin: ProximityOriginSummarySchema,
+  rows: Schema.Array(SiteProximityRowSchema),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type SiteProximityResponse = Schema.Schema.Type<
+  typeof SiteProximityResponseSchema
+>;
+
+export const SiteRoutePreviewInputSchema = Schema.Struct({
+  includeRouteLine: Schema.optional(Schema.Boolean),
+  origin: ProximityOriginInputSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type SiteRoutePreviewInput = Schema.Schema.Type<
+  typeof SiteRoutePreviewInputSchema
+>;
+
+export const SiteRoutePreviewResponseSchema = Schema.Struct({
+  activeJobCount: Schema.Number.pipe(
+    Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+  ),
+  highestActiveJobPriority: Schema.optional(SiteActiveJobPrioritySchema),
+  origin: ProximityOriginSummarySchema,
+  routeLine: Schema.optional(RouteDisplayLineSchema),
+  routeSummary: RouteSummarySchema,
+  site: SiteOptionSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type SiteRoutePreviewResponse = Schema.Schema.Type<
+  typeof SiteRoutePreviewResponseSchema
 >;
 
 export const CreateSiteResponseSchema = SiteOptionSchema;

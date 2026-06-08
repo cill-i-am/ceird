@@ -212,4 +212,21 @@ describe("hotkey registry", () => {
       }
     }
   );
+
+  it("keeps the Jobs Near me sequence clear of active map single-key shortcuts", () => {
+    const [jobsNearMeFirstChord] = HOTKEYS.jobsNearMe.hotkey.split(/\s+/);
+    const [sitesNearMeFirstChord] = HOTKEYS.sitesNearMe.hotkey.split(/\s+/);
+    const mapSingleKeyHotkeys: string[] = [];
+    for (const definition of Object.values(HOTKEYS)) {
+      if (
+        definition.scope === "map" &&
+        definition.hotkey.split(/\s+/).length === 1
+      ) {
+        mapSingleKeyHotkeys.push(definition.hotkey);
+      }
+    }
+
+    expect(mapSingleKeyHotkeys).not.toContain(jobsNearMeFirstChord);
+    expect(mapSingleKeyHotkeys).not.toContain(sitesNearMeFirstChord);
+  });
 });

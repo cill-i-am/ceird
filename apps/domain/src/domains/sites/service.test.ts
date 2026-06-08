@@ -1,10 +1,22 @@
-import { OrganizationId, UserId } from "@ceird/identity-core";
+import {
+  decodeUserPreferences,
+  OrganizationId,
+  UserId,
+  UserPreferencesStorageError,
+} from "@ceird/identity-core";
+import {
+  GooglePlaceId,
+  ProximityAccessDeniedError,
+  signProximityOriginToken,
+} from "@ceird/proximity-core";
+import type { TypedOrigin, UnsignedTypedOrigin } from "@ceird/proximity-core";
 import type {
   GooglePlaceIdType,
   GooglePlacesSessionTokenType,
   IsoDateTimeStringType,
   SiteLatitude,
   SiteLongitude,
+  SiteProximityFilters,
 } from "@ceird/sites-core";
 import {
   CreateSiteInputSchema,
@@ -13,13 +25,24 @@ import {
   SitesOptionsResponseSchema,
 } from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
+import {
+  configProviderFromMap,
+  withConfigProvider,
+} from "../../test/effect-test-helpers.js";
 import { CommentsRepository } from "../comments/repository.js";
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
+import { RouteProvider } from "../proximity/route-provider.js";
+import type {
+  RankRoutesInput,
+  RoutePreviewInput,
+} from "../proximity/route-provider.js";
+import { RouteProximityService } from "../proximity/service.js";
 import { SiteLocationProvider } from "./location-provider.js";
 import {
   SiteLabelAssignmentsRepository,
@@ -34,15 +57,40 @@ type ContextService<Service> = Service extends {
   : never;
 
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
+const decodeGooglePlaceId = Schema.decodeUnknownSync(GooglePlaceId);
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
+const PROXIMITY_ORIGIN_TOKEN_SECRET = "proximity-origin-secret";
+const proximityOriginConfigProvider = configProviderFromMap(
+  new Map([["AGENT_INTERNAL_SECRET", PROXIMITY_ORIGIN_TOKEN_SECRET]])
+);
 
 const actor = {
   organizationId: decodeOrganizationId("org_123"),
   role: "admin",
   userId: decodeUserId("user_admin"),
 } satisfies OrganizationActor;
+
+async function makeSignedTypedOrigin(
+  input: Partial<UnsignedTypedOrigin> = {}
+): Promise<TypedOrigin> {
+  const origin = {
+    coordinates: input.coordinates ?? { latitude: 53.34, longitude: -6.26 },
+    displayText: input.displayText ?? "Heuston Station",
+    mode: "typed_origin" as const,
+    placeId: input.placeId ?? decodeGooglePlaceId("google-place-origin"),
+  } satisfies UnsignedTypedOrigin;
+
+  return {
+    ...origin,
+    originToken: await signProximityOriginToken({
+      origin,
+      secret: PROXIMITY_ORIGIN_TOKEN_SECRET,
+      ttlSeconds: 300,
+    }),
+  };
+}
 
 describe("SitesService contracts", () => {
   it("keeps site creation focused on optional location and access details", () => {
@@ -685,6 +733,426 @@ describe("SitesService contracts", () => {
       longitude: -6.1956,
     });
   });
+
+  it("ranks mapped sites by driving time with active job summaries", async () => {
+    let capturedFilters: SiteProximityFilters | undefined;
+    let capturedRankInput: RankRoutesInput | undefined;
+    let previewCalls = 0;
+    const closestSite = makeMappedSite(
+      "11111111-1111-4111-8111-111111111301",
+      "Canal Terrace",
+      53.341,
+      -6.261
+    );
+    const urgentSite = makeMappedSite(
+      "11111111-1111-4111-8111-111111111302",
+      "Harbour Row",
+      53.347,
+      -6.23
+    );
+    const noRouteSite = makeMappedSite(
+      "11111111-1111-4111-8111-111111111303",
+      "Private Avenue",
+      53.361,
+      -6.305
+    );
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.rankNearbySites({
+          filters: { query: "Dublin" },
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        })
+      ),
+      {
+        listProximityCandidates: (_organizationId, filters) => {
+          capturedFilters = filters;
+          return Effect.succeed({
+            candidateCount: 4,
+            candidateLimitApplied: false,
+            candidates: [
+              {
+                activeJobCount: 1,
+                highestActiveJobPriority: "medium",
+                site: closestSite,
+              },
+              {
+                activeJobCount: 2,
+                highestActiveJobPriority: "urgent",
+                site: urgentSite,
+              },
+              {
+                activeJobCount: 1,
+                highestActiveJobPriority: "high",
+                site: noRouteSite,
+              },
+            ],
+            excluded: [{ count: 1, reason: "missing_coordinates" }],
+          });
+        },
+        previewRoute: (_input) => {
+          previewCalls += 1;
+          return Effect.die("RouteProvider.previewRoute was not expected");
+        },
+        rankRoutes: (input) => {
+          capturedRankInput = input;
+          return Effect.succeed({
+            rows: [
+              {
+                destinationId: urgentSite.id,
+                routeSummary: makeRouteSummary(320, 1600),
+              },
+              {
+                destinationId: closestSite.id,
+                routeSummary: makeRouteSummary(360, 900),
+              },
+            ],
+            unavailableDestinationIds: [noRouteSite.id],
+          });
+        },
+      }
+    );
+
+    expect(capturedFilters).toStrictEqual({ query: "Dublin" });
+    expect(capturedRankInput?.destinations).toStrictEqual([
+      {
+        coordinates: { latitude: 53.341, longitude: -6.261 },
+        destinationId: closestSite.id,
+      },
+      {
+        coordinates: { latitude: 53.347, longitude: -6.23 },
+        destinationId: urgentSite.id,
+      },
+      {
+        coordinates: { latitude: 53.361, longitude: -6.305 },
+        destinationId: noRouteSite.id,
+      },
+    ]);
+    expect(previewCalls).toBe(0);
+    expect(result.rows.map((row) => row.site.id)).toStrictEqual([
+      urgentSite.id,
+      closestSite.id,
+    ]);
+    expect(result.rows[0]).toMatchObject({
+      activeJobCount: 2,
+      highestActiveJobPriority: "urgent",
+      site: urgentSite,
+    });
+    expect(result.meta).toMatchObject({
+      candidateCount: 4,
+      candidateLimitApplied: false,
+      excluded: [
+        { count: 1, reason: "missing_coordinates" },
+        { count: 1, reason: "no_driving_route" },
+      ],
+      rankedCandidateLimit: 100,
+    });
+  });
+
+  it("returns an inline route preview for a mapped site", async () => {
+    let capturedPreviewInput: RoutePreviewInput | undefined;
+    const site = makeMappedSite(
+      "11111111-1111-4111-8111-111111111401",
+      "Mill Lane",
+      53.344,
+      -6.248
+    );
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.getSiteRoutePreview(site.id, {
+          includeRouteLine: true,
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        })
+      ),
+      {
+        getActiveJobSummary: () =>
+          Effect.succeed({
+            activeJobCount: 3,
+            highestActiveJobPriority: "high",
+          }),
+        getOptionById: () => Effect.succeed(Option.some(site)),
+        previewRoute: (input) => {
+          capturedPreviewInput = input;
+          return Effect.succeed({
+            line: {
+              encodedPolyline: "encoded-site-route",
+              format: "encoded_polyline" as const,
+            },
+            routeSummary: {
+              ...makeRouteSummary(510, 2300),
+              providerRequestKind: "route_preview" as const,
+            },
+          });
+        },
+        rankRoutes: () =>
+          Effect.die("RouteProvider.rankRoutes should not be called"),
+      }
+    );
+
+    expect(capturedPreviewInput).toMatchObject({
+      destination: {
+        coordinates: { latitude: 53.344, longitude: -6.248 },
+        destinationId: site.id,
+      },
+      includeLine: true,
+      origin: { latitude: 53.34, longitude: -6.26 },
+    });
+    expect(result).toMatchObject({
+      activeJobCount: 3,
+      highestActiveJobPriority: "high",
+      site,
+    });
+    expect(result.routeLine).toStrictEqual({
+      encodedPolyline: "encoded-site-route",
+      format: "encoded_polyline",
+    });
+    expect(result.routeSummary.providerRequestKind).toBe("route_preview");
+  });
+
+  it("rejects current-location site ranking when location preference is disabled", async () => {
+    let candidateCalls = 0;
+    let routeCalls = 0;
+
+    const exit = await Effect.runPromiseExit(
+      sitesServiceCall((sites) =>
+        sites.rankNearbySites({
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        })
+      ).pipe(
+        Effect.provide(SitesService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeSitesServiceTestLayer({
+            listProximityCandidates: () => {
+              candidateCalls += 1;
+              return Effect.die(
+                "SitesRepository.listProximityCandidates should not be called"
+              );
+            },
+            previewRoute: () =>
+              Effect.die("RouteProvider.previewRoute should not be called"),
+            rankRoutes: () => {
+              routeCalls += 1;
+              return Effect.die(
+                "RouteProvider.rankRoutes should not be called"
+              );
+            },
+            routeProximityLocationEnabled: false,
+          })
+        )
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
+      expect(failure).toBeInstanceOf(ProximityAccessDeniedError);
+      expect(failure).toMatchObject({
+        message: "Current location access is disabled for this user.",
+      });
+    }
+    expect(candidateCalls).toBe(0);
+    expect(routeCalls).toBe(0);
+  });
+
+  it("allows typed-origin site ranking when location preference is disabled", async () => {
+    let candidateCalls = 0;
+    const origin = await makeSignedTypedOrigin();
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.rankNearbySites({
+          origin,
+        })
+      ),
+      {
+        listProximityCandidates: () => {
+          candidateCalls += 1;
+          return Effect.succeed({
+            candidateCount: 0,
+            candidateLimitApplied: false,
+            candidates: [],
+            excluded: [],
+          });
+        },
+        previewRoute: () =>
+          Effect.die("RouteProvider.previewRoute should not be called"),
+        rankRoutes: (input) =>
+          Effect.succeed({
+            rows: input.destinations.map((destination) => ({
+              destinationId: destination.destinationId,
+              routeSummary: makeRouteSummary(120, 1000),
+            })),
+            unavailableDestinationIds: [],
+          }),
+        routeProximityLocationEnabled: false,
+      },
+      { withProximityOriginConfig: true }
+    );
+
+    expect(candidateCalls).toBe(1);
+    expect(result.origin).toMatchObject({
+      displayText: "Heuston Station",
+      mode: "typed_origin",
+    });
+  });
+
+  it("rejects tampered typed-origin site ranking before loading candidates", async () => {
+    let candidateCalls = 0;
+    const signedOrigin = await makeSignedTypedOrigin();
+
+    const exit = await Effect.runPromiseExit(
+      sitesServiceCall((sites) =>
+        sites.rankNearbySites({
+          origin: {
+            ...signedOrigin,
+            coordinates: { latitude: 53.35, longitude: -6.27 },
+          },
+        })
+      ).pipe(
+        Effect.provide(SitesService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeSitesServiceTestLayer({
+            listProximityCandidates: () => {
+              candidateCalls += 1;
+              return Effect.die(
+                "SitesRepository.listProximityCandidates should not be called"
+              );
+            },
+            previewRoute: () =>
+              Effect.die("RouteProvider.previewRoute should not be called"),
+            rankRoutes: () =>
+              Effect.die("RouteProvider.rankRoutes should not be called"),
+            routeProximityLocationEnabled: false,
+          })
+        ),
+        withConfigProvider(proximityOriginConfigProvider)
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
+      expect(failure).toBeInstanceOf(ProximityAccessDeniedError);
+      expect(failure).toMatchObject({
+        message: "Typed origin access could not be verified.",
+      });
+    }
+    expect(candidateCalls).toBe(0);
+  });
+
+  it("rejects current-location site route previews before loading the site when location preference is unavailable", async () => {
+    let getOptionCalls = 0;
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111402");
+
+    const exit = await Effect.runPromiseExit(
+      sitesServiceCall((sites) =>
+        sites.getSiteRoutePreview(siteId, {
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        })
+      ).pipe(
+        Effect.provide(SitesService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeSitesServiceTestLayer({
+            getOptionById: () => {
+              getOptionCalls += 1;
+              return Effect.die(
+                "SitesRepository.getOptionById should not be called"
+              );
+            },
+            previewRoute: () =>
+              Effect.die("RouteProvider.previewRoute should not be called"),
+            rankRoutes: () =>
+              Effect.die("RouteProvider.rankRoutes should not be called"),
+            userPreferencesGet: () =>
+              Effect.fail(
+                new UserPreferencesStorageError({
+                  message: "User preferences storage operation failed",
+                })
+              ),
+          })
+        )
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
+      expect(failure).toBeInstanceOf(ProximityAccessDeniedError);
+      expect(failure).toMatchObject({
+        message: "Current location access could not be verified.",
+      });
+    }
+    expect(getOptionCalls).toBe(0);
+  });
+
+  it("reports how many routeable sites were omitted by the 100-candidate cap", async () => {
+    const mappedSites = Array.from({ length: 100 }, (_, index) => {
+      const suffix = String(index + 1).padStart(12, "0");
+
+      return {
+        activeJobCount: index % 3,
+        highestActiveJobPriority: "medium" as const,
+        site: makeMappedSite(
+          `11111111-1111-4111-8111-${suffix}`,
+          `Site ${index + 1}`,
+          53.3 + index / 10_000,
+          -6.2 - index / 10_000
+        ),
+      };
+    });
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.rankNearbySites({
+          origin: {
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        })
+      ),
+      {
+        listProximityCandidates: () =>
+          Effect.succeed({
+            candidateCount: 126,
+            candidateLimitApplied: true,
+            candidates: mappedSites,
+            excluded: [],
+          }),
+        previewRoute: () =>
+          Effect.die("RouteProvider.previewRoute was not expected"),
+        rankRoutes: (input) =>
+          Effect.succeed({
+            rows: input.destinations.slice(0, 10).map((destination, index) => ({
+              destinationId: destination.destinationId,
+              routeSummary: makeRouteSummary(180 + index, 1500 + index),
+            })),
+            unavailableDestinationIds: [],
+          }),
+      }
+    );
+
+    expect(result.rows).toHaveLength(10);
+    expect(result.meta.excluded).toContainEqual({
+      count: 26,
+      reason: "candidate_cap",
+    });
+  });
 });
 
 type TestSitesServiceRequirements =
@@ -692,9 +1160,11 @@ type TestSitesServiceRequirements =
   | CurrentOrganizationActor
   | HttpServerRequest.HttpServerRequest
   | OrganizationAuthorization
+  | RouteProximityService
   | SiteLabelAssignmentsRepository
   | SiteLocationProvider
-  | SitesRepository;
+  | SitesRepository
+  | UserPreferencesRepository;
 
 function sitesServiceCall<
   Value,
@@ -718,13 +1188,18 @@ function runSitesServiceEffect<Value, Error>(
     Error,
     SitesService | TestSitesServiceRequirements
   >,
-  options: Partial<TestSitesDependencies> = {}
+  options: Partial<TestSitesDependencies> = {},
+  testOptions: { readonly withProximityOriginConfig?: boolean } = {}
 ) {
+  const provided = effect.pipe(
+    Effect.provide(SitesService.DefaultWithoutDependencies),
+    Effect.provide(makeSitesServiceTestLayer(options))
+  );
+
   return Effect.runPromise(
-    effect.pipe(
-      Effect.provide(SitesService.DefaultWithoutDependencies),
-      Effect.provide(makeSitesServiceTestLayer(options))
-    )
+    testOptions.withProximityOriginConfig === true
+      ? provided.pipe(withConfigProvider(proximityOriginConfigProvider))
+      : provided
   );
 }
 
@@ -736,10 +1211,24 @@ interface TestSitesDependencies {
   readonly getOptionById: ContextService<
     typeof SitesRepository
   >["getOptionById"];
+  readonly getActiveJobSummary: ContextService<
+    typeof SitesRepository
+  >["getActiveJobSummary"];
+  readonly listProximityCandidates: ContextService<
+    typeof SitesRepository
+  >["listProximityCandidates"];
+  readonly previewRoute: (
+    input: RoutePreviewInput
+  ) => ReturnType<ContextService<typeof RouteProvider>["previewRoute"]>;
+  readonly rankRoutes: ContextService<typeof RouteProvider>["rankRoutes"];
+  readonly routeProximityLocationEnabled: boolean;
   readonly resolvePlace: ContextService<
     typeof SiteLocationProvider
   >["resolvePlace"];
   readonly update: ContextService<typeof SitesRepository>["update"];
+  readonly userPreferencesGet: ContextService<
+    typeof UserPreferencesRepository
+  >["get"];
 }
 
 function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
@@ -765,6 +1254,10 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
         ensureCanViewOrganizationData: () => Effect.void,
       } as unknown as ContextService<typeof OrganizationAuthorization>)
     ),
+    makeUserPreferencesRepositoryLayer({
+      get: options.userPreferencesGet,
+      routeProximityLocationEnabled: options.routeProximityLocationEnabled,
+    }),
     Layer.succeed(
       SiteLocationProvider,
       SiteLocationProvider.of({
@@ -776,6 +1269,26 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
           (() => Effect.die("SiteLocationProvider.resolvePlace not stubbed")),
       })
     ),
+    options.rankRoutes === undefined
+      ? Layer.succeed(
+          RouteProximityService,
+          RouteProximityService.of(
+            {} as ContextService<typeof RouteProximityService>
+          )
+        )
+      : RouteProximityService.DefaultWithoutDependencies.pipe(
+          Layer.provide(
+            Layer.succeed(
+              RouteProvider,
+              RouteProvider.of({
+                previewRoute:
+                  options.previewRoute ??
+                  (() => Effect.die("RouteProvider.previewRoute not stubbed")),
+                rankRoutes: options.rankRoutes,
+              })
+            )
+          )
+        ),
     Layer.succeed(
       SiteLabelAssignmentsRepository,
       SiteLabelAssignmentsRepository.of(
@@ -791,6 +1304,13 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
         getOptionById:
           options.getOptionById ??
           (() => Effect.die("SitesRepository.getOptionById not stubbed")),
+        getActiveJobSummary:
+          options.getActiveJobSummary ??
+          (() => Effect.die("SitesRepository.getActiveJobSummary not stubbed")),
+        listProximityCandidates:
+          options.listProximityCandidates ??
+          (() =>
+            Effect.die("SitesRepository.listProximityCandidates not stubbed")),
         update:
           options.update ??
           (() => Effect.die("SitesRepository.update not stubbed")),
@@ -800,4 +1320,65 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
       } as unknown as ContextService<typeof SitesRepository>)
     )
   );
+}
+
+function makeUserPreferencesRepositoryLayer(
+  options: {
+    readonly get?:
+      | ContextService<typeof UserPreferencesRepository>["get"]
+      | undefined;
+    readonly routeProximityLocationEnabled?: boolean | undefined;
+  } = {}
+) {
+  return Layer.succeed(
+    UserPreferencesRepository,
+    UserPreferencesRepository.of({
+      get:
+        options.get ??
+        (() =>
+          Effect.succeed(
+            decodeUserPreferences({
+              routeProximityLocationEnabled:
+                options.routeProximityLocationEnabled ?? true,
+              updatedAt: "2026-05-20T09:00:00.000Z",
+            })
+          )),
+      update: () => Effect.die("UserPreferencesRepository.update not stubbed"),
+    })
+  );
+}
+
+function makeMappedSite(
+  id: string,
+  name: string,
+  latitude: number,
+  longitude: number
+) {
+  return decodeSiteOption({
+    displayLocation: `${name}, Dublin`,
+    formattedAddress: `${name}, Dublin, Ireland`,
+    googlePlaceId: `place-${id}`,
+    hasUsableCoordinates: true,
+    id,
+    labels: [],
+    latitude,
+    locationProvider: "google_places",
+    locationResolvedAt: "2026-05-20T09:00:00.000Z",
+    locationStatus: "google_resolved",
+    longitude,
+    name,
+    rawLocationInput: name,
+  });
+}
+
+function makeRouteSummary(durationSeconds: number, distanceMeters: number) {
+  return {
+    computedAt: "2026-05-20T10:15:00.000Z",
+    distanceMeters,
+    durationSeconds,
+    provider: "google_routes" as const,
+    providerRequestKind: "matrix" as const,
+    routeStatus: "ok" as const,
+    trafficAware: true,
+  };
 }

@@ -1,4 +1,7 @@
-import type { OrganizationSummary } from "@ceird/identity-core";
+import type {
+  OrganizationSummary,
+  UserPreferences,
+} from "@ceird/identity-core";
 import { CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useForm } from "@tanstack/react-form";
@@ -22,6 +25,11 @@ import {
 } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { EntryShell, EntrySurfaceCard } from "#/features/auth/entry-shell";
+import { LocationPreferencePanel } from "#/features/settings/location-preference-panel";
+import {
+  DEFAULT_USER_PREFERENCES,
+  updateCurrentUserPreferences,
+} from "#/features/settings/user-preferences-api";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
@@ -223,6 +231,11 @@ function InviteMembersStep({
   readonly organization: OrganizationSummary;
 }) {
   const [hasSentInvite, setHasSentInvite] = React.useState(false);
+  const [preferences, setPreferences] = React.useState<UserPreferences>(
+    DEFAULT_USER_PREFERENCES
+  );
+  const [locationPreferenceSaving, setLocationPreferenceSaving] =
+    React.useState(false);
   const [roleSelectOpen, setRoleSelectOpen] = React.useState(false);
   const form = useForm({
     defaultValues: DEFAULT_INVITE_VALUES,
@@ -292,12 +305,30 @@ function InviteMembersStep({
                 : "min-h-11 px-3 text-muted-foreground sm:min-h-9"
             )}
             onClick={() => void onContinue()}
+            disabled={locationPreferenceSaving}
           >
             {hasSentInvite ? "Continue to Ceird" : "Skip for now"}
           </Button>
         </div>
       }
     >
+      <LocationPreferencePanel
+        preferences={preferences}
+        onPreferenceChange={async (routeProximityLocationEnabled) => {
+          setLocationPreferenceSaving(true);
+
+          try {
+            const response = await updateCurrentUserPreferences({
+              routeProximityLocationEnabled,
+            });
+            setPreferences(response.preferences);
+            return response.preferences;
+          } finally {
+            setLocationPreferenceSaving(false);
+          }
+        }}
+      />
+
       <form
         className="flex flex-col gap-6"
         method="post"

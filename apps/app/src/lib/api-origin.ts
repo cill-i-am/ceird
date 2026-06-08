@@ -30,6 +30,54 @@ export function resolveApiOrigin(
   return mapAppOriginToApiOrigin(url)?.origin;
 }
 
+function shouldUseLocalAppApiProxy(
+  origin: URL,
+  configuredUrl: URL | undefined
+) {
+  return (
+    origin.protocol === "http:" &&
+    origin.hostname === "app.localhost" &&
+    (configuredUrl === undefined ||
+      (configuredUrl.protocol === "http:" &&
+        configuredUrl.hostname === "api.localhost" &&
+        configuredUrl.port === origin.port))
+  );
+}
+
+export function resolveBrowserApiOrigin(
+  origin?: string | undefined,
+  explicitApiOrigin?: string | undefined
+): string | undefined {
+  const configuredUrl =
+    typeof explicitApiOrigin === "string"
+      ? toURL(explicitApiOrigin)
+      : undefined;
+  const url = typeof origin === "string" ? toURL(origin) : undefined;
+
+  if (url && shouldUseLocalAppApiProxy(url, configuredUrl)) {
+    return url.origin;
+  }
+
+  return resolveApiOrigin(origin, explicitApiOrigin);
+}
+
+export function resolveBrowserAppApiBaseURL(
+  origin?: string | undefined,
+  explicitApiOrigin?: string | undefined
+): string | undefined {
+  const configuredUrl =
+    typeof explicitApiOrigin === "string"
+      ? toURL(explicitApiOrigin)
+      : undefined;
+  const url = typeof origin === "string" ? toURL(origin) : undefined;
+
+  if (url && shouldUseLocalAppApiProxy(url, configuredUrl)) {
+    return new URL("/api", url.origin).toString();
+  }
+
+  return resolveApiOrigin(origin, explicitApiOrigin);
+}
+
 export function readConfiguredApiOrigin(): string | undefined {
   const envOrigin = import.meta.env.VITE_API_ORIGIN;
   return typeof envOrigin === "string" ? envOrigin : undefined;

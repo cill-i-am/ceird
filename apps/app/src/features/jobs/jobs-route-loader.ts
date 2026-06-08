@@ -20,6 +20,7 @@ import {
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import { requireOrganizationRouteContextRole } from "#/features/organizations/organization-route-access";
 import type { OrganizationProductRouteContext } from "#/features/organizations/organization-route-access";
+import { loadRouteProximityLocationPreferenceEnabled } from "#/features/settings/route-proximity-location-preference";
 
 const EMPTY_JOBS_LIST: JobListResponse = {
   items: [],
@@ -38,6 +39,7 @@ export async function loadJobsRouteData(
       dataPlaneSeeds: [],
       list: EMPTY_JOBS_LIST,
       options: EMPTY_JOBS_OPTIONS,
+      routeProximityLocationEnabled: false,
       viewer: {
         role: "member",
         userId: decodeJobsViewerUserId(organizationAccess.currentUserId),
@@ -51,6 +53,8 @@ export async function loadJobsRouteData(
     userId: decodeJobsViewerUserId(organizationAccess.currentUserId),
   } satisfies JobsViewer;
   const listRequestStartedAt = Date.now();
+  const routeProximityLocationPreferencePromise =
+    loadRouteProximityLocationPreferenceEnabled();
   const listPromise = listAllCurrentServerJobs({});
   let optionsRequestStartedAt = Date.now();
   let optionsPromise = canUseInternalJobOptions(viewer)
@@ -64,6 +68,8 @@ export async function loadJobsRouteData(
   }
 
   const options = await optionsPromise;
+  const routeProximityLocationEnabled =
+    await routeProximityLocationPreferencePromise;
   const scope = createOrganizationDataScope({
     organizationId: organizationAccess.activeOrganizationId,
     role: viewer.role,
@@ -94,6 +100,7 @@ export async function loadJobsRouteData(
         items: seededItems,
       },
       options: seededOptions?.options ?? options,
+      routeProximityLocationEnabled,
       viewer,
     };
   }
@@ -102,6 +109,7 @@ export async function loadJobsRouteData(
     dataPlaneSeeds: [jobsSeed, jobOptionsSeed],
     list,
     options,
+    routeProximityLocationEnabled,
     viewer,
   };
 }

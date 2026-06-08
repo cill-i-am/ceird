@@ -17,6 +17,7 @@
     "@ceird/comments-core": "workspace:*",
     "@ceird/identity-core": "workspace:*",
     "@ceird/labels-core": "workspace:*",
+    "@ceird/proximity-core": "workspace:*",
     "effect": "4.0.0-beta.68"
   },
   "devDependencies": {

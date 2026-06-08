@@ -16,7 +16,11 @@ import {
 } from "better-auth/plugins/organization/access";
 import { createAuthClient } from "better-auth/react";
 
-import { readConfiguredApiOrigin, resolveApiOrigin } from "./api-origin";
+import {
+  readConfiguredApiOrigin,
+  resolveApiOrigin,
+  resolveBrowserApiOrigin,
+} from "./api-origin";
 
 export const API_BASE_PATH = "/api";
 export const AUTH_BASE_PATH = "/api/auth";
@@ -71,6 +75,32 @@ export function createCeirdAuthClientPlugins() {
   ];
 }
 
+export function resolveBrowserAuthBaseURL(
+  origin?: string | undefined,
+  explicitAuthOrigin?: string | undefined
+): string | undefined {
+  const apiOrigin = resolveBrowserApiOrigin(origin, explicitAuthOrigin);
+
+  if (!apiOrigin) {
+    return undefined;
+  }
+
+  return new URL(AUTH_BASE_PATH, apiOrigin).toString();
+}
+
+export function resolveBrowserApiBaseURL(
+  origin?: string | undefined,
+  explicitAuthOrigin?: string | undefined
+): string | undefined {
+  const apiOrigin = resolveBrowserApiOrigin(origin, explicitAuthOrigin);
+
+  if (!apiOrigin) {
+    return undefined;
+  }
+
+  return new URL(API_BASE_PATH, apiOrigin).toString();
+}
+
 export function createCeirdAuthClient(baseURL?: string | undefined) {
   return createAuthClient({
     basePath: AUTH_BASE_PATH,
@@ -102,7 +132,7 @@ function createUnavailableAuthClient(
 const defaultApiBaseURL =
   typeof window === "undefined"
     ? undefined
-    : resolveApiBaseURL(window.location.origin, configuredApiOrigin);
+    : resolveBrowserApiBaseURL(window.location.origin, configuredApiOrigin);
 export async function getPublicInvitationPreview(
   invitationId: string,
   baseURL = defaultApiBaseURL
@@ -144,7 +174,7 @@ export function createBrowserCeirdAuthClient(
   origin: string,
   explicitAuthOrigin?: string | undefined
 ) {
-  const baseURL = resolveAuthBaseURL(origin, explicitAuthOrigin);
+  const baseURL = resolveBrowserAuthBaseURL(origin, explicitAuthOrigin);
 
   if (!baseURL) {
     return createUnavailableAuthClient(

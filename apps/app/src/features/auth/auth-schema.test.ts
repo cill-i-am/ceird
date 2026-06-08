@@ -4,6 +4,7 @@ import {
   createCeirdAuthClient,
   resolveApiBaseURL,
   resolveAuthBaseURL,
+  resolveBrowserAuthBaseURL,
 } from "../../lib/auth-client";
 import * as authClientModule from "../../lib/auth-client";
 import {
@@ -185,6 +186,15 @@ describe("auth base URL resolution", () => {
     expect(resolveAuthBaseURL("http://app.localhost:1337")).toBe(
       "http://api.localhost:1337/api/auth"
     );
+  }, 1000);
+
+  it("keeps browser auth same-origin for local Alchemy app hosts", () => {
+    expect(
+      resolveBrowserAuthBaseURL(
+        "http://app.localhost:1337",
+        "http://api.localhost:1337"
+      )
+    ).toBe("http://app.localhost:1337/api/auth");
   }, 1000);
 
   it("returns undefined when no origin is available", () => {

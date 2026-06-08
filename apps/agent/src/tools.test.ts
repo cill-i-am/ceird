@@ -4,6 +4,7 @@ import {
   AgentActionRunId,
   AgentInstanceName,
 } from "@ceird/agents-core/runtime";
+import type { AgentProximityOriginContextFrame } from "@ceird/agents-core/runtime";
 import type { DomainServiceBinding } from "@ceird/domain-core";
 import { beforeEach, describe, expect, it } from "@effect/vitest";
 import type { ToolExecutionOptions } from "ai";
@@ -194,6 +195,154 @@ describe("Ceird Agent tools", () => {
       operationId: "tool:call_with_spaces:ceird.jobs.list",
       threadId: "11111111-1111-4111-8111-111111111111",
     });
+  });
+
+  it("replaces current-location proximity tool origins with hidden request origin", async () => {
+    const proximityOrigin = {
+      accuracyMeters: 12,
+      coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+      mode: "current_location",
+    } satisfies AgentProximityOriginContextFrame["origin"];
+    const tools = createCeirdTools(makeEnv(), agentInstanceName, {
+      proximityOrigin,
+    });
+    const result = await tools.rankNearbyJobs?.execute?.(
+      {
+        limit: 10,
+        origin: {
+          coordinates: { latitude: 0, longitude: 0 },
+          mode: "current_location",
+        },
+      },
+      {
+        abortSignal: new AbortController().signal,
+        messages: [],
+        toolCallId: "nearby-call",
+      } satisfies ToolExecutionOptions
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(runDomainAction).toHaveBeenCalledExactlyOnceWith(makeEnv(), {
+      input: {
+        limit: 10,
+        origin: proximityOrigin,
+      },
+      name: "ceird.jobs.proximity",
+      operationId: "tool:nearby-call:ceird.jobs.proximity",
+      threadId: "11111111-1111-4111-8111-111111111111",
+    });
+  });
+
+  it("overrides model-supplied typed proximity origins with the hidden request origin", async () => {
+    const proximityOrigin = {
+      accuracyMeters: 12,
+      coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+      mode: "current_location",
+    } satisfies AgentProximityOriginContextFrame["origin"];
+    const tools = createCeirdTools(makeEnv(), agentInstanceName, {
+      proximityOrigin,
+    });
+
+    await tools.rankNearbyJobs?.execute?.(
+      {
+        limit: 10,
+        origin: {
+          coordinates: { latitude: 53.342_886, longitude: -6.267_428 },
+          displayText: "Heuston Station",
+          mode: "typed_origin",
+          originToken: "fake-token",
+          placeId: "google-place-origin",
+        },
+      },
+      {
+        abortSignal: new AbortController().signal,
+        messages: [],
+        toolCallId: "typed-origin-call",
+      } satisfies ToolExecutionOptions
+    );
+
+    expect(runDomainAction).toHaveBeenCalledExactlyOnceWith(makeEnv(), {
+      input: {
+        limit: 10,
+        origin: proximityOrigin,
+      },
+      name: "ceird.jobs.proximity",
+      operationId: "tool:typed-origin-call:ceird.jobs.proximity",
+      threadId: "11111111-1111-4111-8111-111111111111",
+    });
+  });
+
+  it("keeps proximity tool output rich for the app but redacted for the model", async () => {
+    const tools = createCeirdTools(makeEnv(), agentInstanceName);
+    const modelOutput = await (
+      tools.rankNearbyJobs as
+        | {
+            readonly toModelOutput?: (options: {
+              readonly input: unknown;
+              readonly output: unknown;
+              readonly toolCallId: string;
+            }) => unknown;
+          }
+        | undefined
+    )?.toModelOutput?.({
+      input: {},
+      output: {
+        origin: {
+          computedAt: "2026-06-06T10:00:00.000Z",
+          coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+          displayText: "Current location",
+          mode: "current_location",
+          originToken: "secret-origin-token",
+        },
+        routeLine: {
+          coordinates: [
+            { latitude: 53.349_805, longitude: -6.260_31 },
+            { latitude: 53.3498, longitude: -6.2603 },
+          ],
+          format: "geojson_linestring",
+        },
+        rows: [
+          {
+            job: {
+              site: {
+                coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+              },
+              title: "Urgent boiler repair",
+            },
+            routeSummary: {
+              distanceMeters: 1200,
+              durationSeconds: 420,
+            },
+          },
+        ],
+      },
+      toolCallId: "model-output-call",
+    });
+
+    expect(modelOutput).toEqual({
+      type: "json",
+      value: {
+        origin: {
+          displayText: "Current location",
+          mode: "current_location",
+        },
+        rows: [
+          {
+            job: {
+              site: {},
+              title: "Urgent boiler repair",
+            },
+            routeSummary: {
+              distanceMeters: 1200,
+              durationSeconds: 420,
+            },
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(modelOutput)).not.toContain("53.349805");
+    expect(JSON.stringify(modelOutput)).not.toContain("routeLine");
+    expect(JSON.stringify(modelOutput)).not.toContain("originToken");
   });
 });
 

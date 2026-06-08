@@ -11,6 +11,7 @@ const schemaExportNames = [
   "commentsSchema",
   "contact",
   "databaseSchema",
+  "identityPreferencesSchema",
   "invitation",
   "jobsSchema",
   "jwks",
@@ -31,6 +32,7 @@ const schemaExportNames = [
   "sitesSchema",
   "twoFactor",
   "user",
+  "userPreferences",
   "verification",
   "workItem",
   "workItemActivity",
@@ -73,6 +75,9 @@ export const comment = requireSchemaExport("comment");
 export const commentsSchema = requireSchemaExport("commentsSchema");
 export const contact = requireSchemaExport("contact");
 export const databaseSchema = requireSchemaExport("databaseSchema");
+export const identityPreferencesSchema = requireSchemaExport(
+  "identityPreferencesSchema"
+);
 export const invitation = requireSchemaExport("invitation");
 export const jobsSchema = requireSchemaExport("jobsSchema");
 export const jwks = requireSchemaExport("jwks");
@@ -93,6 +98,7 @@ export const siteLabel = requireSchemaExport("siteLabel");
 export const sitesSchema = requireSchemaExport("sitesSchema");
 export const twoFactor = requireSchemaExport("twoFactor");
 export const user = requireSchemaExport("user");
+export const userPreferences = requireSchemaExport("userPreferences");
 export const verification = requireSchemaExport("verification");
 export const workItem = requireSchemaExport("workItem");
 export const workItemActivity = requireSchemaExport("workItemActivity");

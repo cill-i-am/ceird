@@ -42,10 +42,20 @@ const JobsHandlersLive = HttpApiBuilder.group(AppApi, "jobs", (handlers) =>
           .listOrganizationActivity(query)
           .pipe(observeJobsOperation("listOrganizationActivity"))
       )
+      .handle("rankNearbyJobs", ({ payload }) =>
+        jobsService
+          .rankNearbyJobs(payload)
+          .pipe(observeJobsOperation("rankNearbyJobs"))
+      )
       .handle("getJobDetail", ({ params }) =>
         jobsService
           .getDetail(params.workItemId)
           .pipe(observeJobsOperation("getJobDetail"))
+      )
+      .handle("getJobRoutePreview", ({ params, payload }) =>
+        jobsService
+          .getJobRoutePreview(params.workItemId, payload)
+          .pipe(observeJobsOperation("getJobRoutePreview"))
       )
       .handle("patchJob", ({ params, payload }) =>
         jobsService

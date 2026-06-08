@@ -90,12 +90,12 @@ describe("authenticated shell home", () => {
 
       expect(screen.getByRole("heading", { name: "Home" })).toBeInTheDocument();
       expect(
-        screen.getByText("Acme Field Ops / @acme-field-ops")
-      ).toBeVisible();
+        screen.queryByText("Acme Field Ops / @acme-field-ops")
+      ).not.toBeInTheDocument();
       const pageHeader = screen.getByRole("banner");
       expect(
-        within(pageHeader).getByRole("link", { name: /invite teammate/i })
-      ).toHaveAttribute("href", "/members");
+        within(pageHeader).queryByRole("link", { name: /invite teammate/i })
+      ).not.toBeInTheDocument();
       expect(
         within(pageHeader).getByRole("link", { name: /^new job/i })
       ).toHaveAttribute("href", "/jobs");
@@ -103,8 +103,12 @@ describe("authenticated shell home", () => {
         within(pageHeader).queryByRole("link", { name: /open jobs/i })
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("heading", { name: "Workspace overview" })
-      ).toBeInTheDocument();
+        screen.queryByRole("heading", { name: "Workspace overview" })
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("Active jobs")).toBeVisible();
+      expect(screen.getAllByText("Sites").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Members").length).toBeGreaterThan(0);
+      expect(screen.queryByText("Email")).not.toBeInTheDocument();
       expect(
         screen.getByRole("heading", { name: "Jobs at a glance" })
       ).toBeInTheDocument();
@@ -212,7 +216,8 @@ describe("authenticated shell home", () => {
       expect(
         within(nextActions as HTMLElement).getAllByRole("listitem")
       ).toHaveLength(3);
-      expect(screen.getByText("Verified")).toBeInTheDocument();
+      expect(screen.queryByText("Verified")).not.toBeInTheDocument();
+      expect(screen.queryByText("Email")).not.toBeInTheDocument();
       expect(
         within(nextActions as HTMLElement).queryByText(/verify your email/i)
       ).not.toBeInTheDocument();
@@ -285,8 +290,8 @@ describe("authenticated shell home", () => {
       );
 
       expect(
-        screen.getByRole("heading", { name: "Workspace overview" })
-      ).toBeInTheDocument();
+        screen.queryByRole("heading", { name: "Workspace overview" })
+      ).not.toBeInTheDocument();
       expect(
         screen.getByRole("heading", { name: "Jobs at a glance" })
       ).toBeInTheDocument();
@@ -296,6 +301,19 @@ describe("authenticated shell home", () => {
       expect(within(jobsPanel).getByText("Boiler replacement")).toBeVisible();
       expect(within(jobsPanel).getByText("In progress")).toBeVisible();
       expect(within(jobsPanel).getByText("Apex House")).toBeVisible();
+      const jobRowLink = within(jobsPanel)
+        .getAllByRole("link")
+        .find((link) =>
+          [
+            "Boiler replacement",
+            "Apex House",
+            "In progress",
+            "James Stewart",
+            "2026-05-14T09:00:00.000Z",
+          ].every((text) => link.textContent?.includes(text))
+        );
+      expect(jobRowLink).toBeDefined();
+      expect(jobRowLink).toHaveAttribute("href", "/jobs");
       expect(
         screen.getByRole("heading", { name: "Sites with active work" })
       ).toBeInTheDocument();
@@ -304,6 +322,18 @@ describe("authenticated shell home", () => {
       });
       expect(within(sitesPanel).getByText("Apex House")).toBeVisible();
       expect(within(sitesPanel).getByText("1 active job")).toBeVisible();
+      const siteRowLink = within(sitesPanel)
+        .getAllByRole("link")
+        .find((link) =>
+          [
+            "Apex House",
+            "1 active job",
+            "1 North Wall Quay, Dublin",
+            "2026-05-14T08:00:00.000Z",
+          ].every((text) => link.textContent?.includes(text))
+        );
+      expect(siteRowLink).toBeDefined();
+      expect(siteRowLink).toHaveAttribute("href", "/sites");
       expect(
         screen.getByRole("heading", { name: "Recent activity" })
       ).toBeInTheDocument();

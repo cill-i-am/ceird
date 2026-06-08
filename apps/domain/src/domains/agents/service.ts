@@ -40,6 +40,7 @@ import {
 } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
+import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -59,6 +60,12 @@ import type { AgentActionInputLedgerValue } from "./repositories.js";
 const DEFAULT_AGENT_ACTION_RUN_STALE_AFTER_SECONDS = 15 * 60;
 const STALE_ACTION_RUN_MESSAGE =
   "Agent action operation timed out before completion";
+const ROUTE_PROXIMITY_ACTION_NAMES = new Set<AgentActionName>([
+  "ceird.jobs.proximity",
+  "ceird.jobs.route_preview",
+  "ceird.sites.proximity",
+  "ceird.sites.route_preview",
+]);
 
 const AgentRuntimeConfig = Config.all({
   actionRunStaleAfterSeconds: Config.int(
@@ -88,6 +95,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
       const authorization = yield* OrganizationAuthorization;
       const config = yield* AgentRuntimeConfig;
       const threadsRepository = yield* AgentThreadsRepository;
+      const userPreferencesRepository = yield* UserPreferencesRepository;
 
       const loadActor = Effect.fn("AgentThreadsService.loadActor")(function* (
         operation: AgentStorageOperation
@@ -311,6 +319,53 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         }
       );
 
+      const validateCurrentLocationAccess = Effect.fn(
+        "AgentThreadsService.validateCurrentLocationAccess"
+      )(function* (threadId: AgentThreadId) {
+        yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
+        yield* ensureInternalRequest(config.internalSecret);
+
+        const threadActor = yield* threadsRepository
+          .resolveActiveThreadActor(threadId)
+          .pipe(
+            Effect.catchTag(
+              "SqlError",
+              failStorage("thread.currentLocationAccess")
+            ),
+            Effect.map(Option.getOrUndefined)
+          );
+
+        if (threadActor === undefined) {
+          return yield* Effect.fail(
+            new AgentThreadNotFoundError({
+              message: "Agent thread does not exist",
+              threadId,
+            })
+          );
+        }
+
+        const preferences = yield* userPreferencesRepository
+          .get(threadActor.actor.userId)
+          .pipe(
+            Effect.mapError(
+              () =>
+                new AgentAccessDeniedError({
+                  message: "Current location access could not be verified.",
+                })
+            )
+          );
+
+        if (!preferences.routeProximityLocationEnabled) {
+          return yield* Effect.fail(
+            new AgentAccessDeniedError({
+              message: "Current location access is disabled for this user.",
+            })
+          );
+        }
+
+        return { allowed: true } as const;
+      });
+
       const runAction = Effect.fn("AgentThreadsService.runAction")(function* (
         input: RunAgentActionInput
       ) {
@@ -375,7 +430,9 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
 
             if (isReExecutableReadReplay(begin.run)) {
               const replayed = yield* actions
-                .execute(threadActor.actor, input.name, input.input)
+                .execute(threadActor.actor, input.name, input.input, {
+                  threadId: input.threadId,
+                })
                 .pipe(Effect.result);
 
               return replayedReadResultToOutcome(replayed, {
@@ -409,7 +466,9 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
           }
 
           const result = yield* actions
-            .execute(threadActor.actor, input.name, input.input)
+            .execute(threadActor.actor, input.name, input.input, {
+              threadId: input.threadId,
+            })
             .pipe(Effect.result);
 
           if (Result.isSuccess(result)) {
@@ -450,6 +509,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         prepareSession,
         runAction,
         touchActivity,
+        validateCurrentLocationAccess,
       };
     }),
   }
@@ -494,6 +554,16 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
       Context.Service.Shape<typeof AgentThreadsService>["touchActivity"]
     >
   ) => AgentThreadsService.use((service) => service.touchActivity(...args));
+  static readonly validateCurrentLocationAccess = (
+    ...args: Parameters<
+      Context.Service.Shape<
+        typeof AgentThreadsService
+      >["validateCurrentLocationAccess"]
+    >
+  ) =>
+    AgentThreadsService.use((service) =>
+      service.validateCurrentLocationAccess(...args)
+    );
   static readonly DefaultWithoutDependencies = Layer.effect(
     AgentThreadsService,
     AgentThreadsService.make
@@ -505,7 +575,8 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         AgentActionRunsRepository.Default,
         AgentThreadsRepository.Default,
         CurrentOrganizationActor.Default,
-        OrganizationAuthorization.Default
+        OrganizationAuthorization.Default,
+        UserPreferencesRepository.Default
       )
     )
   );
@@ -795,7 +866,9 @@ function makeActionInputLedgerValue(
           actionName,
           message: "Agent action input could not be recorded",
         }),
-      try: () => JSON.stringify(input) ?? "null",
+      try: () =>
+        JSON.stringify(sanitizeActionInputForLedger(actionName, input)) ??
+        "null",
     });
     const bytes = actionInputLedgerTextEncoder.encode(serialized);
     const digest = yield* Effect.tryPromise({
@@ -813,6 +886,46 @@ function makeActionInputLedgerValue(
       sha256: bytesToHex(new Uint8Array(digest)),
     } satisfies AgentActionInputLedgerValue;
   });
+}
+
+function sanitizeActionInputForLedger(
+  actionName: AgentActionName,
+  input: unknown
+): unknown {
+  if (!ROUTE_PROXIMITY_ACTION_NAMES.has(actionName)) {
+    return input;
+  }
+
+  return sanitizeProximityLedgerValue(input);
+}
+
+function sanitizeProximityLedgerValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeProximityLedgerValue);
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      key === "origin" && isRecord(entry)
+        ? sanitizeProximityOriginForLedger(entry)
+        : sanitizeProximityLedgerValue(entry),
+    ])
+  );
+}
+
+function sanitizeProximityOriginForLedger(
+  origin: Record<string, unknown>
+): Record<string, unknown> {
+  return typeof origin.mode === "string" ? { mode: origin.mode } : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function bytesToHex(bytes: Uint8Array): string {

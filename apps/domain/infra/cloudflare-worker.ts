@@ -31,9 +31,12 @@ export interface DomainWorkerStageConfig {
   readonly authPasswordCompromiseCheckRangeUrlOverride?: string | undefined;
   readonly authRateLimitEnabled: boolean;
   readonly googleMapsApiKey: Redacted.Redacted<string>;
+  readonly googleMapsRoutesApiKey?: Redacted.Redacted<string> | undefined;
   readonly mcpAuthorizedAppCacheMaxEntries?: number | undefined;
   readonly mcpAuthorizedAppCacheTtlSeconds?: number | undefined;
   readonly mcpHostname: string;
+  readonly proximityOriginTokenTtlSeconds?: number | undefined;
+  readonly routeProvider: "google_routes" | "test";
   readonly stage?: string | undefined;
   readonly tenantBaseDomain: string;
   readonly tenantTrustedOriginPattern: string | undefined;
@@ -42,7 +45,7 @@ export interface DomainWorkerStageConfig {
 
 // oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for InferEnv.
 export type DomainWorkerBindings = {
-  readonly ANALYTICS: Cloudflare.AnalyticsEngineDataset;
+  readonly ANALYTICS?: Cloudflare.AnalyticsEngineDataset | undefined;
   readonly AUTH_EMAIL?: Cloudflare.SendEmail | undefined;
   readonly AUTH_EMAIL_QUEUE?: Cloudflare.Queue | undefined;
   readonly DATABASE?: Cloudflare.Hyperdrive | undefined;
@@ -93,14 +96,17 @@ export interface DomainWorkerConfiguredEnv {
   readonly BETTER_AUTH_SECRET: Input<Redacted.Redacted<string>>;
   readonly BETTER_AUTH_SECRETS?: Input<Redacted.Redacted<string>> | undefined;
   readonly CEIRD_LOCAL_DEV?: "true" | undefined;
+  readonly CEIRD_ROUTE_PROVIDER: "google_routes" | "test";
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
   readonly DATABASE_URL?: Input<Redacted.Redacted<string>> | undefined;
   readonly GOOGLE_MAPS_API_KEY: Redacted.Redacted<string>;
+  readonly GOOGLE_MAPS_ROUTES_API_KEY?: Redacted.Redacted<string> | undefined;
   readonly MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES?: string | undefined;
   readonly MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS?: string | undefined;
   readonly MCP_RESOURCE_URL: string;
   readonly NODE_ENV: "production";
   readonly OAUTH_ISSUER_URL: string;
+  readonly PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS?: string | undefined;
 }
 
 function optionalDomainWorkerEnv<
@@ -187,9 +193,7 @@ export function makeDomainWorkerBindings(input: {
   readonly localDev?: boolean | undefined;
 }): DomainWorkerBindingProps {
   if (input.localDev === true) {
-    return {
-      ANALYTICS: input.analytics,
-    } satisfies DomainWorkerBindingProps;
+    return {} satisfies DomainWorkerBindingProps;
   }
 
   return {
@@ -284,11 +288,16 @@ export function makeDomainWorkerEnv(input: {
       "CEIRD_LOCAL_DEV",
       input.localDev === true ? "true" : undefined
     ),
+    CEIRD_ROUTE_PROVIDER: input.config.routeProvider,
     CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: String(
       input.config.workerAnalyticsSampleRate
     ),
     ...optionalDomainWorkerEnv("DATABASE_URL", input.databaseUrl),
     GOOGLE_MAPS_API_KEY: input.config.googleMapsApiKey,
+    ...optionalDomainWorkerEnv(
+      "GOOGLE_MAPS_ROUTES_API_KEY",
+      input.config.googleMapsRoutesApiKey
+    ),
     ...optionalDomainWorkerEnv(
       "AUTH_COOKIE_DOMAIN",
       makeDomainWorkerCookieDomainEnvValue({
@@ -306,6 +315,12 @@ export function makeDomainWorkerEnv(input: {
       "MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS",
       stringifiedNumberWorkerEnvValue(
         input.config.mcpAuthorizedAppCacheTtlSeconds
+      )
+    ),
+    ...optionalDomainWorkerEnv(
+      "PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS",
+      stringifiedNumberWorkerEnvValue(
+        input.config.proximityOriginTokenTtlSeconds
       )
     ),
     MCP_RESOURCE_URL: `${mcpOrigin}/mcp`,

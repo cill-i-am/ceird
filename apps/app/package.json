@@ -24,6 +24,7 @@
     "@ceird/identity-core": "workspace:*",
     "@ceird/jobs-core": "workspace:^",
     "@ceird/labels-core": "workspace:*",
+    "@ceird/proximity-core": "workspace:*",
     "@ceird/sites-core": "workspace:*",
     "@cloudflare/ai-chat": "0.7.1",
     "@fontsource-variable/geist": "^5.2.8",

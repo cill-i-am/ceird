@@ -35,6 +35,12 @@ Agent Worker:
 - org/user/thread instance-name helpers
 - connect-token payload schemas and signing/verification helpers
 - thread DTOs, action request/response DTOs, and Effect `HttpApi` groups
+- the route-origin sideband frame schema plus
+  `agent-origin-<uuid>` `ceirdProximityOriginContextId` request-body key for
+  matching an ephemeral current-location origin to one Agent turn without
+  exposing coordinates in visible chat text or the persisted AI chat request
+  body; Agent runtime caches must keep those frame payloads short-lived and
+  delete them when consumed
 
 The root export includes the Effect `HttpApi` groups used by app/domain clients.
 The Agent Worker imports `@ceird/agents-core/runtime` instead; that subpath keeps
@@ -62,6 +68,8 @@ Exports shared identity and organization primitives:
 - organization summary schemas
 - create/update organization input schemas
 - public invitation preview schema
+- user preference DTOs and `UserPreferencesApiGroup`, including the global
+  route-proximity location opt-in
 - decode helpers for untrusted payloads
 
 Use this package when app, API adapter, MCP adapter, and domain code need the same organization or membership
@@ -102,9 +110,11 @@ Exports the shared jobs contract:
   access, visits, and activity event types
 - job comment DTOs extended from `@ceird/comments-core`
 - DTO schemas and inferred DTO types
+- route-aware proximity request/response DTOs for ranking filtered active jobs
+  and previewing one job route by driving time
 - typed `Schema.TaggedError` classes with HTTP status annotations
 - `JobsApi`, an Effect `HttpApi` contract for jobs, job label assignment,
-  collaborators, visits, comments, and activity
+  collaborators, visits, comments, activity, and route-aware proximity
 
 Subpath exports `@ceird/jobs-core/ids` and `@ceird/jobs-core/dto` are available
 for runtimes, such as the Agent Worker, that need schemas without pulling in the
@@ -127,6 +137,8 @@ Exports the shared sites contract:
   and cursor-paginated site list request/response DTOs; agent actions layer an
   additional `{ name, eircode }` site-create shortcut in `@ceird/agents-core`
   without changing the public sites DTO
+- route-aware proximity request/response DTOs for ranking mapped sites and
+  previewing one site route by driving time, including active-job summary fields
 - Google Places autocomplete and place-details request/response DTOs
 - site comment DTOs extended from `@ceird/comments-core`
 - site label assignment inputs and endpoints; this package depends on
@@ -141,6 +153,31 @@ available for schema-only consumers that should not bundle HTTP API groups.
 Sites are independent shared organization data. Keep Google Places provider
 calls, future Address Validation integration, SQL repositories, authorization,
 and React state in the domain Worker or app.
+
+## `@ceird/proximity-core`
+
+Path: `packages/proximity-core`
+
+Exports shared route-aware proximity contracts used by jobs, sites, the domain
+Worker, the browser app, and agent action schemas:
+
+- current-location and signed typed-origin discriminated-union inputs
+- Google Maps origin autocomplete/place-details request and response DTOs
+- short-lived typed-origin proof token schemas and HMAC signing/verification
+  helpers for server-issued typed origins
+- route summary, display-only route-line, normalized metadata, and result-limit
+  schemas
+- proximity provider, provider request-kind, cost-guard scope, and exclusion
+  literals
+- typed proximity access-denied, provider, origin-resolution, route-unavailable,
+  and cost-guard errors
+- `ProximityApi` and `ProximityApiGroup` for shared origin lookup endpoints
+
+This package owns generic route/origin payload shape. It deliberately does not
+depend on `@ceird/sites-core`; site-specific Google place and site-location
+schemas remain in `@ceird/sites-core` to avoid package cycles. Keep provider
+clients, cache policy, quota accounting, SQL repositories, authorization, and UI
+state outside this package.
 
 ## `@ceird/labels-core`
 
@@ -168,6 +205,7 @@ apps/app
   -> @ceird/jobs-core
   -> @ceird/sites-core
   -> @ceird/labels-core
+  -> @ceird/proximity-core
 
 apps/domain
   -> @ceird/agents-core
@@ -176,6 +214,7 @@ apps/domain
   -> @ceird/jobs-core
   -> @ceird/sites-core
   -> @ceird/labels-core
+  -> @ceird/proximity-core
 
 apps/agent
   -> @ceird/agents-core/runtime
@@ -198,6 +237,7 @@ apps/sync
 packages/jobs-core
   -> @ceird/comments-core
   -> @ceird/identity-core
+  -> @ceird/proximity-core
   -> @ceird/sites-core
   -> @ceird/labels-core
 
@@ -205,6 +245,17 @@ packages/sites-core
   -> @ceird/comments-core
   -> @ceird/identity-core
   -> @ceird/labels-core
+  -> @ceird/proximity-core
+
+packages/agents-core
+  -> @ceird/identity-core
+  -> @ceird/jobs-core
+  -> @ceird/proximity-core
+  -> @ceird/sites-core
+  -> @ceird/labels-core
+
+packages/proximity-core
+  -> @ceird/identity-core
 
 packages/comments-core
   -> @ceird/identity-core

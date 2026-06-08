@@ -1,7 +1,6 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
 
 import {
-  loadRequestAppContextMiddlewareContext,
   optionalAuthFunctionMiddleware,
   organizationAdminFunctionMiddleware,
   organizationFunctionMiddleware,
@@ -9,6 +8,7 @@ import {
   shouldHydrateAuthContext,
   shouldHydrateOrganizationContext,
 } from "./app-context-middleware";
+import { loadRequestAppContextMiddlewareContext } from "./app-context-request-middleware";
 import { decodeServerAuthSession } from "./app-context-types";
 import type { ServerAuthSession } from "./app-context-types";
 import { buildAppAuthContextSnapshotForRequest } from "./auth-request-context.server";

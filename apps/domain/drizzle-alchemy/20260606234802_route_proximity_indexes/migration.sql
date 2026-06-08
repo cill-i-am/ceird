@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS "work_items_organization_site_active_priority_idx" ON "work_items" ("organization_id", "site_id", "status", "priority") WHERE "status" not in ('completed', 'canceled');--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "sites_organization_routeable_updated_at_idx" ON "sites" ("organization_id", "updated_at" DESC, "id" DESC) WHERE "archived_at" is null and "location_status" in ('google_resolved', 'manually_adjusted', 'validated') and "latitude" is not null and "longitude" is not null;

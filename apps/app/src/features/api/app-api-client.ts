@@ -1,7 +1,11 @@
 import { AgentActionsApiGroup, AgentThreadsApiGroup } from "@ceird/agents-core";
-import { IdentityApiGroup } from "@ceird/identity-core";
+import {
+  IdentityApiGroup,
+  UserPreferencesApiGroup,
+} from "@ceird/identity-core";
 import { JobsApiGroup } from "@ceird/jobs-core";
 import { LabelsApiGroup } from "@ceird/labels-core";
+import { ProximityApiGroup } from "@ceird/proximity-core";
 import { SitesApiGroup } from "@ceird/sites-core";
 import { Cause, Effect, Exit, Layer } from "effect";
 import {
@@ -11,7 +15,10 @@ import {
 } from "effect/unstable/http";
 import { HttpApi, HttpApiClient } from "effect/unstable/httpapi";
 
-import { resolveApiOrigin } from "#/lib/api-origin";
+import {
+  resolveApiOrigin,
+  resolveBrowserAppApiBaseURL,
+} from "#/lib/api-origin";
 import type { ServerApiForwardedHeaders } from "#/lib/server-api-forwarded-headers";
 
 import {
@@ -25,7 +32,9 @@ const CeirdApi = HttpApi.make("CeirdApi")
   .add(AgentActionsApiGroup)
   .add(IdentityApiGroup)
   .add(JobsApiGroup)
+  .add(UserPreferencesApiGroup)
   .add(LabelsApiGroup)
+  .add(ProximityApiGroup)
   .add(SitesApiGroup);
 
 const currentGlobalFetch: typeof globalThis.fetch = (input, init) =>
@@ -37,6 +46,7 @@ const AppApiHttpClientLive = Layer.mergeAll(
 );
 
 export interface AppApiClientOptions {
+  readonly apiBaseUrl?: string | undefined;
   readonly requestOrigin?: string | undefined;
   readonly apiOrigin?: string | undefined;
   readonly cookie?: string | undefined;
@@ -50,7 +60,7 @@ function resolveAppApiOrigin(
 }
 
 function makeAppApiClient(options: AppApiClientOptions = {}) {
-  const apiOrigin = resolveAppApiOrigin(options);
+  const apiOrigin = options.apiBaseUrl ?? resolveAppApiOrigin(options);
 
   if (!apiOrigin) {
     return Effect.fail(
@@ -73,7 +83,10 @@ export function makeBrowserAppApiClient(origin?: string | undefined) {
     origin ??
     (typeof window === "undefined" ? undefined : window.location.origin);
 
-  return makeAppApiClient({ requestOrigin });
+  return makeAppApiClient({
+    apiBaseUrl: resolveBrowserAppApiBaseURL(requestOrigin),
+    requestOrigin,
+  });
 }
 
 const BrowserAppApiHttpClientLive = Layer.mergeAll(

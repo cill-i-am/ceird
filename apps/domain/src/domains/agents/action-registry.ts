@@ -147,6 +147,38 @@ const domainAgentActions = [
       }),
   }),
   defineDomainAgentAction({
+    name: "ceird.sites.proximity",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.sites.proximity",
+          input
+        );
+        const sitesService = yield* SitesService;
+
+        return yield* sitesService.rankNearbySites({
+          ...payload,
+          includeRouteLines: false,
+        });
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.sites.route_preview",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.sites.route_preview",
+          input
+        );
+        const sitesService = yield* SitesService;
+
+        return yield* sitesService.getSiteRoutePreview(
+          payload.siteId,
+          payload.input
+        );
+      }),
+  }),
+  defineDomainAgentAction({
     name: "ceird.sites.create",
     execute: (_actor, input) =>
       Effect.gen(function* () {
@@ -251,6 +283,35 @@ const domainAgentActions = [
         const jobsService = yield* JobsService;
 
         return yield* jobsService.getDetail(payload.workItemId);
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.jobs.proximity",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput("ceird.jobs.proximity", input);
+        const jobsService = yield* JobsService;
+
+        return yield* jobsService.rankNearbyJobs({
+          ...payload,
+          includeRouteLines: false,
+        });
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.jobs.route_preview",
+    execute: (_actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput(
+          "ceird.jobs.route_preview",
+          input
+        );
+        const jobsService = yield* JobsService;
+
+        return yield* jobsService.getJobRoutePreview(
+          payload.workItemId,
+          payload.input
+        );
       }),
   }),
   defineDomainAgentAction({
