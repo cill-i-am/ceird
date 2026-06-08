@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
 import { APP_ORIGIN } from "../test-urls";
-import { waitForSubmitHydration } from "./wait-for-submit-hydration";
+import { waitForLocatorHydration } from "./wait-for-submit-hydration";
 
 export class LocationAccessPage {
   readonly page: Page;
@@ -24,7 +24,7 @@ export class LocationAccessPage {
         timeout: 15_000,
       }),
       expect(this.heading).toBeVisible({ timeout: 15_000 }),
-      waitForSubmitHydration(this.page),
+      waitForLocatorHydration(this.skip),
     ]);
   }
 
