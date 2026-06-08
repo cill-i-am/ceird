@@ -14,6 +14,7 @@ export const configWithoutCloudflareBootstrapSecrets = {
   authCookieDomain: "example.com",
   authCookiePrefix: "ceird-main",
   authCaptchaEnabled: undefined,
+  authCaptchaSiteVerifyRequestTimeoutMs: undefined,
   authCaptchaSiteVerifyUrlOverride: undefined,
   authCaptchaTurnstileSecretKey: undefined,
   authCaptchaTurnstileSiteKey: undefined,

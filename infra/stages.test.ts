@@ -551,6 +551,7 @@ describe("Alchemy stage identity", () => {
             ConfigProvider.fromEnv({
               env: {
                 AUTH_CAPTCHA_ENABLED: "true",
+                AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS: "1250",
                 AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE:
                   "http://127.0.0.1:8787/siteverify",
                 AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: "turnstile-secret-key",
@@ -566,6 +567,7 @@ describe("Alchemy stage identity", () => {
     );
 
     expect(config.authCaptchaEnabled).toBe(true);
+    expect(config.authCaptchaSiteVerifyRequestTimeoutMs).toBe(1250);
     expect(config.authCaptchaSiteVerifyUrlOverride).toBe(
       "http://127.0.0.1:8787/siteverify"
     );
@@ -576,6 +578,30 @@ describe("Alchemy stage identity", () => {
     expect(Redacted.value(config.authCaptchaTurnstileSecretKey)).toBe(
       "turnstile-secret-key"
     );
+  });
+
+  it("rejects non-positive captcha site verify request timeout before Worker env mutation", () => {
+    expect(() =>
+      Effect.runSync(
+        loadInfraStageConfig("main").pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  AUTH_CAPTCHA_ENABLED: "true",
+                  AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS: "0",
+                  AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: "turnstile-secret-key",
+                  AUTH_CAPTCHA_TURNSTILE_SITE_KEY: "turnstile-site-key",
+                  AUTH_EMAIL_FROM: "no-reply@example.com",
+                  CEIRD_ZONE_NAME: "example.com",
+                  GOOGLE_MAPS_API_KEY: "google-key",
+                },
+              })
+            )
+          )
+        )
+      )
+    ).toThrow(/AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS/);
   });
 
   it("rejects non-local captcha site verify URL overrides before Worker env mutation", () => {

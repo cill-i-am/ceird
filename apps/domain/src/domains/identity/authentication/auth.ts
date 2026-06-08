@@ -25,7 +25,6 @@ import type {
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, getIp } from "better-auth/api";
-import { captcha } from "better-auth/plugins";
 import type { Role } from "better-auth/plugins/access";
 import { jwt } from "better-auth/plugins/jwt";
 import { organization } from "better-auth/plugins/organization";
@@ -41,6 +40,11 @@ import { Context, Effect, Layer } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 
 import { AppDatabase } from "../../../platform/database/database.js";
+import {
+  makeAuthCaptchaPlugin,
+  makeAuthCaptchaProviderFailureReporter,
+} from "./auth-captcha.js";
+import type { AuthCaptchaProviderFailureReporter } from "./auth-captcha.js";
 import { loadAuthEmailConfig } from "./auth-email-config.js";
 import {
   AuthenticationEmailScheduler,
@@ -752,6 +756,9 @@ export function createAuthentication(options: {
   readonly reportEmailChangeConfirmationFailure?: (error: unknown) => void;
   readonly reportOrganizationInvitationEmailFailure?: (error: unknown) => void;
   readonly reportPasswordCompromiseCheckFailure?: (error: unknown) => void;
+  readonly reportCaptchaProviderFailure?:
+    | AuthCaptchaProviderFailureReporter
+    | undefined;
   readonly runtimeContext?: AuthEffectRuntimeContext | undefined;
   readonly sendOrganizationInvitationEmail: (
     input: OrganizationInvitationEmailInput
@@ -866,10 +873,13 @@ export function createAuthentication(options: {
       }),
       ...(captchaConfig.enabled
         ? [
-            captcha({
+            makeAuthCaptchaPlugin({
               provider: captchaConfig.provider,
               secretKey: captchaConfig.secretKey,
               endpoints: [...captchaConfig.protectedEndpoints],
+              reportProviderFailure: options.reportCaptchaProviderFailure,
+              siteVerifyRequestTimeoutMs:
+                captchaConfig.siteVerifyRequestTimeoutMs,
               ...(captchaConfig.siteVerifyURLOverride === undefined
                 ? {}
                 : {
@@ -5056,6 +5066,11 @@ export class Authentication extends Context.Service<Authentication>()(
           runtimeContext,
           backgroundTaskHandler
         );
+      const reportCaptchaProviderFailure =
+        makeAuthCaptchaProviderFailureReporter(
+          runtimeContext,
+          backgroundTaskHandler
+        );
 
       return createAuthentication({
         appOrigin: authEmailConfig.appOrigin,
@@ -5063,6 +5078,7 @@ export class Authentication extends Context.Service<Authentication>()(
         config,
         database: authDb,
         reportEmailChangeConfirmationFailure,
+        reportCaptchaProviderFailure,
         reportOrganizationInvitationEmailFailure,
         reportPasswordCompromiseCheckFailure,
         reportPasswordResetEmailFailure,

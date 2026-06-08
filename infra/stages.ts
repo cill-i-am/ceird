@@ -139,6 +139,7 @@ export interface InfraStageConfig {
   readonly authCookiePrefix: string;
   readonly authCookieDomain: DomainName | undefined;
   readonly authCaptchaEnabled: boolean | undefined;
+  readonly authCaptchaSiteVerifyRequestTimeoutMs: number | undefined;
   readonly authCaptchaSiteVerifyUrlOverride: string | undefined;
   readonly authCaptchaTurnstileSecretKey: Redacted.Redacted<string> | undefined;
   readonly authCaptchaTurnstileSiteKey: string | undefined;
@@ -268,6 +269,12 @@ const AgentActionRunStaleAfterSeconds = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(1, {
     message:
       "CEIRD_AGENT_ACTION_RUN_STALE_AFTER_SECONDS must be a positive integer",
+  })
+);
+const AuthCaptchaSiteVerifyRequestTimeoutMs = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(1, {
+    message:
+      "AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS must be a positive integer",
   })
 );
 const ProximityOriginTokenTtlSeconds = Schema.Int.check(
@@ -455,6 +462,12 @@ function decodeAgentActionRunStaleAfterSeconds(value: number) {
   ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
 }
 
+function decodeAuthCaptchaSiteVerifyRequestTimeoutMs(value: number) {
+  return Schema.decodeUnknownEffect(AuthCaptchaSiteVerifyRequestTimeoutMs)(
+    value
+  ).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+}
+
 function decodeProximityOriginTokenTtlSeconds(value: number) {
   return Schema.decodeUnknownEffect(ProximityOriginTokenTtlSeconds)(value).pipe(
     Effect.mapError((error) => new Config.ConfigError(error))
@@ -619,6 +632,11 @@ export function loadInfraStageConfig(stageInput: string) {
     const authCaptchaSiteVerifyUrlOverride = yield* Config.option(
       Config.string("AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE").pipe(
         Config.mapOrFail(decodeAuthCaptchaSiteVerifyUrl)
+      )
+    ).pipe(Effect.map(Option.getOrUndefined));
+    const authCaptchaSiteVerifyRequestTimeoutMs = yield* Config.option(
+      Config.int("AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS").pipe(
+        Config.mapOrFail(decodeAuthCaptchaSiteVerifyRequestTimeoutMs)
       )
     ).pipe(Effect.map(Option.getOrUndefined));
 
@@ -793,6 +811,7 @@ export function loadInfraStageConfig(stageInput: string) {
       authCookiePrefix,
       authCookieDomain,
       authCaptchaEnabled,
+      authCaptchaSiteVerifyRequestTimeoutMs,
       authCaptchaSiteVerifyUrlOverride,
       authCaptchaTurnstileSecretKey,
       authCaptchaTurnstileSiteKey,

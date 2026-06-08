@@ -247,6 +247,7 @@ type DomainWorkerStackRuntimeConfigEnv = Required<
     | "MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS"
     | "AUTH_COOKIE_DOMAIN"
     | "AUTH_CAPTCHA_ENABLED"
+    | "AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS"
     | "AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE"
     | "AUTH_CAPTCHA_TURNSTILE_SECRET_KEY"
     | "AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED"
@@ -520,6 +521,9 @@ describe("Cloudflare stack", () => {
     expect(domainEnv.BETTER_AUTH_SECRET).toBe(betterAuthSecret);
     expect(domainEnv.BETTER_AUTH_SECRETS).toBeUndefined();
     expect(domainEnv.AUTH_CAPTCHA_ENABLED).toBeUndefined();
+    expect(
+      domainEnv.AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS
+    ).toBeUndefined();
     expect(domainEnv.AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE).toBeUndefined();
     expect(domainEnv.AUTH_CAPTCHA_TURNSTILE_SECRET_KEY).toBeUndefined();
     expect(domainEnv.AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED).toBeUndefined();
@@ -870,6 +874,7 @@ describe("Cloudflare stack", () => {
     const config = {
       ...configWithoutCloudflareBootstrapSecrets,
       authCaptchaEnabled: true,
+      authCaptchaSiteVerifyRequestTimeoutMs: 1250,
       authCaptchaSiteVerifyUrlOverride: "http://127.0.0.1:8787/siteverify",
       authCaptchaTurnstileSecretKey: turnstileSecretKey,
       authCaptchaTurnstileSiteKey: "turnstile-site-key",
@@ -889,6 +894,7 @@ describe("Cloudflare stack", () => {
 
     expect(domainEnv).toMatchObject({
       AUTH_CAPTCHA_ENABLED: "true",
+      AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS: "1250",
       AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE: "http://127.0.0.1:8787/siteverify",
       AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: turnstileSecretKey,
     });

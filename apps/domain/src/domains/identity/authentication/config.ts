@@ -4,6 +4,7 @@ import {
   DEFAULT_APP_DATABASE_URL,
   appDatabaseUrlConfig,
 } from "../../../platform/database/config.js";
+import { DEFAULT_AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS } from "./auth-captcha.js";
 import type { FetchPasswordRange } from "./auth-password-compromise.js";
 import {
   loadRateLimitCleanupConfig,
@@ -164,6 +165,14 @@ const AuthenticationCaptchaSiteVerifyURLOverride = Schema.String.pipe(
 );
 const decodeAuthenticationCaptchaSiteVerifyURLOverride =
   Schema.decodeUnknownSync(AuthenticationCaptchaSiteVerifyURLOverride);
+const AuthenticationCaptchaSiteVerifyRequestTimeoutMs = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(1, {
+    message:
+      "AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS must be a positive integer",
+  })
+);
+const decodeAuthenticationCaptchaSiteVerifyRequestTimeoutMs =
+  Schema.decodeUnknownEffect(AuthenticationCaptchaSiteVerifyRequestTimeoutMs);
 const AuthenticationPasswordCompromiseCheckRangeURLOverride =
   Schema.String.pipe(
     Schema.refine(
@@ -281,6 +290,7 @@ export interface AuthenticationEnvironment {
   readonly appOrigin?: string | undefined;
   readonly baseUrl: string;
   readonly captchaEnabled?: boolean | undefined;
+  readonly captchaSiteVerifyRequestTimeoutMs?: number | undefined;
   readonly captchaSiteVerifyURLOverride?: string | undefined;
   readonly captchaTurnstileSecretKey?: string | undefined;
   readonly cookieDomain?: string | undefined;
@@ -388,6 +398,7 @@ export interface AuthenticationConfig {
         readonly enabled: false;
         readonly provider: typeof AUTH_CAPTCHA_PROVIDER;
         readonly protectedEndpoints: typeof AUTH_CAPTCHA_PROTECTED_ENDPOINTS;
+        readonly siteVerifyRequestTimeoutMs: number;
         readonly siteVerifyURLOverride?: string | undefined;
       }
     | {
@@ -395,6 +406,7 @@ export interface AuthenticationConfig {
         readonly provider: typeof AUTH_CAPTCHA_PROVIDER;
         readonly protectedEndpoints: typeof AUTH_CAPTCHA_PROTECTED_ENDPOINTS;
         readonly secretKey: string;
+        readonly siteVerifyRequestTimeoutMs: number;
         readonly siteVerifyURLOverride?: string | undefined;
       };
   readonly emailAndPassword: {
@@ -777,10 +789,33 @@ function makePasswordCompromiseCheckRangeURLOverrideFetcher(
   };
 }
 
+function validateAuthenticationCaptchaSiteVerifyRequestTimeoutMs(
+  value:
+    | number
+    | undefined = DEFAULT_AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS
+) {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(
+      "AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS must be a positive integer"
+    );
+  }
+
+  return value;
+}
+
+function decodeAuthenticationCaptchaSiteVerifyRequestTimeoutMsConfig(
+  value: number
+) {
+  return decodeAuthenticationCaptchaSiteVerifyRequestTimeoutMs(value).pipe(
+    Effect.mapError((error) => new Config.ConfigError(error))
+  );
+}
+
 function makeAuthenticationCaptchaConfig(
   environment: Pick<
     AuthenticationEnvironment,
     | "captchaEnabled"
+    | "captchaSiteVerifyRequestTimeoutMs"
     | "captchaSiteVerifyURLOverride"
     | "captchaTurnstileSecretKey"
   >
@@ -789,12 +824,17 @@ function makeAuthenticationCaptchaConfig(
     normalizeAuthenticationCaptchaSiteVerifyURLOverride(
       environment.captchaSiteVerifyURLOverride
     );
+  const siteVerifyRequestTimeoutMs =
+    validateAuthenticationCaptchaSiteVerifyRequestTimeoutMs(
+      environment.captchaSiteVerifyRequestTimeoutMs
+    );
 
   if (environment.captchaEnabled !== true) {
     return {
       enabled: false,
       provider: AUTH_CAPTCHA_PROVIDER,
       protectedEndpoints: AUTH_CAPTCHA_PROTECTED_ENDPOINTS,
+      siteVerifyRequestTimeoutMs,
       ...(siteVerifyURLOverride === undefined
         ? {}
         : {
@@ -816,6 +856,7 @@ function makeAuthenticationCaptchaConfig(
     provider: AUTH_CAPTCHA_PROVIDER,
     protectedEndpoints: AUTH_CAPTCHA_PROTECTED_ENDPOINTS,
     secretKey,
+    siteVerifyRequestTimeoutMs,
     ...(siteVerifyURLOverride === undefined
       ? {}
       : {
@@ -1040,6 +1081,14 @@ export const loadAuthenticationConfig = Effect.gen(
       ),
       Config.option
     );
+    const captchaSiteVerifyRequestTimeoutMs = yield* Config.int(
+      "AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS"
+    ).pipe(
+      Config.mapOrFail(
+        decodeAuthenticationCaptchaSiteVerifyRequestTimeoutMsConfig
+      ),
+      Config.withDefault(DEFAULT_AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS)
+    );
     const trustedOrigins = yield* pipe(
       Config.string("AUTH_TRUSTED_ORIGINS"),
       Config.option
@@ -1090,6 +1139,7 @@ export const loadAuthenticationConfig = Effect.gen(
       appOrigin: Option.getOrUndefined(appOrigin),
       baseUrl,
       captchaEnabled,
+      captchaSiteVerifyRequestTimeoutMs,
       captchaSiteVerifyURLOverride: trimOptionalConfigValue(
         captchaSiteVerifyURLOverride
       ),

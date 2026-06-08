@@ -104,11 +104,15 @@ describe("Cloudflare Worker environment config", () => {
     const config = domainWorkerEnvConfigMap({
       ...makeWorkerEnv(),
       AUTH_CAPTCHA_ENABLED: "true",
+      AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS: "1250",
       AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE: "http://127.0.0.1:8787/siteverify",
       AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: "turnstile-secret-key",
     });
 
     expect(config.get("AUTH_CAPTCHA_ENABLED")).toBe("true");
+    expect(config.get("AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS")).toBe(
+      "1250"
+    );
     expect(config.get("AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE")).toBe(
       "http://127.0.0.1:8787/siteverify"
     );

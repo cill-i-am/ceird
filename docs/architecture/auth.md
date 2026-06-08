@@ -166,11 +166,17 @@ Current config decisions:
   `/reset-password`; deployed-looking auth config enables it by default, while
   `CEIRD_LOCAL_DEV=true` or a strict loopback/`.localhost` auth base URL keeps it
   disabled unless explicitly overridden
-- Better Auth's captcha plugin is enabled when `AUTH_CAPTCHA_ENABLED=true`
-  using Cloudflare Turnstile. The first rollout protects `/sign-up/email`,
-  `/request-password-reset`, and `/send-verification-email`; ordinary
-  `/sign-in/email` is intentionally not always challenged. Conditional captcha
-  after repeated failed sign-in attempts is deferred to `TSK-116`.
+- Ceird's Better Auth captcha plugin is enabled when
+  `AUTH_CAPTCHA_ENABLED=true` using Cloudflare Turnstile. The first rollout
+  protects `/sign-up/email`, `/request-password-reset`, and
+  `/send-verification-email`; ordinary `/sign-in/email` is intentionally not
+  always challenged. Conditional captcha after repeated failed sign-in attempts
+  is deferred to `TSK-116`.
+- Turnstile Siteverify requests default to a 3000 ms timeout. Configure
+  `AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS` to tune the budget per stage.
+  Provider timeout, network failure, or malformed provider responses fail closed
+  with the existing captcha failure response and emit sanitized
+  `captcha_provider_failure` telemetry.
 - `AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE` is accepted only for strict loopback
   or `.localhost` verifier stubs. Hostnames that merely start with `127.`, such
   as `127.evil.example`, are rejected at both the domain config and Alchemy
@@ -376,8 +382,9 @@ Current note:
   until a conditional failed-attempt design exists.
 - conditional captcha after repeated failed sign-in attempts remains a backlog
   spike in `TSK-116`
-- captcha provider timeout, fail-open/fail-closed, and Ceird-owned telemetry
-  policy remains a backlog spike in `TSK-121`
+- captcha provider failures fail closed for the selected public abuse endpoints,
+  return the same user-facing captcha failure as invalid tokens, and log
+  sanitized high-severity telemetry for sustained-alerting policy
 - `rate_limit` table retention and cleanup policy remains a backlog spike in
   `TSK-113`
 - durable auth email delivery de-duplication across queue redelivery remains a
@@ -1324,6 +1331,9 @@ These are the important current rules we are following.
   side effects run
 - require Cloudflare Turnstile on selected high-abuse public auth flows when
   captcha is enabled
+- own the Turnstile Siteverify timeout and provider-failure telemetry locally
+  because Better Auth's built-in captcha plugin does not expose a verifier
+  timeout option
 - send verification links through `AuthEmailSender`
 - require verified email before organization creation, member invitations, and
   OAuth/MCP consent approvals

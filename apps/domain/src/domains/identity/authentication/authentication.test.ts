@@ -1,3 +1,5 @@
+import { setTimeout as delayForTest } from "node:timers/promises";
+
 import { getTableColumns, getTableName } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { ConfigProvider, Effect, Layer, Logger, References } from "effect";
@@ -10,6 +12,8 @@ import {
 import { Pool } from "pg";
 
 import { readMigrationSql } from "../../../platform/database/test-database.js";
+import { makeAuthCaptchaProviderFailureReporter } from "./auth-captcha.js";
+import type { AuthCaptchaProviderFailureEvent } from "./auth-captcha.js";
 import {
   makeAuthenticationRequestObservation,
   runWithAuthenticationRequestObservation,
@@ -558,8 +562,48 @@ describe("makeAuthenticationConfig()", () => {
           provider: AUTH_CAPTCHA_PROVIDER,
           protectedEndpoints: AUTH_CAPTCHA_PROTECTED_ENDPOINTS,
           secretKey: "turnstile-secret-key",
+          siteVerifyRequestTimeoutMs: 3000,
           siteVerifyURLOverride: "http://127.0.0.1:8787/siteverify",
         });
+      }
+    );
+  }, 10_000);
+
+  it("loads the Turnstile site verify request timeout from environment", async () => {
+    await withEnvironment(
+      {
+        AUTH_CAPTCHA_ENABLED: "true",
+        AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS: "1250",
+        AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: "turnstile-secret-key",
+        BETTER_AUTH_BASE_URL: "https://api.ceird.example/api/auth",
+        BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+        DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+      },
+      async (provider) => {
+        const config = await loadAuthenticationConfigForTest(provider);
+
+        expect(config.captcha).toMatchObject({
+          enabled: true,
+          siteVerifyRequestTimeoutMs: 1250,
+        });
+      }
+    );
+  }, 10_000);
+
+  it("rejects non-positive Turnstile site verify request timeouts", async () => {
+    await withEnvironment(
+      {
+        AUTH_CAPTCHA_ENABLED: "true",
+        AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS: "0",
+        AUTH_CAPTCHA_TURNSTILE_SECRET_KEY: "turnstile-secret-key",
+        BETTER_AUTH_BASE_URL: "https://api.ceird.example/api/auth",
+        BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+        DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+      },
+      async (provider) => {
+        await expect(loadAuthenticationConfigForTest(provider)).rejects.toThrow(
+          /AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS/
+        );
       }
     );
   }, 10_000);
@@ -1512,6 +1556,7 @@ describe("createAuthentication()", () => {
       expect(captchaPlugin?.options).toMatchObject({
         provider: AUTH_CAPTCHA_PROVIDER,
         secretKey: "turnstile-secret-key",
+        siteVerifyRequestTimeoutMs: 3000,
         siteVerifyURLOverride: "http://127.0.0.1:8787/siteverify",
         endpoints: [...AUTH_CAPTCHA_PROTECTED_ENDPOINTS],
       });
@@ -1647,6 +1692,300 @@ describe("createAuthentication()", () => {
       await cleanup();
     }
   });
+
+  it.each([
+    {
+      expectedFailure: "request_failed",
+      fetchSiteVerify: () => Promise.reject(new Error("network failed")),
+      name: "the fetch request rejects",
+    },
+    {
+      expectedFailure: "request_failed",
+      expectedResponseStatus: 503,
+      fetchSiteVerify: () =>
+        Promise.resolve(
+          Response.json(
+            { "error-codes": ["internal-error"], success: false },
+            { status: 503 }
+          )
+        ),
+      name: "the provider returns a non-2xx response",
+    },
+    {
+      expectedFailure: "invalid_response",
+      expectedResponseStatus: 200,
+      fetchSiteVerify: () =>
+        Promise.resolve(
+          new Response("not-json", {
+            headers: {
+              "content-type": "application/json",
+            },
+          })
+        ),
+      name: "the provider returns invalid JSON",
+    },
+    {
+      expectedFailure: "invalid_response",
+      expectedResponseStatus: 200,
+      fetchSiteVerify: () => Promise.resolve(Response.json({ ok: false })),
+      name: "the provider returns schema-invalid JSON",
+    },
+    {
+      expectedFailure: "provider_error",
+      expectedProviderErrorCodes: ["invalid-input-secret"],
+      expectedResponseStatus: 200,
+      fetchSiteVerify: () =>
+        Promise.resolve(
+          Response.json({
+            "error-codes": ["invalid-input-secret"],
+            success: false,
+          })
+        ),
+      name: "the provider reports an invalid secret",
+    },
+    {
+      expectedFailure: "provider_error",
+      expectedProviderErrorCodes: ["internal-error"],
+      expectedResponseStatus: 200,
+      fetchSiteVerify: () =>
+        Promise.resolve(
+          Response.json({ "error-codes": ["internal-error"], success: false })
+        ),
+      name: "the provider reports an internal error",
+    },
+  ] as const)(
+    "fails closed and reports sanitized captcha provider failure when $name",
+    async ({
+      expectedFailure,
+      expectedProviderErrorCodes,
+      expectedResponseStatus,
+      fetchSiteVerify,
+    }) => {
+      const reportedFailures: AuthCaptchaProviderFailureEvent[] = [];
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(fetchSiteVerify);
+      const { auth, cleanup } = createAuthenticationForPluginInspection(
+        {
+          captchaEnabled: true,
+          captchaSiteVerifyRequestTimeoutMs: 1000,
+          captchaSiteVerifyURLOverride: "http://127.0.0.1:8787/siteverify",
+          captchaTurnstileSecretKey: "turnstile-secret-key",
+        },
+        {
+          reportCaptchaProviderFailure: (failure) => {
+            reportedFailures.push(failure);
+          },
+        }
+      );
+
+      try {
+        const response = await makeAuthenticationWebHandler(auth)(
+          new Request("https://api.ceird.example/api/auth/sign-up/email", {
+            body: JSON.stringify({
+              email: "person@example.com",
+              name: "Person Example",
+              password: "correct horse battery staple",
+            }),
+            headers: {
+              "content-type": "application/json",
+              "x-captcha-response": "captcha-token",
+            },
+            method: "POST",
+          })
+        );
+
+        expect(response.status).toBe(403);
+        await expect(response.json()).resolves.toStrictEqual({
+          code: "VERIFICATION_FAILED",
+          message: "Captcha verification failed",
+        });
+        expect(reportedFailures).toHaveLength(1);
+        expect(reportedFailures[0]).toMatchObject({
+          endpointPath: "/sign-up/email",
+          failure: expectedFailure,
+          failureMode: "fail_closed",
+          provider: AUTH_CAPTCHA_PROVIDER,
+          requestTimeoutMs: 1000,
+        });
+        expect(
+          reportedFailures.map(({ providerErrorCodes, responseStatus }) => ({
+            providerErrorCodes,
+            responseStatus,
+          }))
+        ).toStrictEqual([
+          {
+            providerErrorCodes: expectedProviderErrorCodes,
+            responseStatus: expectedResponseStatus,
+          },
+        ]);
+      } finally {
+        fetchSpy.mockRestore();
+        await cleanup();
+      }
+    },
+    10_000
+  );
+
+  it("treats duplicate Turnstile tokens as user verification failures without provider telemetry", async () => {
+    const reportedFailures: AuthCaptchaProviderFailureEvent[] = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        "error-codes": ["timeout-or-duplicate"],
+        success: false,
+      })
+    );
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {
+        captchaEnabled: true,
+        captchaSiteVerifyURLOverride: "http://127.0.0.1:8787/siteverify",
+        captchaTurnstileSecretKey: "turnstile-secret-key",
+      },
+      {
+        reportCaptchaProviderFailure: (failure) => {
+          reportedFailures.push(failure);
+        },
+      }
+    );
+
+    try {
+      const response = await makeAuthenticationWebHandler(auth)(
+        new Request("https://api.ceird.example/api/auth/sign-up/email", {
+          body: JSON.stringify({
+            email: "person@example.com",
+            name: "Person Example",
+            password: "correct horse battery staple",
+          }),
+          headers: {
+            "content-type": "application/json",
+            "x-captcha-response": "duplicate-captcha-token",
+          },
+          method: "POST",
+        })
+      );
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toStrictEqual({
+        code: "VERIFICATION_FAILED",
+        message: "Captcha verification failed",
+      });
+      expect(reportedFailures).toStrictEqual([]);
+    } finally {
+      fetchSpy.mockRestore();
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("fails closed, aborts, and reports when the Turnstile verifier times out", async () => {
+    const reportedFailures: unknown[] = [];
+    let signal: AbortSignal | undefined;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((_input, init) => {
+        signal = init?.signal ?? undefined;
+
+        return Effect.runPromise(Effect.never);
+      });
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {
+        captchaEnabled: true,
+        captchaSiteVerifyRequestTimeoutMs: 1,
+        captchaSiteVerifyURLOverride: "http://127.0.0.1:8787/siteverify",
+        captchaTurnstileSecretKey: "turnstile-secret-key",
+      } as Parameters<typeof createAuthenticationForPluginInspection>[0],
+      {
+        reportCaptchaProviderFailure: (failure) => {
+          reportedFailures.push(failure);
+        },
+      }
+    );
+
+    try {
+      const response = await Promise.race([
+        makeAuthenticationWebHandler(auth)(
+          new Request("https://api.ceird.example/api/auth/sign-up/email", {
+            body: JSON.stringify({
+              email: "person@example.com",
+              name: "Person Example",
+              password: "correct horse battery staple",
+            }),
+            headers: {
+              "content-type": "application/json",
+              "x-captcha-response": "captcha-token",
+            },
+            method: "POST",
+          })
+        ),
+        delayForTest(50).then(() => "request timed out" as const),
+      ]);
+
+      expect(response).not.toBe("request timed out");
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(403);
+      await expect((response as Response).json()).resolves.toStrictEqual({
+        code: "VERIFICATION_FAILED",
+        message: "Captcha verification failed",
+      });
+      expect(signal?.aborted).toBeTruthy();
+      expect(reportedFailures).toHaveLength(1);
+      expect(reportedFailures[0]).toMatchObject({
+        endpointPath: "/sign-up/email",
+        failure: "request_timed_out",
+        failureMode: "fail_closed",
+        provider: AUTH_CAPTCHA_PROVIDER,
+        requestTimeoutMs: 1,
+      });
+    } finally {
+      fetchSpy.mockRestore();
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("logs captcha provider telemetry without raw provider failure details", async () => {
+    const { logger, logs } = captureLogs();
+    const scheduledReports: Promise<unknown>[] = [];
+
+    await Effect.gen(function* verifyCaptchaProviderFailureTelemetry() {
+      const runtimeContext = yield* Effect.context<never>();
+      const reportFailure = makeAuthCaptchaProviderFailureReporter(
+        runtimeContext,
+        (task) => {
+          scheduledReports.push(task);
+        }
+      );
+
+      reportFailure({
+        cause: new Error(
+          "failed for token=opaque-captcha-token at 203.0.113.42 using secret=turnstile-secret"
+        ),
+        endpointPath: "/sign-up/email",
+        failure: "provider_error",
+        failureMode: "fail_closed",
+        provider: AUTH_CAPTCHA_PROVIDER,
+        providerErrorCodes: ["internal-error"],
+        requestTimeoutMs: 3000,
+        responseStatus: 200,
+      });
+
+      expect(scheduledReports).toHaveLength(1);
+      yield* Effect.promise(() => scheduledReports[0] ?? Promise.resolve());
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain("captcha_provider_failure");
+    expect(serializedLogs).toContain("internal-error");
+    expect(serializedLogs).toContain(
+      "alert_on_sustained_captcha_provider_failure"
+    );
+    expect(serializedLogs).not.toContain("opaque-captcha-token");
+    expect(serializedLogs).not.toContain("203.0.113.42");
+    expect(serializedLogs).not.toContain("turnstile-secret");
+  }, 10_000);
 
   it("does not challenge mounted sign-in requests when captcha is enabled", async () => {
     const { auth, cleanup } = createAuthenticationForPluginInspection({
@@ -6403,6 +6742,7 @@ function createAuthenticationForPluginInspection(
     Pick<
       Parameters<typeof makeAuthenticationConfig>[0],
       | "captchaEnabled"
+      | "captchaSiteVerifyRequestTimeoutMs"
       | "captchaSiteVerifyURLOverride"
       | "captchaTurnstileSecretKey"
       | "passwordCompromiseCheckEnabled"
@@ -6415,6 +6755,9 @@ function createAuthenticationForPluginInspection(
   > = {},
   options: {
     readonly database?: Parameters<typeof createAuthentication>[0]["database"];
+    readonly reportCaptchaProviderFailure?: Parameters<
+      typeof createAuthentication
+    >[0]["reportCaptchaProviderFailure"];
   } = {}
 ) {
   const pool = options.database
@@ -6436,6 +6779,11 @@ function createAuthenticationForPluginInspection(
       ...environmentOverrides,
     }),
     database: options.database ?? drizzle({ client: pool as Pool }),
+    ...(options.reportCaptchaProviderFailure === undefined
+      ? {}
+      : {
+          reportCaptchaProviderFailure: options.reportCaptchaProviderFailure,
+        }),
     reportPasswordResetEmailFailure: () => {},
     reportVerificationEmailFailure: () => {},
     sendOrganizationInvitationEmail: async () => {},

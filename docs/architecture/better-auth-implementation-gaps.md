@@ -112,15 +112,16 @@ HMAC digests rather than raw addresses. Oversized or unreadable delivery
 request bodies fail before Better Auth can send mail, and Better Auth's
 internal logger is disabled so Ceird-owned sanitized telemetry is the only auth
 logging boundary.
-Ceird also adopts Better Auth's captcha plugin with Cloudflare Turnstile for
-sign-up, password reset request, and verification resend when
+Ceird also adopts a Ceird-owned Better Auth captcha plugin with Cloudflare
+Turnstile for sign-up, password reset request, and verification resend when
 `AUTH_CAPTCHA_ENABLED=true`.
 
 Remaining gap: operational thresholds still need production tuning. The runtime
 now preserves Better Auth's anti-enumeration response shape for password reset
 and verification resend while making delivery throttles visible through stable
-rate-limit telemetry. Captcha provider timeout and sanitized telemetry policy is
-tracked separately in `TSK-121`.
+rate-limit telemetry. Captcha Siteverify timeout and sanitized provider-failure
+telemetry are owned locally; `TSK-121` approved the 3000 ms default timeout,
+fail-closed behavior, and existing captcha failure UX for provider outages.
 
 Better move:
 
@@ -133,8 +134,8 @@ Better move:
   before raising alert severity.
 - Keep rate-limit storage failure telemetry sanitized and dashboard-oriented
   unless failures cross the approved alert threshold.
-- Decide `TSK-121` before treating Turnstile provider availability as a fully
-  Ceird-owned operational signal.
+- Treat Turnstile provider failures as Ceird-owned internal telemetry; tune
+  alert thresholds from production behavior before adding new user-facing copy.
 
 ### 4. Email Verification Gate Coverage Needs To Stay Explicit
 

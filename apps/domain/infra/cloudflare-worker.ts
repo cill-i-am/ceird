@@ -23,6 +23,7 @@ export interface DomainWorkerStageConfig {
   readonly apiHostname: string;
   readonly appHostname: string;
   readonly authCaptchaEnabled?: boolean | undefined;
+  readonly authCaptchaSiteVerifyRequestTimeoutMs?: number | undefined;
   readonly authCaptchaSiteVerifyUrlOverride?: string | undefined;
   readonly authCaptchaTurnstileSecretKey?:
     | Redacted.Redacted<string>
@@ -80,6 +81,7 @@ export interface DomainWorkerConfiguredEnv {
   readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_CAPTCHA_ENABLED?: "false" | "true" | undefined;
+  readonly AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS?: string | undefined;
   readonly AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE?: string | undefined;
   readonly AUTH_CAPTCHA_TURNSTILE_SECRET_KEY?:
     | Redacted.Redacted<string>
@@ -275,6 +277,10 @@ export function makeDomainWorkerEnv(input: {
     ...optionalDomainWorkerEnv(
       "AUTH_CAPTCHA_ENABLED",
       booleanWorkerEnvValue(input.config.authCaptchaEnabled)
+    ),
+    ...optionalDomainWorkerEnv(
+      "AUTH_CAPTCHA_SITE_VERIFY_REQUEST_TIMEOUT_MS",
+      input.config.authCaptchaSiteVerifyRequestTimeoutMs?.toString()
     ),
     ...optionalDomainWorkerEnv(
       "AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE",
