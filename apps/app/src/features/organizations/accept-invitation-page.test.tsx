@@ -316,7 +316,7 @@ describe("accept invitation page", () => {
     ).toBeInTheDocument();
   }, 10_000);
 
-  it("accepts the invitation and returns to the app", async () => {
+  it("accepts the invitation and continues to location onboarding", async () => {
     mockedGetSession.mockResolvedValue({
       data: {
         session: {
@@ -349,7 +349,7 @@ describe("accept invitation page", () => {
     });
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
-        to: "/",
+        to: "/location-access",
       });
     });
     expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
@@ -399,7 +399,7 @@ describe("accept invitation page", () => {
     });
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
-        to: "/",
+        to: "/location-access",
       });
     });
   }, 10_000);

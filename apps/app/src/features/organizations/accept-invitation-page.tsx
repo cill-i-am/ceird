@@ -405,7 +405,7 @@ function useAcceptInvitationPageModel(
 
     await mutationFeedback.waitForSuccess();
     await navigate({
-      to: "/",
+      to: "/location-access",
     });
   }
 
