@@ -37,3 +37,7 @@ export function shouldHydrateOrganizationContext(pathname: string) {
     pathname.startsWith("/sites/")
   );
 }
+
+export function shouldBypassAuthenticatedAppShell(pathname: string) {
+  return pathname === "/create-organization" || pathname === "/location-access";
+}

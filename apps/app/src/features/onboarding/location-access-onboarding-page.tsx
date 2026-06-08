@@ -11,14 +11,23 @@ import {
 } from "#/features/settings/user-preferences-api";
 import { cn } from "#/lib/utils";
 
-export function LocationAccessOnboardingPage() {
+export function LocationAccessOnboardingPage({
+  initialPreferences = DEFAULT_USER_PREFERENCES,
+  preferencesUnavailable = false,
+}: {
+  readonly initialPreferences?: UserPreferences | undefined;
+  readonly preferencesUnavailable?: boolean | undefined;
+}) {
   const navigate = useNavigate({ from: "/location-access" });
-  const [preferences, setPreferences] = React.useState<UserPreferences>(
-    DEFAULT_USER_PREFERENCES
-  );
+  const [preferences, setPreferences] =
+    React.useState<UserPreferences>(initialPreferences);
   const [locationPreferenceSaving, setLocationPreferenceSaving] =
     React.useState(false);
   const hasEnabledLocationAccess = preferences.routeProximityLocationEnabled;
+
+  React.useEffect(() => {
+    setPreferences(initialPreferences);
+  }, [initialPreferences]);
 
   return (
     <main className="flex min-h-screen">
@@ -57,6 +66,7 @@ export function LocationAccessOnboardingPage() {
         >
           <LocationPreferencePanel
             preferences={preferences}
+            unavailable={preferencesUnavailable}
             onPreferenceChange={async (routeProximityLocationEnabled) => {
               setLocationPreferenceSaving(true);
 

@@ -250,7 +250,7 @@ describe("organization onboarding page", () => {
     expect(mockedNavigate).not.toHaveBeenCalled();
   }, 10_000);
 
-  it("asks for route proximity location preference after team creation without geolocation", async () => {
+  it("does not ask for route proximity location preference again after team creation", async () => {
     const user = userEvent.setup();
 
     render(<OrganizationOnboardingPage />);
@@ -261,54 +261,13 @@ describe("organization onboarding page", () => {
     await screen.findByRole("heading", { name: "Invite members" });
 
     expect(
-      screen.getByRole("heading", { name: "Location access" })
-    ).toBeVisible();
-    expect(screen.getByText("Disabled")).toBeVisible();
-
-    await user.click(
-      screen.getByRole("button", { name: "Enable location access" })
-    );
-
-    await waitFor(() => {
-      expect(mockedUpdateUserPreferences).toHaveBeenCalledWith({
-        routeProximityLocationEnabled: true,
-      });
-    });
-    expect(screen.getByText("Enabled")).toBeVisible();
+      screen.queryByRole("heading", { name: "Location access" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Enable location access" })
+    ).not.toBeInTheDocument();
+    expect(mockedUpdateUserPreferences).not.toHaveBeenCalled();
     expect(navigator.geolocation?.getCurrentPosition).toBeUndefined();
-  }, 10_000);
-
-  it("keeps onboarding navigation disabled while saving location preference", async () => {
-    const user = userEvent.setup();
-    const preferenceUpdate = Promise.withResolvers<{
-      preferences: {
-        routeProximityLocationEnabled: boolean;
-        updatedAt: string;
-      };
-    }>();
-    mockedUpdateUserPreferences.mockReturnValueOnce(preferenceUpdate.promise);
-
-    render(<OrganizationOnboardingPage />);
-
-    await user.type(screen.getByLabelText("Team name"), "Acme Field Ops");
-    await user.click(screen.getByRole("button", { name: "Create team" }));
-    await screen.findByRole("heading", { name: "Invite members" });
-
-    await user.click(
-      screen.getByRole("button", { name: "Enable location access" })
-    );
-
-    expect(screen.getByRole("button", { name: "Skip for now" })).toBeDisabled();
-    preferenceUpdate.resolve({
-      preferences: {
-        routeProximityLocationEnabled: true,
-        updatedAt: "2026-06-06T10:01:00.000Z",
-      },
-    });
-    await expect(screen.findByText("Enabled")).resolves.toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Skip for now" })
-    ).not.toBeDisabled();
   }, 10_000);
 
   it("keeps the generated slug hidden while the team name changes", async () => {

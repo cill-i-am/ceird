@@ -31,7 +31,7 @@ export function SitesProximityMap({
   const firstDestination = rows.find(
     (row) => row.site.latitude !== undefined && row.site.longitude !== undefined
   )?.site;
-  const center = firstDestination
+  const center: [number, number] = firstDestination
     ? [
         firstDestination.longitude ?? origin.coordinates.longitude,
         firstDestination.latitude ?? origin.coordinates.latitude,
@@ -41,7 +41,7 @@ export function SitesProximityMap({
   return (
     <div className="min-h-[360px] overflow-hidden rounded-lg border bg-muted/20">
       <Map
-        center={center as [number, number]}
+        center={center}
         zoom={11}
         dragRotate={false}
         pitchWithRotate={false}

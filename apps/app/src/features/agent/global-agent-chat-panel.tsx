@@ -955,9 +955,17 @@ function AgentComposer({
   );
   const [submitting, setSubmitting] = React.useState(false);
   const composerRef = React.useRef<HTMLDivElement | null>(null);
+  const originResolveRequestRef = React.useRef(0);
   const sessionTokenRef = React.useRef(createProximityOriginSessionToken());
   const isBusy = busy || submitting;
   const trimmedOriginQuery = originDialogState.query.trim();
+
+  React.useEffect(
+    () => () => {
+      originResolveRequestRef.current += 1;
+    },
+    []
+  );
 
   React.useEffect(() => {
     if (
@@ -1009,6 +1017,7 @@ function AgentComposer({
   }, [originDialogState.open, trimmedOriginQuery]);
 
   const resetOriginDialog = React.useCallback(() => {
+    originResolveRequestRef.current += 1;
     dispatchOriginDialog({ type: "reset" });
     sessionTokenRef.current = createProximityOriginSessionToken();
   }, []);
@@ -1043,6 +1052,8 @@ function AgentComposer({
         return;
       }
 
+      const resolveRequestId = originResolveRequestRef.current + 1;
+      originResolveRequestRef.current = resolveRequestId;
       dispatchOriginDialog({ type: "resolveStarted" });
       const originExit = await Effect.runPromiseExit(
         resolveProximityOriginPlace({
@@ -1051,6 +1062,10 @@ function AgentComposer({
           sessionToken: sessionTokenRef.current,
         })
       );
+
+      if (originResolveRequestRef.current !== resolveRequestId) {
+        return;
+      }
 
       if (Exit.isFailure(originExit)) {
         dispatchOriginDialog({
@@ -1070,7 +1085,7 @@ function AgentComposer({
         if (sent) {
           setDraft("");
           resetOriginDialog();
-        } else {
+        } else if (originResolveRequestRef.current === resolveRequestId) {
           dispatchOriginDialog({ type: "resolveStopped" });
         }
       } finally {
@@ -1199,7 +1214,8 @@ function AgentLocationNotice({
         <span>{notice.message}</span>
         <span>
           Ceird uses the origin only for this route request and does not save
-          the coordinates.
+          the coordinates. Enabling current-location access means Ceird can ask
+          this browser for fresh location whenever you use Near me.
         </span>
         <span className="flex flex-wrap gap-2">
           {notice.canShareCurrentLocation ? (
@@ -1210,7 +1226,7 @@ function AgentLocationNotice({
               disabled={busy}
               onClick={onShareCurrentLocation}
             >
-              Share current location
+              Enable current-location access
             </Button>
           ) : null}
           {notice.canChooseOrigin ? (

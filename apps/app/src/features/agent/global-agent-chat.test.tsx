@@ -18,7 +18,14 @@ import type {
   SiteProximityResponse,
 } from "@ceird/sites-core";
 import type * as AiChatReactModule from "@cloudflare/ai-chat/react";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  waitForElementToBeRemoved,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as AgentsReactModule from "agents/react";
 import { Effect } from "effect";
@@ -774,6 +781,73 @@ describe("global agent chat", () => {
     expect(textbox).toHaveValue("");
   });
 
+  it("does not send a selected typed origin after the origin dialog is closed", async () => {
+    const user = userEvent.setup();
+    mockGeolocationFailure({
+      code: 1,
+      message: "Permission denied",
+    });
+    const suggestion = {
+      displayText: "Docklands depot",
+      placeId: "ChIJdocklandsDepot" as TypedOrigin["placeId"],
+      secondaryText: "Dublin",
+    } satisfies ProximityOriginSuggestion;
+    const typedOrigin: TypedOrigin = {
+      coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+      displayText: suggestion.displayText,
+      mode: "typed_origin",
+      originToken: "v1.typedOrigin.testSignature" as TypedOrigin["originToken"],
+      placeId: suggestion.placeId,
+    };
+    const placeResolution = Promise.withResolvers<{ origin: TypedOrigin }>();
+    mockedAutocompleteProximityOrigin.mockReturnValue(
+      Effect.succeed({ suggestions: [suggestion] })
+    );
+    mockedResolveProximityOriginPlace.mockReturnValue(
+      Effect.promise(() => placeResolution.promise)
+    );
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    const textbox = within(drawer).getByRole("textbox", {
+      name: /message ask ceird/i,
+    });
+    await user.type(textbox, "nearest sites");
+    await user.click(within(drawer).getByRole("button", { name: /^send$/i }));
+    await user.click(
+      await within(drawer).findByRole("button", { name: /choose origin/i })
+    );
+    await user.type(
+      await screen.findByRole("searchbox", {
+        name: /search address, eircode or place/i,
+      }),
+      "Docklands depot"
+    );
+    await user.click(await screen.findByRole("option", { name: /docklands/i }));
+    await user.click(
+      screen.getByRole("button", { name: /use selected origin/i })
+    );
+
+    const originDialog = screen.getByRole("dialog");
+    await user.click(
+      within(originDialog).getByRole("button", { name: /close/i })
+    );
+    await waitForElementToBeRemoved(originDialog);
+    placeResolution.resolve({ origin: typedOrigin });
+    await Promise.resolve();
+
+    expect(mockedAgentSend).not.toHaveBeenCalled();
+    expect(mockedSendMessage).not.toHaveBeenCalled();
+    expect(textbox).toHaveValue("nearest sites");
+  });
+
   it("blocks near-me prompts before geolocation when location preference is disabled", async () => {
     const user = userEvent.setup();
     const getCurrentPosition = mockGeolocationSuccess({
@@ -842,7 +916,7 @@ describe("global agent chat", () => {
 
     await user.click(
       await within(drawer).findByRole("button", {
-        name: /share current location/i,
+        name: /enable current-location access/i,
       })
     );
 

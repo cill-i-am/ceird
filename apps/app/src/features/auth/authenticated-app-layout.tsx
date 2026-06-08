@@ -6,6 +6,8 @@ import {
 
 import { AppLayout } from "#/components/app-layout";
 
+import { shouldBypassAuthenticatedAppShell } from "./app-context-route-selection";
+
 export function AuthenticatedAppLayout() {
   const { activeOrganizationId, currentOrganizationRole, session } =
     useRouteContext({
@@ -13,8 +15,7 @@ export function AuthenticatedAppLayout() {
     });
   const isOrganizationCreation = useRouterState({
     select: (state) =>
-      state.location.pathname === "/create-organization" ||
-      state.location.pathname === "/location-access",
+      shouldBypassAuthenticatedAppShell(state.location.pathname),
   });
 
   if (isOrganizationCreation) {

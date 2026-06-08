@@ -246,7 +246,9 @@ export class CeirdAgent extends AIChatAgent<AgentWorkerEnv> {
       const agentInstanceName = decodeAgentInstanceName(this.name);
       const threadId = extractAgentThreadId(agentInstanceName);
 
-      await validateAgentCurrentLocationAccess(this.env, threadId);
+      if (frame.value.origin.mode === "current_location") {
+        await validateAgentCurrentLocationAccess(this.env, threadId);
+      }
     } catch {
       return true;
     }
@@ -583,11 +585,24 @@ function makeProximityTextRedactionContext(
 ): ProximityTextRedactionContext {
   return {
     expiresAt: now + PROXIMITY_ORIGIN_TTL_MS,
-    values: makeCoordinateRedactionValues(
+    values: makeProximityOriginRedactionValues(origin),
+  };
+}
+
+function makeProximityOriginRedactionValues(
+  origin: AgentProximityOriginContextFrame["origin"]
+) {
+  return [
+    ...makeCoordinateRedactionValues(
       origin.coordinates.latitude,
       origin.coordinates.longitude
     ),
-  };
+    ...(origin.mode === "typed_origin"
+      ? [origin.displayText, origin.placeId]
+      : []),
+  ]
+    .filter((value) => value.length > 0)
+    .toSorted((left, right) => right.length - left.length);
 }
 
 function makeCoordinateRedactionValues(latitude: number, longitude: number) {
@@ -598,9 +613,7 @@ function makeCoordinateRedactionValues(latitude: number, longitude: number) {
       latitude.toFixed(6),
       longitude.toFixed(6),
     ]),
-  ]
-    .filter((value) => value.length > 0)
-    .toSorted((left, right) => right.length - left.length);
+  ];
 }
 
 function collectActiveProximityRedactionValues(
@@ -640,5 +653,5 @@ function buildCeirdAgentSystemPrompt(
     return `${basePrompt}\n\nRoute-aware proximity: use driving-time tools for nearby, closest, route, or directions questions. Do not use straight-line distance. If the user asks for "near me" and no request origin is available, ask for location access before ranking routes.`;
   }
 
-  return `${basePrompt}\n\nRoute-aware proximity: the current request includes a hidden current-location origin from the app. Use this origin exactly when the latest user request asks for nearby jobs, nearby sites, closest results, route previews, distance, or directions. Do not ask the user to type an origin when this context is relevant. For proximity tools, send a current_location origin with placeholder coordinates { latitude: 0, longitude: 0 }; runtime will replace it with the hidden origin before calling Ceird. Do not quote raw current-location coordinates or route geometry back to the user. Rank by traffic-aware driving time, not straight-line distance. For ranked nearby lists, omit route lines and default to 10 results unless the user asks for another limit up to 25. For a specific job or site route preview, request includeRouteLine: true so the app can render the route inline.`;
+  return `${basePrompt}\n\nRoute-aware proximity: the current request includes a hidden route origin from the app. Use this origin exactly when the latest user request asks for nearby jobs, nearby sites, closest results, route previews, distance, or directions. Do not ask the user to type an origin when this context is relevant. For proximity tools, send a current_location origin with placeholder coordinates { latitude: 0, longitude: 0 }; runtime will replace it with the hidden origin before calling Ceird. Do not quote raw origin coordinates, typed-origin labels, or route geometry back to the user. Rank by traffic-aware driving time, not straight-line distance. For ranked nearby lists, omit route lines and default to 10 results unless the user asks for another limit up to 25. For a specific job or site route preview, request includeRouteLine: true so the app can render the route inline.`;
 }

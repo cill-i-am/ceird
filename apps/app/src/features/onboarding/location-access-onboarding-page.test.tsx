@@ -72,6 +72,43 @@ describe("location access onboarding page", () => {
     expect(mockedUpdateCurrentUserPreferences).not.toHaveBeenCalled();
   }, 10_000);
 
+  it("starts from the saved route proximity preference when it is already enabled", () => {
+    render(
+      <LocationAccessOnboardingPage
+        initialPreferences={{
+          routeProximityLocationEnabled: true,
+          updatedAt: "2026-06-06T10:00:00.000Z",
+        }}
+        preferencesUnavailable={false}
+      />
+    );
+
+    expect(screen.getByText("Enabled")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Continue to Ceird" })
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Skip for now" })
+    ).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("shows an unavailable preference state when the route loader cannot load it", () => {
+    render(
+      <LocationAccessOnboardingPage
+        initialPreferences={{
+          routeProximityLocationEnabled: false,
+          updatedAt: "1970-01-01T00:00:00.000Z",
+        }}
+        preferencesUnavailable
+      />
+    );
+
+    expect(screen.getByText("Unavailable")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Enable location access" })
+    ).toBeDisabled();
+  }, 10_000);
+
   it("enables location access without requesting coordinates during onboarding", async () => {
     const user = userEvent.setup();
     const getCurrentPosition = vi.fn<Geolocation["getCurrentPosition"]>();
