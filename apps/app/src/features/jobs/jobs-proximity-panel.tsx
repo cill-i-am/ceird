@@ -6,12 +6,8 @@ import type {
   JobProximityResponse,
 } from "@ceird/jobs-core";
 import type {
-  CurrentLocationOrigin,
   ProximityLimit,
-  ProximityOriginAutocompleteResponse,
   ProximityOriginInput,
-  ProximityOriginPlaceDetailsResponse,
-  ProximityOriginSuggestion,
 } from "@ceird/proximity-core";
 import {
   PROXIMITY_ACCESS_DENIED_ERROR_TAG,
@@ -26,24 +22,26 @@ import {
   RefreshIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Cause, Effect, Exit, Fiber, Option } from "effect";
+import { Cause, Option } from "effect";
 import * as React from "react";
 
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import {
-  autocompleteProximityOrigin,
-  rankNearbyJobs,
-  resolveProximityOriginPlace,
-} from "#/features/proximity/proximity-api";
+import { rankNearbyJobs } from "#/features/proximity/proximity-api";
 import {
   formatCandidateCapLabel,
   formatRouteComputedAt,
 } from "#/features/proximity/proximity-format";
 import { ProximityLimitSelect } from "#/features/proximity/proximity-limit-select";
-import { requestCurrentLocationOrigin } from "#/features/proximity/proximity-location-access";
-import { createProximityOriginSessionToken } from "#/features/proximity/proximity-origin";
 import { ProximityOriginDialog } from "#/features/proximity/proximity-origin-dialog";
+import type {
+  ProximityOriginRunState,
+  ProximityRunRequestState,
+} from "#/features/proximity/proximity-run-controller";
+import {
+  isReusableProximityResponse,
+  useProximityRunController,
+} from "#/features/proximity/proximity-run-controller";
 import type { ProximityResultLimitOption } from "#/features/proximity/proximity-state";
 import { ProximityStatusPanel } from "#/features/proximity/proximity-status-panel";
 import { cn } from "#/lib/utils";
@@ -53,198 +51,13 @@ import type { JobsListFilters } from "./jobs-state";
 
 type JobsViewMode = "list" | "map";
 
-type ProximityRequestState =
-  | { readonly status: "idle" }
-  | {
-      readonly includeRouteLines: boolean;
-      readonly inputKey: string;
-      readonly status: "loading";
-    }
-  | {
-      readonly includeRouteLines: boolean;
-      readonly inputKey: string;
-      readonly response: JobProximityResponse;
-      readonly status: "success";
-    }
-  | {
-      readonly includeRouteLines: boolean;
-      readonly inputKey: string;
-      readonly message: string;
-      readonly status: "failed";
-    };
-
-type OriginRunState =
-  | { readonly status: "idle" }
-  | { readonly status: "requesting" }
-  | { readonly origin: ProximityOriginInput; readonly status: "ready" }
-  | {
-      readonly reason: "current_location_disabled" | "current_location_failed";
-      readonly status: "needs_origin";
-    };
-
-const ORIGIN_AUTOCOMPLETE_MIN_LENGTH = 3;
-const ORIGIN_AUTOCOMPLETE_DEBOUNCE_MS = 250;
-const ROUTE_RANKING_DEBOUNCE_MS = 300;
-const TYPED_ORIGIN_FAILURE_MESSAGE =
-  "Ceird could not use that origin. Select another result or try again.";
+type JobsProximityRequestState = ProximityRunRequestState<JobProximityResponse>;
 
 const LazyJobsProximityMap = React.lazy(async () => {
   const module = await import("./jobs-proximity-map");
 
   return { default: module.JobsProximityMap };
 });
-
-interface JobsProximityPanelState {
-  readonly origin: OriginRunState;
-  readonly originDialogError: string | null;
-  readonly originDialogLoading: boolean;
-  readonly originDialogOpen: boolean;
-  readonly originQuery: string;
-  readonly originSuggestions: readonly ProximityOriginSuggestion[];
-  readonly rankingRetryToken: number;
-  readonly request: ProximityRequestState;
-  readonly selectedJobId: string | null;
-  readonly selectedSuggestion: ProximityOriginSuggestion | null;
-}
-
-type JobsProximityPanelAction =
-  | { readonly origin: OriginRunState; readonly type: "origin" }
-  | {
-      readonly request: ProximityRequestState;
-      readonly selectedJobId?: string | null;
-      readonly type: "request";
-    }
-  | { readonly open: boolean; readonly type: "origin_dialog_open" }
-  | { readonly query: string; readonly type: "origin_query" }
-  | {
-      readonly suggestions: readonly ProximityOriginSuggestion[];
-      readonly type: "origin_suggestions";
-    }
-  | {
-      readonly suggestion: ProximityOriginSuggestion | null;
-      readonly type: "selected_suggestion";
-    }
-  | { readonly type: "typed_origin_start" }
-  | {
-      readonly origin: ProximityOriginInput;
-      readonly type: "typed_origin_success";
-    }
-  | { readonly type: "typed_origin_failure" }
-  | { readonly jobId: string | null; readonly type: "selected_job" }
-  | { readonly type: "reset_dialog" }
-  | { readonly type: "reset_proximity" }
-  | { readonly type: "retry_ranking" };
-
-const INITIAL_JOBS_PROXIMITY_PANEL_STATE: JobsProximityPanelState = {
-  origin: { status: "idle" },
-  originDialogError: null,
-  originDialogLoading: false,
-  originDialogOpen: false,
-  originQuery: "",
-  originSuggestions: [],
-  rankingRetryToken: 0,
-  request: { status: "idle" },
-  selectedJobId: null,
-  selectedSuggestion: null,
-};
-
-function jobsProximityPanelReducer(
-  state: JobsProximityPanelState,
-  action: JobsProximityPanelAction
-): JobsProximityPanelState {
-  switch (action.type) {
-    case "origin": {
-      return { ...state, origin: action.origin };
-    }
-    case "origin_dialog_open": {
-      return { ...state, originDialogOpen: action.open };
-    }
-    case "origin_query": {
-      return {
-        ...state,
-        originDialogError: null,
-        originQuery: action.query,
-        originSuggestions: [],
-        selectedSuggestion: null,
-      };
-    }
-    case "origin_suggestions": {
-      return { ...state, originSuggestions: action.suggestions };
-    }
-    case "request": {
-      return {
-        ...state,
-        request: action.request,
-        selectedJobId:
-          action.selectedJobId === undefined
-            ? state.selectedJobId
-            : action.selectedJobId,
-      };
-    }
-    case "reset_dialog": {
-      return {
-        ...state,
-        originDialogError: null,
-        originDialogLoading: false,
-        originQuery: "",
-        originSuggestions: [],
-        selectedSuggestion: null,
-      };
-    }
-    case "reset_proximity": {
-      return {
-        ...state,
-        origin: { status: "idle" },
-        originDialogOpen: false,
-        request: { status: "idle" },
-        selectedJobId: null,
-      };
-    }
-    case "retry_ranking": {
-      return {
-        ...state,
-        rankingRetryToken: state.rankingRetryToken + 1,
-      };
-    }
-    case "selected_job": {
-      return { ...state, selectedJobId: action.jobId };
-    }
-    case "selected_suggestion": {
-      return { ...state, selectedSuggestion: action.suggestion };
-    }
-    case "typed_origin_failure": {
-      return {
-        ...state,
-        originDialogError: TYPED_ORIGIN_FAILURE_MESSAGE,
-        originDialogLoading: false,
-      };
-    }
-    case "typed_origin_start": {
-      return {
-        ...state,
-        originDialogError: null,
-        originDialogLoading: true,
-      };
-    }
-    case "typed_origin_success": {
-      return {
-        ...state,
-        origin: { origin: action.origin, status: "ready" },
-        originDialogError: null,
-        originDialogLoading: false,
-        originDialogOpen: false,
-        originQuery: "",
-        originSuggestions: [],
-        selectedSuggestion: null,
-      };
-    }
-    default: {
-      const exhaustiveAction: never = action;
-
-      return exhaustiveAction;
-    }
-  }
-}
 
 export interface JobsProximityPanelProps {
   readonly active: boolean;
@@ -388,471 +201,66 @@ function useJobsProximityPanelController({
   readonly routeProximityLocationEnabled: boolean;
   readonly viewMode: JobsViewMode;
 }) {
-  const [state, dispatch] = React.useReducer(
-    jobsProximityPanelReducer,
-    INITIAL_JOBS_PROXIMITY_PANEL_STATE
+  const buildInput = React.useCallback(
+    ({
+      includeRouteLines,
+      origin,
+    }: {
+      readonly includeRouteLines: boolean;
+      readonly origin: ProximityOriginInput;
+    }) =>
+      buildJobProximityInput({
+        filters,
+        includeRouteLines,
+        limit,
+        origin,
+      }),
+    [filters, limit]
   );
-  const sessionTokenRef = React.useRef(createProximityOriginSessionToken());
-  const activeRef = React.useRef(active);
-  const pendingActivationRef = React.useRef(false);
-  const originRequestIdRef = React.useRef(0);
-  const rankRequestIdRef = React.useRef(0);
-  const typedOriginRequestIdRef = React.useRef(0);
-  const currentLocationRequestKeyRef = React.useRef(currentLocationRequestKey);
-  const currentOriginFiberRef = React.useRef<Fiber.Fiber<
-    CurrentLocationOrigin,
-    unknown
-  > | null>(null);
-  const removeCurrentOriginObserverRef = React.useRef<(() => void) | null>(
-    null
-  );
-  const typedOriginFiberRef = React.useRef<Fiber.Fiber<
-    ProximityOriginPlaceDetailsResponse,
-    unknown
-  > | null>(null);
-  const removeTypedOriginObserverRef = React.useRef<(() => void) | null>(null);
-  const requestRef = React.useRef(state.request);
-  const rankingRetryTokenRef = React.useRef(state.rankingRetryToken);
-  activeRef.current = active;
-  requestRef.current = state.request;
-
-  const {
-    origin,
-    originDialogError,
-    originDialogLoading,
-    originDialogOpen,
-    originQuery,
-    originSuggestions,
-    rankingRetryToken,
-    request,
-    selectedJobId,
-    selectedSuggestion,
-  } = state;
-  const rankingInput = React.useMemo(() => {
-    if (!active || origin.status !== "ready") {
-      return null;
-    }
-
-    return buildJobProximityInput({
-      filters,
-      includeRouteLines: viewMode === "map",
-      limit,
-      origin: origin.origin,
-    });
-  }, [active, filters, limit, origin, viewMode]);
-  const rankingInputKey = React.useMemo(
-    () =>
-      rankingInput === null ? null : makeJobProximityInputKey(rankingInput),
-    [rankingInput]
-  );
-
-  const cancelCurrentOriginRequest = React.useCallback(() => {
-    removeCurrentOriginObserverRef.current?.();
-    removeCurrentOriginObserverRef.current = null;
-    if (currentOriginFiberRef.current !== null) {
-      void Effect.runFork(Fiber.interrupt(currentOriginFiberRef.current));
-      currentOriginFiberRef.current = null;
-    }
-  }, []);
-
-  const cancelTypedOriginRequest = React.useCallback(() => {
-    removeTypedOriginObserverRef.current?.();
-    removeTypedOriginObserverRef.current = null;
-    if (typedOriginFiberRef.current !== null) {
-      void Effect.runFork(Fiber.interrupt(typedOriginFiberRef.current));
-      typedOriginFiberRef.current = null;
-    }
-  }, []);
-
-  React.useEffect(
-    () => () => {
-      activeRef.current = false;
-      pendingActivationRef.current = false;
-      originRequestIdRef.current += 1;
-      rankRequestIdRef.current += 1;
-      typedOriginRequestIdRef.current += 1;
-      cancelCurrentOriginRequest();
-      cancelTypedOriginRequest();
-    },
-    [cancelCurrentOriginRequest, cancelTypedOriginRequest]
-  );
-
-  React.useEffect(() => {
-    if (routeProximityLocationEnabled || !active) {
-      return;
-    }
-
-    const shouldClearCurrentLocationOrigin =
-      origin.status === "requesting" ||
-      (origin.status === "ready" && origin.origin.mode === "current_location");
-
-    if (!shouldClearCurrentLocationOrigin) {
-      return;
-    }
-
-    originRequestIdRef.current += 1;
-    rankRequestIdRef.current += 1;
-    pendingActivationRef.current = false;
-    cancelCurrentOriginRequest();
-    dispatch({
-      origin: {
-        reason: "current_location_disabled",
-        status: "needs_origin",
-      },
-      type: "origin",
-    });
-    dispatch({ open: true, type: "origin_dialog_open" });
-  }, [
-    active,
-    cancelCurrentOriginRequest,
-    origin,
-    routeProximityLocationEnabled,
-  ]);
-
-  const requestCurrentOrigin = React.useCallback(() => {
-    cancelCurrentOriginRequest();
-    const requestId = originRequestIdRef.current + 1;
-    originRequestIdRef.current = requestId;
-
-    if (!routeProximityLocationEnabled) {
-      pendingActivationRef.current = false;
-      dispatch({
-        origin: {
-          reason: "current_location_disabled",
-          status: "needs_origin",
-        },
-        type: "origin",
-      });
-      dispatch({ open: true, type: "origin_dialog_open" });
-      return;
-    }
-
-    dispatch({ origin: { status: "requesting" }, type: "origin" });
-
-    const originFiber = Effect.runFork(requestCurrentLocationOrigin());
-    currentOriginFiberRef.current = originFiber;
-    removeCurrentOriginObserverRef.current = originFiber.addObserver((exit) => {
-      if (currentOriginFiberRef.current === originFiber) {
-        removeCurrentOriginObserverRef.current = null;
-        currentOriginFiberRef.current = null;
-      }
-
-      if (
-        originRequestIdRef.current !== requestId ||
-        (!activeRef.current && !pendingActivationRef.current)
-      ) {
-        return;
-      }
-
-      pendingActivationRef.current = false;
-
-      if (Exit.isSuccess(exit)) {
-        dispatch({
-          origin: { origin: exit.value, status: "ready" },
-          type: "origin",
-        });
-        return;
-      }
-
-      dispatch({
-        origin: { reason: "current_location_failed", status: "needs_origin" },
-        type: "origin",
-      });
-    });
-  }, [cancelCurrentOriginRequest, routeProximityLocationEnabled]);
-
-  React.useEffect(() => {
-    if (!active || rankingInput === null || rankingInputKey === null) {
-      return;
-    }
-
-    const needsRouteLines = rankingInput.includeRouteLines === true;
-    const retryRequested = rankingRetryTokenRef.current !== rankingRetryToken;
-    rankingRetryTokenRef.current = rankingRetryToken;
-    const reusableRequest = requestRef.current;
-    if (
-      !retryRequested &&
-      reusableRequest.status === "success" &&
-      isReusableJobProximityResponse({
-        currentInputKey: rankingInputKey,
-        needsRouteLines,
-        requestState: reusableRequest,
-      })
-    ) {
-      return;
-    }
-
-    const currentRankingInput = rankingInput;
-    const currentRankingInputKey = rankingInputKey;
-    const currentRankingNeedsRouteLines =
-      currentRankingInput.includeRouteLines === true;
-    const requestId = rankRequestIdRef.current + 1;
-    rankRequestIdRef.current = requestId;
-    dispatch({
-      request: {
-        includeRouteLines: currentRankingNeedsRouteLines,
-        inputKey: currentRankingInputKey,
-        status: "loading",
-      },
-      selectedJobId: null,
-      type: "request",
-    });
-    let rankingFiber: Fiber.Fiber<JobProximityResponse, unknown> | null = null;
-    let removeRankingObserver: (() => void) | undefined;
-    const timeoutId = window.setTimeout(() => {
-      runRankingRequest();
-    }, ROUTE_RANKING_DEBOUNCE_MS);
-
-    function runRankingRequest() {
-      if (rankRequestIdRef.current !== requestId || !activeRef.current) {
-        return;
-      }
-      rankingFiber = Effect.runFork(rankNearbyJobs(currentRankingInput));
-      removeRankingObserver = rankingFiber.addObserver((exit) => {
-        if (rankRequestIdRef.current !== requestId || !activeRef.current) {
-          return;
-        }
-
-        if (Exit.isSuccess(exit)) {
-          dispatch({
-            request: {
-              includeRouteLines: currentRankingNeedsRouteLines,
-              inputKey: currentRankingInputKey,
-              response: exit.value,
-              status: "success",
-            },
-            selectedJobId: exit.value.rows[0]?.job.id ?? null,
-            type: "request",
-          });
-          return;
-        }
-
-        dispatch({
-          request: {
-            includeRouteLines: currentRankingNeedsRouteLines,
-            inputKey: currentRankingInputKey,
-            message: getRouteRequestFailureMessage(exit.cause),
-            status: "failed",
-          },
-          type: "request",
-        });
-      });
-    }
-
-    return () => {
-      window.clearTimeout(timeoutId);
-      removeRankingObserver?.();
-      if (rankingFiber !== null) {
-        void Effect.runFork(Fiber.interrupt(rankingFiber));
-      }
-      if (rankRequestIdRef.current === requestId) {
-        rankRequestIdRef.current += 1;
-      }
-    };
-  }, [active, rankingInput, rankingInputKey, rankingRetryToken]);
-
-  React.useEffect(() => {
-    if (
-      !active ||
-      currentLocationRequestKey === currentLocationRequestKeyRef.current
-    ) {
-      return;
-    }
-
-    currentLocationRequestKeyRef.current = currentLocationRequestKey;
-    requestCurrentOrigin();
-  }, [active, currentLocationRequestKey, requestCurrentOrigin]);
-
-  React.useEffect(() => {
-    if (active) {
-      return;
-    }
-
-    originRequestIdRef.current += 1;
-    rankRequestIdRef.current += 1;
-    typedOriginRequestIdRef.current += 1;
-    pendingActivationRef.current = false;
-    cancelCurrentOriginRequest();
-    cancelTypedOriginRequest();
-    dispatch({ type: "reset_proximity" });
-  }, [active, cancelCurrentOriginRequest, cancelTypedOriginRequest]);
-
-  const trimmedOriginQuery = originQuery.trim();
-
-  React.useEffect(() => {
-    if (
-      !originDialogOpen ||
-      trimmedOriginQuery.length < ORIGIN_AUTOCOMPLETE_MIN_LENGTH
-    ) {
-      dispatch({ suggestions: [], type: "origin_suggestions" });
-      return;
-    }
-
-    let requestActive = true;
-    let autocompleteFiber: Fiber.Fiber<
-      ProximityOriginAutocompleteResponse,
-      unknown
-    > | null = null;
-    let removeAutocompleteObserver: (() => void) | undefined;
-    const timeoutId = window.setTimeout(() => {
-      runAutocompleteRequest();
-    }, ORIGIN_AUTOCOMPLETE_DEBOUNCE_MS);
-
-    function runAutocompleteRequest() {
-      if (!requestActive) {
-        return;
-      }
-
-      autocompleteFiber = Effect.runFork(
-        autocompleteProximityOrigin({
-          country: "IE",
-          input: trimmedOriginQuery,
-          sessionToken: sessionTokenRef.current,
-        })
-      );
-      removeAutocompleteObserver = autocompleteFiber.addObserver((exit) => {
-        if (!requestActive || !Exit.isSuccess(exit)) {
-          return;
-        }
-
-        dispatch({
-          suggestions: exit.value.suggestions,
-          type: "origin_suggestions",
-        });
-      });
-    }
-
-    return () => {
-      requestActive = false;
-      window.clearTimeout(timeoutId);
-      removeAutocompleteObserver?.();
-      if (autocompleteFiber !== null) {
-        void Effect.runFork(Fiber.interrupt(autocompleteFiber));
-      }
-    };
-  }, [originDialogOpen, trimmedOriginQuery]);
-
-  React.useEffect(() => {
-    if (originDialogOpen) {
-      return;
-    }
-
-    typedOriginRequestIdRef.current += 1;
-    cancelTypedOriginRequest();
-    sessionTokenRef.current = createProximityOriginSessionToken();
-    dispatch({ type: "reset_dialog" });
-  }, [cancelTypedOriginRequest, originDialogOpen]);
-
-  const retryRanking = React.useCallback(() => {
-    dispatch({ type: "retry_ranking" });
-  }, []);
-
-  const handleOriginDialogOpen = React.useCallback((open: boolean) => {
-    dispatch({ open, type: "origin_dialog_open" });
-  }, []);
-
-  const handleOriginQueryChange = React.useCallback(
-    (query: string) => {
-      if (originQuery.trim().length > 0 && query.trim().length === 0) {
-        sessionTokenRef.current = createProximityOriginSessionToken();
-      }
-
-      dispatch({ query, type: "origin_query" });
-    },
-    [originQuery]
-  );
-
-  const handleSuggestionSelect = React.useCallback(
-    (suggestion: ProximityOriginSuggestion) => {
-      dispatch({ suggestion, type: "selected_suggestion" });
-    },
+  const isInputEligible = React.useCallback(() => true, []);
+  const getFirstSelectionId = React.useCallback(
+    (response: JobProximityResponse) => response.rows[0]?.job.id ?? null,
     []
   );
 
-  const handleSelectedJobIdChange = React.useCallback((jobId: string) => {
-    dispatch({ jobId, type: "selected_job" });
-  }, []);
-
-  const confirmTypedOrigin = React.useCallback(
-    (suggestion: ProximityOriginSuggestion) => {
-      cancelTypedOriginRequest();
-      const requestId = typedOriginRequestIdRef.current + 1;
-      typedOriginRequestIdRef.current = requestId;
-      dispatch({ type: "typed_origin_start" });
-
-      const originFiber = Effect.runFork(
-        resolveProximityOriginPlace({
-          placeId: suggestion.placeId,
-          rawInput: originQuery.trim() || suggestion.displayText,
-          sessionToken: sessionTokenRef.current,
-        })
-      );
-      typedOriginFiberRef.current = originFiber;
-      removeTypedOriginObserverRef.current = originFiber.addObserver((exit) => {
-        if (typedOriginFiberRef.current === originFiber) {
-          removeTypedOriginObserverRef.current = null;
-          typedOriginFiberRef.current = null;
-        }
-
-        if (
-          typedOriginRequestIdRef.current !== requestId ||
-          !activeRef.current
-        ) {
-          return;
-        }
-
-        if (Exit.isSuccess(exit)) {
-          sessionTokenRef.current = createProximityOriginSessionToken();
-          dispatch({
-            origin: exit.value.origin,
-            type: "typed_origin_success",
-          });
-          return;
-        }
-
-        dispatch({ type: "typed_origin_failure" });
-      });
-    },
-    [cancelTypedOriginRequest, originQuery]
-  );
-
-  const enableNearMe = React.useCallback(() => {
-    pendingActivationRef.current = true;
-    onActiveChange(true);
-    requestCurrentOrigin();
-  }, [onActiveChange, requestCurrentOrigin]);
-
-  const disableNearMe = React.useCallback(() => {
-    originRequestIdRef.current += 1;
-    rankRequestIdRef.current += 1;
-    typedOriginRequestIdRef.current += 1;
-    pendingActivationRef.current = false;
-    cancelCurrentOriginRequest();
-    cancelTypedOriginRequest();
-    dispatch({ type: "reset_proximity" });
-    onActiveChange(false);
-  }, [cancelCurrentOriginRequest, cancelTypedOriginRequest, onActiveChange]);
+  const controller = useProximityRunController<
+    JobProximityInput,
+    JobProximityResponse,
+    string
+  >({
+    active,
+    buildInput,
+    currentLocationRequestKey,
+    getFailureMessage: getRouteRequestFailureMessage,
+    getFirstSelectionId,
+    includeRouteLines: viewMode === "map",
+    isInputEligible,
+    makeInputKey: makeJobProximityInputKey,
+    rank: rankNearbyJobs,
+    routeProximityLocationEnabled,
+    onActiveChange,
+  });
 
   return {
-    confirmTypedOrigin,
-    disableNearMe,
-    enableNearMe,
-    handleOriginDialogOpen,
-    handleOriginQueryChange,
-    handleSelectedJobIdChange,
-    handleSuggestionSelect,
-    origin,
-    originDialogError,
-    originDialogLoading,
-    originDialogOpen,
-    originQuery,
-    originSuggestions,
-    rankingInputKey,
-    request,
-    requestCurrentOrigin,
-    retryRanking,
-    selectedJobId,
-    selectedSuggestion,
+    confirmTypedOrigin: controller.confirmTypedOrigin,
+    disableNearMe: controller.disableNearMe,
+    enableNearMe: controller.enableNearMe,
+    handleOriginDialogOpen: controller.handleOriginDialogOpen,
+    handleOriginQueryChange: controller.handleOriginQueryChange,
+    handleSelectedJobIdChange: controller.handleSelectedIdChange,
+    handleSuggestionSelect: controller.handleSuggestionSelect,
+    origin: controller.origin,
+    originDialogError: controller.originDialogError,
+    originDialogLoading: controller.originDialogLoading,
+    originDialogOpen: controller.originDialogOpen,
+    originQuery: controller.originQuery,
+    originSuggestions: controller.originSuggestions,
+    rankingInputKey: controller.rankingInputKey,
+    request: controller.request,
+    requestCurrentOrigin: controller.requestCurrentOrigin,
+    retryRanking: controller.retryRanking,
+    selectedJobId: controller.selectedId,
+    selectedSuggestion: controller.selectedSuggestion,
   };
 }
 
@@ -872,9 +280,9 @@ function JobsProximityToolbar({
   readonly active: boolean;
   readonly currentInputKey: string | null;
   readonly limit: ProximityLimit;
-  readonly originState: OriginRunState;
+  readonly originState: ProximityOriginRunState;
   readonly requestCurrentOrigin: () => void;
-  readonly requestState: ProximityRequestState;
+  readonly requestState: JobsProximityRequestState;
   readonly retryRanking: () => void;
   readonly onDisableNearMe: () => void;
   readonly onEnableNearMe: () => void;
@@ -967,9 +375,9 @@ function JobsProximityContent({
 }: {
   readonly onClearFilters: () => void;
   readonly currentInputKey: string | null;
-  readonly originState: OriginRunState;
+  readonly originState: ProximityOriginRunState;
   readonly requestCurrentOrigin: () => void;
-  readonly requestState: ProximityRequestState;
+  readonly requestState: JobsProximityRequestState;
   readonly retryRanking: () => void;
   readonly routeProximityLocationEnabled: boolean;
   readonly selectedJobId: string | null;
@@ -1184,7 +592,7 @@ function hasCurrentJobsProximityRouteResults({
   readonly active: boolean;
   readonly currentInputKey: string | null;
   readonly needsRouteLines: boolean;
-  readonly requestState: ProximityRequestState;
+  readonly requestState: JobsProximityRequestState;
 }) {
   return (
     active &&
@@ -1204,13 +612,13 @@ function isReusableJobProximityResponse({
 }: {
   readonly currentInputKey: string | null;
   readonly needsRouteLines: boolean;
-  readonly requestState: Exclude<ProximityRequestState, { status: "idle" }>;
+  readonly requestState: Exclude<JobsProximityRequestState, { status: "idle" }>;
 }) {
-  return (
-    currentInputKey !== null &&
-    requestState.inputKey === currentInputKey &&
-    (!needsRouteLines || requestState.includeRouteLines)
-  );
+  return isReusableProximityResponse({
+    currentInputKey,
+    needsRouteLines,
+    requestState,
+  });
 }
 
 function buildJobProximityFilters(

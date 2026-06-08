@@ -216,6 +216,7 @@ the package-local fallback and `local` when no Alchemy metadata is available.
 | `features/settings`      | User settings page schemas, search, profile/email/password forms, account security sessions, and 2FA settings UI.                                                                                                                                                                                                                    |
 | `features/command-bar`   | Command palette UI and global app actions.                                                                                                                                                                                                                                                                                           |
 | `features/agent`         | App-level Ceird Agent launcher, thread API helpers, Agent Worker origin resolution, responsive chat drawer, and chat E2E page object.                                                                                                                                                                                                |
+| `features/proximity`     | Shared route-aware proximity browser primitives: API bridge helpers, location access, maps handoff, typed-origin dialog control, route-ranking control, limit state, and display formatting.                                                                                                                                         |
 
 Shared app components live in `src/components`. shadcn-style primitives live in
 `src/components/ui`. Hotkey infrastructure lives in `src/hotkeys`.
@@ -349,6 +350,15 @@ current-location access is replaced by the typed-origin flow. Agent chat checks
 the preference only when a prompt needs current location; disabled or
 unavailable preference state blocks geolocation and offers explicit preference
 enablement or typed-origin selection.
+Jobs Near me, Sites Near me, and Agent typed-origin selection share the
+app-side origin dialog controller in
+`features/proximity/proximity-origin-controller.ts`. That controller owns
+autocomplete debouncing, Google Places session token rollover, suggestion
+selection, typed-origin place resolution, and close/unmount cancellation. Jobs
+and Sites compose it through
+`features/proximity/proximity-run-controller.ts`, which adds route-ranking
+request state and duplicate-request reuse. Feature surfaces still own their
+domain-specific rendering, filters, hidden Agent context handoff, and copy.
 Feature-local form/search schemas live next to the feature that owns them, for
 example:
 
