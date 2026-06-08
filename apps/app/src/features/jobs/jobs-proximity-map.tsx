@@ -84,6 +84,7 @@ export function JobsProximityMap({
                   color={selected ? "#2563eb" : "#64748b"}
                   opacity={selected ? 0.95 : 0.45}
                   width={selected ? 5 : 3}
+                  onClick={() => onSelectedJobIdChange(row.job.id)}
                 />
               ) : null}
               <MapMarker

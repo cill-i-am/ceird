@@ -322,6 +322,17 @@ disabled/pending states over global shortcuts.
 Use `lib/server-api-forwarded-headers.ts` when server-side calls need the API to
 preserve the original browser host/protocol for trusted proxy and cookie logic.
 
+## Map Primitive
+
+Interactive map surfaces use the source-owned shadcn-style map primitive in
+`apps/app/src/components/ui/map.tsx`. The primitive owns MapLibre imports and
+imperative map calls for controls, markers, route display lines, route fitting,
+and bounds fitting. Feature folders should compose `Map`, `MapMarker`,
+`MapRouteLine`, `MapFitRouteBounds`, and `MapFitBounds` instead of importing
+`maplibre-gl` or calling `useMap` directly. Proximity list/map features pass
+response-owned display geometry into the primitive and keep row, marker, and
+route-line selection state in React.
+
 ## State And Validation
 
 Runtime payloads that cross the app/API boundary are decoded with shared Effect

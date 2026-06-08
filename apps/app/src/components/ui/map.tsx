@@ -392,6 +392,8 @@ interface MapRouteLineProps {
   opacity?: number;
   /** Optional MapLibre dash pattern for alternate route states. */
   dashArray?: readonly number[];
+  /** Callback fired when the route line is clicked. */
+  onClick?: () => void;
 }
 
 interface RouteLineSource {
@@ -440,6 +442,15 @@ function removeMapRouteLine(
   }
 }
 
+function addMapLayerClickListener(
+  map: MapLibreGL.Map,
+  layerId: string,
+  handler: () => void
+) {
+  map.on("click", layerId, handler);
+  return () => map.off("click", layerId, handler);
+}
+
 function MapRouteLine({
   id,
   coordinates,
@@ -448,6 +459,7 @@ function MapRouteLine({
   width = DEFAULT_ROUTE_LINE_WIDTH,
   opacity = DEFAULT_ROUTE_LINE_OPACITY,
   dashArray,
+  onClick,
 }: MapRouteLineProps) {
   const { isLoaded, map } = useMap();
   const sourceId = `${id}-source`;
@@ -459,6 +471,8 @@ function MapRouteLine({
   );
   const lineDataRef = useRef(lineData);
   lineDataRef.current = lineData;
+  const onClickRef = useRef(onClick);
+  onClickRef.current = onClick;
 
   const dashArrayKey = dashArray?.join(",") ?? "";
   const dashPattern = useMemo(
@@ -506,7 +520,18 @@ function MapRouteLine({
       map.addLayer(layer, beforeId);
     }
 
+    const handleClick = () => {
+      onClickRef.current?.();
+    };
+
+    const removeClickListener = addMapLayerClickListener(
+      map,
+      layerId,
+      handleClick
+    );
+
     return () => {
+      removeClickListener();
       removeMapRouteLine(map, layerId, sourceId);
     };
   }, [
@@ -534,6 +559,68 @@ function MapRouteLine({
   }, [canRender, isLoaded, lineData, map, sourceId]);
 
   return null;
+}
+
+interface MapFitBoundsProps {
+  /** Coordinates in GeoJSON order: [longitude, latitude]. */
+  coordinates: readonly MapRouteLineCoordinate[];
+  /** Fit animation duration in milliseconds. */
+  duration?: number;
+  /** Maximum zoom level after fitting the route. */
+  maxZoom?: number;
+  /** Padding around the fitted route bounds in screen pixels. */
+  padding?: number;
+  /** Zoom level used when there is only one coordinate to center on. */
+  singleZoom?: number;
+}
+
+function MapFitBounds({
+  coordinates,
+  duration = 0,
+  maxZoom = 15,
+  padding = 36,
+  singleZoom = maxZoom,
+}: MapFitBoundsProps) {
+  const { isLoaded, map } = useMap();
+
+  useEffect(() => {
+    if (!isLoaded || map === null || coordinates.length === 0) {
+      return;
+    }
+
+    if (coordinates.length === 1) {
+      const [coordinate] = coordinates;
+
+      if (!coordinate) {
+        return;
+      }
+
+      map.easeTo({
+        center: [coordinate[0], coordinate[1]],
+        duration,
+        zoom: singleZoom,
+      });
+      return;
+    }
+
+    const bounds = new MapLibreGL.LngLatBounds();
+
+    for (const coordinate of coordinates) {
+      bounds.extend([coordinate[0], coordinate[1]]);
+    }
+
+    map.fitBounds(bounds, {
+      duration,
+      maxZoom,
+      padding,
+    });
+  }, [coordinates, duration, isLoaded, map, maxZoom, padding, singleZoom]);
+
+  return null;
+}
+
+function MapFitRouteBounds(props: MapFitBoundsProps) {
+  return <MapFitBounds {...props} />;
 }
 
 interface MarkerContextValue {
@@ -1162,6 +1249,8 @@ export {
   Map,
   useMap,
   MapMarker,
+  MapFitBounds,
+  MapFitRouteBounds,
   MapRouteLine,
   MarkerContent,
   MarkerPopup,

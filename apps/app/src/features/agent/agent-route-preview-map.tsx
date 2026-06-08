@@ -3,17 +3,15 @@
 import type { ProximityCoordinates } from "@ceird/proximity-core";
 import { MapsLocation01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import MapLibreGL from "maplibre-gl";
-import * as React from "react";
 
 import {
   Map,
   MapControls,
+  MapFitRouteBounds,
   MapMarker,
   MapRouteLine,
   MarkerContent,
   MarkerLabel,
-  useMap,
 } from "#/components/ui/map";
 import type { MapLineCoordinate } from "#/features/proximity/route-display-line";
 
@@ -43,7 +41,7 @@ export function AgentRoutePreviewMap({
         pitchWithRotate={false}
         touchPitch={false}
       >
-        <FitRouteBounds coordinates={routeCoordinates} />
+        <MapFitRouteBounds coordinates={routeCoordinates} />
         <MapControls position="bottom-right" controls={["zoom"]} />
         <MapRouteLine
           id="agent-route-preview"
@@ -74,32 +72,4 @@ export function AgentRoutePreviewMap({
       </Map>
     </div>
   );
-}
-
-function FitRouteBounds({
-  coordinates,
-}: {
-  readonly coordinates: readonly MapLineCoordinate[];
-}) {
-  const { isLoaded, map } = useMap();
-
-  React.useEffect(() => {
-    if (!isLoaded || map === null || coordinates.length < 2) {
-      return;
-    }
-
-    const bounds = new MapLibreGL.LngLatBounds();
-
-    for (const coordinate of coordinates) {
-      bounds.extend([coordinate[0], coordinate[1]]);
-    }
-
-    map.fitBounds(bounds, {
-      duration: 0,
-      maxZoom: 15,
-      padding: 36,
-    });
-  }, [coordinates, isLoaded, map]);
-
-  return null;
 }

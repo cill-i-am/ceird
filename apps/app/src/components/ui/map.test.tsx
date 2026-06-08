@@ -12,12 +12,21 @@ import type MapLibreGL from "maplibre-gl";
 
 import { ShortcutHelpOverlay } from "#/hotkeys/shortcut-help-overlay";
 
-import { Map, MapControls, MapRouteLine } from "./map";
+import {
+  Map,
+  MapControls,
+  MapFitBounds,
+  MapFitRouteBounds,
+  MapRouteLine,
+} from "./map";
 
 const {
   mockedAddLayer,
   mockedAddSource,
+  mockedBoundsExtend,
+  mockedEaseTo,
   mockedExitFullscreen,
+  mockedFitBounds,
   mockedFlyTo,
   mockedRequestBrowserGeolocation,
   mockedRequestFullscreen,
@@ -25,11 +34,15 @@ const {
   mockedRemoveSource,
   mockedResetNorthPitch,
   mockedSetSourceData,
+  mockedLayerEventHandlers,
   mockedZoomTo,
 } = vi.hoisted(() => ({
   mockedAddLayer: vi.fn<(layer: unknown, before?: string) => void>(),
   mockedAddSource: vi.fn<(id: string, source: unknown) => void>(),
+  mockedBoundsExtend: vi.fn<(coordinate: [number, number]) => void>(),
+  mockedEaseTo: vi.fn<(options: unknown) => void>(),
   mockedExitFullscreen: vi.fn<() => Promise<void>>(),
+  mockedFitBounds: vi.fn<(bounds: unknown, options: unknown) => void>(),
   mockedFlyTo:
     vi.fn<
       (options: {
@@ -49,6 +62,10 @@ const {
   mockedRemoveSource: vi.fn<(id: string) => void>(),
   mockedResetNorthPitch: vi.fn<(options: { duration: number }) => void>(),
   mockedSetSourceData: vi.fn<(id: string, data: unknown) => void>(),
+  mockedLayerEventHandlers: new globalThis.Map<
+    string,
+    Set<(event: unknown) => void>
+  >(),
   mockedZoomTo:
     vi.fn<(nextZoom: number, options: { duration: number }) => void>(),
 }));
@@ -58,8 +75,15 @@ vi.mock(import("#/lib/browser-geolocation"), () => ({
 }));
 
 function MockLngLatBounds() {
-  return null;
+  void mockedBoundsExtend;
 }
+
+MockLngLatBounds.prototype.extend = function extend(
+  coordinate: [number, number]
+) {
+  mockedBoundsExtend(coordinate);
+  return this;
+};
 
 function MockMarker() {
   return null;
@@ -70,7 +94,7 @@ function MockPopup() {
 }
 
 vi.mock(import("maplibre-gl"), () => {
-  type MockEventHandler = () => void;
+  type MockEventHandler = (event?: unknown) => void;
   interface MockSource {
     readonly setData: (data: unknown) => void;
   }
@@ -114,12 +138,14 @@ vi.mock(import("maplibre-gl"), () => {
       return this;
     }
 
-    easeTo() {
+    easeTo(options: unknown) {
       void this.container;
+      mockedEaseTo(options);
     }
 
-    fitBounds() {
+    fitBounds(bounds: unknown, options: unknown) {
       void this.container;
+      mockedFitBounds(bounds, options);
     }
 
     flyTo(options: {
@@ -173,11 +199,39 @@ vi.mock(import("maplibre-gl"), () => {
       void this.container;
     }
 
-    off(event: string, handler: MockEventHandler) {
-      this.eventHandlers.get(event)?.delete(handler);
+    off(
+      event: string,
+      layerOrHandler: MockEventHandler | string,
+      maybeHandler?: MockEventHandler
+    ) {
+      if (typeof layerOrHandler === "string") {
+        const key = `${event}:${layerOrHandler}`;
+        const handlers = mockedLayerEventHandlers.get(key);
+        if (handlers && maybeHandler) {
+          handlers.delete(maybeHandler);
+        }
+        return;
+      }
+
+      this.eventHandlers.get(event)?.delete(layerOrHandler);
     }
 
-    on(event: string, handler: MockEventHandler) {
+    on(
+      event: string,
+      layerOrHandler: MockEventHandler | string,
+      maybeHandler?: MockEventHandler
+    ) {
+      if (typeof layerOrHandler === "string") {
+        const key = `${event}:${layerOrHandler}`;
+        const handlers = mockedLayerEventHandlers.get(key) ?? new Set();
+        if (maybeHandler) {
+          handlers.add(maybeHandler);
+        }
+        mockedLayerEventHandlers.set(key, handlers);
+        return;
+      }
+
+      const handler = layerOrHandler;
       const handlers = this.eventHandlers.get(event) ?? new Set();
       handlers.add(handler);
       this.eventHandlers.set(event, handlers);
@@ -268,9 +322,13 @@ describe("map controls hotkeys", () => {
     );
     mockedAddLayer.mockClear();
     mockedAddSource.mockClear();
+    mockedBoundsExtend.mockClear();
+    mockedEaseTo.mockClear();
+    mockedFitBounds.mockClear();
     mockedRemoveLayer.mockClear();
     mockedRemoveSource.mockClear();
     mockedSetSourceData.mockClear();
+    mockedLayerEventHandlers.clear();
   });
 
   afterEach(() => {
@@ -524,6 +582,86 @@ describe("map route line", () => {
 
     expect(mockedAddLayer).toHaveBeenCalledOnce();
     expect(mockedRemoveLayer).not.toHaveBeenCalledWith("selected-route-layer");
+  });
+
+  it("lets feature code select a row from a route line click", async () => {
+    const onRouteClick = vi.fn<() => void>();
+
+    render(
+      <Map center={[-6.2603, 53.3498]} zoom={12}>
+        <MapRouteLine
+          id="interactive-route"
+          coordinates={[
+            [-6.2603, 53.3498],
+            [-6.251, 53.343],
+          ]}
+          onClick={onRouteClick}
+        />
+      </Map>
+    );
+
+    await waitFor(() => {
+      expect(mockedAddLayer).toHaveBeenCalledOnce();
+    });
+
+    const routeClickHandlers = mockedLayerEventHandlers.get(
+      "click:interactive-route-layer"
+    );
+    if (routeClickHandlers) {
+      for (const handler of routeClickHandlers) {
+        handler({ type: "click" });
+      }
+    }
+
+    expect(onRouteClick).toHaveBeenCalledOnce();
+  });
+
+  it("fits route bounds from coordinates inside the map primitive", async () => {
+    render(
+      <Map center={[-6.2603, 53.3498]} zoom={12}>
+        <MapFitRouteBounds
+          coordinates={[
+            [-6.2603, 53.3498],
+            [-6.251, 53.343],
+          ]}
+          maxZoom={14}
+          padding={32}
+        />
+      </Map>
+    );
+
+    await waitFor(() => {
+      expect(mockedFitBounds).toHaveBeenCalledWith(expect.anything(), {
+        duration: 0,
+        maxZoom: 14,
+        padding: 32,
+      });
+    });
+
+    expect(mockedBoundsExtend).toHaveBeenNthCalledWith(1, [-6.2603, 53.3498]);
+    expect(mockedBoundsExtend).toHaveBeenNthCalledWith(2, [-6.251, 53.343]);
+  });
+
+  it("eases to one coordinate from inside the map primitive", async () => {
+    render(
+      <Map center={[-6.2603, 53.3498]} zoom={12}>
+        <MapFitBounds
+          coordinates={[[-6.251, 53.343]]}
+          duration={600}
+          singleZoom={11}
+        />
+      </Map>
+    );
+
+    await waitFor(() => {
+      expect(mockedEaseTo).toHaveBeenCalledWith({
+        center: [-6.251, 53.343],
+        duration: 600,
+        zoom: 11,
+      });
+    });
+
+    expect(mockedFitBounds).not.toHaveBeenCalled();
   });
 
   it("removes its layer and source when unmounted", async () => {

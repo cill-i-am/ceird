@@ -2,20 +2,18 @@
 import { MapsLocation01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
-import MapLibreGL from "maplibre-gl";
 import * as React from "react";
 
 import { Badge } from "#/components/ui/badge";
 import { buttonVariants } from "#/components/ui/button";
-import type { MapRef } from "#/components/ui/map";
 import {
   Map,
   MapControls,
+  MapFitBounds,
   MapMarker,
   MarkerContent,
   MarkerLabel,
   MarkerPopup,
-  useMap,
 } from "#/components/ui/map";
 import {
   DEFAULT_SITE_MAP_CENTER,
@@ -30,6 +28,12 @@ export function SitesCoverageMapCanvas({
 }: {
   readonly sites: readonly MappedSiteMapItem[];
 }) {
+  const mapCoordinates = React.useMemo(
+    () =>
+      sites.map((item) => [item.site.longitude, item.site.latitude] as const),
+    [sites]
+  );
+
   return (
     <div className="h-full min-h-0">
       <Map
@@ -39,7 +43,13 @@ export function SitesCoverageMapCanvas({
         pitchWithRotate={false}
         touchPitch={false}
       >
-        <FitMapToSites sites={sites} />
+        <MapFitBounds
+          coordinates={mapCoordinates}
+          duration={600}
+          maxZoom={12}
+          padding={72}
+          singleZoom={11}
+        />
         <MapControls
           position="bottom-right"
           controls={["zoom", "fullscreen"]}
@@ -112,50 +122,4 @@ export function SitesCoverageMapCanvas({
       </Map>
     </div>
   );
-}
-
-function FitMapToSites({
-  sites,
-}: {
-  readonly sites: readonly MappedSiteMapItem[];
-}) {
-  const { isLoaded, map } = useMap();
-  const mapRef = React.useRef<MapRef | null>(null);
-
-  React.useEffect(() => {
-    if (!map || !isLoaded) {
-      return;
-    }
-
-    mapRef.current = map;
-
-    if (sites.length === 1) {
-      const [item] = sites;
-
-      if (!item) {
-        return;
-      }
-
-      map.easeTo({
-        center: [item.site.longitude, item.site.latitude],
-        duration: 600,
-        zoom: 11,
-      });
-      return;
-    }
-
-    const bounds = new MapLibreGL.LngLatBounds();
-
-    for (const item of sites) {
-      bounds.extend([item.site.longitude, item.site.latitude]);
-    }
-
-    map.fitBounds(bounds, {
-      duration: 600,
-      maxZoom: 12,
-      padding: 72,
-    });
-  }, [isLoaded, map, sites]);
-
-  return null;
 }
