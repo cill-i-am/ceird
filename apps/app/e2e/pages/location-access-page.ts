@@ -46,3 +46,25 @@ export async function skipLocationAccessIfPresent(page: Page) {
 
   await new LocationAccessPage(page).skipForNow();
 }
+
+export async function skipLocationAccessBeforeExpectedPage(
+  page: Page,
+  matchesExpectedPage: (url: URL) => boolean,
+  options?: {
+    readonly timeout?: number;
+  }
+) {
+  const currentUrl = new URL(page.url());
+
+  if (
+    currentUrl.pathname !== "/location-access" &&
+    !matchesExpectedPage(currentUrl)
+  ) {
+    await page.waitForURL(
+      (url) => url.pathname === "/location-access" || matchesExpectedPage(url),
+      { timeout: options?.timeout ?? 20_000 }
+    );
+  }
+
+  await skipLocationAccessIfPresent(page);
+}

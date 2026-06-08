@@ -4,7 +4,7 @@ import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { CreateOrganizationPage } from "../pages/create-organization-page";
-import { skipLocationAccessIfPresent } from "../pages/location-access-page";
+import { skipLocationAccessBeforeExpectedPage } from "../pages/location-access-page";
 import { SignupPage } from "../pages/signup-page";
 import { markUserEmailVerified } from "./email-verification";
 import { createTestPassword } from "./test-account";
@@ -22,7 +22,11 @@ function createTestSlug(prefix: string): string {
 async function expectAuthenticatedHome(page: Page) {
   const workspaceHome = page.getByRole("main", { name: "Workspace home" });
 
-  await skipLocationAccessIfPresent(page);
+  await skipLocationAccessBeforeExpectedPage(
+    page,
+    (url) => url.pathname === "/",
+    { timeout: WORKSPACE_HOME_TIMEOUT_MS }
+  );
   await expect(page).toHaveURL(/\/$/, {
     timeout: WORKSPACE_HOME_TIMEOUT_MS,
   });
