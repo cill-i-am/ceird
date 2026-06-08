@@ -49,16 +49,29 @@ import { cn } from "#/lib/utils";
 
 import type { SitesMapFilter } from "./sites-page";
 import { SitesProximityRow } from "./sites-proximity-row";
+import type { SitesViewMode } from "./sites-search";
+
+const LazySitesProximityMap = React.lazy(async () => {
+  const module = await import("./sites-proximity-map");
+
+  return { default: module.SitesProximityMap };
+});
 
 type ProximityRequestState =
   | { readonly status: "idle" }
-  | { readonly inputKey: string; readonly status: "loading" }
   | {
+      readonly includeRouteLines: boolean;
+      readonly inputKey: string;
+      readonly status: "loading";
+    }
+  | {
+      readonly includeRouteLines: boolean;
       readonly inputKey: string;
       readonly response: SiteProximityResponse;
       readonly status: "success";
     }
   | {
+      readonly includeRouteLines: boolean;
       readonly inputKey: string;
       readonly message: string;
       readonly status: "failed";
@@ -240,6 +253,7 @@ export interface SitesProximityPanelProps {
   readonly query: string;
   readonly routeProximityLocationEnabled: boolean;
   readonly showToolbar?: boolean;
+  readonly viewMode?: SitesViewMode | undefined;
 }
 
 export function SitesProximityPanel({
@@ -254,6 +268,7 @@ export function SitesProximityPanel({
   query,
   routeProximityLocationEnabled,
   showToolbar = true,
+  viewMode = "list",
 }: SitesProximityPanelProps) {
   const {
     confirmTypedOrigin,
@@ -283,6 +298,13 @@ export function SitesProximityPanel({
     onActiveChange,
     query,
     routeProximityLocationEnabled,
+    viewMode,
+  });
+  const hasCurrentRouteResults = hasCurrentSitesProximityRouteResults({
+    active,
+    currentInputKey: rankingInputKey,
+    needsRouteLines: viewMode === "map",
+    requestState: request,
   });
   const shouldRenderProximityShell = showToolbar || active;
   return (
@@ -321,6 +343,7 @@ export function SitesProximityPanel({
               retryRanking={retryRanking}
               routeProximityLocationEnabled={routeProximityLocationEnabled}
               selectedSiteId={selectedSiteId}
+              viewMode={viewMode}
               onClearFilters={onClearFilters}
               onOriginDialogOpen={handleOriginDialogOpen}
               onSelectedSiteIdChange={handleSelectedSiteIdChange}
@@ -341,7 +364,7 @@ export function SitesProximityPanel({
           />
         </section>
       ) : null}
-      {children}
+      {hasCurrentRouteResults ? null : children}
     </>
   );
 }
@@ -354,6 +377,7 @@ function useSitesProximityPanelController({
   onActiveChange,
   query,
   routeProximityLocationEnabled,
+  viewMode,
 }: {
   readonly active: boolean;
   readonly currentLocationRequestKey: number;
@@ -362,6 +386,7 @@ function useSitesProximityPanelController({
   readonly onActiveChange: (active: boolean) => void;
   readonly query: string;
   readonly routeProximityLocationEnabled: boolean;
+  readonly viewMode: SitesViewMode;
 }) {
   const [state, dispatch] = React.useReducer(
     sitesProximityPanelReducer,
@@ -386,7 +411,10 @@ function useSitesProximityPanelController({
     unknown
   > | null>(null);
   const removeTypedOriginObserverRef = React.useRef<(() => void) | null>(null);
+  const requestRef = React.useRef(state.request);
+  const rankingRetryTokenRef = React.useRef(state.rankingRetryToken);
   activeRef.current = active;
+  requestRef.current = state.request;
 
   const {
     origin,
@@ -405,8 +433,13 @@ function useSitesProximityPanelController({
       return null;
     }
 
-    return buildSiteProximityInput({ limit, origin: origin.origin, query });
-  }, [active, limit, mapFilter, origin, query]);
+    return buildSiteProximityInput({
+      includeRouteLines: viewMode === "map",
+      limit,
+      origin: origin.origin,
+      query,
+    });
+  }, [active, limit, mapFilter, origin, query, viewMode]);
   const rankingInputKey = React.useMemo(
     () =>
       rankingInput === null ? null : makeSiteProximityInputKey(rankingInput),
@@ -533,12 +566,34 @@ function useSitesProximityPanelController({
       return;
     }
 
+    const needsRouteLines = rankingInput.includeRouteLines === true;
+    const retryRequested = rankingRetryTokenRef.current !== rankingRetryToken;
+    rankingRetryTokenRef.current = rankingRetryToken;
+    const reusableRequest = requestRef.current;
+    if (
+      !retryRequested &&
+      reusableRequest.status === "success" &&
+      isReusableSiteProximityResponse({
+        currentInputKey: rankingInputKey,
+        needsRouteLines,
+        requestState: reusableRequest,
+      })
+    ) {
+      return;
+    }
+
     const currentRankingInput = rankingInput;
     const currentRankingInputKey = rankingInputKey;
+    const currentRankingNeedsRouteLines =
+      currentRankingInput.includeRouteLines === true;
     const requestId = rankRequestIdRef.current + 1;
     rankRequestIdRef.current = requestId;
     dispatch({
-      request: { inputKey: currentRankingInputKey, status: "loading" },
+      request: {
+        includeRouteLines: currentRankingNeedsRouteLines,
+        inputKey: currentRankingInputKey,
+        status: "loading",
+      },
       selectedSiteId: null,
       type: "request",
     });
@@ -561,6 +616,7 @@ function useSitesProximityPanelController({
         if (Exit.isSuccess(exit)) {
           dispatch({
             request: {
+              includeRouteLines: currentRankingNeedsRouteLines,
               inputKey: currentRankingInputKey,
               response: exit.value,
               status: "success",
@@ -573,6 +629,7 @@ function useSitesProximityPanelController({
 
         dispatch({
           request: {
+            includeRouteLines: currentRankingNeedsRouteLines,
             inputKey: currentRankingInputKey,
             message: getRouteRequestFailureMessage(exit.cause),
             status: "failed",
@@ -904,6 +961,7 @@ function SitesProximityContent({
   retryRanking,
   routeProximityLocationEnabled,
   selectedSiteId,
+  viewMode,
   onClearFilters,
   onOriginDialogOpen,
   onSelectedSiteIdChange,
@@ -916,6 +974,7 @@ function SitesProximityContent({
   readonly retryRanking: () => void;
   readonly routeProximityLocationEnabled: boolean;
   readonly selectedSiteId: string | null;
+  readonly viewMode: SitesViewMode;
   readonly onClearFilters: () => void;
   readonly onOriginDialogOpen: (open: boolean) => void;
   readonly onSelectedSiteIdChange: (siteId: string) => void;
@@ -1068,6 +1127,23 @@ function SitesProximityContent({
           )}
         </span>
       </div>
+      {viewMode === "map" ? (
+        <React.Suspense
+          fallback={
+            <div
+              aria-hidden
+              className="min-h-[360px] rounded-lg border bg-muted/20"
+            />
+          }
+        >
+          <LazySitesProximityMap
+            origin={requestState.response.origin}
+            rows={requestState.response.rows}
+            selectedSiteId={selectedSiteId}
+            onSelectedSiteIdChange={onSelectedSiteIdChange}
+          />
+        </React.Suspense>
+      ) : null}
       <div className="grid gap-2">
         {requestState.response.rows.map((row, index) => (
           <SitesProximityRow
@@ -1085,10 +1161,12 @@ function SitesProximityContent({
 }
 
 export function buildSiteProximityInput({
+  includeRouteLines,
   limit,
   origin,
   query,
 }: {
+  readonly includeRouteLines: boolean;
   readonly limit: ProximityLimit;
   readonly origin: ProximityOriginInput;
   readonly query: string;
@@ -1097,7 +1175,7 @@ export function buildSiteProximityInput({
 
   return {
     ...(trimmedQuery.length === 0 ? {} : { filters: { query: trimmedQuery } }),
-    includeRouteLines: false,
+    includeRouteLines,
     limit,
     origin,
   };
@@ -1109,6 +1187,45 @@ function makeSiteProximityInputKey(input: SiteProximityInput) {
     limit: input.limit,
     origin: input.origin,
   });
+}
+
+function hasCurrentSitesProximityRouteResults({
+  active,
+  currentInputKey,
+  needsRouteLines,
+  requestState,
+}: {
+  readonly active: boolean;
+  readonly currentInputKey: string | null;
+  readonly needsRouteLines: boolean;
+  readonly requestState: ProximityRequestState;
+}) {
+  return (
+    active &&
+    needsRouteLines &&
+    requestState.status === "success" &&
+    isReusableSiteProximityResponse({
+      currentInputKey,
+      needsRouteLines,
+      requestState,
+    })
+  );
+}
+
+function isReusableSiteProximityResponse({
+  currentInputKey,
+  needsRouteLines,
+  requestState,
+}: {
+  readonly currentInputKey: string | null;
+  readonly needsRouteLines: boolean;
+  readonly requestState: Exclude<ProximityRequestState, { status: "idle" }>;
+}) {
+  return (
+    currentInputKey !== null &&
+    requestState.inputKey === currentInputKey &&
+    (!needsRouteLines || requestState.includeRouteLines)
+  );
 }
 
 function getRouteRequestFailureMessage(cause: Cause.Cause<unknown>) {

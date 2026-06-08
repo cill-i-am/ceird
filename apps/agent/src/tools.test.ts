@@ -290,9 +290,10 @@ describe("Ceird Agent tools", () => {
         origin: {
           computedAt: "2026-06-06T10:00:00.000Z",
           coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
-          displayText: "Current location",
-          mode: "current_location",
+          displayText: "Docklands depot",
+          mode: "typed_origin",
           originToken: "secret-origin-token",
+          placeId: "ChIJdocklandsDepot",
         },
         routeLine: {
           coordinates: [
@@ -323,8 +324,7 @@ describe("Ceird Agent tools", () => {
       type: "json",
       value: {
         origin: {
-          displayText: "Current location",
-          mode: "current_location",
+          mode: "typed_origin",
         },
         rows: [
           {
@@ -341,6 +341,8 @@ describe("Ceird Agent tools", () => {
       },
     });
     expect(JSON.stringify(modelOutput)).not.toContain("53.349805");
+    expect(JSON.stringify(modelOutput)).not.toContain("Docklands depot");
+    expect(JSON.stringify(modelOutput)).not.toContain("ChIJdocklandsDepot");
     expect(JSON.stringify(modelOutput)).not.toContain("routeLine");
     expect(JSON.stringify(modelOutput)).not.toContain("originToken");
   });

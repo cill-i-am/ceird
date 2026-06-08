@@ -30,7 +30,7 @@ import { AuthFormField } from "./auth-form-field";
 import { authQuietLinkClassName } from "./auth-link-styles";
 import {
   getLoginNavigationTarget,
-  useAuthSuccessNavigation,
+  useSignupSuccessNavigation,
 } from "./auth-navigation";
 import { AuthPasswordInput } from "./auth-password-input";
 import { decodeSignupInput, signupSchema } from "./auth-schemas";
@@ -41,7 +41,7 @@ export function SignupPage({
 }: {
   readonly search?: InvitationContinuationSearch;
 }) {
-  const navigateOnSuccess = useAuthSuccessNavigation(search?.invitation);
+  const navigateOnSuccess = useSignupSuccessNavigation(search?.invitation);
   const isHydrated = useIsHydrated();
   const [captchaToken, setCaptchaToken] = useState<string>();
   const [captchaResetKey, setCaptchaResetKey] = useState(0);

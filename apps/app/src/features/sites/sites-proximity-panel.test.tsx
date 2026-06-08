@@ -15,7 +15,14 @@ import type {
   SiteProximityInput,
   SiteProximityResponse,
 } from "@ceird/sites-core";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  waitForElementToBeRemoved,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
 import * as React from "react";
@@ -89,6 +96,10 @@ vi.mock(import("#/features/proximity/proximity-api"), async (importActual) => {
 
 vi.mock(import("#/features/proximity/proximity-location-access"), () => ({
   requestCurrentLocationOrigin: mockedRequestCurrentLocationOrigin,
+}));
+
+vi.mock(import("./sites-proximity-map"), () => ({
+  SitesProximityMap: () => <div data-testid="sites-proximity-map" />,
 }));
 
 describe("sites proximity panel", () => {
@@ -235,6 +246,39 @@ describe("sites proximity panel", () => {
       screen.findByRole("heading", { name: "Dublin Estate" })
     ).resolves.toBeVisible();
     expect(screen.getByText("14 min")).toBeVisible();
+  });
+
+  it("requests route lines and renders the proximity map in map mode", async () => {
+    const user = userEvent.setup();
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
+
+    render(
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
+        limit={10}
+        mapFilter="all"
+        query=""
+        viewMode="map"
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      >
+        <div>Ordinary site map</div>
+      </ControlledSitesProximityPanel>
+    );
+
+    await user.click(screen.getByRole("button", { name: /near me/i }));
+
+    await waitFor(() => {
+      expect(mockedRankNearbySites).toHaveBeenCalledWith(
+        expect.objectContaining({
+          includeRouteLines: true,
+        })
+      );
+    });
+    await expect(
+      screen.findByTestId("sites-proximity-map")
+    ).resolves.toBeVisible();
+    expect(screen.queryByText("Ordinary site map")).not.toBeInTheDocument();
   });
 
   it("uses typed-origin fallback without geolocation when location preference is disabled", async () => {
@@ -576,6 +620,7 @@ describe("sites proximity panel", () => {
     await user.click(
       screen.getByRole("button", { name: "Use selected origin" })
     );
+    const originDialog = screen.getByRole("dialog");
     rerender(
       <SitesProximityPanel
         active={false}
@@ -588,15 +633,18 @@ describe("sites proximity panel", () => {
         onLimitChange={onLimitChange}
       />
     );
+    await waitForElementToBeRemoved(originDialog);
 
-    placeDetailsRequest.resolve({
-      origin: {
-        coordinates: { latitude: 53.35, longitude: -6.27 },
-        displayText: "Dublin",
-        mode: "typed_origin",
-        originToken: typedOriginToken,
-        placeId: dublinPortPlaceId,
-      },
+    act(() => {
+      placeDetailsRequest.resolve({
+        origin: {
+          coordinates: { latitude: 53.35, longitude: -6.27 },
+          displayText: "Dublin",
+          mode: "typed_origin",
+          originToken: typedOriginToken,
+          placeId: dublinPortPlaceId,
+        },
+      });
     });
     await delay(450);
 

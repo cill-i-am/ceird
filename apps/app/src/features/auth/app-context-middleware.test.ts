@@ -5,6 +5,7 @@ import {
   organizationAdminFunctionMiddleware,
   organizationFunctionMiddleware,
   requiredAuthFunctionMiddleware,
+  shouldBypassAuthenticatedAppShell,
   shouldHydrateAuthContext,
   shouldHydrateOrganizationContext,
 } from "./app-context-middleware";
@@ -95,6 +96,7 @@ describe("app context request middleware route selection", () => {
     "/create-organization",
     "/forgot-password",
     "/login",
+    "/location-access",
     "/members",
     "/oauth/consent",
     "/organization/security",
@@ -130,10 +132,27 @@ describe("app context request middleware route selection", () => {
     expect(shouldHydrateOrganizationContext(pathname)).toBeTruthy();
   });
 
-  it.each(["/login", "/signup", "/create-organization", "/forgot-password"])(
-    "does not hydrate organization context for %s",
+  it.each([
+    "/login",
+    "/signup",
+    "/location-access",
+    "/create-organization",
+    "/forgot-password",
+  ])("does not hydrate organization context for %s", (pathname) => {
+    expect(shouldHydrateOrganizationContext(pathname)).toBeFalsy();
+  });
+
+  it.each(["/create-organization", "/location-access"])(
+    "bypasses the authenticated app shell for %s",
     (pathname) => {
-      expect(shouldHydrateOrganizationContext(pathname)).toBeFalsy();
+      expect(shouldBypassAuthenticatedAppShell(pathname)).toBeTruthy();
+    }
+  );
+
+  it.each(["/", "/jobs", "/sites", "/settings"])(
+    "keeps the authenticated app shell for %s",
+    (pathname) => {
+      expect(shouldBypassAuthenticatedAppShell(pathname)).toBeFalsy();
     }
   );
 });

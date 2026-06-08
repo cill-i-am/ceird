@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
+import type * as UserPreferencesApiModule from "#/features/settings/user-preferences-api";
 import type * as AuthClientModule from "#/lib/auth-client";
 
 import { listOrganizations } from "../organizations/organization-access";
@@ -16,6 +17,7 @@ const {
   mockedNavigate,
   mockedSignInEmail,
   mockedSignUpEmail,
+  mockedUpdateCurrentUserPreferences,
 } = vi.hoisted(() => ({
   mockedClearAppContextClientCache: vi.fn<() => void>(),
   mockedGetSession: vi.fn<
@@ -69,6 +71,8 @@ const {
       } | null;
     }>
   >(),
+  mockedUpdateCurrentUserPreferences:
+    vi.fn<typeof UserPreferencesApiModule.updateCurrentUserPreferences>(),
 }));
 
 vi.mock(import("./app-context-client-cache-state"), async (importActual) => {
@@ -86,7 +90,12 @@ vi.mock(import("./auth-navigation"), async (importActual) => {
 
   return {
     ...actual,
-    useAuthSuccessNavigation: () => () => mockedNavigate({ to: "/" }),
+    useSignupSuccessNavigation: (invitation?: string) => () =>
+      mockedNavigate({
+        to: invitation
+          ? `/accept-invitation/${encodeURIComponent(invitation)}`
+          : "/location-access",
+      }),
   };
 });
 
@@ -145,6 +154,10 @@ vi.mock(import("#/lib/auth-client"), async () => {
   };
 });
 
+vi.mock(import("#/features/settings/user-preferences-api"), () => ({
+  updateCurrentUserPreferences: mockedUpdateCurrentUserPreferences,
+}));
+
 describe("signup page", () => {
   beforeEach(() => {
     window.history.replaceState({}, "", "http://localhost:3000/signup");
@@ -176,6 +189,12 @@ describe("signup page", () => {
       },
       error: null,
     });
+    mockedUpdateCurrentUserPreferences.mockResolvedValue({
+      preferences: {
+        routeProximityLocationEnabled: true,
+        updatedAt: "2026-06-06T10:00:00.000Z",
+      },
+    });
   });
 
   afterEach(() => {
@@ -206,11 +225,60 @@ describe("signup page", () => {
     });
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
-        to: "/",
+        to: "/location-access",
       });
     });
     expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
     expect(mockedSignInEmail).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("does not ask for route-aware location access inside the signup form", () => {
+    render(<SignupPage />);
+
+    expect(
+      screen.queryByText(/traffic-aware nearby jobs and sites/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", {
+        name: /ask this device for location when i use near me/i,
+      })
+    ).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("defers route-aware location setup until after signup", async () => {
+    const user = userEvent.setup();
+
+    render(<SignupPage />);
+
+    await user.type(screen.getByLabelText("Name"), "Taylor Example");
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password1234");
+    await user.click(screen.getByRole("button", { name: /sign up/i }));
+
+    expect(mockedUpdateCurrentUserPreferences).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/location-access",
+      });
+    });
+  }, 10_000);
+
+  it("lets new users skip the location access preference during signup", async () => {
+    const user = userEvent.setup();
+
+    render(<SignupPage />);
+
+    await user.type(screen.getByLabelText("Name"), "Taylor Example");
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password1234");
+    await user.click(screen.getByRole("button", { name: /sign up/i }));
+
+    await waitFor(() => {
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/location-access",
+      });
+    });
+    expect(mockedUpdateCurrentUserPreferences).not.toHaveBeenCalled();
   }, 10_000);
 
   it("passes the Turnstile token header when signup captcha is enabled", async () => {
@@ -289,7 +357,7 @@ describe("signup page", () => {
 
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
-        to: "/",
+        to: "/location-access",
       });
     });
 
@@ -311,7 +379,7 @@ describe("signup page", () => {
 
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
-        to: "/",
+        to: "/accept-invitation/inv_123",
       });
     });
     expect(mockedSignInEmail).not.toHaveBeenCalled();

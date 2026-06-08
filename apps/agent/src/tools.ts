@@ -306,10 +306,6 @@ function redactProximityOriginForModel(
     redactedOrigin.mode = origin.mode;
   }
 
-  if (typeof origin.displayText === "string") {
-    redactedOrigin.displayText = origin.displayText;
-  }
-
   return redactedOrigin;
 }
 

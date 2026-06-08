@@ -14,24 +14,25 @@ layout and organization context without adding URL segments.
 
 Current visible routes:
 
-| URL                                | Route file                            | Purpose                                                        |
-| ---------------------------------- | ------------------------------------- | -------------------------------------------------------------- |
-| `/`                                | `_app._org.index.tsx`                 | Authenticated organization home.                               |
-| `/login`                           | `login.tsx`                           | Sign in.                                                       |
-| `/signup`                          | `signup.tsx`                          | Create account.                                                |
-| `/forgot-password`                 | `forgot-password.tsx`                 | Request password reset.                                        |
-| `/reset-password`                  | `reset-password.tsx`                  | Complete password reset.                                       |
-| `/verify-email`                    | `verify-email.tsx`                    | Show email verification result.                                |
-| `/accept-invitation/$invitationId` | `accept-invitation.$invitationId.tsx` | Accept organization invitation.                                |
-| `/create-organization`             | `_app.create-organization.tsx`        | Create a team and optionally invite initial members.           |
-| `/settings`                        | `_app.settings.tsx`                   | User profile, email, password, and account security settings.  |
-| `/activity`                        | `_app._org.activity.tsx`              | Organization activity feed.                                    |
-| `/jobs`                            | `_app._org.jobs.tsx`                  | Jobs list and saved views.                                     |
-| `/members`                         | `_app._org.members.tsx`               | Organization members and invitations.                          |
-| `/organization/security`           | `_app._org.organization.security.tsx` | Owner/admin security activity review.                          |
-| `/organization/settings`           | `_app._org.organization.settings.tsx` | Organization settings and labels.                              |
-| `/sites`                           | `_app._org.sites.tsx`                 | Sites list.                                                    |
-| `/health`                          | `health.ts`                           | App stack/stage health response for Alchemy and Worker checks. |
+| URL                                | Route file                            | Purpose                                                         |
+| ---------------------------------- | ------------------------------------- | --------------------------------------------------------------- |
+| `/`                                | `_app._org.index.tsx`                 | Authenticated organization home.                                |
+| `/login`                           | `login.tsx`                           | Sign in.                                                        |
+| `/signup`                          | `signup.tsx`                          | Create account.                                                 |
+| `/forgot-password`                 | `forgot-password.tsx`                 | Request password reset.                                         |
+| `/reset-password`                  | `reset-password.tsx`                  | Complete password reset.                                        |
+| `/verify-email`                    | `verify-email.tsx`                    | Show email verification result.                                 |
+| `/accept-invitation/$invitationId` | `accept-invitation.$invitationId.tsx` | Accept organization invitation.                                 |
+| `/location-access`                 | `_app.location-access.tsx`            | Authenticated, shellless, skippable location-access onboarding. |
+| `/create-organization`             | `_app.create-organization.tsx`        | Create a team and optionally invite initial members.            |
+| `/settings`                        | `_app.settings.tsx`                   | User profile, email, password, and account security settings.   |
+| `/activity`                        | `_app._org.activity.tsx`              | Organization activity feed.                                     |
+| `/jobs`                            | `_app._org.jobs.tsx`                  | Jobs list and saved views.                                      |
+| `/members`                         | `_app._org.members.tsx`               | Organization members and invitations.                           |
+| `/organization/security`           | `_app._org.organization.security.tsx` | Owner/admin security activity review.                           |
+| `/organization/settings`           | `_app._org.organization.settings.tsx` | Organization settings and labels.                               |
+| `/sites`                           | `_app._org.sites.tsx`                 | Sites list.                                                     |
+| `/health`                          | `health.ts`                           | App stack/stage health response for Alchemy and Worker checks.  |
 
 `apps/app/src/router.tsx` configures scroll restoration, intent preloading, the
 router-scoped TanStack Query client, SSR Query dehydration/hydration, and typed
@@ -154,20 +155,21 @@ authorization endpoint. Product mutations still execute only through the Agent
 Worker and private domain action registry; the app chat surface owns
 presentation, approval review, thread selection, and connection setup.
 When a chat prompt is clearly asking for "near me", closest jobs/sites, or
-directions, the drawer preflights browser geolocation and sends the current
-origin through an ephemeral Agent WebSocket frame. The following chat request
-body contains only an opaque `ceirdProximityOriginContextId` so the Agent can
-match the turn to the in-memory origin without persisting raw coordinates in the
-AI chat runtime's latest-body request context. The id uses the
+directions, the drawer either preflights browser geolocation or asks the user to
+choose a typed origin resolved by the app. The chosen origin is sent through an
+ephemeral Agent WebSocket frame. The following chat request body contains only
+an opaque `ceirdProximityOriginContextId` so the Agent can match the turn to the
+in-memory origin without persisting raw coordinates or typed-origin details in
+the AI chat runtime's latest-body request context. The id uses the
 `agent-origin-<uuid>` shape; the Agent strips any unsupported custom body fields
 before handing the chat request to the AI chat runtime. The Agent cache prunes
 stale sideband origins after a short TTL, so abandoned sends do not keep precise
-coordinates indefinitely. The visible user message is not rewritten with
-coordinates. If the browser cannot provide current location, the composer blocks
-the send, keeps the draft, and shows an inline recovery message asking the user
-to allow location access or enable it in Settings. Free-form typed origins in
-Agent chat are a follow-up until the app can resolve and pass a signed typed
-origin sideband to the Agent Worker.
+origins indefinitely. The visible user message is not rewritten with
+coordinates or typed-origin details. If the browser cannot provide current
+location, or the user has current-location access disabled, the composer keeps
+the draft and offers either an explicit preference-enabling action or a signed
+typed-origin chooser. Agent persistence redacts request coordinates, typed
+origin labels, route geometry, and model-facing route-origin payloads.
 Route-aware Agent tool outputs render typed result rows and route preview cards
 inline instead of raw JSON; route-preview cards lazy-load the existing MapLibre
 map only when route geometry and browser map support are available. Stored chat
@@ -287,19 +289,25 @@ loaders may import the lane-neutral role/assertion helpers in
 function modules; those modules belong to the app/auth lane and can trigger
 extra shell reads from product navigation.
 
-The `/create-organization` onboarding route stays outside the app shell while
-the first workspace is created. The client submits only the team name to
+The `/location-access` onboarding route is an authenticated, shellless,
+skippable account-level step reached after ordinary signup and after successful
+invitation acceptance. Its loader reads the current
+`routeProximityLocationEnabled` user preference, so users who already enabled
+route proximity see the enabled state instead of being asked again. Enabling the
+preference does not call browser geolocation or store coordinates; it only
+allows future Near me flows to request fresh browser location when needed.
+
+The `/create-organization` onboarding route also stays outside the app shell
+while the first workspace is created. The client submits only the team name to
 `features/organizations/organization-server.ts`; that server helper generates
 the Better Auth organization slug, forwards auth cookies from the Better Auth
 response, sets the new organization as active for the current session when
 Better Auth accepts the sync, decodes the created organization summary, and
-returns that summary to the client. The same onboarding page then offers a
-compact location-access preference prompt and an optional invite-members step
-before navigating into the app. The prompt only updates the global
-`routeProximityLocationEnabled` user preference through the typed domain API; it
-does not call browser geolocation or store coordinates. Skipping or completing
-this step enters the active workspace; invite creation uses Better Auth's
-`authClient.organization.inviteMember` with the newly created organization ID.
+returns that summary to the client. The same onboarding page then offers an
+optional invite-members step before navigating into the app. Skipping or
+completing this step enters the active workspace; invite creation uses Better
+Auth's `authClient.organization.inviteMember` with the newly created
+organization ID.
 
 The `/members` route uses Better Auth organization client methods directly for
 both active members and pending invitations. It loads current members with
@@ -324,11 +332,12 @@ User settings load the route-proximity location preference through
 tab. Enabling the setting means Ceird may ask the current browser for a fresh
 device location when the user runs nearby Jobs, Sites, or Agent flows; the
 setting itself stores only a boolean preference.
-Jobs and Sites route loaders read the same preference and fail closed if it is
-disabled or unavailable: Near me stays available, but current-location requests
-are replaced by the typed-origin flow. Agent chat checks the preference only
-when a prompt needs current location; disabled or unavailable preference state
-blocks geolocation and asks the user to enable location access.
+Jobs, Sites, and the location-access onboarding route read the same preference
+and fail closed if it is unavailable. Near me stays available, but disabled
+current-location access is replaced by the typed-origin flow. Agent chat checks
+the preference only when a prompt needs current location; disabled or
+unavailable preference state blocks geolocation and offers explicit preference
+enablement or typed-origin selection.
 Feature-local form/search schemas live next to the feature that owns them, for
 example:
 

@@ -2,6 +2,7 @@ import {
   makeAgentProximityOriginContextBody,
   makeAgentProximityOriginContextFrame,
 } from "@ceird/agents-core/runtime";
+import type { AgentProximityOriginContextFrame } from "@ceird/agents-core/runtime";
 import type { ChatRecoveryContext } from "@cloudflare/ai-chat";
 import type * as AiChatModule from "@cloudflare/ai-chat";
 import { beforeAll, beforeEach, describe, expect, it } from "@effect/vitest";
@@ -25,6 +26,10 @@ type TouchAgentThreadActivity = typeof touchAgentThreadActivity;
 type ValidateAgentCurrentLocationAccess =
   typeof validateAgentCurrentLocationAccess;
 type CreateCeirdTools = typeof createCeirdTools;
+type TypedAgentOrigin = Extract<
+  AgentProximityOriginContextFrame["origin"],
+  { readonly mode: "typed_origin" }
+>;
 
 const {
   MockAIChatAgent,
@@ -246,7 +251,7 @@ describe("CeirdAgent", () => {
       | undefined;
     expect(streamTextInput?.system).not.toContain("53.349805");
     expect(streamTextInput?.system).not.toContain("-6.26031");
-    expect(streamTextInput?.system).toContain("hidden current-location origin");
+    expect(streamTextInput?.system).toContain("hidden route origin");
     expect(streamTextInput?.system).toContain("placeholder coordinates");
     expect(streamTextInput?.system).toContain(
       "Rank by traffic-aware driving time, not straight-line distance"
@@ -312,6 +317,48 @@ describe("CeirdAgent", () => {
       expect.objectContaining({
         system: expect.not.stringContaining("Request origin data JSON"),
       })
+    );
+  });
+
+  it("keeps signed typed-origin frames when current-location access is disabled", async () => {
+    const agent = makeRunnableAgent(CeirdAgent);
+    const contextId = "agent-origin-66666666-6666-4666-8666-666666666666";
+    mockedValidateAgentCurrentLocationAccess.mockRejectedValueOnce(
+      new Error("Current location access is disabled for this user.")
+    );
+
+    await agent.onMessage(
+      {} as never,
+      JSON.stringify(
+        makeAgentProximityOriginContextFrame(contextId, {
+          coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+          displayText: "Docklands depot",
+          mode: "typed_origin",
+          originToken:
+            "v1.typedOrigin.testSignature" as TypedAgentOrigin["originToken"],
+          placeId: "ChIJdocklandsDepot" as TypedAgentOrigin["placeId"],
+        })
+      )
+    );
+
+    await agent.onChatMessage(vi.fn(), {
+      body: makeAgentProximityOriginContextBody(contextId),
+      requestId: "request-1",
+    });
+
+    expect(mockedValidateAgentCurrentLocationAccess).not.toHaveBeenCalled();
+    expect(mockedCreateCeirdTools).toHaveBeenLastCalledWith(
+      agent.env,
+      agent.name,
+      {
+        proximityOrigin: {
+          coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+          displayText: "Docklands depot",
+          mode: "typed_origin",
+          originToken: "v1.typedOrigin.testSignature",
+          placeId: "ChIJdocklandsDepot",
+        },
+      }
     );
   });
 
@@ -514,6 +561,65 @@ describe("CeirdAgent", () => {
       "53.349805"
     );
     expect(JSON.stringify(sanitized)).not.toContain("53.349805");
+    expect(JSON.stringify(sanitized)).toContain(
+      "[redacted-proximity-coordinate]"
+    );
+  });
+
+  it("redacts typed-origin display text from persisted stream chunks and text messages", async () => {
+    const agent = makeRunnableAgent(CeirdAgent);
+    const contextId = "agent-origin-77777777-7777-4777-8777-777777777777";
+    const streamAgent = agent as unknown as CeirdAgentType & {
+      _startStream: (requestId: string) => string;
+      _storeStreamChunk: (streamId: string, body: string) => void;
+      sanitizeMessageForPersistence: (message: UIMessage) => UIMessage;
+      storedStreamChunks: {
+        readonly body: string;
+        readonly streamId: string;
+      }[];
+    };
+
+    await agent.onMessage(
+      {} as never,
+      JSON.stringify(
+        makeAgentProximityOriginContextFrame(contextId, {
+          coordinates: { latitude: 53.349_805, longitude: -6.260_31 },
+          displayText: "Docklands depot",
+          mode: "typed_origin",
+          originToken:
+            "v1.typedOrigin.testSignature" as TypedAgentOrigin["originToken"],
+          placeId: "ChIJdocklandsDepot" as TypedAgentOrigin["placeId"],
+        })
+      )
+    );
+    await agent.onChatMessage(vi.fn(), {
+      body: makeAgentProximityOriginContextBody(contextId),
+      requestId: "request-1",
+    });
+
+    const streamId = streamAgent._startStream("request-1");
+    streamAgent._storeStreamChunk(
+      streamId,
+      JSON.stringify({
+        delta: "The route starts at Docklands depot.",
+        type: "text-delta",
+      })
+    );
+    const sanitized = streamAgent.sanitizeMessageForPersistence({
+      id: "assistant-message",
+      parts: [
+        {
+          text: "The route starts at Docklands depot.",
+          type: "text",
+        },
+      ],
+      role: "assistant",
+    } as unknown as UIMessage);
+
+    expect(JSON.stringify(streamAgent.storedStreamChunks)).not.toContain(
+      "Docklands depot"
+    );
+    expect(JSON.stringify(sanitized)).not.toContain("Docklands depot");
     expect(JSON.stringify(sanitized)).toContain(
       "[redacted-proximity-coordinate]"
     );

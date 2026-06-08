@@ -37,10 +37,10 @@ Agent Worker:
 - thread DTOs, action request/response DTOs, and Effect `HttpApi` groups
 - the route-origin sideband frame schema plus
   `agent-origin-<uuid>` `ceirdProximityOriginContextId` request-body key for
-  matching an ephemeral current-location origin to one Agent turn without
-  exposing coordinates in visible chat text or the persisted AI chat request
-  body; Agent runtime caches must keep those frame payloads short-lived and
-  delete them when consumed
+  matching an ephemeral `ProximityOriginInput` to one Agent turn without
+  exposing current-location coordinates or signed typed-origin details in
+  visible chat text or the persisted AI chat request body; Agent runtime caches
+  must keep those frame payloads short-lived and delete them when consumed
 
 The root export includes the Effect `HttpApi` groups used by app/domain clients.
 The Agent Worker imports `@ceird/agents-core/runtime` instead; that subpath keeps

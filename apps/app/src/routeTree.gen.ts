@@ -20,6 +20,7 @@ import { Route as OauthConsentRouteImport } from './routes/oauth.consent'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
+import { Route as AppLocationAccessRouteImport } from './routes/_app.location-access'
 import { Route as AppCreateOrganizationRouteImport } from './routes/_app.create-organization'
 import { Route as AppOrgRouteImport } from './routes/_app._org'
 import { Route as AppOrgIndexRouteImport } from './routes/_app._org.index'
@@ -85,6 +86,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
+const AppLocationAccessRoute = AppLocationAccessRouteImport.update({
+  id: '/location-access',
+  path: '/location-access',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppCreateOrganizationRoute = AppCreateOrganizationRouteImport.update({
   id: '/create-organization',
   path: '/create-organization',
@@ -141,6 +147,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/create-organization': typeof AppCreateOrganizationRoute
+  '/location-access': typeof AppLocationAccessRoute
   '/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/api/$': typeof ApiSplatRoute
@@ -161,6 +168,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/create-organization': typeof AppCreateOrganizationRoute
+  '/location-access': typeof AppLocationAccessRoute
   '/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/api/$': typeof ApiSplatRoute
@@ -183,6 +191,7 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/_app/_org': typeof AppOrgRouteWithChildren
   '/_app/create-organization': typeof AppCreateOrganizationRoute
+  '/_app/location-access': typeof AppLocationAccessRoute
   '/_app/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/api/$': typeof ApiSplatRoute
@@ -206,6 +215,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/create-organization'
+    | '/location-access'
     | '/settings'
     | '/accept-invitation/$invitationId'
     | '/api/$'
@@ -226,6 +236,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/create-organization'
+    | '/location-access'
     | '/settings'
     | '/accept-invitation/$invitationId'
     | '/api/$'
@@ -247,6 +258,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/_app/_org'
     | '/_app/create-organization'
+    | '/_app/location-access'
     | '/_app/settings'
     | '/accept-invitation/$invitationId'
     | '/api/$'
@@ -352,6 +364,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/location-access': {
+      id: '/_app/location-access'
+      path: '/location-access'
+      fullPath: '/location-access'
+      preLoaderRoute: typeof AppLocationAccessRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/create-organization': {
       id: '/_app/create-organization'
       path: '/create-organization'
@@ -444,12 +463,14 @@ const AppOrgRouteWithChildren =
 interface AppRouteChildren {
   AppOrgRoute: typeof AppOrgRouteWithChildren
   AppCreateOrganizationRoute: typeof AppCreateOrganizationRoute
+  AppLocationAccessRoute: typeof AppLocationAccessRoute
   AppSettingsRoute: typeof AppSettingsRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppOrgRoute: AppOrgRouteWithChildren,
   AppCreateOrganizationRoute: AppCreateOrganizationRoute,
+  AppLocationAccessRoute: AppLocationAccessRoute,
   AppSettingsRoute: AppSettingsRoute,
 }
 

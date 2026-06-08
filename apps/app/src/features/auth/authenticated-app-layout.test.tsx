@@ -132,4 +132,37 @@ describe("authenticated app layout", () => {
       expect(mockedAppLayout).not.toHaveBeenCalled();
     }
   );
+
+  it(
+    "renders the location access onboarding route without the app shell",
+    {
+      timeout: 10_000,
+    },
+    () => {
+      mockedUseRouteContext.mockReturnValue({
+        activeOrganizationId: undefined,
+        currentOrganizationRole: undefined,
+        session: {
+          user: {
+            name: "Taylor Example",
+            email: "person@example.com",
+            emailVerified: false,
+            image: null,
+          },
+        },
+      });
+      mockedUseRouterState.mockImplementationOnce(
+        (options) =>
+          options?.select?.({
+            location: { pathname: "/location-access" },
+          }) ?? false
+      );
+
+      const { getByTestId, queryByTestId } = render(<AuthenticatedAppLayout />);
+
+      expect(getByTestId("onboarding-outlet")).toBeInTheDocument();
+      expect(queryByTestId("app-layout")).not.toBeInTheDocument();
+      expect(mockedAppLayout).not.toHaveBeenCalled();
+    }
+  );
 });

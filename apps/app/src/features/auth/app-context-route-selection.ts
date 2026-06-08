@@ -9,6 +9,7 @@ export function shouldHydrateAuthContext(pathname: string) {
     pathname === "/create-organization" ||
     pathname === "/forgot-password" ||
     pathname === "/login" ||
+    pathname === "/location-access" ||
     pathname === "/members" ||
     pathname === "/oauth/consent" ||
     pathname === "/organization/security" ||
@@ -35,4 +36,8 @@ export function shouldHydrateOrganizationContext(pathname: string) {
     pathname.startsWith("/jobs") ||
     pathname.startsWith("/sites/")
   );
+}
+
+export function shouldBypassAuthenticatedAppShell(pathname: string) {
+  return pathname === "/create-organization" || pathname === "/location-access";
 }
