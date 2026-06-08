@@ -5,6 +5,11 @@ import {
   appDatabaseUrlConfig,
 } from "../../../platform/database/config.js";
 import type { FetchPasswordRange } from "./auth-password-compromise.js";
+import {
+  loadRateLimitCleanupConfig,
+  makeRateLimitCleanupConfig,
+} from "./auth-rate-limit-cleanup.js";
+import type { RateLimitCleanupConfig } from "./auth-rate-limit-cleanup.js";
 
 export const DEFAULT_AUTH_BASE_PATH = "/api/auth" as const;
 export const DEFAULT_AUTH_DATABASE_URL = DEFAULT_APP_DATABASE_URL;
@@ -292,6 +297,10 @@ export interface AuthenticationEnvironment {
   readonly secrets?: AuthenticationVersionedSecret[] | undefined;
   readonly databaseUrl: string;
   readonly rateLimitEnabled?: boolean | undefined;
+  readonly rateLimitCleanupBatchSize?: number | undefined;
+  readonly rateLimitCleanupEnabled?: boolean | undefined;
+  readonly rateLimitCleanupMaxBatches?: number | undefined;
+  readonly rateLimitCleanupRetentionHours?: number | undefined;
   readonly trustedOrigins?: readonly string[] | undefined;
 }
 
@@ -373,6 +382,7 @@ export interface AuthenticationConfig {
       };
     };
   };
+  readonly rateLimitCleanup: RateLimitCleanupConfig;
   readonly captcha:
     | {
         readonly enabled: false;
@@ -831,6 +841,12 @@ export function makeAuthenticationConfig(
   const versionedSecrets = normalizeAuthenticationVersionedSecrets(
     environment.secrets
   );
+  const rateLimitCleanup = makeRateLimitCleanupConfig({
+    batchSize: environment.rateLimitCleanupBatchSize,
+    enabled: environment.rateLimitCleanupEnabled,
+    maxBatches: environment.rateLimitCleanupMaxBatches,
+    retentionHours: environment.rateLimitCleanupRetentionHours,
+  });
 
   return {
     appName: "Ceird",
@@ -917,6 +933,7 @@ export function makeAuthenticationConfig(
         },
       },
     },
+    rateLimitCleanup,
     captcha: makeAuthenticationCaptchaConfig(environment),
     emailAndPassword: {
       enabled: true,
@@ -1040,6 +1057,7 @@ export const loadAuthenticationConfig = Effect.gen(
     const rateLimitEnabled = yield* Config.boolean(
       "AUTH_RATE_LIMIT_ENABLED"
     ).pipe(Config.withDefault(true));
+    const rateLimitCleanup = yield* loadRateLimitCleanupConfig;
     const ceirdLocalDev = yield* pipe(
       Config.string("CEIRD_LOCAL_DEV"),
       Config.option
@@ -1096,6 +1114,10 @@ export const loadAuthenticationConfig = Effect.gen(
       secrets: versionedSecrets,
       databaseUrl,
       rateLimitEnabled,
+      rateLimitCleanupBatchSize: rateLimitCleanup.batchSize,
+      rateLimitCleanupEnabled: rateLimitCleanup.enabled,
+      rateLimitCleanupMaxBatches: rateLimitCleanup.maxBatches,
+      rateLimitCleanupRetentionHours: rateLimitCleanup.retentionHours,
       trustedOrigins: parseCommaDelimitedConfigList(trustedOrigins),
     });
   }

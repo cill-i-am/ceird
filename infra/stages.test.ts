@@ -115,6 +115,7 @@ describe("Alchemy stage identity", () => {
     expect(config.authCaptchaTurnstileSecretKey).toBeUndefined();
     expect(config.authCaptchaTurnstileSiteKey).toBeUndefined();
     expect(config.authPasswordCompromiseCheckEnabled).toBeUndefined();
+    expect(config.authRateLimitCleanupEnabled).toBeUndefined();
     expect(config.authSecrets).toBeUndefined();
     expect(config.agentActionRunStaleAfterSeconds).toBe(900);
     expect(config.mcpHostname).toBe("mcp.dev-cillian.example.com");
@@ -400,6 +401,27 @@ describe("Alchemy stage identity", () => {
     );
 
     expect(config.authRateLimitEnabled).toBeTruthy();
+  });
+
+  it("loads optional auth rate-limit cleanup override as stage config", () => {
+    const config = Effect.runSync(
+      loadInfraStageConfig("main").pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                AUTH_EMAIL_FROM: "no-reply@example.com",
+                AUTH_RATE_LIMIT_CLEANUP_ENABLED: "false",
+                CEIRD_ZONE_NAME: "example.com",
+                GOOGLE_MAPS_API_KEY: "google-key",
+              },
+            })
+          )
+        )
+      )
+    );
+
+    expect(config.authRateLimitCleanupEnabled).toBeFalsy();
   });
 
   it("loads optional password compromise check override as stage config", () => {

@@ -281,11 +281,15 @@ The domain Worker module adapter runs fetch and queue Effect programs; the
 single Effect-threaded domain runtime boundary lives in
 `apps/domain/src/platform/cloudflare/runtime.ts`, where config, Hyperdrive, auth
 queue scheduling, email binding delivery, and Google Places site location
-resolution are composed from Cloudflare bindings. Alchemy imports are isolated to the app-owned resource
+resolution are composed from Cloudflare bindings. Its scheduled handler runs
+the auth rate-limit cleanup job from the Cloudflare Cron Trigger configured on
+deployed domain Workers; local Alchemy dev sets the cron list to empty and
+injects `AUTH_RATE_LIMIT_CLEANUP_ENABLED=false` explicitly. Alchemy imports are isolated to the app-owned resource
 modules rather than request handlers or domain services. The fetch path
 acquires the DB-backed web handler inside each Worker invocation so Hyperdrive
 connections stay request-scoped; queues compose their email sender runtime per
-batch.
+batch, and scheduled cleanup composes the same Hyperdrive-backed database
+runtime for bounded maintenance deletes.
 The domain and Agent Workers are also configured with trusted app-origin env
 vars; the domain Worker additionally receives Better Auth env vars, MCP
 resource metadata, optional MCP authorized-app cache sizing, Google Maps Places
@@ -378,6 +382,10 @@ branch names.
 | `AUTH_EMAIL_FROM_NAME`                              | `Ceird`         | Sender display name.                                                                                                                                                                          |
 | `AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED`            | unset           | Optional password compromise check override; domain config enables the check by default unless `CEIRD_LOCAL_DEV=true` or the auth base URL is strict loopback or `.localhost`.                |
 | `AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE` | unset           | Optional strict loopback or `.localhost` HIBP range API override for deterministic local verification. Production should use the default HIBP provider.                                       |
+| `AUTH_RATE_LIMIT_CLEANUP_ENABLED`                   | stage-dependent | Domain Worker scheduled cleanup flag; deployed Workers default to `true`, while local Alchemy dev injects `false` unless explicitly overridden.                                               |
+| `AUTH_RATE_LIMIT_RETENTION_HOURS`                   | `48`            | Auth `rate_limit` retention horizon after `last_request`; must stay greater than the largest configured limiter window.                                                                       |
+| `AUTH_RATE_LIMIT_CLEANUP_BATCH_SIZE`                | `1000`          | Maximum auth `rate_limit` rows deleted per cleanup batch.                                                                                                                                     |
+| `AUTH_RATE_LIMIT_CLEANUP_MAX_BATCHES`               | `10`            | Maximum cleanup batches per scheduled domain Worker invocation.                                                                                                                               |
 | `AUTH_RATE_LIMIT_ENABLED`                           | stage-dependent | Auth rate limiting flag; defaults to `false` for `pr-<number>` stages and `true` otherwise. CI also overrides it to `false` for `ci-<run>-<attempt>` stages.                                  |
 | `BETTER_AUTH_SECRETS`                               | unset           | Optional redacted Better Auth rotation material formatted as comma-delimited `<version>:<secret>` entries.                                                                                    |
 | `GOOGLE_MAPS_API_KEY`                               | required        | Google Maps Geocoding API key for deployed domain Worker.                                                                                                                                     |

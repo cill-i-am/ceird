@@ -173,7 +173,10 @@ Current config decisions:
 - Better Auth remains the native owner of profile updates, verified email
   changes, and password changes; the app only renders forms around those client
   APIs
-- rate limiting is enabled and stored in the database
+- rate limiting is enabled and stored in the database. `rate_limit` rows are
+  mutable limiter state and are retained for 48 hours after `last_request`,
+  which is greater than the current largest configured limiter window of 24
+  hours. The first release uses one uniform retention horizon for all keys.
 - `BETTER_AUTH_BASE_URL` is required
 - `BETTER_AUTH_SECRET` is required as the legacy/current fallback secret and
   must be at least 32 characters
@@ -672,6 +675,33 @@ The database is the source of truth for:
 - OAuth client registrations, tokens, and consent records
 
 Ceird does not maintain a parallel app-specific session store.
+
+### Rate-Limit Retention
+
+Better Auth and Ceird's auth-abuse guards store limiter counters in
+`rate_limit`. The table is mutable operational state, not append-only
+time-series data, so Ceird does not partition it for the first release.
+
+The deployed domain Worker runs auth rate-limit cleanup from its Cloudflare
+Cron Trigger at `17 3 * * *` UTC. Cleanup is deliberately off the auth request
+path so sign-in, sign-up, OAuth registration, two-factor, and organization
+invitation requests do not pay maintenance-query latency or hold cleanup locks.
+Local Alchemy dev disables the cron and sets
+`AUTH_RATE_LIMIT_CLEANUP_ENABLED=false` explicitly unless overridden.
+
+The cleanup job deletes rows where `last_request` is older than the configured
+retention horizon. Defaults are:
+
+- `AUTH_RATE_LIMIT_RETENTION_HOURS=48`
+- `AUTH_RATE_LIMIT_CLEANUP_BATCH_SIZE=1000`
+- `AUTH_RATE_LIMIT_CLEANUP_MAX_BATCHES=10`
+
+Retention config is validated to remain greater than the largest configured
+limiter window. The delete path selects victims ordered by `(last_request, id)`
+with `FOR UPDATE SKIP LOCKED`, deletes bounded batches, and logs partial
+progress if a later batch fails. The supporting
+`rate_limit_last_request_id_idx` index keeps victim selection aligned with the
+retention predicate and ordering.
 
 ### Account Session Management
 

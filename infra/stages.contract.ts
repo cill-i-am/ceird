@@ -21,6 +21,7 @@ export const configWithoutCloudflareBootstrapSecrets = {
   authEmailFromName: "Ceird",
   authPasswordCompromiseCheckEnabled: undefined,
   authPasswordCompromiseCheckRangeUrlOverride: undefined,
+  authRateLimitCleanupEnabled: undefined,
   authRateLimitEnabled: true,
   authSecrets: undefined,
   googleMapsApiKey: Redacted.make(

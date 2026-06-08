@@ -222,6 +222,10 @@ type DomainWorkerStackRuntimeConfigEnv = Required<
     | "AUTH_COOKIE_PREFIX"
     | "AUTH_EMAIL_FROM"
     | "AUTH_EMAIL_FROM_NAME"
+    | "AUTH_RATE_LIMIT_CLEANUP_BATCH_SIZE"
+    | "AUTH_RATE_LIMIT_CLEANUP_ENABLED"
+    | "AUTH_RATE_LIMIT_CLEANUP_MAX_BATCHES"
+    | "AUTH_RATE_LIMIT_RETENTION_HOURS"
     | "AUTH_RATE_LIMIT_ENABLED"
     | "AUTH_TRUSTED_ORIGINS"
     | "BETTER_AUTH_BASE_URL"
@@ -493,6 +497,10 @@ describe("Cloudflare stack", () => {
       AUTH_COOKIE_DOMAIN: "example.com",
       AUTH_COOKIE_PREFIX: "ceird-main",
       AUTH_EMAIL_FROM_NAME: "Ceird",
+      AUTH_RATE_LIMIT_CLEANUP_BATCH_SIZE: "1000",
+      AUTH_RATE_LIMIT_CLEANUP_ENABLED: "true",
+      AUTH_RATE_LIMIT_CLEANUP_MAX_BATCHES: "10",
+      AUTH_RATE_LIMIT_RETENTION_HOURS: "48",
       AUTH_RATE_LIMIT_ENABLED: "true",
       AUTH_TRUSTED_ORIGINS:
         "https://app.example.com,https://*--main.example.com",
@@ -1049,6 +1057,7 @@ describe("Cloudflare stack", () => {
     expect(syncBindings.ANALYTICS).toBe(workerAnalytics);
     expect(syncBindings.DOMAIN).toBe(domain);
     expect(domainWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
+    expect(domainWorkerProps.crons).toStrictEqual(["17 3 * * *"]);
     expect(domainWorkerProps.observability).toBe(ceirdWorkerObservability);
     expect(domainWorkerProps.placement).toBe(ceirdDomainWorkerPlacement);
     expect(apiWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
@@ -1288,6 +1297,15 @@ describe("Cloudflare stack", () => {
       "postgresql://ceird:secret@example.neon.tech/ceird"
     );
     expect(domainWorkerProps.env.CEIRD_LOCAL_DEV).toBe("true");
+    expect(domainWorkerProps.env.AUTH_RATE_LIMIT_CLEANUP_ENABLED).toBe("false");
+    expect(domainWorkerProps.env.AUTH_RATE_LIMIT_CLEANUP_BATCH_SIZE).toBe(
+      "1000"
+    );
+    expect(domainWorkerProps.env.AUTH_RATE_LIMIT_CLEANUP_MAX_BATCHES).toBe(
+      "10"
+    );
+    expect(domainWorkerProps.env.AUTH_RATE_LIMIT_RETENTION_HOURS).toBe("48");
+    expect(domainWorkerProps.crons).toStrictEqual([]);
     expect(domainWorkerProps.env.AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED).toBe(
       "false"
     );

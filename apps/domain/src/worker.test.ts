@@ -20,6 +20,7 @@ import {
   getDomainWorkerMcpAuthorizedAppCache,
   handleWorkerFetch,
   handleWorkerQueue,
+  handleWorkerScheduled,
   makeDomainWorkerRuntimeLayers,
   makeWorkerBaseLive,
   makeWorkerAuthenticationBackgroundTaskHandlerLive,
@@ -101,6 +102,16 @@ async function runWorkerQueueAdapter(
   await queue(batch, env, makeExecutionContext());
 }
 
+async function runWorkerScheduledAdapter(env: DomainWorkerEnv) {
+  const scheduled = worker.scheduled as (
+    controller: ScheduledController,
+    env: DomainWorkerEnv,
+    context: ExecutionContext
+  ) => Promise<void>;
+
+  await scheduled(makeScheduledController(), env, makeExecutionContext());
+}
+
 function makeSendEmailMock(
   send: TestSendEmail = () => Promise.resolve({ messageId: "email_123" })
 ) {
@@ -136,6 +147,14 @@ function makeEnv(
     NODE_ENV: "test",
     ...envOverrides,
   };
+}
+
+function makeScheduledController() {
+  return {
+    cron: "17 3 * * *",
+    noRetry: vi.fn<() => void>(),
+    scheduledTime: Date.UTC(2026, 5, 8, 3, 17, 0),
+  } as unknown as ScheduledController;
 }
 
 describe("worker queue auth email delivery", () => {
@@ -421,6 +440,72 @@ describe("worker queue auth email delivery", () => {
     await expect(
       vi.mocked(secondContext.waitUntil).mock.calls[0]?.[0]
     ).resolves.toBeUndefined();
+  });
+
+  it("skips scheduled auth rate-limit cleanup when explicitly disabled", async () => {
+    const { logger, logs } = captureLogs();
+
+    await handleWorkerScheduled(
+      makeScheduledController(),
+      makeEnv({
+        AUTH_RATE_LIMIT_CLEANUP_ENABLED: "false",
+        CEIRD_LOCAL_DEV: "true",
+        DATABASE: undefined,
+        DATABASE_URL: undefined,
+      })
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        annotations: expect.objectContaining({
+          authRateLimitCleanupEnabled: false,
+          "cloudflare.cron": "17 3 * * *",
+        }),
+        level: "INFO",
+        message: ["Auth rate-limit cleanup skipped"],
+      })
+    );
+  });
+
+  it("logs sanitized scheduled auth rate-limit cleanup failures and propagates the cron failure", async () => {
+    const { logger, logs } = captureLogs();
+
+    await expect(
+      handleWorkerScheduled(
+        makeScheduledController(),
+        makeEnv({
+          DATABASE: undefined,
+          DATABASE_URL: undefined,
+        })
+      ).pipe(
+        Effect.provide(Logger.layer([logger])),
+        Effect.provideService(References.MinimumLogLevel, "Trace"),
+        Effect.runPromise
+      )
+    ).rejects.toThrow(
+      "Deployed Domain Worker requires the DATABASE Hyperdrive binding"
+    );
+
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain("rate_limit_cleanup_failed");
+    expect(serializedLogs).toContain("authRateLimitCleanupFailureCause");
+    expect(serializedLogs).not.toContain("postgresql://");
+  });
+
+  it("exposes scheduled cleanup through the Cloudflare Worker adapter", async () => {
+    await runWorkerScheduledAdapter(
+      makeEnv({
+        AUTH_RATE_LIMIT_CLEANUP_ENABLED: "false",
+        CEIRD_LOCAL_DEV: "true",
+        DATABASE: undefined,
+        DATABASE_URL: undefined,
+      })
+    );
   });
 
   it("uses the Google Places location provider with Worker environment config", async () => {

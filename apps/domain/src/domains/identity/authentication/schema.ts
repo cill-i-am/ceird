@@ -224,7 +224,10 @@ export const rateLimit = pgTable(
     count: integer("count").notNull(),
     lastRequest: bigint("last_request", { mode: "number" }).notNull(),
   },
-  (table) => [uniqueIndex("rate_limit_key_idx").on(table.key)]
+  (table) => [
+    uniqueIndex("rate_limit_key_idx").on(table.key),
+    index("rate_limit_last_request_id_idx").on(table.lastRequest, table.id),
+  ]
 );
 
 export const jwks = pgTable("jwks", {

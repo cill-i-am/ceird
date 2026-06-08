@@ -167,6 +167,16 @@ resource depends on `Drizzle.Schema`, then applies SQL files from
 the stage-specific `appliedMigrationsDir` before Hyperdrive and the domain
 Worker are reconciled.
 
+The domain Worker owns scheduled maintenance that needs the same database path
+as request handling. Auth rate-limit retention runs from the Worker's
+Cloudflare Cron Trigger instead of from Better Auth request handlers or
+database-side cron. The scheduled handler resolves Postgres through the same
+Hyperdrive binding or explicit local `DATABASE_URL` fallback as normal Worker
+invocations, then runs the cleanup through the shared Effect SQL runtime. The
+`rate_limit` cleanup query is bounded by batch size and max-batch config and is
+supported by the `(last_request, id)` index so old limiter rows can be found in
+delete order without scanning current counters.
+
 ## Electric SQL Sync
 
 Electric SQL is deployed as a Cloudflare Container owned by `apps/sync`. The
