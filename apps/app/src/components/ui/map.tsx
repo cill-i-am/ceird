@@ -442,6 +442,15 @@ function removeMapRouteLine(
   }
 }
 
+function addMapLayerClickListener(
+  map: MapLibreGL.Map,
+  layerId: string,
+  handler: () => void
+) {
+  map.on("click", layerId, handler);
+  return () => map.off("click", layerId, handler);
+}
+
 function MapRouteLine({
   id,
   coordinates,
@@ -464,7 +473,6 @@ function MapRouteLine({
   lineDataRef.current = lineData;
   const onClickRef = useRef(onClick);
   onClickRef.current = onClick;
-  const isInteractive = onClick !== undefined;
 
   const dashArrayKey = dashArray?.join(",") ?? "";
   const dashPattern = useMemo(
@@ -516,14 +524,14 @@ function MapRouteLine({
       onClickRef.current?.();
     };
 
-    if (isInteractive) {
-      map.on("click", layerId, handleClick);
-    }
+    const removeClickListener = addMapLayerClickListener(
+      map,
+      layerId,
+      handleClick
+    );
 
     return () => {
-      if (isInteractive) {
-        map.off("click", layerId, handleClick);
-      }
+      removeClickListener();
       removeMapRouteLine(map, layerId, sourceId);
     };
   }, [
@@ -532,7 +540,6 @@ function MapRouteLine({
     color,
     dashPattern,
     isLoaded,
-    isInteractive,
     layerId,
     map,
     opacity,
