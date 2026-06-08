@@ -46,6 +46,17 @@ export function getAuthSuccessNavigationTarget(invitationId?: string) {
   };
 }
 
+export function getSignupSuccessNavigationTarget(invitationId?: string) {
+  if (invitationId) {
+    return getInvitationAcceptanceNavigationTarget(invitationId);
+  }
+
+  return {
+    to: "/location-access" as const,
+    viewTransition: authCardViewTransition,
+  };
+}
+
 function getInvitationAcceptanceHref(invitationId: string) {
   return `/accept-invitation/${encodeURIComponent(invitationId)}`;
 }
@@ -60,5 +71,18 @@ export function useAuthSuccessNavigation(invitationId?: string) {
     }
 
     await navigate(getAuthSuccessNavigationTarget(invitationId));
+  };
+}
+
+export function useSignupSuccessNavigation(invitationId?: string) {
+  const navigate = useNavigate({ from: "/signup" });
+
+  return async () => {
+    if (invitationId && typeof window !== "undefined") {
+      window.location.assign(getInvitationAcceptanceHref(invitationId));
+      return;
+    }
+
+    await navigate(getSignupSuccessNavigationTarget());
   };
 }

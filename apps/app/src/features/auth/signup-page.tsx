@@ -6,8 +6,6 @@ import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
-import { LocationAccessStep } from "#/features/onboarding/location-access-step";
-import { updateCurrentUserPreferences } from "#/features/settings/user-preferences-api";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import {
   authClient,
@@ -32,7 +30,7 @@ import { AuthFormField } from "./auth-form-field";
 import { authQuietLinkClassName } from "./auth-link-styles";
 import {
   getLoginNavigationTarget,
-  useAuthSuccessNavigation,
+  useSignupSuccessNavigation,
 } from "./auth-navigation";
 import { AuthPasswordInput } from "./auth-password-input";
 import { decodeSignupInput, signupSchema } from "./auth-schemas";
@@ -43,12 +41,10 @@ export function SignupPage({
 }: {
   readonly search?: InvitationContinuationSearch;
 }) {
-  const navigateOnSuccess = useAuthSuccessNavigation(search?.invitation);
+  const navigateOnSuccess = useSignupSuccessNavigation(search?.invitation);
   const isHydrated = useIsHydrated();
   const [captchaToken, setCaptchaToken] = useState<string>();
   const [captchaResetKey, setCaptchaResetKey] = useState(0);
-  const [routeProximityLocationEnabled, setRouteProximityLocationEnabled] =
-    useState(false);
   const form = useForm({
     defaultValues: {
       name: "",
@@ -84,16 +80,6 @@ export function SignupPage({
         });
 
         return;
-      }
-
-      if (routeProximityLocationEnabled) {
-        try {
-          await updateCurrentUserPreferences({
-            routeProximityLocationEnabled: true,
-          });
-        } catch {
-          // Signup should remain skippable even when the preference write fails.
-        }
       }
 
       await mutationFeedback.waitForSuccess();
@@ -217,11 +203,6 @@ export function SignupPage({
               }}
             </form.Field>
           </FieldGroup>
-
-          <LocationAccessStep
-            enabled={routeProximityLocationEnabled}
-            onEnabledChange={setRouteProximityLocationEnabled}
-          />
 
           <AuthCaptchaChallenge
             action="signup"

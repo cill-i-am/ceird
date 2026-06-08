@@ -4,6 +4,7 @@ import {
   getForgotPasswordNavigationTarget,
   getLoginNavigationTarget,
   getSignupNavigationTarget,
+  getSignupSuccessNavigationTarget,
 } from "./auth-navigation";
 
 describe("auth navigation", () => {
@@ -16,6 +17,22 @@ describe("auth navigation", () => {
 
   it("returns the accept-invitation route when continuation is present", () => {
     expect(getAuthSuccessNavigationTarget("inv_123")).toStrictEqual({
+      params: {
+        invitationId: "inv_123",
+      },
+      to: "/accept-invitation/$invitationId",
+    });
+  }, 10_000);
+
+  it("routes normal signup success through location onboarding", () => {
+    expect(getSignupSuccessNavigationTarget()).toStrictEqual({
+      to: "/location-access",
+      viewTransition: authCardViewTransition,
+    });
+  }, 10_000);
+
+  it("keeps invitation signup success on invitation acceptance", () => {
+    expect(getSignupSuccessNavigationTarget("inv_123")).toStrictEqual({
       params: {
         invitationId: "inv_123",
       },

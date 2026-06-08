@@ -12,7 +12,9 @@ export function AuthenticatedAppLayout() {
       from: "/_app",
     });
   const isOrganizationCreation = useRouterState({
-    select: (state) => state.location.pathname === "/create-organization",
+    select: (state) =>
+      state.location.pathname === "/create-organization" ||
+      state.location.pathname === "/location-access",
   });
 
   if (isOrganizationCreation) {

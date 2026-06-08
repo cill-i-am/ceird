@@ -90,7 +90,12 @@ vi.mock(import("./auth-navigation"), async (importActual) => {
 
   return {
     ...actual,
-    useAuthSuccessNavigation: () => () => mockedNavigate({ to: "/" }),
+    useSignupSuccessNavigation: (invitation?: string) => () =>
+      mockedNavigate({
+        to: invitation
+          ? `/accept-invitation/${encodeURIComponent(invitation)}`
+          : "/location-access",
+      }),
   };
 });
 
@@ -220,49 +225,40 @@ describe("signup page", () => {
     });
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
-        to: "/",
+        to: "/location-access",
       });
     });
     expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
     expect(mockedSignInEmail).not.toHaveBeenCalled();
   }, 10_000);
 
-  it("asks for route-aware location access during account creation without requesting coordinates", async () => {
-    const user = userEvent.setup();
-    const getCurrentPosition = vi.fn<Geolocation["getCurrentPosition"]>();
-
-    Object.defineProperty(navigator, "geolocation", {
-      configurable: true,
-      value: { getCurrentPosition },
-    });
-
+  it("does not ask for route-aware location access inside the signup form", () => {
     render(<SignupPage />);
 
     expect(
-      screen.getByText(/traffic-aware nearby jobs and sites/i)
-    ).toBeVisible();
-    await user.click(
-      screen.getByRole("checkbox", {
+      screen.queryByText(/traffic-aware nearby jobs and sites/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", {
         name: /ask this device for location when i use near me/i,
       })
-    );
+    ).not.toBeInTheDocument();
+  }, 10_000);
+
+  it("defers route-aware location setup until after signup", async () => {
+    const user = userEvent.setup();
+
+    render(<SignupPage />);
+
     await user.type(screen.getByLabelText("Name"), "Taylor Example");
     await user.type(screen.getByLabelText("Email"), "person@example.com");
     await user.type(screen.getByLabelText("Password"), "password1234");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
 
-    await waitFor(() => {
-      expect(mockedUpdateCurrentUserPreferences).toHaveBeenCalledWith({
-        routeProximityLocationEnabled: true,
-      });
-    });
-    expect(getCurrentPosition).not.toHaveBeenCalled();
-    expect(
-      JSON.stringify(mockedUpdateCurrentUserPreferences.mock.calls)
-    ).not.toContain("latitude");
+    expect(mockedUpdateCurrentUserPreferences).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
-        to: "/",
+        to: "/location-access",
       });
     });
   }, 10_000);
@@ -279,7 +275,7 @@ describe("signup page", () => {
 
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
-        to: "/",
+        to: "/location-access",
       });
     });
     expect(mockedUpdateCurrentUserPreferences).not.toHaveBeenCalled();
@@ -361,7 +357,7 @@ describe("signup page", () => {
 
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
-        to: "/",
+        to: "/location-access",
       });
     });
 
@@ -383,7 +379,7 @@ describe("signup page", () => {
 
     await waitFor(() => {
       expect(mockedNavigate).toHaveBeenCalledWith({
-        to: "/",
+        to: "/accept-invitation/inv_123",
       });
     });
     expect(mockedSignInEmail).not.toHaveBeenCalled();

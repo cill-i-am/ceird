@@ -95,6 +95,7 @@ describe("app context request middleware route selection", () => {
     "/create-organization",
     "/forgot-password",
     "/login",
+    "/location-access",
     "/members",
     "/oauth/consent",
     "/organization/security",
@@ -130,12 +131,15 @@ describe("app context request middleware route selection", () => {
     expect(shouldHydrateOrganizationContext(pathname)).toBeTruthy();
   });
 
-  it.each(["/login", "/signup", "/create-organization", "/forgot-password"])(
-    "does not hydrate organization context for %s",
-    (pathname) => {
-      expect(shouldHydrateOrganizationContext(pathname)).toBeFalsy();
-    }
-  );
+  it.each([
+    "/login",
+    "/signup",
+    "/location-access",
+    "/create-organization",
+    "/forgot-password",
+  ])("does not hydrate organization context for %s", (pathname) => {
+    expect(shouldHydrateOrganizationContext(pathname)).toBeFalsy();
+  });
 });
 
 describe("app context request middleware payload", () => {
