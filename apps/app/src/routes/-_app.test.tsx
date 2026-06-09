@@ -349,12 +349,6 @@ describe("authenticated app route loader", () => {
     await expect(
       beforeLoad?.({
         context: {
-          authSession: null,
-        },
-        location: {
-          pathname: "/settings",
-        },
-        serverContext: {
           authSession: {
             session: {
               id: "session_123",
@@ -377,10 +371,58 @@ describe("authenticated app route loader", () => {
           },
           currentOrganizationRole: "admin",
         },
+        location: {
+          pathname: "/settings",
+        },
       } as never)
     ).resolves.toMatchObject({
       activeOrganizationId: "org_active",
       currentOrganizationRole: "admin",
+    });
+    expect(mockedRequireSession).not.toHaveBeenCalled();
+    expect(mockedGetCachedClientAppContext).not.toHaveBeenCalled();
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
+  it("preserves an empty preloaded organization snapshot from route middleware context", async () => {
+    const { Route } = await import("./_app");
+    const { beforeLoad } = Route.options;
+
+    expect(beforeLoad).toBeDefined();
+    mockedIsServerEnvironment.mockReturnValue(true);
+
+    await expect(
+      beforeLoad?.({
+        context: {
+          authSession: {
+            session: {
+              id: "session_123",
+              activeOrganizationId: null,
+              createdAt: "2026-05-24T10:00:00.000Z",
+              expiresAt: "2026-05-31T10:00:00.000Z",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+              userId: "user_123",
+            },
+            user: {
+              createdAt: "2026-05-24T10:00:00.000Z",
+              email: "taylor@example.com",
+              emailVerified: false,
+              twoFactorEnabled: false,
+              id: "user_123",
+              image: null,
+              name: "Taylor Example",
+              updatedAt: "2026-05-24T10:00:00.000Z",
+            },
+          },
+          organizations: [],
+        },
+        location: {
+          pathname: "/",
+        },
+      } as never)
+    ).resolves.toMatchObject({
+      activeOrganizationId: null,
+      organizations: [],
     });
     expect(mockedRequireSession).not.toHaveBeenCalled();
     expect(mockedGetCachedClientAppContext).not.toHaveBeenCalled();

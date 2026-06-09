@@ -15,8 +15,9 @@ import { requireAuthenticatedSession } from "#/features/auth/require-authenticat
 import { isServerEnvironment } from "#/features/auth/runtime-environment";
 
 export const Route = createFileRoute("/_app")({
-  beforeLoad: ({ location, serverContext }) =>
+  beforeLoad: ({ context, location, serverContext }) =>
     loadAuthenticatedAppRoute({
+      context,
       pathname: location.pathname,
       serverContext,
     }),
@@ -24,10 +25,13 @@ export const Route = createFileRoute("/_app")({
 });
 
 export async function loadAuthenticatedAppRoute(input?: {
+  readonly context?: unknown;
   readonly pathname?: string | undefined;
   readonly serverContext?: unknown;
 }) {
-  const serverContext = readAppServerContext(input?.serverContext);
+  const serverContext = readAppServerContext(
+    input?.context ?? input?.serverContext
+  );
   const hydrateOrganizationContext =
     input?.pathname !== undefined &&
     shouldHydrateOrganizationContext(input.pathname);
