@@ -68,6 +68,7 @@ import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
 import { cn } from "#/lib/utils";
 
+import { SiteWorkSignal } from "./site-work-signal";
 import { SitesProximityPanel } from "./sites-proximity-panel";
 import type { SitesViewMode } from "./sites-search";
 import { useSitesNotice, useSitesOptions } from "./sites-state";
@@ -689,6 +690,7 @@ function SitesDesktopDirectory({
       <TableHeader>
         <TableRow>
           <TableHead>Site</TableHead>
+          <TableHead className="w-[18rem] text-right">Work</TableHead>
           <TableHead className="w-10">
             <span className="sr-only">Open</span>
           </TableHead>
@@ -732,6 +734,9 @@ function SitesDesktopDirectory({
                 </div>
               </div>
             </TableCell>
+            <TableCell>
+              <SiteWorkSignal className="justify-end" site={site} />
+            </TableCell>
             <TableCell className="text-right text-muted-foreground">
               <HugeiconsIcon
                 icon={ArrowRight01Icon}
@@ -762,7 +767,7 @@ function SiteDirectoryCard({ item }: { readonly item: SiteDirectoryViewItem }) {
         className="group block px-3 py-3 transition-colors outline-none hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:px-4"
       >
         <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
               <span className="truncate font-medium text-foreground">
                 {site.name}
@@ -772,6 +777,7 @@ function SiteDirectoryCard({ item }: { readonly item: SiteDirectoryViewItem }) {
             <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
               {addressSummary}
             </p>
+            <SiteWorkSignal className="mt-2" site={site} />
           </div>
           <HugeiconsIcon
             icon={ArrowRight01Icon}

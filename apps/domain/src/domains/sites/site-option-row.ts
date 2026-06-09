@@ -1,6 +1,10 @@
 import type { Label } from "@ceird/labels-core";
 import { SiteOptionSchema } from "@ceird/sites-core";
-import type { GoogleAddressComponent, SiteOption } from "@ceird/sites-core";
+import type {
+  GoogleAddressComponent,
+  SiteActiveJobPriority,
+  SiteOption,
+} from "@ceird/sites-core";
 import { Schema } from "effect";
 
 export interface SiteOptionRow {
@@ -25,11 +29,17 @@ export interface SiteOptionRow {
   readonly town: string | null;
 }
 
+interface SiteOptionActiveJobSummary {
+  readonly activeJobCount: number;
+  readonly highestActiveJobPriority?: SiteActiveJobPriority;
+}
+
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 
 export function mapSiteOptionRow(
   row: SiteOptionRow,
-  labels: readonly Label[] = []
+  labels: readonly Label[] = [],
+  activeJobSummary?: SiteOptionActiveJobSummary
 ): SiteOption {
   const hasUsableCoordinates =
     isUsableCoordinateStatus(row.location_status) &&
@@ -43,6 +53,17 @@ export function mapSiteOptionRow(
 
   return decodeSiteOption({
     accessNotes: nullableToUndefined(row.access_notes),
+    ...(activeJobSummary === undefined
+      ? {}
+      : {
+          activeJobCount: activeJobSummary.activeJobCount,
+          ...(activeJobSummary.highestActiveJobPriority === undefined
+            ? {}
+            : {
+                highestActiveJobPriority:
+                  activeJobSummary.highestActiveJobPriority,
+              }),
+        }),
     addressComponents: nullableToUndefined(row.address_components),
     addressLine1: nullableToUndefined(row.address_line_1),
     addressLine2: nullableToUndefined(row.address_line_2),

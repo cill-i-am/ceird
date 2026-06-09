@@ -291,13 +291,23 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
           ],
           { concurrency: 2 }
         );
+        const siteIds = pipe(
+          rows,
+          Arr.map((row) => decodeSiteId(row.id))
+        );
+        const activeJobSummariesBySiteId =
+          yield* listActiveJobSummariesForSites(sql, organizationId, siteIds);
 
         return pipe(
           rows,
           Arr.map((row) => {
             const siteId = decodeSiteId(row.id);
 
-            return mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? []);
+            return mapSiteOptionRow(
+              row,
+              labelsBySiteId.get(siteId) ?? [],
+              activeJobSummariesBySiteId.get(siteId)
+            );
           })
         );
       });
@@ -371,20 +381,27 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         `;
 
         const pageRows = Arr.take(rows, limit);
-        const labelsBySiteId = yield* listSiteLabelsForSites(
-          sql,
-          organizationId,
-          pipe(
-            pageRows,
-            Arr.map((row) => decodeSiteId(row.id))
-          )
+        const pageSiteIds = pipe(
+          pageRows,
+          Arr.map((row) => decodeSiteId(row.id))
+        );
+        const [labelsBySiteId, activeJobSummariesBySiteId] = yield* Effect.all(
+          [
+            listSiteLabelsForSites(sql, organizationId, pageSiteIds),
+            listActiveJobSummariesForSites(sql, organizationId, pageSiteIds),
+          ],
+          { concurrency: 2 }
         );
         const items = pipe(
           pageRows,
           Arr.map((row) => {
             const siteId = decodeSiteId(row.id);
 
-            return mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? []);
+            return mapSiteOptionRow(
+              row,
+              labelsBySiteId.get(siteId) ?? [],
+              activeJobSummariesBySiteId.get(siteId)
+            );
           })
         );
         const nextCursorRow = rows.length > limit ? rows[limit - 1] : undefined;
@@ -434,14 +451,21 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
             return Option.none<SiteOption>();
           }
 
-          const labelsBySiteId = yield* listSiteLabelsForSites(
-            sql,
-            organizationId,
-            [siteId]
-          );
+          const [labelsBySiteId, activeJobSummariesBySiteId] =
+            yield* Effect.all(
+              [
+                listSiteLabelsForSites(sql, organizationId, [siteId]),
+                listActiveJobSummariesForSites(sql, organizationId, [siteId]),
+              ],
+              { concurrency: 2 }
+            );
 
           return Option.some(
-            mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? [])
+            mapSiteOptionRow(
+              row,
+              labelsBySiteId.get(siteId) ?? [],
+              activeJobSummariesBySiteId.get(siteId)
+            )
           );
         }
       );
@@ -572,12 +596,12 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         `;
         const pageRows = Arr.take(rows, PROXIMITY_CANDIDATE_LIMIT);
         const siteIds = pageRows.map((row) => decodeSiteId(row.id));
-        const activeJobSummariesBySiteId =
-          yield* listActiveJobSummariesForSites(sql, organizationId, siteIds);
-        const labelsBySiteId = yield* listSiteLabelsForSites(
-          sql,
-          organizationId,
-          siteIds
+        const [activeJobSummariesBySiteId, labelsBySiteId] = yield* Effect.all(
+          [
+            listActiveJobSummariesForSites(sql, organizationId, siteIds),
+            listSiteLabelsForSites(sql, organizationId, siteIds),
+          ],
+          { concurrency: 2 }
         );
         const excluded = new Map<ProximityExcludedCount["reason"], number>();
         addExcluded(excluded, "unmapped_site", stats.unmapped_site_count);
@@ -990,7 +1014,9 @@ function listActiveJobSummariesForSites(
         and work_items.status not in ('completed', 'canceled')
       group by work_items.site_id
     `;
-    const summaries = new Map<SiteId, SiteActiveJobSummary>();
+    const summaries = new Map<SiteId, SiteActiveJobSummary>(
+      siteIds.map((siteId) => [siteId, { activeJobCount: 0 }])
+    );
 
     for (const row of rows) {
       const siteId = decodeSiteId(row.site_id);

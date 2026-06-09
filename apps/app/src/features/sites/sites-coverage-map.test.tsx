@@ -1,7 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import { SitesCoverageMap } from "./sites-coverage-map";
@@ -56,7 +56,9 @@ describe("sites coverage map", () => {
       <SitesCoverageMap
         sites={[
           buildSite({
+            activeJobCount: 2,
             hasUsableCoordinates: true,
+            highestActiveJobPriority: "urgent",
             id: depotSiteId,
             latitude: 53.3498,
             longitude: -6.2603,
@@ -82,6 +84,8 @@ describe("sites coverage map", () => {
       "href",
       "/sites"
     );
+    expect(screen.getByText("2 active jobs")).toBeInTheDocument();
+    expect(screen.getByText("Urgent")).toBeInTheDocument();
     expect(screen.getByText(/1 mapped/i)).toBeInTheDocument();
     expect(screen.getByText(/1 unmapped/i)).toBeInTheDocument();
     expect(screen.getByText(/unverified location/i)).toBeInTheDocument();
@@ -121,6 +125,39 @@ describe("sites coverage map", () => {
     await flushScrollAreaEffects();
   });
 
+  it("uses compact fallback pins when the interactive map cannot render", async () => {
+    Reflect.deleteProperty(URL, "createObjectURL");
+
+    render(
+      <SitesCoverageMap
+        sites={[
+          buildSite({
+            activeJobCount: 1,
+            hasUsableCoordinates: true,
+            highestActiveJobPriority: "urgent",
+            id: depotSiteId,
+            latitude: 53.3498,
+            longitude: -6.2603,
+            name: "Depot",
+          }),
+        ]}
+      />
+    );
+
+    expect(screen.getByTestId("sites-map-static-fallback")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sites-coverage-map-canvas")
+    ).not.toBeInTheDocument();
+
+    const [marker] = screen.getAllByTestId("sites-map-fallback-marker");
+
+    expect(marker).toBeDefined();
+    expect(within(marker).getByText("1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Depot, 1 active job")).toBeInTheDocument();
+    expect(screen.getByText("1 active job")).toBeInTheDocument();
+    await flushScrollAreaEffects();
+  });
+
   it("renders the empty state when no visible sites have mapped coordinates", async () => {
     render(
       <SitesCoverageMap
@@ -156,6 +193,7 @@ async function flushScrollAreaEffects() {
 
 function buildSite(overrides: Partial<SiteOption> & Pick<SiteOption, "id">) {
   return {
+    activeJobCount: 0,
     displayLocation: "Main Street, Galway",
     hasUsableCoordinates: false,
     labels: [],

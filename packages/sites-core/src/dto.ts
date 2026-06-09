@@ -81,6 +81,20 @@ export type GoogleAddressComponent = Schema.Schema.Type<
   typeof GoogleAddressComponentSchema
 >;
 
+export const SITE_ACTIVE_JOB_PRIORITIES = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "urgent",
+] as const;
+export const SiteActiveJobPrioritySchema = Schema.Literals(
+  SITE_ACTIVE_JOB_PRIORITIES
+);
+export type SiteActiveJobPriority = Schema.Schema.Type<
+  typeof SiteActiveJobPrioritySchema
+>;
+
 const SiteOptionBaseSchema = Schema.Struct({
   id: SiteId,
   name: Schema.String,
@@ -105,6 +119,12 @@ const SiteOptionBaseSchema = Schema.Struct({
   locationResolvedAt: Schema.optional(IsoDateTimeString),
   rawLocationInput: Schema.optional(Schema.String),
   labels: Schema.Array(LabelSchema),
+  activeJobCount: Schema.optional(
+    Schema.Number.pipe(
+      Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+    )
+  ),
+  highestActiveJobPriority: Schema.optional(SiteActiveJobPrioritySchema),
 });
 export const SiteOptionSchema = SiteOptionBaseSchema.pipe(
   Schema.refine(
@@ -112,6 +132,13 @@ export const SiteOptionSchema = SiteOptionBaseSchema.pipe(
       isSiteOptionLocationConsistent(site),
     {
       message: "Site location fields are inconsistent",
+    }
+  ),
+  Schema.refine(
+    (site): site is Schema.Schema.Type<typeof SiteOptionBaseSchema> =>
+      isSiteOptionActiveWorkConsistent(site),
+    {
+      message: "Site active work fields are inconsistent",
     }
   )
 );
@@ -171,20 +198,6 @@ export const SiteListResponseSchema = Schema.Struct({
 });
 export type SiteListResponse = Schema.Schema.Type<
   typeof SiteListResponseSchema
->;
-
-export const SITE_ACTIVE_JOB_PRIORITIES = [
-  "none",
-  "low",
-  "medium",
-  "high",
-  "urgent",
-] as const;
-export const SiteActiveJobPrioritySchema = Schema.Literals(
-  SITE_ACTIVE_JOB_PRIORITIES
-);
-export type SiteActiveJobPriority = Schema.Schema.Type<
-  typeof SiteActiveJobPrioritySchema
 >;
 
 export const SiteProximityFiltersSchema = Schema.Struct({
@@ -382,6 +395,20 @@ function isSiteOptionLocationConsistent(
     isPresent(site.locationProvider) &&
     isPresent(site.locationResolvedAt)
   );
+}
+
+function isSiteOptionActiveWorkConsistent(
+  site: Schema.Schema.Type<typeof SiteOptionBaseSchema>
+) {
+  if (site.activeJobCount === undefined) {
+    return site.highestActiveJobPriority === undefined;
+  }
+
+  if (site.activeJobCount === 0) {
+    return site.highestActiveJobPriority === undefined;
+  }
+
+  return true;
 }
 
 function isPresent<Value>(
