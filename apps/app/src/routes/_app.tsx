@@ -61,11 +61,7 @@ export async function loadAuthenticatedAppRoute(input?: {
     serverContextOrganizations: serverContext.organizations,
   });
 
-  if (
-    hydrateOrganizationContext &&
-    activeOrganizationId === null &&
-    organizations?.length === 0
-  ) {
+  if (hydrateOrganizationContext && activeOrganizationId === null) {
     throw redirect({ to: "/create-organization" });
   }
 
