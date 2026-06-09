@@ -1,6 +1,6 @@
 import type { mcpHandler as betterAuthMcpHandler } from "@better-auth/oauth-provider";
 import { beforeEach, describe, expect, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Logger, References } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { vi } from "vitest";
 
@@ -265,6 +265,247 @@ describe("mcp http handler", () => {
     });
   }, 10_000);
 
+  it("accepts Better Auth access-token JWTs that carry the OAuth client id in azp", async () => {
+    mcpHandlerMock.mockImplementation(
+      (_verifyOptions, handler) => (request: Request) =>
+        Promise.resolve(
+          handler(request, {
+            azp: "mcp-client",
+            ceird_org_id: "org_123",
+            exp: Math.floor(Date.now() / 1000) + 300,
+            scope: "ceird:read",
+            sid: "session_abc",
+            sub: "user_abc",
+          })
+        )
+    );
+
+    const authConfig = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+    const handler = makeMcpWebHandler({
+      authConfig,
+      runtimeLive: Layer.mergeAll(
+        makeSuccessfulLabelListSqlLayer(),
+        SiteLocationProvider.Development
+      ),
+    });
+
+    const response = await handler(
+      new Request("http://127.0.0.1:3000/mcp", {
+        method: "POST",
+        headers: makeAuthorizedMcpHeaders(await initializeMcpSession(handler)),
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "1",
+          method: "tools/list",
+        }),
+      })
+    );
+
+    expect(response?.status).toBe(200);
+    await expect(response?.json()).resolves.toMatchObject({
+      id: 1,
+      jsonrpc: "2.0",
+      result: {
+        tools: expect.arrayContaining([
+          expect.objectContaining({ name: "ceird.labels.list" }),
+        ]),
+      },
+    });
+  }, 10_000);
+
+  it("rejects verified bearer tokens after the connected app grant is disconnected", async () => {
+    mcpHandlerMock.mockImplementation(
+      (_verifyOptions, handler) => (request: Request) =>
+        Promise.resolve(
+          handler(request, {
+            client_id: "mcp-client",
+            ceird_org_id: "org_123",
+            exp: Math.floor(Date.now() / 1000) + 300,
+            scope: "ceird:read",
+            sid: "session_abc",
+            sub: "user_abc",
+          })
+        )
+    );
+
+    const sql = vi.fn<
+      (strings: TemplateStringsArray) => Effect.Effect<readonly unknown[]>
+    >((strings) => {
+      const statement = strings.join(" ");
+
+      if (statement.includes("from oauth_consent")) {
+        return Effect.succeed([]);
+      }
+
+      if (statement.includes("from session")) {
+        return Effect.succeed([
+          {
+            activeOrganizationId: "org_123",
+            expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+            userId: "user_abc",
+          },
+        ]);
+      }
+
+      if (statement.includes("from member")) {
+        return Effect.succeed([{ role: "member" }]);
+      }
+
+      if (statement.includes("from labels")) {
+        return Effect.succeed([
+          {
+            archived_at: null,
+            created_at: new Date("2026-01-01T00:00:00.000Z"),
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "Priority",
+            normalized_name: "priority",
+            organization_id: "org_123",
+            updated_at: new Date("2026-01-01T00:00:00.000Z"),
+          },
+        ]);
+      }
+
+      return Effect.die(new Error(`Unexpected SQL in test mock: ${statement}`));
+    });
+    Object.assign(sql, {
+      withTransaction: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
+    });
+
+    const authConfig = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+    const handler = makeMcpWebHandler({
+      authConfig,
+      runtimeLive: Layer.mergeAll(
+        Layer.succeed(
+          SqlClient.SqlClient,
+          sql as unknown as SqlClient.SqlClient
+        ),
+        SiteLocationProvider.Development
+      ),
+    });
+
+    const response = await handler(
+      new Request("http://127.0.0.1:3000/mcp", {
+        method: "POST",
+        headers: makeAuthorizedMcpHeaders(),
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 0,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-06-18",
+            capabilities: {},
+            clientInfo: {
+              name: "ceird-domain-test",
+              version: "0.0.0",
+            },
+          },
+        }),
+      })
+    );
+
+    expect(response?.status).toBe(401);
+    expect(response?.headers.get("WWW-Authenticate")).toContain(
+      'error="invalid_token"'
+    );
+    expect(sql).not.toHaveBeenCalledWith(
+      expect.arrayContaining([expect.stringContaining("from labels")])
+    );
+  }, 10_000);
+
+  it("fails closed and logs when the connected-app consent check cannot read storage", async () => {
+    const { logger, logs } = captureLogs();
+
+    mcpHandlerMock.mockImplementation(
+      (_verifyOptions, handler) => (request: Request) =>
+        Promise.resolve(
+          handler(request, {
+            client_id: "mcp-client",
+            ceird_org_id: "org_123",
+            exp: Math.floor(Date.now() / 1000) + 300,
+            scope: "ceird:read",
+            sid: "session_abc",
+            sub: "user_abc",
+          })
+        )
+    );
+    const sql = vi.fn<
+      (strings: TemplateStringsArray) => Effect.Effect<readonly unknown[]>
+    >((strings) => {
+      const statement = strings.join(" ");
+
+      if (statement.includes("from oauth_consent")) {
+        return Effect.die(
+          new Error(
+            "database unavailable for rawtokenrawtokenrawtokenrawtoken1234"
+          )
+        );
+      }
+
+      return Effect.die(new Error(`Unexpected SQL in test mock: ${statement}`));
+    });
+    Object.assign(sql, {
+      withTransaction: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
+    });
+    const authConfig = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
+    });
+    const handler = makeMcpWebHandler({
+      authConfig,
+      baseLive: Layer.mergeAll(
+        Logger.layer([logger]),
+        Layer.succeed(References.MinimumLogLevel, "Trace")
+      ),
+      runtimeLive: Layer.mergeAll(
+        Layer.succeed(
+          SqlClient.SqlClient,
+          sql as unknown as SqlClient.SqlClient
+        ),
+        SiteLocationProvider.Development
+      ),
+    });
+
+    const response = await handler(
+      new Request("http://127.0.0.1:3000/mcp", {
+        method: "POST",
+        headers: makeAuthorizedMcpHeaders(),
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 0,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-06-18",
+            capabilities: {},
+            clientInfo: {
+              name: "ceird-domain-test",
+              version: "0.0.0",
+            },
+          },
+        }),
+      })
+    );
+
+    expect(response?.status).toBe(401);
+    expect(response?.headers.get("WWW-Authenticate")).toContain(
+      'error="invalid_token"'
+    );
+    const serializedLogs = JSON.stringify(logs);
+    expect(serializedLogs).toContain("MCP connected app consent check failed");
+    expect(serializedLogs).toContain("storage_or_layer_failure");
+    expect(serializedLogs).not.toContain(
+      "rawtokenrawtokenrawtokenrawtoken1234"
+    );
+  }, 10_000);
+
   it("handles authorized no-argument MCP tool calls through the Effect AI router", async () => {
     mcpHandlerMock.mockImplementation(
       (_verifyOptions, handler) => (request: Request) =>
@@ -420,6 +661,10 @@ describe("mcp http handler", () => {
     >((strings) => {
       const statement = strings.join(" ");
 
+      if (statement.includes("from oauth_consent")) {
+        return Effect.succeed([{ scopes: ["ceird:read"] }]);
+      }
+
       if (statement.includes("from session")) {
         return Effect.succeed([
           {
@@ -481,8 +726,8 @@ describe("mcp http handler", () => {
       const sessionId = await initializeMcpSession(initializeHandler);
       await initializeHandler.dispose();
 
-      expect(acquiredSqlClients).toBe(0);
-      expect(releasedSqlClients).toBe(0);
+      expect(acquiredSqlClients).toBe(1);
+      expect(releasedSqlClients).toBe(1);
 
       const toolHandler = makeMcpWebHandler({
         authorizedAppCache,
@@ -512,8 +757,8 @@ describe("mcp http handler", () => {
           isError: false,
         },
       });
-      expect(acquiredSqlClients).toBe(1);
-      expect(releasedSqlClients).toBe(1);
+      expect(acquiredSqlClients).toBe(3);
+      expect(releasedSqlClients).toBe(3);
     } finally {
       await disposeMcpAuthorizedAppCache(authorizedAppCache);
     }
@@ -536,9 +781,17 @@ describe("mcp http handler", () => {
 
     const sql = vi.fn<
       (strings: TemplateStringsArray) => Effect.Effect<readonly unknown[]>
-    >(() =>
-      Effect.die(new Error("Domain SQL should not run for forbidden tools"))
-    );
+    >((strings) => {
+      const statement = strings.join(" ");
+
+      if (statement.includes("from oauth_consent")) {
+        return Effect.succeed([{ scopes: ["ceird:read"] }]);
+      }
+
+      return Effect.die(
+        new Error("Domain SQL should not run for forbidden tools")
+      );
+    });
     Object.assign(sql, {
       withTransaction: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
     });
@@ -576,7 +829,7 @@ describe("mcp http handler", () => {
     );
 
     expect(response?.status).toBe(200);
-    expect(sql).not.toHaveBeenCalled();
+    expect(sql).toHaveBeenCalledTimes(2);
     await expect(response?.json()).resolves.toMatchObject({
       id: 1,
       jsonrpc: "2.0",
@@ -837,6 +1090,10 @@ function makeSuccessfulLabelListSqlLayer() {
   >((strings) => {
     const statement = strings.join(" ");
 
+    if (statement.includes("from oauth_consent")) {
+      return Effect.succeed([{ scopes: ["ceird:read"] }]);
+    }
+
     if (statement.includes("from session")) {
       return Effect.succeed([
         {
@@ -876,4 +1133,17 @@ function makeSuccessfulLabelListSqlLayer() {
     SqlClient.SqlClient,
     sql as unknown as SqlClient.SqlClient
   );
+}
+
+function captureLogs() {
+  const logs: unknown[] = [];
+  const logger = Logger.make((input) => {
+    logs.push({
+      annotations: input.fiber.getRef(References.CurrentLogAnnotations),
+      level: input.logLevel.toUpperCase(),
+      message: input.message,
+    });
+  });
+
+  return { logger, logs };
 }

@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
 import { getTableColumns, getTableName } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { ConfigProvider, Effect, Layer, Logger, References } from "effect";
@@ -39,6 +42,7 @@ import {
   withOrganizationSecurityAuditEventRecorder,
   withOAuthClientManagementEndpointGuard,
   withOAuthClientRegistrationPolicyGuard,
+  withOAuthRefreshTokenConsentGuard,
   withOAuthSecurityAuditEventRecorder,
 } from "./auth.js";
 import type { CeirdAuthentication } from "./auth.js";
@@ -1252,6 +1256,49 @@ describe("auth schema", () => {
     ]) {
       expect(migrationSql).toContain(`'${eventType}'`);
     }
+  }, 10_000);
+
+  it("extends the auth security audit event constraint for OAuth consent revocations", async () => {
+    const migrationSql = await readMigrationSql(
+      "oauth_consent_revoked_audit_event"
+    );
+    const alchemyMigrationSql = await readFile(
+      path.resolve(
+        process.cwd(),
+        "drizzle-alchemy",
+        "20260609100000_oauth_consent_revoked_audit_event",
+        "migration.sql"
+      ),
+      "utf8"
+    );
+
+    expect(migrationSql).toContain(
+      `DROP CONSTRAINT "auth_security_audit_event_type_chk"`
+    );
+    expect(migrationSql).toContain(`'oauth_consent_revoked'`);
+    expect(migrationSql).toContain(
+      `CREATE INDEX "oauth_consent_user_client_reference_idx"`
+    );
+    expect(migrationSql).toContain(
+      `CREATE INDEX "oauth_refresh_token_user_client_reference_active_idx"`
+    );
+    expect(migrationSql).toContain(
+      `CREATE INDEX "oauth_access_token_user_client_reference_expires_idx"`
+    );
+    expect(migrationSql).toContain(`row_number() OVER`);
+    expect(migrationSql).toContain(
+      `CREATE UNIQUE INDEX "oauth_consent_user_client_account_unique_idx"`
+    );
+    expect(migrationSql).toContain(
+      `CREATE UNIQUE INDEX "oauth_consent_user_client_reference_unique_idx"`
+    );
+    expect(migrationSql).toContain(
+      `CREATE TRIGGER "oauth_refresh_token_active_consent_chk"`
+    );
+    expect(migrationSql).toContain(
+      `CREATE TRIGGER "oauth_access_token_active_consent_chk"`
+    );
+    expect(alchemyMigrationSql).toBe(migrationSql);
   }, 10_000);
 
   it("stores Better Auth two-factor schema changes in a reversible migration", async () => {
@@ -2529,9 +2576,13 @@ describe("createAuthentication()", () => {
     "/oauth2/update-client",
     "/oauth2/delete-client",
     "/oauth2/client/rotate-secret",
+    "/oauth2/get-consent",
+    "/oauth2/get-consents",
+    "/oauth2/update-consent",
+    "/oauth2/delete-consent",
     "/admin/oauth2/create-client",
     "/admin/oauth2/update-client",
-  ])("blocks OAuth client management endpoint %s", async (endpointPath) => {
+  ])("blocks native OAuth management endpoint %s", async (endpointPath) => {
     let delegated = false;
     const config = makeAuthenticationConfig({
       baseUrl: "https://api.ceird.example/api/auth",
@@ -2558,7 +2609,7 @@ describe("createAuthentication()", () => {
 
     await expect(response.json()).resolves.toStrictEqual({
       code: "OAUTH_CLIENT_MANAGEMENT_DISABLED",
-      message: "OAuth client management requires manual approval.",
+      message: "OAuth management is handled by Ceird workflows.",
     });
     expect(response.status).toBe(403);
     expect(delegated).toBeFalsy();
@@ -3009,6 +3060,292 @@ describe("createAuthentication()", () => {
     await expect(response.json()).resolves.toStrictEqual({ delegated: true });
     expect(response.status).toBe(200);
     expect(delegated).toBeTruthy();
+  }, 10_000);
+
+  it("blocks refresh-token grants when the saved OAuth consent is gone", async () => {
+    const storedRefreshToken = await hashOAuthStoredToken(
+      "raw-refresh-token",
+      "refresh_token"
+    );
+    let delegated = false;
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthRefreshTokenConsentGuard(
+      () => {
+        delegated = true;
+        return Promise.resolve(Response.json({ delegated: true }));
+      },
+      {
+        basePath: config.basePath,
+        database: makeOAuthRefreshTokenConsentGuardDatabase({
+          rows: [
+            {
+              consentScopes: null,
+              refreshTokenScopes: ["ceird:read", "offline_access"],
+              token: storedRefreshToken,
+            },
+          ],
+        }),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/token", {
+        body: new URLSearchParams({
+          client_id: "client_external_mcp",
+          grant_type: "refresh_token",
+          refresh_token: "raw-refresh-token",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      error: "invalid_grant",
+      error_description: "Refresh token consent is no longer active.",
+    });
+    expect(response.status).toBe(400);
+    expect(delegated).toBeFalsy();
+  }, 10_000);
+
+  it("blocks refresh-token grants when live consent no longer covers the refresh-token scopes", async () => {
+    const storedRefreshToken = await hashOAuthStoredToken(
+      "raw-refresh-token",
+      "refresh_token"
+    );
+    let delegated = false;
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthRefreshTokenConsentGuard(
+      () => {
+        delegated = true;
+        return Promise.resolve(Response.json({ delegated: true }));
+      },
+      {
+        basePath: config.basePath,
+        database: makeOAuthRefreshTokenConsentGuardDatabase({
+          rows: [
+            {
+              consentScopes: ["ceird:read"],
+              refreshTokenScopes: ["ceird:read", "offline_access"],
+              token: storedRefreshToken,
+            },
+          ],
+        }),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/token", {
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: "raw-refresh-token",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      error: "invalid_grant",
+      error_description: "Refresh token consent is no longer active.",
+    });
+    expect(response.status).toBe(400);
+    expect(delegated).toBeFalsy();
+  }, 10_000);
+
+  it("fails closed when refresh-token request bodies are too large to inspect", async () => {
+    let delegated = false;
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthRefreshTokenConsentGuard(
+      () => {
+        delegated = true;
+        return Promise.resolve(Response.json({ delegated: true }));
+      },
+      {
+        basePath: config.basePath,
+        database: makeOAuthRefreshTokenConsentGuardDatabase({ rows: [] }),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/token", {
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          padding: "x".repeat(16 * 1024),
+          refresh_token: "raw-refresh-token",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      error: "invalid_request",
+      error_description: "OAuth token request could not be inspected.",
+    });
+    expect(response.status).toBe(400);
+    expect(delegated).toBeFalsy();
+  }, 10_000);
+
+  it("fails closed when token request JSON cannot be inspected", async () => {
+    let delegated = false;
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthRefreshTokenConsentGuard(
+      () => {
+        delegated = true;
+        return Promise.resolve(Response.json({ delegated: true }));
+      },
+      {
+        basePath: config.basePath,
+        database: makeOAuthRefreshTokenConsentGuardDatabase({ rows: [] }),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/token", {
+        body: '{"grant_type":',
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      error: "invalid_request",
+      error_description: "OAuth token request could not be inspected.",
+    });
+    expect(response.status).toBe(400);
+    expect(delegated).toBeFalsy();
+  }, 10_000);
+
+  it("allows refresh-token grants when the saved OAuth consent is still active", async () => {
+    const storedRefreshToken = await hashOAuthStoredToken(
+      "raw-refresh-token",
+      "refresh_token"
+    );
+    let delegated = false;
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthRefreshTokenConsentGuard(
+      () => {
+        delegated = true;
+        return Promise.resolve(Response.json({ delegated: true }));
+      },
+      {
+        basePath: config.basePath,
+        database: makeOAuthRefreshTokenConsentGuardDatabase({
+          rows: [
+            {
+              consentScopes: ["ceird:read", "offline_access"],
+              refreshTokenScopes: ["ceird:read", "offline_access"],
+              token: storedRefreshToken,
+            },
+          ],
+        }),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/token", {
+        body: JSON.stringify({
+          client_id: "client_external_mcp",
+          grant_type: "refresh_token",
+          refresh_token: "raw-refresh-token",
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({ delegated: true });
+    expect(response.status).toBe(200);
+    expect(delegated).toBeTruthy();
+  }, 10_000);
+
+  it("fails closed and logs when refresh-token consent lookup fails", async () => {
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(function* verifyRefreshConsentGuard() {
+      const runtimeContext = yield* Effect.context<never>();
+      const handler = withOAuthRefreshTokenConsentGuard(
+        () => Promise.resolve(Response.json({ delegated: true })),
+        {
+          basePath: config.basePath,
+          database: makeOAuthRefreshTokenConsentGuardDatabase({
+            selectFailure: new Error(
+              "lookup failed for rawtokenrawtokenrawtokenrawtoken1234"
+            ),
+          }),
+          runtimeContext,
+        }
+      );
+
+      return yield* Effect.promise(() =>
+        handler(
+          new Request("https://api.ceird.example/api/auth/oauth2/token", {
+            body: new URLSearchParams({
+              client_id: "client_external_mcp",
+              grant_type: "refresh_token",
+              refresh_token: "raw-refresh-token",
+            }),
+            headers: {
+              "content-type": "application/x-www-form-urlencoded",
+            },
+            method: "POST",
+          })
+        )
+      );
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      error: "server_error",
+      error_description: "Refresh token consent could not be verified.",
+    });
+    expect(response.status).toBe(503);
+    const serializedLogs = JSON.stringify(logs);
+    expect(serializedLogs).toContain(
+      "oauth_refresh_token_consent_guard_failure"
+    );
+    expect(serializedLogs).not.toContain(
+      "rawtokenrawtokenrawtokenrawtoken1234"
+    );
   }, 10_000);
 
   it("records OAuth dynamic client registration audit events without client secrets", async () => {
@@ -6670,6 +7007,11 @@ interface CapturedOAuthTokenAuditContextRow {
   readonly token: string;
   readonly userId?: string | null;
 }
+interface OAuthRefreshTokenConsentGuardRow {
+  readonly consentScopes: readonly string[] | null;
+  readonly refreshTokenScopes: readonly string[];
+  readonly token: string;
+}
 interface CapturedOrganizationMemberAuditContextRow {
   readonly id: string;
   readonly organizationId: string;
@@ -6680,6 +7022,36 @@ interface CapturedOrganizationInvitationAuditContextRow {
   readonly email: string;
   readonly organizationId: string;
   readonly role: string;
+}
+
+function makeOAuthRefreshTokenConsentGuardDatabase(options: {
+  readonly rows?: readonly OAuthRefreshTokenConsentGuardRow[];
+  readonly selectFailure?: Error;
+}) {
+  return {
+    select: () => ({
+      from: () => ({
+        leftJoin: () => ({
+          where: (condition: unknown) => ({
+            limit: () => {
+              if (options.selectFailure) {
+                return Promise.reject(options.selectFailure);
+              }
+
+              const token = readDrizzleEqParameter(condition);
+              const row =
+                options.rows?.find((tokenRow) => tokenRow.token === token) ??
+                null;
+
+              return Promise.resolve(row ? [row] : []);
+            },
+          }),
+        }),
+      }),
+    }),
+  } as unknown as Parameters<
+    typeof withOAuthRefreshTokenConsentGuard
+  >[1]["database"];
 }
 
 function makeAuthSecurityAuditEventDatabase(

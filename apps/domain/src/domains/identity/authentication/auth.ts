@@ -64,6 +64,7 @@ import {
   invitation as invitationTable,
   member as memberTable,
   oauthAccessToken as oauthAccessTokenTable,
+  oauthConsent as oauthConsentTable,
   oauthRefreshToken as oauthRefreshTokenTable,
   organization as organizationTable,
   rateLimit as rateLimitTable,
@@ -105,8 +106,12 @@ const OAUTH_CLIENT_MANAGEMENT_DISABLED_ERROR_CODE =
   "OAUTH_CLIENT_MANAGEMENT_DISABLED";
 const OAUTH_CLIENT_MANAGEMENT_ENDPOINT_PATHS = new Set([
   "/oauth2/create-client",
+  "/oauth2/delete-consent",
   "/oauth2/update-client",
+  "/oauth2/update-consent",
   "/oauth2/delete-client",
+  "/oauth2/get-consent",
+  "/oauth2/get-consents",
   "/oauth2/client/rotate-secret",
   "/admin/oauth2/create-client",
   "/admin/oauth2/update-client",
@@ -1187,13 +1192,20 @@ export function createAuthentication(options: {
         withOAuthSecurityAuditEventRecorder(
           withOrganizationSecurityAuditEventRecorder(
             withOAuthClientManagementEndpointGuard(
-              withOAuthClientRegistrationPolicyGuard(auth.handler, {
-                allowLoopbackRedirects:
-                  oauthClientRegistrationAllowLoopbackRedirects,
-                allowedScopes: oauthClientRegistrationAllowedScopes,
-                basePath: authConfig.basePath,
-                runtimeContext: options.runtimeContext,
-              }),
+              withOAuthRefreshTokenConsentGuard(
+                withOAuthClientRegistrationPolicyGuard(auth.handler, {
+                  allowLoopbackRedirects:
+                    oauthClientRegistrationAllowLoopbackRedirects,
+                  allowedScopes: oauthClientRegistrationAllowedScopes,
+                  basePath: authConfig.basePath,
+                  runtimeContext: options.runtimeContext,
+                }),
+                {
+                  basePath: authConfig.basePath,
+                  database,
+                  runtimeContext: options.runtimeContext,
+                }
+              ),
               authConfig.basePath
             ),
             {
@@ -2094,7 +2106,7 @@ export function withOAuthClientManagementEndpointGuard(
       Response.json(
         {
           code: OAUTH_CLIENT_MANAGEMENT_DISABLED_ERROR_CODE,
-          message: "OAuth client management requires manual approval.",
+          message: "OAuth management is handled by Ceird workflows.",
         },
         {
           status: 403,
@@ -2102,6 +2114,199 @@ export function withOAuthClientManagementEndpointGuard(
       )
     );
   };
+}
+
+export function withOAuthRefreshTokenConsentGuard(
+  handler: (request: Request) => Promise<Response>,
+  options: {
+    readonly basePath: string;
+    readonly database: NodePgDatabase;
+    readonly runtimeContext?: AuthEffectRuntimeContext | undefined;
+  }
+) {
+  return async (request: Request) => {
+    const endpointPath = resolveAuthenticationEndpointPath(
+      request,
+      options.basePath
+    );
+
+    if (
+      request.method !== "POST" ||
+      endpointPath !== OAUTH_TOKEN_ENDPOINT_PATH
+    ) {
+      return await handler(request);
+    }
+
+    const body = await readOAuthRefreshTokenConsentGuardRequestBody(request);
+
+    if (body.status === "uninspectable") {
+      return makeOAuthTokenErrorResponse({
+        error: "invalid_request",
+        errorDescription: "OAuth token request could not be inspected.",
+        status: 400,
+      });
+    }
+
+    if (readStringField(body.value, "grant_type") !== "refresh_token") {
+      return await handler(request);
+    }
+
+    const refreshToken = readStringField(body.value, "refresh_token");
+
+    if (!refreshToken) {
+      return await handler(request);
+    }
+
+    try {
+      const hasActiveConsent = await refreshTokenHasActiveOAuthConsent(
+        options.database,
+        refreshToken
+      );
+
+      if (hasActiveConsent === false) {
+        return makeOAuthTokenErrorResponse({
+          error: "invalid_grant",
+          errorDescription: "Refresh token consent is no longer active.",
+          status: 400,
+        });
+      }
+    } catch (error) {
+      await reportOAuthRefreshTokenConsentGuardFailure(
+        error,
+        options.runtimeContext ?? Context.empty()
+      );
+
+      return makeOAuthTokenErrorResponse({
+        error: "server_error",
+        errorDescription: "Refresh token consent could not be verified.",
+        status: 503,
+      });
+    }
+
+    return await handler(request);
+  };
+}
+
+type OAuthRefreshTokenConsentGuardRequestBody =
+  | {
+      readonly status: "inspectable";
+      readonly value: Record<string, unknown>;
+    }
+  | {
+      readonly status: "uninspectable";
+    };
+
+async function readOAuthRefreshTokenConsentGuardRequestBody(
+  request: Request
+): Promise<OAuthRefreshTokenConsentGuardRequestBody> {
+  try {
+    const contentType = request.headers.get("content-type") ?? "";
+    const contentLength = readRequestContentLength(request);
+
+    if (
+      contentLength !== null &&
+      Number.isFinite(contentLength) &&
+      contentLength > OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
+    ) {
+      return { status: "uninspectable" };
+    }
+
+    if (
+      !contentType.includes("application/json") &&
+      !contentType.includes("application/x-www-form-urlencoded")
+    ) {
+      return { status: "uninspectable" };
+    }
+
+    const bodyText = await readLimitedRequestText(
+      request,
+      OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
+    );
+
+    if (bodyText === null) {
+      return { status: "uninspectable" };
+    }
+
+    if (bodyText.length === 0) {
+      return { status: "inspectable", value: {} };
+    }
+
+    if (contentType.includes("application/json")) {
+      const body = JSON.parse(bodyText);
+      return isRecord(body)
+        ? { status: "inspectable", value: body }
+        : { status: "uninspectable" };
+    }
+
+    const params = new URLSearchParams(bodyText);
+
+    if (
+      params.getAll("grant_type").length > 1 ||
+      params.getAll("refresh_token").length > 1
+    ) {
+      return { status: "uninspectable" };
+    }
+
+    return { status: "inspectable", value: Object.fromEntries(params) };
+  } catch {
+    return { status: "uninspectable" };
+  }
+}
+
+interface OAuthRefreshTokenConsentGuardRow {
+  readonly consentScopes: readonly string[] | null;
+  readonly refreshTokenScopes: readonly string[];
+}
+
+async function refreshTokenHasActiveOAuthConsent(
+  database: NodePgDatabase,
+  refreshToken: string
+): Promise<boolean | null> {
+  const storedToken = await hashOAuthStoredToken(refreshToken, "refresh_token");
+  const rows = await database
+    .select({
+      consentScopes: oauthConsentTable.scopes,
+      refreshTokenScopes: oauthRefreshTokenTable.scopes,
+    })
+    .from(oauthRefreshTokenTable)
+    .leftJoin(
+      oauthConsentTable,
+      and(
+        eq(oauthConsentTable.userId, oauthRefreshTokenTable.userId),
+        eq(oauthConsentTable.clientId, oauthRefreshTokenTable.clientId),
+        sql`${oauthConsentTable.referenceId} is not distinct from ${oauthRefreshTokenTable.referenceId}`
+      )
+    )
+    .where(eq(oauthRefreshTokenTable.token, storedToken))
+    .limit(1);
+  const [row] = rows as readonly OAuthRefreshTokenConsentGuardRow[];
+
+  if (row === undefined) {
+    return null;
+  }
+
+  const { consentScopes } = row;
+
+  return (
+    consentScopes !== null &&
+    row.refreshTokenScopes.every((scope) => consentScopes.includes(scope))
+  );
+}
+
+function makeOAuthTokenErrorResponse(options: {
+  readonly error: "invalid_grant" | "invalid_request" | "server_error";
+  readonly errorDescription: string;
+  readonly status: 400 | 503;
+}) {
+  return Response.json(
+    {
+      error: options.error,
+      error_description: options.errorDescription,
+    },
+    {
+      status: options.status,
+    }
+  );
 }
 
 interface AuthSecurityAuditEventWriterOptions {
@@ -3274,6 +3479,26 @@ async function reportAuthSecurityAuditTokenContextFailure(
         authAbuseSignal: "auth_security_audit_token_context_failure",
         authAbuseSignalSeverity: "dashboard",
         authSecurityAuditEndpointPath: endpointPath,
+        authSecurityAuditFailureCause:
+          error instanceof Error
+            ? sanitizeAuthFailureLogValue(error.message)
+            : sanitizeAuthFailureLogValue(String(error)),
+      })
+    )
+  );
+}
+
+async function reportOAuthRefreshTokenConsentGuardFailure(
+  error: unknown,
+  runtimeContext: AuthEffectRuntimeContext
+) {
+  await Effect.runPromiseWith(runtimeContext)(
+    Effect.logWarning("OAuth refresh token consent guard failed").pipe(
+      Effect.annotateLogs({
+        authAbuseAlertPolicy: "alert_on_sustained_consent_guard_failure",
+        authAbuseSignal: "oauth_refresh_token_consent_guard_failure",
+        authAbuseSignalSeverity: "high",
+        authSecurityAuditEndpointPath: OAUTH_TOKEN_ENDPOINT_PATH,
         authSecurityAuditFailureCause:
           error instanceof Error
             ? sanitizeAuthFailureLogValue(error.message)

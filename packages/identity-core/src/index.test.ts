@@ -28,6 +28,13 @@ import {
   UserPreferencesApi,
   UserPreferencesApiGroup,
   UserPreferencesStorageError,
+  CONNECTED_APP_SCOPE_GROUP_KEYS,
+  ConnectedAppGrantAccessDeniedError,
+  ConnectedAppGrantNotFoundError,
+  ConnectedAppGrantStorageError,
+  decodeConnectedAppGrantListResponse,
+  decodeDisconnectConnectedAppGrantInput,
+  IdentityApi,
 } from "./index.js";
 
 describe("createOrganizationInputSchema", () => {
@@ -403,5 +410,129 @@ describe("user preferences boundary", () => {
         message: "User preferences storage failed",
       })._tag
     ).toBe("@ceird/identity-core/UserPreferencesStorageError");
+  }, 1000);
+});
+
+describe("connected app grants boundary", () => {
+  it("decodes connected app grants without exposing raw token material", () => {
+    expect(
+      decodeConnectedAppGrantListResponse({
+        grants: [
+          {
+            activeAccessTokenCount: 1,
+            activeRefreshTokenCount: 1,
+            clientId: "client_external_mcp",
+            clientName: "External MCP",
+            clientUri: "https://mcp.example.com",
+            context: {
+              organizationId: "org_acme",
+              organizationName: "Acme Field Ops",
+              type: "organization",
+            },
+            grantId: "consent_123",
+            grantedAt: "2026-06-08T10:30:00.000Z",
+            latestAccessTokenExpiresAt: "2026-06-08T11:30:00.000Z",
+            latestRefreshTokenExpiresAt: "2026-07-08T10:30:00.000Z",
+            offlineAccess: true,
+            redirectHosts: ["mcp.example.com"],
+            scopes: ["openid", "profile", "ceird:read", "offline_access"],
+            scopeGroups: [
+              {
+                key: "identity",
+                label: "Identity",
+                scopes: ["openid", "profile"],
+              },
+              {
+                key: "read",
+                label: "Read",
+                scopes: ["ceird:read"],
+              },
+              {
+                key: "offline",
+                label: "Offline access",
+                scopes: ["offline_access"],
+              },
+            ],
+            updatedAt: "2026-06-08T10:45:00.000Z",
+          },
+        ],
+      })
+    ).toStrictEqual({
+      grants: [
+        expect.objectContaining({
+          clientId: "client_external_mcp",
+          context: {
+            organizationId: "org_acme",
+            organizationName: "Acme Field Ops",
+            type: "organization",
+          },
+          grantId: "consent_123",
+          offlineAccess: true,
+        }),
+      ],
+    });
+
+    expect(() =>
+      decodeConnectedAppGrantListResponse({
+        grants: [
+          {
+            accessToken: "secret",
+            activeAccessTokenCount: 1,
+            activeRefreshTokenCount: 1,
+            clientId: "client_external_mcp",
+            context: { type: "account" },
+            grantId: "consent_123",
+            grantedAt: "2026-06-08T10:30:00.000Z",
+            offlineAccess: true,
+            redirectHosts: [],
+            refreshToken: "secret",
+            scopes: ["offline_access"],
+            scopeGroups: [],
+            updatedAt: "2026-06-08T10:45:00.000Z",
+          },
+        ],
+      })
+    ).toThrow(/[Uu]nexpected/);
+  }, 1000);
+
+  it("exposes typed connected app endpoints and errors", () => {
+    const spec = OpenApi.fromApi(IdentityApi);
+
+    expect(CONNECTED_APP_SCOPE_GROUP_KEYS).toStrictEqual([
+      "identity",
+      "read",
+      "write",
+      "admin",
+      "offline",
+      "other",
+    ]);
+    expect(spec.paths["/user/connected-apps"]?.get?.operationId).toBe(
+      "identity.listConnectedAppGrants"
+    );
+    expect(
+      spec.paths["/user/connected-apps/{grantId}"]?.delete?.operationId
+    ).toBe("identity.disconnectConnectedAppGrant");
+    expect(
+      decodeDisconnectConnectedAppGrantInput({ grantId: "consent_123" })
+    ).toStrictEqual({ grantId: "consent_123" });
+    expect(
+      new ConnectedAppGrantAccessDeniedError({
+        message: "Authentication is required",
+      })._tag
+    ).toBe("@ceird/identity-core/ConnectedAppGrantAccessDeniedError");
+    expect(
+      new ConnectedAppGrantNotFoundError({
+        grantId: decodeDisconnectConnectedAppGrantInput({
+          grantId: "consent_123",
+        }).grantId,
+        message: "Connected app grant was not found",
+      })._tag
+    ).toBe("@ceird/identity-core/ConnectedAppGrantNotFoundError");
+    expect(
+      new ConnectedAppGrantStorageError({
+        cause: "database unavailable",
+        message: "Connected app storage failed",
+      })._tag
+    ).toBe("@ceird/identity-core/ConnectedAppGrantStorageError");
   }, 1000);
 });

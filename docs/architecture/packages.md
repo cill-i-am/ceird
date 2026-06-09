@@ -70,9 +70,15 @@ Exports shared identity and organization primitives:
 - public invitation preview schema
 - user preference DTOs and `UserPreferencesApiGroup`, including the global
   route-proximity location opt-in
+- connected-app grant DTOs, scope-group schemas, disconnect input/response
+  schemas, and typed connected-app errors used by app settings, domain identity
+  handlers, and MCP consent enforcement
+- `IdentityApiGroup` endpoints for organization security activity plus
+  current-user connected-app listing and disconnect
 - decode helpers for untrusted payloads
 
-Use this package when app, API adapter, MCP adapter, and domain code need the same organization or membership
+Use this package when app, API adapter, MCP adapter, and domain code need the
+same organization, membership, current-user identity, or connected-app wire
 contract. Do not put Better Auth adapter configuration or database queries here;
 those belong in `apps/domain`.
 

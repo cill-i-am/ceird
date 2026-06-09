@@ -13,6 +13,9 @@ contracts used by the app, domain Worker, API adapter, and jobs core package.
 - organization summary schemas and list schemas
 - create/update organization input schemas
 - public invitation preview schema
+- connected-app grant schemas, scope groups, and disconnect response schemas
+- identity HTTP API group for organization security activity and current-user
+  connected-app management
 - decode helpers for untrusted payloads
 
 ## Commands

@@ -93,11 +93,26 @@ for example `/.well-known/oauth-protected-resource/mcp`.
 
 MCP HTTP is served through `effect/unstable/ai`'s `McpServer.layerHttp`, adapted
 to the domain web-handler boundary after Better Auth OAuth bearer validation.
-Bearer validation requires the OAuth token to include `sid`, `sub`, and
-`client_id`; the authorized-app cache is partitioned by session id, user id,
-OAuth client id, and normalized scopes.
+Bearer validation requires the OAuth token to include `sid`, `sub`, and an OAuth
+client id from Better Auth's JWT `azp` claim, with `client_id` accepted for
+compatible callers; the authorized-app cache is partitioned by session id, user
+id, OAuth client id, and normalized scopes.
+Before the cached MCP app is used, the domain Worker checks that a matching
+Better Auth `oauth_consent` row still exists for the token user, client,
+reference id, and scopes. Removing a connected app through the identity API
+therefore blocks future MCP requests immediately, even while an issued access
+token has time remaining. Consent-check storage failures fail closed and emit
+sanitized warning telemetry.
 The standalone MCP Worker remains a forwarding adapter so generated/action UI,
 Agents SDK Workers, and bot surfaces can call the same domain surface.
+
+The identity HTTP group also exposes current-user connected-app management for
+the account settings Security tab:
+
+| Method   | Path                            | Purpose                                                                              |
+| -------- | ------------------------------- | ------------------------------------------------------------------------------------ |
+| `GET`    | `/user/connected-apps`          | List user-approved OAuth/MCP clients without token or client-secret data.            |
+| `DELETE` | `/user/connected-apps/:grantId` | Delete the consent, revoke refresh tokens, clear DB-backed access tokens, and audit. |
 
 ## Agent Runtime
 
