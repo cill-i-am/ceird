@@ -30,7 +30,7 @@ export async function loadAuthenticatedAppRoute(input?: {
   readonly serverContext?: unknown;
 }) {
   const serverContext = readAppServerContext(
-    input?.context ?? input?.serverContext
+    resolveRouteServerContextInput(input)
   );
   const hydrateOrganizationContext =
     input?.pathname !== undefined &&
@@ -60,6 +60,14 @@ export async function loadAuthenticatedAppRoute(input?: {
     clientAppContext,
     serverContextOrganizations: serverContext.organizations,
   });
+
+  if (
+    hydrateOrganizationContext &&
+    activeOrganizationId === null &&
+    organizations?.length === 0
+  ) {
+    throw redirect({ to: "/create-organization" });
+  }
 
   return {
     activeOrganizationId,
@@ -169,5 +177,24 @@ function resolveOrganizations(input: {
 }) {
   return (
     input.serverContextOrganizations ?? input.clientAppContext?.organizations
+  );
+}
+
+function resolveRouteServerContextInput(input?: {
+  readonly context?: unknown;
+  readonly serverContext?: unknown;
+}) {
+  if (hasServerContext(input?.context)) {
+    return input.context.serverContext;
+  }
+
+  return input?.serverContext ?? input?.context;
+}
+
+function hasServerContext(
+  input: unknown
+): input is { readonly serverContext: unknown } {
+  return (
+    typeof input === "object" && input !== null && "serverContext" in input
   );
 }
