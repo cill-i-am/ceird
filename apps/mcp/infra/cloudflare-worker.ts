@@ -1,9 +1,9 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import type { DomainServiceBinding } from "@ceird/domain-core";
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { WorkerProps } from "alchemy/Cloudflare";
-import type { InputProps } from "alchemy/Input";
-import type * as Effect from "effect/Effect";
+import type { Input, InputProps } from "alchemy/Input";
 
 import {
   ceirdWorkerCompatibility,
@@ -13,31 +13,32 @@ import type { DomainWorkerResource } from "../../domain/infra/cloudflare-worker.
 
 const mcpWorkerMain = new URL("../src/worker.ts", import.meta.url).pathname;
 
-export type WorkerServiceBinding = Service;
-
-// oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for service bindings.
-export type McpWorkerBindings = {
+export interface McpWorkerResourceEnv {
   readonly ANALYTICS?: Cloudflare.AnalyticsEngineDataset | undefined;
   readonly DOMAIN: DomainWorkerResource;
-};
+}
 
 export interface McpWorkerBindingEnv {
   readonly ANALYTICS?: AnalyticsEngineDataset | undefined;
-  readonly DOMAIN: WorkerServiceBinding;
+  readonly DOMAIN: DomainServiceBinding;
 }
-
-type McpWorkerBindingProps = {
-  readonly [BindingName in keyof McpWorkerBindings]:
-    | NonNullable<McpWorkerBindings[BindingName]>
-    | Effect.Effect<NonNullable<McpWorkerBindings[BindingName]>, never, never>;
-};
 
 export interface McpWorkerConfiguredEnv {
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
   readonly NODE_ENV: "production";
 }
 
-export function makeMcpWorkerBindings(input: {
+type McpWorkerEnv = McpWorkerResourceEnv & McpWorkerConfiguredEnv;
+type WorkerEnvShape<Env extends object> = {
+  readonly [Key in keyof Env]: Env[Key];
+};
+type WorkerEnvInput<Env extends object> = {
+  readonly [Key in keyof WorkerEnvShape<Env>]: undefined extends WorkerEnvShape<Env>[Key]
+    ? Input<Exclude<WorkerEnvShape<Env>[Key], undefined>> | undefined
+    : Input<WorkerEnvShape<Env>[Key]>;
+};
+
+export function makeMcpWorkerResourceEnv(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly domain: DomainWorkerResource;
   readonly localDev?: boolean | undefined;
@@ -45,17 +46,34 @@ export function makeMcpWorkerBindings(input: {
   return {
     ...(input.localDev === true ? {} : { ANALYTICS: input.analytics }),
     DOMAIN: input.domain,
-  } satisfies McpWorkerBindingProps;
+  } satisfies WorkerEnvInput<McpWorkerResourceEnv>;
 }
 
-export function makeMcpWorkerEnv(input: {
+export function makeMcpWorkerConfiguredEnv(input: {
   readonly workerAnalyticsSampleRate: number;
 }): McpWorkerConfiguredEnv {
   return {
     CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: String(input.workerAnalyticsSampleRate),
     NODE_ENV: "production",
-  } satisfies McpWorkerConfiguredEnv &
-    Record<string, NonNullable<WorkerProps["env"]>[string]>;
+  };
+}
+
+export function makeMcpWorkerEnv(input: {
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
+  readonly config: { readonly workerAnalyticsSampleRate: number };
+  readonly domain: DomainWorkerResource;
+  readonly localDev?: boolean | undefined;
+}) {
+  return {
+    ...makeMcpWorkerResourceEnv({
+      analytics: input.analytics,
+      domain: input.domain,
+      localDev: input.localDev,
+    }),
+    ...makeMcpWorkerConfiguredEnv({
+      workerAnalyticsSampleRate: input.config.workerAnalyticsSampleRate,
+    }),
+  } satisfies WorkerEnvInput<McpWorkerEnv>;
 }
 
 export function makeMcpWorkerProps(input: {
@@ -70,20 +88,16 @@ export function makeMcpWorkerProps(input: {
     name: input.name,
     main: mcpWorkerMain,
     compatibility: ceirdWorkerCompatibility,
-    bindings: makeMcpWorkerBindings({
+    env: makeMcpWorkerEnv({
       analytics: input.analytics,
+      config: input.config,
       domain: input.domain,
       localDev: input.localDev,
     }),
-    env: {
-      ...makeMcpWorkerEnv({
-        workerAnalyticsSampleRate: input.config.workerAnalyticsSampleRate,
-      }),
-    },
     domain: input.hostname,
     observability: ceirdWorkerObservability,
     url: false,
-  } satisfies InputProps<WorkerProps<McpWorkerBindingProps>>;
+  } satisfies InputProps<WorkerProps<WorkerEnvShape<McpWorkerEnv>>>;
 }
 
 export function makeMcpWorker(input: {

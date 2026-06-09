@@ -53,11 +53,14 @@ export function makeAlchemyLocalWorkerOrigin(
 }
 
 export function makeCloudflareWorkerOrigin(input: {
-  readonly domains: readonly {
-    readonly hostname: string;
-    readonly id?: string;
-    readonly zoneId?: string;
-  }[];
+  readonly domains: readonly (
+    | string
+    | {
+        readonly hostname: string;
+        readonly id?: string;
+        readonly zoneId?: string;
+      }
+  )[];
   readonly fallbackHostname: string;
   readonly localDev?: boolean;
   readonly localUrl?: string | undefined;
@@ -66,7 +69,10 @@ export function makeCloudflareWorkerOrigin(input: {
     return input.localUrl;
   }
 
-  return `https://${input.domains[0]?.hostname ?? input.fallbackHostname}`;
+  const [domain] = input.domains;
+  const hostname = typeof domain === "string" ? domain : domain?.hostname;
+
+  return `https://${hostname ?? input.fallbackHostname}`;
 }
 
 export function makeCloudflareHyperdrive(input: {
@@ -209,13 +215,6 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     mcp: makeAlchemyLocalWorkerOrigin("mcp"),
     sync: makeAlchemyLocalWorkerOrigin("sync"),
   };
-  const localDatabaseUrl =
-    localDev === true
-      ? input.database.branch.connectionUri.pipe(
-          Output.map((connectionUri) => Redacted.make(connectionUri))
-        )
-      : undefined;
-
   yield* Effect.annotateCurrentSpan("alchemy.localDev", localDev);
   yield* Effect.annotateCurrentSpan(
     "electricStorageProvisioned",
@@ -247,7 +246,6 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     betterAuthSecret: betterAuthSecret.text,
     betterAuthSecrets: input.config.authSecrets,
     config: input.config,
-    databaseUrl: localDatabaseUrl,
     hyperdrive: input.hyperdrive,
     localDev,
     localOrigins,
@@ -483,14 +481,49 @@ export interface ElectricStorageCredentialValues {
   readonly secretAccessKey: SecretStringInput;
 }
 
-type SecretStringInput = string | Output.Output<string>;
+type SecretString = string | Redacted.Redacted<string>;
+type SecretStringInput = SecretString | Output.Output<SecretString>;
+interface RedactedMarker {
+  readonly _tag: "Redacted";
+  readonly value: string;
+}
 
-function redactInput(
+function isRedactedMarker(value: unknown): value is RedactedMarker {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "_tag" in value &&
+    value._tag === "Redacted" &&
+    "value" in value &&
+    typeof value.value === "string"
+  );
+}
+
+function toRedactedSecretString(value: SecretString) {
+  return Redacted.isRedacted(value) ? value : Redacted.make(value);
+}
+
+export function redactInput(value: SecretString): Redacted.Redacted<string>;
+export function redactInput<Req>(
+  value: Output.Output<SecretString, Req>
+): Output.Output<Redacted.Redacted<string>, Req>;
+export function redactInput(
+  value: SecretStringInput
+): Input<Redacted.Redacted<string>>;
+export function redactInput(
   value: SecretStringInput
 ): Input<Redacted.Redacted<string>> {
-  return typeof value === "string"
-    ? Redacted.make(value)
-    : value.pipe(Output.map(Redacted.make));
+  if (Output.isOutput(value)) {
+    return value.pipe(
+      Output.map((resolvedValue) =>
+        isRedactedMarker(resolvedValue)
+          ? Redacted.make(resolvedValue.value)
+          : toRedactedSecretString(resolvedValue)
+      )
+    );
+  }
+
+  return toRedactedSecretString(value);
 }
 
 function makeElectricContainerConfig(input: {

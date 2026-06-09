@@ -250,11 +250,12 @@ The stack provisions:
 - Cloudflare Email Worker binding for deployed auth email delivery
 
 Alchemy local Workerd does not support every deployed provider binding. In
-local dev, the domain Worker omits `AUTH_EMAIL`, `AUTH_EMAIL_QUEUE`, and the
-Hyperdrive binding, injects the selected Neon branch connection URI as a
-redacted Worker `DATABASE_URL` env value, and uses the domain's deterministic
-email scheduler instead of the Cloudflare Queue consumer. Deployed stages keep
-Hyperdrive, Queue, and Email Worker bindings.
+local dev, the domain Worker keeps the native `DATABASE` Hyperdrive binding
+through Alchemy beta.52's local provider support, omits `AUTH_EMAIL` and
+`AUTH_EMAIL_QUEUE`, and uses the domain's deterministic email scheduler instead
+of the Cloudflare Queue consumer. Package-local domain runs can still use
+`DATABASE_URL`, but local Alchemy stages now use the same Hyperdrive path as
+deployed Workers.
 
 Local Vite app Workers are not deployed edge scripts, so local dev also skips
 tenant wildcard DNS, tenant Worker routes, reserved host bypass routes, and the
@@ -296,6 +297,14 @@ Deployed app-owned Workers also receive the native Analytics Engine binding
 through the Effect-native `WorkerObservability` service. Local Alchemy dev
 omits `ANALYTICS` because workerd does not emulate Analytics Engine bindings;
 the runtime observability service already treats the binding as optional.
+App-owned Alchemy worker modules now declare both resource bindings and runtime
+config through the Worker `env` prop; the older `bindings` prop shape is no
+longer used. When local Alchemy dev omits an unsupported resource such as
+Queue, Email, or Analytics Engine, the helper must omit the key entirely
+rather than return `undefined` for it so the resulting `env` object still
+satisfies Alchemy's binding-map typing. The Domain Worker keeps `DATABASE`
+present locally because beta.52's local provider now supports native
+Hyperdrive bindings.
 The public sync Worker declares `DOMAIN` plus the `ElectricSql` Durable Object
 namespace, and its Alchemy module declares the Cloudflare Container that runs
 Electric SQL for deployed stages. The root stack declares the stage R2 bucket
