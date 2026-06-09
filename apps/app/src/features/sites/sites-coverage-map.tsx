@@ -24,6 +24,8 @@ import {
 import { createWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
 import { cn } from "#/lib/utils";
 
+import { formatSiteActiveJobCount, SiteWorkSignal } from "./site-work-signal";
+
 const SitesCoverageMapCanvas = React.lazy(async () => {
   const module = await import("./sites-coverage-map-canvas");
 
@@ -168,6 +170,8 @@ function SitesMapSiteRailItem({ item }: { readonly item: MappedSiteMapItem }) {
           <Badge variant="secondary">Mapped</Badge>
         </div>
 
+        <SiteWorkSignal site={item.site} />
+
         {item.addressLines.length > 0 ? (
           <div className="grid gap-1">
             {item.addressLines.map((line) => (
@@ -297,24 +301,56 @@ function SitesMapViewport({
 
   if (!canRenderInteractiveMap) {
     return (
-      <div className="flex h-full min-h-0 flex-col justify-between gap-6 overflow-y-auto bg-muted/10 p-4">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {mappedSites.slice(0, 9).map((item) => (
-            <div
-              key={item.site.id}
-              className="rounded-2xl border bg-background/84 p-4"
-            >
-              <div className="flex flex-col gap-2">
-                <Badge variant="secondary">Mapped</Badge>
-                <p className="font-medium">{item.site.name}</p>
-                {item.addressLines[0] ? (
-                  <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {item.addressLines[0]}
-                  </p>
-                ) : null}
+      <div
+        className="relative h-full min-h-0 overflow-hidden bg-muted/10 p-4"
+        data-testid="sites-map-static-fallback"
+      >
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-30" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,var(--muted)_0,transparent_18rem),radial-gradient(circle_at_70%_70%,var(--muted)_0,transparent_20rem)] opacity-60" />
+        <div className="relative h-full min-h-0 rounded-xl border border-dashed bg-background/45">
+          {mappedSites.slice(0, 12).map((item, index) => {
+            const activeJobCount = item.site.activeJobCount ?? 0;
+            const position =
+              STATIC_FALLBACK_MARKER_POSITIONS[
+                index % STATIC_FALLBACK_MARKER_POSITIONS.length
+              ];
+
+            return (
+              <div
+                key={item.site.id}
+                className="absolute flex max-w-48 -translate-x-1/2 -translate-y-1/2 items-center gap-2"
+                data-testid="sites-map-fallback-marker"
+                style={{ left: `${position[0]}%`, top: `${position[1]}%` }}
+              >
+                <span
+                  aria-label={`${item.site.name}${
+                    activeJobCount > 0
+                      ? `, ${formatSiteActiveJobCount(activeJobCount)}`
+                      : ""
+                  }`}
+                  className="relative flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/25 bg-primary text-primary-foreground shadow-sm"
+                >
+                  <HugeiconsIcon icon={MapsLocation01Icon} strokeWidth={2} />
+                  {activeJobCount > 0 ? (
+                    <span className="absolute -top-1 -right-1 flex min-w-5 justify-center rounded-full border border-background bg-background px-1 text-[0.625rem] leading-5 font-semibold text-primary shadow-sm">
+                      {activeJobCount}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="hidden max-w-36 min-w-0 truncate rounded-full border bg-background/90 px-2.5 py-1 text-xs font-medium shadow-sm sm:block">
+                  {item.site.name}
+                </span>
               </div>
-            </div>
-          ))}
+            );
+          })}
+          {mappedSites.length > 12 ? (
+            <Badge
+              className="absolute right-3 bottom-3 bg-background/90"
+              variant="outline"
+            >
+              +{mappedSites.length - 12} more
+            </Badge>
+          ) : null}
         </div>
       </div>
     );
@@ -326,6 +362,21 @@ function SitesMapViewport({
     </React.Suspense>
   );
 }
+
+const STATIC_FALLBACK_MARKER_POSITIONS = [
+  [15, 28],
+  [33, 36],
+  [53, 25],
+  [73, 38],
+  [24, 58],
+  [45, 68],
+  [64, 56],
+  [84, 66],
+  [18, 78],
+  [39, 18],
+  [59, 82],
+  [78, 18],
+] as const;
 
 function CoverageMapLoadingState() {
   return (

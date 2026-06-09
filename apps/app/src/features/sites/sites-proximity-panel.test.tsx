@@ -245,7 +245,49 @@ describe("sites proximity panel", () => {
     await expect(
       screen.findByRole("heading", { name: "Dublin Estate" })
     ).resolves.toBeVisible();
+    expect(screen.getByText("2 active jobs")).toBeVisible();
+    expect(screen.getByText("Urgent")).toBeVisible();
     expect(screen.getByText("14 min")).toBeVisible();
+  });
+
+  it("renders zero-work copy for nearby sites without active jobs", async () => {
+    const response = buildResponse();
+    const [row] = response.rows;
+
+    if (row === undefined) {
+      throw new Error("Expected buildResponse to create a row");
+    }
+
+    const zeroWorkRow = { ...row, activeJobCount: 0 };
+    delete zeroWorkRow.highestActiveJobPriority;
+
+    mockedRankNearbySites.mockReturnValue(
+      Effect.succeed({
+        ...response,
+        rows: [zeroWorkRow],
+      })
+    );
+    const user = userEvent.setup();
+    const { SitesProximityPanel } = await import("./sites-proximity-panel");
+
+    render(
+      <ControlledSitesProximityPanel
+        Component={SitesProximityPanel}
+        limit={10}
+        mapFilter="all"
+        query=""
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /near me/i }));
+
+    await expect(
+      screen.findByRole("heading", { name: "Dublin Estate" })
+    ).resolves.toBeVisible();
+    expect(screen.getByText("No active jobs")).toBeVisible();
+    expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
   });
 
   it("requests route lines and renders the proximity map in map mode", async () => {

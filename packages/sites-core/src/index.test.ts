@@ -191,6 +191,22 @@ describe("sites-core", () => {
     expect(
       Schema.decodeUnknownSync(CreateSiteResponseSchema)(resolvedSite)
     ).toStrictEqual(resolvedSite);
+    expect(
+      Schema.decodeUnknownSync(SiteOptionSchema)({
+        ...resolvedSite,
+        activeJobCount: 0,
+      })
+    ).toMatchObject({ activeJobCount: 0 });
+    expect(
+      Schema.decodeUnknownSync(SiteOptionSchema)({
+        ...resolvedSite,
+        activeJobCount: 2,
+        highestActiveJobPriority: "urgent",
+      })
+    ).toMatchObject({
+      activeJobCount: 2,
+      highestActiveJobPriority: "urgent",
+    });
     expect(() =>
       Schema.decodeUnknownSync(CreateSiteResponseSchema)({
         ...resolvedSite,
@@ -224,6 +240,19 @@ describe("sites-core", () => {
         latitude: 53.3498,
       })
     ).toThrow(/location fields are inconsistent/);
+    expect(() =>
+      Schema.decodeUnknownSync(SiteOptionSchema)({
+        ...resolvedSite,
+        highestActiveJobPriority: "urgent",
+      })
+    ).toThrow(/active work fields are inconsistent/);
+    expect(() =>
+      Schema.decodeUnknownSync(SiteOptionSchema)({
+        ...resolvedSite,
+        activeJobCount: 0,
+        highestActiveJobPriority: "urgent",
+      })
+    ).toThrow(/active work fields are inconsistent/);
   });
 
   it("decodes site comment contracts", () => {

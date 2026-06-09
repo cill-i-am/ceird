@@ -13,6 +13,10 @@ import { openWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-
 import { cn } from "#/lib/utils";
 
 import { buildSiteAddressLines } from "./site-location";
+import {
+  formatSiteActiveJobCount,
+  SiteWorkPriorityBadge,
+} from "./site-work-signal";
 
 export function SitesProximityRow({
   origin,
@@ -85,12 +89,10 @@ function SiteProximityMeta({ row }: { readonly row: SiteProximityRow }) {
   return (
     <div className="hidden items-center gap-1.5 md:flex">
       <Badge variant="secondary" className="rounded-full">
-        {row.activeJobCount} active
+        {formatSiteActiveJobCount(row.activeJobCount)}
       </Badge>
       {row.highestActiveJobPriority ? (
-        <Badge variant="outline" className="rounded-full capitalize">
-          {row.highestActiveJobPriority}
-        </Badge>
+        <SiteWorkPriorityBadge priority={row.highestActiveJobPriority} />
       ) : null}
     </div>
   );

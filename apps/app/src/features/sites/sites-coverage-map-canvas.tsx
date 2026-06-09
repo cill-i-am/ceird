@@ -21,6 +21,7 @@ import {
 } from "#/features/sites/site-location";
 import { openWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
 
+import { formatSiteActiveJobCount, SiteWorkSignal } from "./site-work-signal";
 import type { MappedSiteMapItem } from "./sites-coverage-map";
 
 export function SitesCoverageMapCanvas({
@@ -54,71 +55,88 @@ export function SitesCoverageMapCanvas({
           position="bottom-right"
           controls={["zoom", "fullscreen"]}
         />
-        {sites.map((item) => (
-          <MapMarker
-            key={item.site.id}
-            latitude={item.site.latitude}
-            longitude={item.site.longitude}
-          >
-            <MarkerContent interactive ariaLabel={`Open ${item.site.name}`}>
-              <div className="flex size-10 items-center justify-center rounded-full border border-primary/30 bg-primary text-primary-foreground shadow-lg">
-                <HugeiconsIcon icon={MapsLocation01Icon} strokeWidth={2} />
-              </div>
-              <MarkerLabel visibility="hover">{item.site.name}</MarkerLabel>
-            </MarkerContent>
-            <MarkerPopup closeButton offset={24}>
-              <div className="flex w-72 flex-col gap-3">
-                <div className="flex flex-col gap-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-medium">{item.site.name}</p>
-                    <Badge variant="secondary">Mapped</Badge>
-                  </div>
-                  {item.addressLines.map((line) => (
-                    <p
-                      key={line}
-                      className="text-sm leading-6 text-muted-foreground"
-                    >
-                      {line}
-                    </p>
-                  ))}
-                </div>
+        {sites.map((item) => {
+          const activeJobCount = item.site.activeJobCount ?? 0;
 
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    to="/sites"
-                    search={(current) =>
-                      openWorkspaceSheetSearch(current, {
-                        kind: "site.detail",
-                        siteId: item.site.id,
-                      })
-                    }
-                    className={buttonVariants({ size: "sm" })}
-                  >
-                    Open site
-                  </Link>
-                  {item.googleMapsUrl ? (
-                    <a
-                      href={item.googleMapsUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className={buttonVariants({
-                        size: "sm",
-                        variant: "outline",
-                      })}
-                    >
-                      <HugeiconsIcon
-                        icon={MapsLocation01Icon}
-                        strokeWidth={2}
-                        data-icon="inline-start"
-                      />
-                      Open in Google Maps
-                    </a>
+          return (
+            <MapMarker
+              key={item.site.id}
+              latitude={item.site.latitude}
+              longitude={item.site.longitude}
+            >
+              <MarkerContent
+                interactive
+                ariaLabel={`Open ${item.site.name}${
+                  activeJobCount > 0
+                    ? `, ${formatSiteActiveJobCount(activeJobCount)}`
+                    : ""
+                }`}
+              >
+                <div className="relative flex size-10 items-center justify-center rounded-full border border-primary/30 bg-primary text-primary-foreground shadow-lg">
+                  <HugeiconsIcon icon={MapsLocation01Icon} strokeWidth={2} />
+                  {activeJobCount > 0 ? (
+                    <span className="absolute -top-1 -right-1 flex min-w-5 justify-center rounded-full border border-background bg-background px-1 text-[0.625rem] leading-5 font-semibold text-primary shadow-sm">
+                      {activeJobCount}
+                    </span>
                   ) : null}
                 </div>
-              </div>
-            </MarkerPopup>
-          </MapMarker>
-        ))}
+                <MarkerLabel visibility="hover">{item.site.name}</MarkerLabel>
+              </MarkerContent>
+              <MarkerPopup closeButton offset={24}>
+                <div className="flex w-72 flex-col gap-3">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{item.site.name}</p>
+                      <Badge variant="secondary">Mapped</Badge>
+                    </div>
+                    <SiteWorkSignal site={item.site} />
+                    {item.addressLines.map((line) => (
+                      <p
+                        key={line}
+                        className="text-sm leading-6 text-muted-foreground"
+                      >
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      to="/sites"
+                      search={(current) =>
+                        openWorkspaceSheetSearch(current, {
+                          kind: "site.detail",
+                          siteId: item.site.id,
+                        })
+                      }
+                      className={buttonVariants({ size: "sm" })}
+                    >
+                      Open site
+                    </Link>
+                    {item.googleMapsUrl ? (
+                      <a
+                        href={item.googleMapsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={buttonVariants({
+                          size: "sm",
+                          variant: "outline",
+                        })}
+                      >
+                        <HugeiconsIcon
+                          icon={MapsLocation01Icon}
+                          strokeWidth={2}
+                          data-icon="inline-start"
+                        />
+                        Open in Google Maps
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              </MarkerPopup>
+            </MapMarker>
+          );
+        })}
       </Map>
     </div>
   );
