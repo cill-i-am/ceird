@@ -10,10 +10,7 @@ import type {
   PreparedAgentSession,
 } from "@ceird/agents-core";
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
-import type {
-  ProximityOriginInput,
-  ProximityOriginSuggestion,
-} from "@ceird/proximity-core";
+import type { ProximityOriginInput } from "@ceird/proximity-core";
 import {
   getToolApproval,
   getToolInput,
@@ -61,12 +58,8 @@ import {
 import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
 import { Separator } from "#/components/ui/separator";
 import { Textarea } from "#/components/ui/textarea";
-import {
-  autocompleteProximityOrigin,
-  resolveProximityOriginPlace,
-} from "#/features/proximity/proximity-api";
 import { requestCurrentLocationOrigin } from "#/features/proximity/proximity-location-access";
-import { createProximityOriginSessionToken } from "#/features/proximity/proximity-origin";
+import { useProximityOriginDialogController } from "#/features/proximity/proximity-origin-controller";
 import { ProximityOriginDialog } from "#/features/proximity/proximity-origin-dialog";
 import { loadRouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
 import type { RouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
@@ -94,8 +87,6 @@ const AGENT_HOST_MISSING_MESSAGE = "The Agent Worker origin is not configured.";
 const AGENT_CONNECT_TOKEN_CACHE_SAFETY_MS = 60_000;
 const AGENT_CONNECT_TOKEN_MAX_CACHE_MS = 240_000;
 const AGENT_PROXIMITY_CONTEXT_ID_PREFIX = "agent-origin-";
-const AGENT_ORIGIN_AUTOCOMPLETE_DEBOUNCE_MS = 250;
-const AGENT_ORIGIN_AUTOCOMPLETE_MIN_LENGTH = 3;
 
 function AgentIcon({
   icon,
@@ -149,119 +140,6 @@ type AgentComposerLocationNotice =
 interface AgentSendMessageOptions {
   readonly forceEnableLocationPreference?: boolean;
   readonly originOverride?: ProximityOriginInput | undefined;
-}
-
-interface AgentOriginDialogState {
-  readonly error: string | null;
-  readonly open: boolean;
-  readonly query: string;
-  readonly resolving: boolean;
-  readonly selectedSuggestion: ProximityOriginSuggestion | null;
-  readonly suggestions: readonly ProximityOriginSuggestion[];
-}
-
-type AgentOriginDialogAction =
-  | { readonly type: "autocompleteFailed"; readonly error: string }
-  | {
-      readonly type: "autocompleteSucceeded";
-      readonly suggestions: readonly ProximityOriginSuggestion[];
-    }
-  | { readonly type: "open" }
-  | { readonly type: "queryChanged"; readonly query: string }
-  | { readonly type: "reset" }
-  | { readonly type: "resolveFailed"; readonly error: string }
-  | { readonly type: "resolveStarted" }
-  | { readonly type: "resolveStopped" }
-  | {
-      readonly type: "suggestionSelected";
-      readonly suggestion: ProximityOriginSuggestion | null;
-    }
-  | { readonly type: "suggestionsCleared" };
-
-const initialAgentOriginDialogState: AgentOriginDialogState = {
-  error: null,
-  open: false,
-  query: "",
-  resolving: false,
-  selectedSuggestion: null,
-  suggestions: [],
-};
-
-function agentOriginDialogReducer(
-  state: AgentOriginDialogState,
-  action: AgentOriginDialogAction
-): AgentOriginDialogState {
-  switch (action.type) {
-    case "autocompleteFailed": {
-      return {
-        ...state,
-        error: action.error,
-        suggestions: [],
-      };
-    }
-    case "autocompleteSucceeded": {
-      return {
-        ...state,
-        error: null,
-        suggestions: action.suggestions,
-      };
-    }
-    case "open": {
-      return {
-        ...state,
-        open: true,
-      };
-    }
-    case "queryChanged": {
-      return {
-        ...state,
-        error: null,
-        query: action.query,
-        selectedSuggestion: null,
-        suggestions: [],
-      };
-    }
-    case "reset": {
-      return initialAgentOriginDialogState;
-    }
-    case "resolveFailed": {
-      return {
-        ...state,
-        error: action.error,
-        resolving: false,
-      };
-    }
-    case "resolveStarted": {
-      return {
-        ...state,
-        error: null,
-        resolving: true,
-      };
-    }
-    case "resolveStopped": {
-      return {
-        ...state,
-        resolving: false,
-      };
-    }
-    case "suggestionSelected": {
-      return {
-        ...state,
-        selectedSuggestion: action.suggestion,
-      };
-    }
-    case "suggestionsCleared": {
-      return state.suggestions.length === 0
-        ? state
-        : {
-            ...state,
-            suggestions: [],
-          };
-    }
-    default: {
-      return state;
-    }
-  }
 }
 
 interface AgentConversationContextValue {
@@ -949,78 +827,37 @@ function AgentComposer({
   ) => Promise<boolean>;
 }) {
   const [draft, setDraft] = React.useState("");
-  const [originDialogState, dispatchOriginDialog] = React.useReducer(
-    agentOriginDialogReducer,
-    initialAgentOriginDialogState
-  );
   const [submitting, setSubmitting] = React.useState(false);
   const composerRef = React.useRef<HTMLDivElement | null>(null);
-  const originResolveRequestRef = React.useRef(0);
-  const sessionTokenRef = React.useRef(createProximityOriginSessionToken());
+  const pendingOriginMessageRef = React.useRef<string | null>(null);
   const isBusy = busy || submitting;
-  const trimmedOriginQuery = originDialogState.query.trim();
+  const originDialog = useProximityOriginDialogController({
+    autocompleteFailureMessage: "Ceird could not search origins. Try again.",
+    resolveFailureMessage:
+      "Ceird could not confirm that origin. Select another result.",
+    onOriginResolved: async ({ origin }) => {
+      const text = pendingOriginMessageRef.current;
 
-  React.useEffect(
-    () => () => {
-      originResolveRequestRef.current += 1;
+      if (!text) {
+        return "keep-open";
+      }
+
+      setSubmitting(true);
+      try {
+        const sent = await sendMessage({ text }, { originOverride: origin });
+
+        if (!sent) {
+          return "keep-open";
+        }
+
+        pendingOriginMessageRef.current = null;
+        setDraft("");
+        return "reset";
+      } finally {
+        setSubmitting(false);
+      }
     },
-    []
-  );
-
-  React.useEffect(() => {
-    if (
-      !originDialogState.open ||
-      trimmedOriginQuery.length < AGENT_ORIGIN_AUTOCOMPLETE_MIN_LENGTH
-    ) {
-      dispatchOriginDialog({ type: "suggestionsCleared" });
-      return;
-    }
-
-    let cancelled = false;
-    const timeoutId = window.setTimeout(() => {
-      void runAutocomplete();
-    }, AGENT_ORIGIN_AUTOCOMPLETE_DEBOUNCE_MS);
-
-    async function runAutocomplete() {
-      if (cancelled) {
-        return;
-      }
-
-      const exit = await Effect.runPromiseExit(
-        autocompleteProximityOrigin({
-          country: "IE",
-          input: trimmedOriginQuery,
-          sessionToken: sessionTokenRef.current,
-        })
-      );
-
-      if (!cancelled && Exit.isSuccess(exit)) {
-        dispatchOriginDialog({
-          suggestions: exit.value.suggestions,
-          type: "autocompleteSucceeded",
-        });
-        return;
-      }
-
-      if (!cancelled) {
-        dispatchOriginDialog({
-          error: "Ceird could not search origins. Try again.",
-          type: "autocompleteFailed",
-        });
-      }
-    }
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
-  }, [originDialogState.open, trimmedOriginQuery]);
-
-  const resetOriginDialog = React.useCallback(() => {
-    originResolveRequestRef.current += 1;
-    dispatchOriginDialog({ type: "reset" });
-    sessionTokenRef.current = createProximityOriginSessionToken();
-  }, []);
+  });
 
   const submitDraft = React.useCallback(
     async (options?: AgentSendMessageOptions) => {
@@ -1044,60 +881,6 @@ function AgentComposer({
     [draft, isBusy, sendMessage]
   );
 
-  const confirmSelectedOrigin = React.useCallback(
-    async (suggestion: ProximityOriginSuggestion) => {
-      const text = draft.trim();
-
-      if (!text || isBusy) {
-        return;
-      }
-
-      const resolveRequestId = originResolveRequestRef.current + 1;
-      originResolveRequestRef.current = resolveRequestId;
-      dispatchOriginDialog({ type: "resolveStarted" });
-      const resolvedOrigin = await Effect.runPromiseExit(
-        resolveProximityOriginPlace({
-          placeId: suggestion.placeId,
-          rawInput: trimmedOriginQuery || suggestion.displayText,
-          sessionToken: sessionTokenRef.current,
-        })
-      ).then((originExit) => ({
-        isCurrentRequest: originResolveRequestRef.current === resolveRequestId,
-        originExit,
-      }));
-
-      if (!resolvedOrigin.isCurrentRequest) {
-        return;
-      }
-
-      if (Exit.isFailure(resolvedOrigin.originExit)) {
-        dispatchOriginDialog({
-          error: "Ceird could not confirm that origin. Select another result.",
-          type: "resolveFailed",
-        });
-        return;
-      }
-
-      setSubmitting(true);
-      try {
-        const sent = await sendMessage(
-          { text },
-          { originOverride: resolvedOrigin.originExit.value.origin }
-        );
-
-        if (sent) {
-          setDraft("");
-          resetOriginDialog();
-        } else if (originResolveRequestRef.current === resolveRequestId) {
-          dispatchOriginDialog({ type: "resolveStopped" });
-        }
-      } finally {
-        setSubmitting(false);
-      }
-    },
-    [draft, isBusy, resetOriginDialog, sendMessage, trimmedOriginQuery]
-  );
-
   useAppHotkey("agentSubmit", () => {
     if (activeElementIsInside(composerRef)) {
       void submitDraft();
@@ -1113,7 +896,7 @@ function AgentComposer({
             notice={locationNotice}
             onChooseOrigin={() => {
               if (draft.trim() && !isBusy) {
-                dispatchOriginDialog({ type: "open" });
+                originDialog.handleOpenChange(true);
               }
             }}
             onShareCurrentLocation={() => {
@@ -1155,30 +938,33 @@ function AgentComposer({
           </Button>
         </div>
         <ProximityOriginDialog
-          error={originDialogState.error}
-          loading={originDialogState.resolving || submitting}
-          open={originDialogState.open}
-          query={originDialogState.query}
-          selectedSuggestion={originDialogState.selectedSuggestion}
-          suggestions={originDialogState.suggestions}
+          error={originDialog.error}
+          loading={originDialog.loading || submitting}
+          open={originDialog.open}
+          query={originDialog.query}
+          selectedSuggestion={originDialog.selectedSuggestion}
+          suggestions={originDialog.suggestions}
           onConfirm={(suggestion) => {
-            void confirmSelectedOrigin(suggestion);
+            const text = draft.trim();
+
+            if (!text || isBusy) {
+              return;
+            }
+
+            pendingOriginMessageRef.current = text;
+            originDialog.confirmSelectedOrigin(suggestion);
           }}
           onOpenChange={(open) => {
-            if (open) {
-              dispatchOriginDialog({ type: "open" });
-            } else {
-              resetOriginDialog();
+            if (!open) {
+              pendingOriginMessageRef.current = null;
             }
+            originDialog.handleOpenChange(open);
           }}
           onQueryChange={(query) => {
-            dispatchOriginDialog({ query, type: "queryChanged" });
+            originDialog.handleQueryChange(query);
           }}
           onSuggestionSelect={(suggestion) => {
-            dispatchOriginDialog({
-              suggestion,
-              type: "suggestionSelected",
-            });
+            originDialog.handleSuggestionSelect(suggestion);
           }}
         />
       </div>
