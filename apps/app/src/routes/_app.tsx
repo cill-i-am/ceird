@@ -1,5 +1,9 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
-import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
+import type {
+  OrganizationId,
+  OrganizationRole,
+  OrganizationSummary,
+} from "@ceird/identity-core";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { getCachedClientAppContext } from "#/features/auth/app-context-client-cache";
@@ -48,8 +52,20 @@ export async function loadAuthenticatedAppRoute(input?: {
       clientAppContext?.currentOrganizationRole ??
       (await resolveCurrentOrganizationRoleOrUndefined(activeOrganizationId)))
     : undefined;
+  const organizations = resolveOrganizations({
+    clientAppContext,
+    serverContextOrganizations: serverContext.organizations,
+  });
 
-  return { activeOrganizationId, currentOrganizationRole, session };
+  return {
+    activeOrganizationId,
+    currentOrganizationRole,
+    ...(organizations ? { organizations } : {}),
+    ...(serverContext.requestedOrganizationSlug
+      ? { requestedOrganizationSlug: serverContext.requestedOrganizationSlug }
+      : {}),
+    session,
+  };
 }
 
 async function getAuthenticatedRouteSession({
@@ -137,4 +153,17 @@ async function resolveCurrentOrganizationRoleOrUndefined(
   } catch {
     return undefined;
   }
+}
+
+function resolveOrganizations(input: {
+  readonly clientAppContext:
+    | Awaited<ReturnType<typeof getCachedClientAppContext>>
+    | undefined;
+  readonly serverContextOrganizations:
+    | readonly OrganizationSummary[]
+    | undefined;
+}) {
+  return (
+    input.serverContextOrganizations ?? input.clientAppContext?.organizations
+  );
 }

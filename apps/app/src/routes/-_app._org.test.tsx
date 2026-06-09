@@ -1,4 +1,5 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
+import { isRedirect } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 const {
@@ -94,6 +95,75 @@ describe("organization app route boundary", () => {
       },
       currentOrganizationRole: undefined,
     });
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
+  it("redirects to /create-organization when preloaded organizations are empty", async () => {
+    const { Route } = await import("./_app._org");
+
+    const result = Route.options.beforeLoad?.({
+      context: {
+        activeOrganizationId: null,
+        organizations: [],
+        session: {
+          session: {
+            activeOrganizationId: null,
+          },
+          user: {
+            id: "user_123",
+          },
+        },
+      },
+    } as never);
+
+    await expect(result).rejects.toMatchObject({
+      options: { to: "/create-organization" },
+    });
+    await expect(result).rejects.toSatisfy(isRedirect);
+    expect(mockedEnsureActiveOrganizationIdForSession).not.toHaveBeenCalled();
+    expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
+  });
+
+  it("resolves the first preloaded organization without reloading access state", async () => {
+    const activeOrganizationId = decodeOrganizationId("org_first");
+    const { Route } = await import("./_app._org");
+
+    await expect(
+      Route.options.beforeLoad?.({
+        context: {
+          activeOrganizationId: null,
+          organizations: [
+            {
+              id: activeOrganizationId,
+              name: "First Org",
+              slug: "first-org",
+            },
+          ],
+          session: {
+            session: {
+              activeOrganizationId: null,
+            },
+            user: {
+              id: "user_123",
+            },
+          },
+        },
+      } as never)
+    ).resolves.toMatchObject({
+      activeOrganizationId,
+      activeOrganizationSync: {
+        required: true,
+        targetOrganizationId: activeOrganizationId,
+      },
+      organizations: [
+        {
+          id: activeOrganizationId,
+          name: "First Org",
+          slug: "first-org",
+        },
+      ],
+    });
+    expect(mockedEnsureActiveOrganizationIdForSession).not.toHaveBeenCalled();
     expect(mockedGetCurrentOrganizationMemberRole).not.toHaveBeenCalled();
   });
 });

@@ -1,13 +1,20 @@
-import type { OrganizationRole } from "@ceird/identity-core";
+import type {
+  OrganizationId,
+  OrganizationRole,
+  OrganizationSummary,
+} from "@ceird/identity-core";
+import { decodeOrganizationId } from "@ceird/identity-core";
 import {
   Outlet,
   createFileRoute,
+  redirect,
   useRouteContext,
   useRouterState,
 } from "@tanstack/react-router";
 
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { DataPlaneProvider } from "#/data-plane/session";
+import type { ServerAuthSession } from "#/features/auth/server-session-types";
 import { AppOrganizationCommandActions } from "#/features/command-bar/app-global-command-actions";
 import { OrganizationActiveSyncBoundary } from "#/features/organizations/organization-active-sync-boundary";
 import { decodeOrganizationViewerUserId } from "#/features/organizations/organization-viewer";
@@ -23,9 +30,15 @@ export const Route = createFileRoute("/_app/_org")({
       ensureActiveOrganizationIdForSession,
       getCurrentOrganizationMemberRole,
     } = await import("#/features/organizations/organization-access");
-    const organizationAccess = await ensureActiveOrganizationIdForSession(
-      context.session
-    );
+    const preloadedOrganizations = context.organizations;
+    const organizationAccess =
+      preloadedOrganizations === undefined
+        ? await ensureActiveOrganizationIdForSession(context.session)
+        : resolveOrganizationAccessFromContext({
+            activeOrganizationId: context.activeOrganizationId,
+            organizations: preloadedOrganizations,
+            session: context.session,
+          });
     const { currentOrganizationRole: contextCurrentOrganizationRole } = context;
     let currentOrganizationRole: OrganizationRole | undefined;
 
@@ -53,6 +66,42 @@ export const Route = createFileRoute("/_app/_org")({
   },
   component: OrganizationRouteComponent,
 });
+
+function resolveOrganizationAccessFromContext(context: {
+  readonly activeOrganizationId?: OrganizationId | null | undefined;
+  readonly organizations: readonly OrganizationSummary[];
+  readonly session: ServerAuthSession;
+}) {
+  const currentActiveOrganizationId = context.session.session
+    .activeOrganizationId
+    ? decodeOrganizationId(context.session.session.activeOrganizationId)
+    : null;
+  const routeActiveOrganizationId = context.activeOrganizationId ?? null;
+  const activeOrganization =
+    routeActiveOrganizationId === null
+      ? (context.organizations[0] ?? null)
+      : (context.organizations.find(
+          (organization) => organization.id === routeActiveOrganizationId
+        ) ??
+        context.organizations[0] ??
+        null);
+  const activeOrganizationId = activeOrganization?.id ?? null;
+
+  if (!activeOrganizationId || !activeOrganization) {
+    throw redirect({ to: "/create-organization" });
+  }
+
+  return {
+    activeOrganization,
+    activeOrganizationId,
+    activeOrganizationSync: {
+      required: currentActiveOrganizationId !== activeOrganizationId,
+      targetOrganizationId: activeOrganizationId,
+    },
+    organizations: context.organizations,
+    session: context.session,
+  };
+}
 
 function OrganizationRouteComponent() {
   const {
