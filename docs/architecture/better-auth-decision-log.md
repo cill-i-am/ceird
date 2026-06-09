@@ -1,6 +1,6 @@
 # Better Auth Decision Log
 
-Last updated: 2026-06-07
+Last updated: 2026-06-08
 
 This log tracks product, security, and UX decisions for the Linear project
 `Better Auth security and UX hardening` (`TSK-41` through `TSK-75`), plus
@@ -55,7 +55,7 @@ start. They do not all need to block the first baseline docs work.
 | OAuth consent copy and high-risk treatment   | `TSK-66`                      | Approved | Group scopes as identity/read/write/admin/offline; require verified email for consent approval and treat `ceird:admin` as future step-up.                                                                                                              |
 | Auth audit provenance retention              | `TSK-120`                     | Deferred | Define retention, anonymization, and access control for raw source IP and user-agent audit provenance before exposing or retaining it as long-lived product data.                                                                                      |
 | Device Authorization for CLI/MCP             | `TSK-68`                      | Deferred | Evaluate Device Authorization, but do not adopt it in the first implementation wave without concrete CLI or limited-input UX.                                                                                                                          |
-| Better Auth MCP and Agent Auth plugins       | `TSK-69`                      | Deferred | Keep current OAuth Provider plus Ceird MCP bearer validation; evaluate MCP plugin and defer Agent Auth until stable and tied to a concrete pilot.                                                                                                      |
+| Better Auth MCP and Agent Auth plugins       | `TSK-69`                      | Approved | Keep current OAuth Provider plus `@better-auth/oauth-provider` `mcpHandler`; do not adopt the standalone MCP plugin because Better Auth is deprecating it in favor of OAuth Provider; defer Agent Auth until stable and tied to a concrete pilot.      |
 | Organization and invitation limits           | `TSK-71`, `TSK-72`            | Approved | Use 10 orgs/user, 200 members/org, 100 pending invites/org, 30 invites/actor/hour, and 200 invites/org/day as first-release guardrails.                                                                                                                |
 | Organization audit visibility                | `TSK-74`                      | Approved | Capture audit events first; expose useful owner/admin activity later, keeping raw rate-limit/captcha/provider/token-refresh noise internal.                                                                                                            |
 | Better Auth teams and dynamic access control | `TSK-75`                      | Deferred | Defer until crews, branches, regions, divisions, or user-defined roles become concrete product concepts.                                                                                                                                               |
@@ -100,6 +100,12 @@ implementation-shaping decisions are approved for the next implementation wave.
 
 - `TSK-122`: evaluate browser/device-family and approximate-location metadata
   for active sessions without exposing raw IP addresses or user-agent strings.
+
+## Completed Spikes
+
+- `TSK-69`: Better Auth MCP and Agent Auth evaluation. Decision:
+  [keep OAuth Provider plus `mcpHandler`; reject standalone MCP plugin; defer
+  Agent Auth](better-auth-mcp-agent-auth-evaluation.md).
 
 ## Next Action
 

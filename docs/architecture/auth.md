@@ -290,6 +290,10 @@ Ceird does not use the packaged `@xmcp-dev/better-auth` adapter or ship the
 `xmcp` runtime in `apps/api` or `apps/mcp`. MCP auth uses Ceird's existing
 Better Auth OAuth Provider runtime, and MCP HTTP uses the
 `effect/unstable/ai` MCP server layer mounted inside the private domain Worker.
+The `TSK-69` evaluation records the decision to keep this OAuth Provider plus
+`mcpHandler` path, reject Better Auth's standalone MCP plugin, and defer Agent
+Auth until it is stable and product-led:
+[`better-auth-mcp-agent-auth-evaluation.md`](better-auth-mcp-agent-auth-evaluation.md).
 
 ### MCP Bearer Sessions
 

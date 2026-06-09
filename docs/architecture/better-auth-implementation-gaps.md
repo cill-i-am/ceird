@@ -234,8 +234,10 @@ Better move:
   rules where Better Auth allows hooks or wrapper policy.
 - Add audit events for client registration, consent grant, refresh-token use,
   revocation, and admin-scope consent.
-- Consider Better Auth's MCP, Device Authorization, or Agent Auth plugins if
-  they can replace custom policy with narrower capability grants.
+- Keep the `TSK-69` decision in place: do not replace the current OAuth
+  Provider `mcpHandler` integration with the standalone MCP plugin. Evaluate
+  Device Authorization separately for CLI/limited-input UX, and revisit Agent
+  Auth only when it is stable and tied to a concrete agent-capability pilot.
 
 ### 9. Organization Authorization Is Split Across Better Auth And Ceird
 
