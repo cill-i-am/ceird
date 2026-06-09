@@ -30,6 +30,7 @@ export const AUTH_SECURITY_AUDIT_EVENT_TYPES = [
   "oauth_client_registration_rejected",
   "oauth_consent_granted",
   "oauth_consent_denied",
+  "oauth_consent_revoked",
   "oauth_token_refreshed",
   "oauth_token_revoked",
   "organization_created",
@@ -300,6 +301,9 @@ export const oauthRefreshToken = pgTable(
     index("oauth_refresh_token_client_id_idx").on(table.clientId),
     index("oauth_refresh_token_session_id_idx").on(table.sessionId),
     index("oauth_refresh_token_user_id_idx").on(table.userId),
+    index("oauth_refresh_token_user_client_reference_active_idx")
+      .on(table.userId, table.clientId, table.referenceId, table.expiresAt)
+      .where(sql`${table.revoked} is null`),
   ]
 );
 
@@ -326,6 +330,12 @@ export const oauthAccessToken = pgTable(
     index("oauth_access_token_session_id_idx").on(table.sessionId),
     index("oauth_access_token_user_id_idx").on(table.userId),
     index("oauth_access_token_refresh_id_idx").on(table.refreshId),
+    index("oauth_access_token_user_client_reference_expires_idx").on(
+      table.userId,
+      table.clientId,
+      table.referenceId,
+      table.expiresAt
+    ),
   ]
 );
 
@@ -345,6 +355,19 @@ export const oauthConsent = pgTable(
   (table) => [
     index("oauth_consent_client_id_idx").on(table.clientId),
     index("oauth_consent_user_id_idx").on(table.userId),
+    index("oauth_consent_user_client_reference_idx").on(
+      table.userId,
+      table.clientId,
+      table.referenceId
+    ),
+    uniqueIndex("oauth_consent_user_client_account_unique_idx")
+      .on(table.userId, table.clientId)
+      .where(sql`${table.userId} is not null and ${table.referenceId} is null`),
+    uniqueIndex("oauth_consent_user_client_reference_unique_idx")
+      .on(table.userId, table.clientId, table.referenceId)
+      .where(
+        sql`${table.userId} is not null and ${table.referenceId} is not null`
+      ),
   ]
 );
 

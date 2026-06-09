@@ -1,3 +1,8 @@
+import { decodeDisconnectConnectedAppGrantInput } from "@ceird/identity-core";
+import type {
+  ConnectedAppGrant,
+  ConnectedAppGrantId,
+} from "@ceird/identity-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import {
   fireEvent,
@@ -92,10 +97,12 @@ function isActiveBlockerOptions(
 const {
   mockedChangeEmail,
   mockedChangePassword,
+  mockedDisconnectConnectedAppGrant,
   mockedDisableTwoFactor,
   mockedEnableTwoFactor,
   mockedGenerateBackupCodes,
   mockedGetSession,
+  mockedListConnectedAppGrants,
   mockedListSessions,
   mockedRevokeOtherSessions,
   mockedRevokeSession,
@@ -129,10 +136,17 @@ const {
       } | null;
     }>
   >(),
+  mockedDisconnectConnectedAppGrant: vi.fn<
+    (input: { readonly grantId: ConnectedAppGrantId }) => Promise<{
+      readonly disconnectedGrantId: ConnectedAppGrantId;
+    }>
+  >(),
   mockedDisableTwoFactor: vi.fn<DisableTwoFactorMock>(),
   mockedEnableTwoFactor: vi.fn<EnableTwoFactorMock>(),
   mockedGenerateBackupCodes: vi.fn<GenerateBackupCodesMock>(),
   mockedGetSession: vi.fn<GetSessionMock>(),
+  mockedListConnectedAppGrants:
+    vi.fn<() => Promise<{ readonly grants: readonly ConnectedAppGrant[] }>>(),
   mockedListSessions: vi.fn<ListSessionsMock>(),
   mockedRevokeOtherSessions: vi.fn<RevokeOtherSessionsMock>(),
   mockedRevokeSession: vi.fn<RevokeSessionMock>(),
@@ -165,6 +179,11 @@ vi.mock(import("./user-preferences-api"), () => ({
     updatedAt: "1970-01-01T00:00:00.000Z",
   },
   updateCurrentUserPreferences: mockedUpdateUserPreferences,
+}));
+
+vi.mock(import("./user-connected-apps-api"), () => ({
+  disconnectConnectedAppGrant: mockedDisconnectConnectedAppGrant,
+  listConnectedAppGrants: mockedListConnectedAppGrants,
 }));
 
 vi.mock(import("#/lib/auth-client"), async () => {
@@ -277,6 +296,12 @@ describe("user settings page", () => {
       ],
       error: null,
     });
+    mockedListConnectedAppGrants.mockResolvedValue({ grants: [] });
+    mockedDisconnectConnectedAppGrant.mockResolvedValue({
+      disconnectedGrantId: decodeDisconnectConnectedAppGrantInput({
+        grantId: "consent_123",
+      }).grantId,
+    });
     mockedRevokeOtherSessions.mockResolvedValue({
       data: { status: true },
       error: null,
@@ -370,6 +395,20 @@ describe("user settings page", () => {
 
     await selectTab("Profile");
     expect(screen.getByRole("heading", { name: "Profile" })).toBeVisible();
+  });
+
+  it("loads connected apps from the security settings tab", async () => {
+    render(<UserSettingsPage user={user} />);
+
+    await selectTab("Security");
+
+    expect(
+      screen.getByRole("heading", { name: "Connected apps" })
+    ).toBeVisible();
+    await expect(
+      screen.findByText("No connected apps yet.")
+    ).resolves.toBeVisible();
+    expect(mockedListConnectedAppGrants).toHaveBeenCalledOnce();
   });
 
   it("updates the profile and refreshes route data", async () => {

@@ -32,6 +32,8 @@ Authentication currently supports only:
 - session lookup
 - account security settings with active-session listing and other-session
   revocation
+- account security settings with connected-app listing and OAuth/MCP consent
+  disconnect
 - account security settings with optional TOTP two-factor enrollment, backup
   code acknowledgement/regeneration, and disable controls
 - inline two-factor login challenge with TOTP and backup-code verification
@@ -45,6 +47,7 @@ Authentication currently supports only:
 - Ceird domain authorization for organization actors and role-scoped workflows
 - OAuth/OIDC authorization-server configuration for MCP clients
 - app-owned OAuth consent UI for Better Auth authorization requests
+- app-owned connected-app management for user-approved OAuth/MCP clients
 - owner/admin organization security activity review
 - Better Auth two-factor persistence and endpoints for optional TOTP plus backup
   codes
@@ -139,8 +142,11 @@ Current config decisions:
   rejected before Better Auth can issue a client secret.
 - Better Auth's authenticated OAuth client write endpoints
   (`/oauth2/create-client`, `/oauth2/update-client`, client secret rotation,
-  delete-client, and their admin variants) are disabled at the Ceird auth
-  handler boundary until that approval flow exists
+  delete-client, and their admin variants) and native consent-management
+  endpoints (`/oauth2/get-consent`, `/oauth2/get-consents`,
+  `/oauth2/update-consent`, and `/oauth2/delete-consent`) are disabled at the
+  Ceird auth handler boundary so
+  connected-app disconnect always flows through Ceird's audited revoke path
 - dynamic client registration rejects unsafe redirect and metadata shapes before
   Better Auth persists a client: non-HTTPS redirects outside local/dev,
   loopback redirects outside local/dev, wildcard or fragment redirects,
@@ -155,6 +161,25 @@ Current config decisions:
 - `ceird:*` OAuth consent is organization-scoped through Better Auth
   `postLogin.consentReferenceId`; the stored consent reference id is the active
   Better Auth organization id, while identity-only consent remains account-level
+- connected-app management uses Better Auth's `oauth_consent` rows as the grant
+  source of truth. `GET /user/connected-apps` returns the current user's
+  consented OAuth/MCP clients with account/workspace context, grouped scopes,
+  redirect hosts, grant timestamps, and active token counts. `DELETE
+/user/connected-apps/:grantId` deletes the consent, revokes matching active
+  refresh tokens, deletes matching DB-backed access tokens, and records
+  `oauth_consent_revoked` without exposing stored token material. Already
+  issued JWT access tokens can remain valid outside resources that perform
+  live-consent checks until they expire.
+- refresh-token grants pre-check that the hashed Better Auth refresh-token row
+  still has a matching `oauth_consent` row whose scopes cover the refresh-token
+  scopes before Better Auth can rotate it. Missing or narrowed consent returns
+  `invalid_grant`; uninspectable token requests and storage failures fail
+  closed with sanitized telemetry.
+- the database enforces at most one consent per user/client/account or
+  user/client/workspace reference and rejects new active DB-backed OAuth token
+  rows unless a matching consent row still exists with covering scopes. This
+  closes refresh/disconnect races where Better Auth would otherwise insert a
+  rotated token after consent deletion.
 - if a `ceird:*` request reaches the post-login authorization step without an
   active organization, Better Auth redirects to the app consent route for a
   blocking workspace warning; server-side consent approval still fails with
@@ -275,7 +300,16 @@ Token verification requires:
 - audience equal to `MCP_RESOURCE_URL`
 - a token subject (`sub`) matching the Better Auth user
 - a Better Auth session id (`sid`)
-- an OAuth client id (`client_id`)
+- an OAuth client id from Better Auth's JWT `azp` claim, with `client_id` still
+  accepted for compatible callers
+
+After JWT verification, the domain Worker also checks that a matching
+`oauth_consent` row still exists for the token user, OAuth client id, consent
+reference id, and token scopes. This check runs before the isolate-local
+authorized-app cache is used, so disconnecting a connected app immediately
+prevents future MCP requests even if a previously issued access token has not
+expired yet. Storage or layer failures fail closed as `invalid_token` and emit
+sanitized warning telemetry.
 
 MCP tool execution does not synthesize cookie headers. It resolves the
 organization actor by loading the Better Auth `session` row from `sid`, checking
@@ -411,6 +445,8 @@ Current signal policy:
 | `auth_security_audit_session_resolution_failure`   | `dashboard_until_sustained_audit_session_failure`                                                    | Emitted when Ceird cannot resolve the Better Auth session while enriching an OAuth/MCP or organization security audit event; request handling and audit capture continue without actor/session enrichment.                        |
 | `auth_security_audit_token_context_failure`        | `dashboard_until_sustained_audit_context_failure`                                                    | Emitted when Ceird cannot pre-read stored OAuth token context for refresh/revoke audit enrichment.                                                                                                                                |
 | `auth_security_audit_organization_context_failure` | `dashboard_until_sustained_audit_context_failure`                                                    | Emitted when Ceird cannot pre-read organization member or invitation context for audit enrichment.                                                                                                                                |
+| `oauth_refresh_token_consent_guard_failure`        | `alert_on_sustained_consent_guard_failure`                                                           | Emitted when Ceird cannot verify live consent before a refresh-token grant. The token request fails closed with OAuth `server_error`.                                                                                             |
+| `mcp_connected_app_consent_check_failed`           | `dashboard_until_sustained_mcp_consent_check_failure`                                                | Emitted when the MCP resource server cannot verify live connected-app consent after JWT verification. The MCP request fails closed as `invalid_token`.                                                                            |
 
 Current redaction rules:
 
@@ -441,6 +477,7 @@ Current event types:
 - `oauth_client_registration_rejected`
 - `oauth_consent_granted`
 - `oauth_consent_denied`
+- `oauth_consent_revoked`
 - `oauth_token_refreshed`
 - `oauth_token_revoked`
 - `organization_created`
@@ -472,11 +509,15 @@ organization mutation attempts remain covered by abuse/rate-limit telemetry and
 request logs until a separate failed-attempt audit taxonomy is designed.
 
 `@ceird/identity-core` exposes the typed `identity` HTTP API group for the
-owner/admin organization security activity read model:
+owner/admin organization security activity read model and current-user
+connected-app management:
 
 - `GET /organization/security/activity`
-- the domain service resolves the current Better Auth session, active
-  organization, and membership role through `CurrentOrganizationActor`
+- `GET /user/connected-apps`
+- `DELETE /user/connected-apps/:grantId`
+- the organization security activity service resolves the current Better Auth
+  session, active organization, and membership role through
+  `CurrentOrganizationActor`
 - only organization owners and admins may read it; other roles receive the
   identity-core access-denied error
 - the query is scoped to the active organization and to the owner/admin-visible
@@ -496,6 +537,18 @@ owner/admin organization security activity read model:
 - filtering supports event type, actor user id, target type, date range, target
   search, limit, and cursor parameters; cursors preserve the database timestamp
   precision used by the `(created_at desc, id desc)` ordering
+- connected-app list and disconnect resolve only the current authenticated user.
+  A grant id owned by another user is treated as not found so grant existence is
+  not leaked across accounts.
+- connected-app responses include client display metadata, account/workspace
+  context, grouped scopes, redirect hosts, grant timestamps, active token
+  counts, and offline-access status. They never include access tokens, refresh
+  tokens, token hashes, client secrets, authorization codes, or raw request
+  provenance.
+- connected-app disconnect writes `oauth_consent_revoked` with actor user id,
+  OAuth client id, consent scopes, and reference metadata. It has no step-up
+  authentication gate in this release; the UI uses explicit inline
+  confirmation.
 
 The app renders this read model at `/organization/security` as a read-only
 admin route. It shows filters in the page header, hides raw provenance, and
@@ -503,6 +556,9 @@ notes that internal audit retention may be longer than the visible recent
 activity view. Cursor pagination is exposed as a URL-backed `Next page` action.
 The route uses `G Y` for global admin navigation and has no page-local hotkeys
 because there are no row actions.
+The app renders connected apps inside `/settings` on the Security tab. It uses
+keyboard-accessible row buttons with inline confirmation and does not add a
+global hotkey because the panel is not a primary navigation target.
 
 Redaction rules:
 
@@ -521,7 +577,9 @@ Reliability notes:
   Better Auth token rows
 - refresh-token grants pre-read the stored Better Auth refresh token row before
   Better Auth rotates it, so matching rows can include user, session, active
-  organization, client, and scope context
+  organization, client, and scope context; Ceird also checks the matching live
+  consent row and covering consent scopes before allowing the refresh grant
+  through
 - revoke events pre-read stored refresh or opaque access-token rows when
   possible; JWT access-token revocation and unknown-token revocation cannot
   prove a stored row mutation from the endpoint response alone, so those rows

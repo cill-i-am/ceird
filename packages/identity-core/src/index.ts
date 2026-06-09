@@ -58,6 +58,13 @@ export const SessionId = Schema.NonEmptyString.pipe(
 );
 export type SessionId = Schema.Schema.Type<typeof SessionId>;
 
+export const ConnectedAppGrantId = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/identity-core/ConnectedAppGrantId")
+);
+export type ConnectedAppGrantId = Schema.Schema.Type<
+  typeof ConnectedAppGrantId
+>;
+
 export const InvitationId = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/identity-core/InvitationId")
 );
@@ -311,6 +318,139 @@ export const UserPreferencesApi = HttpApi.make("UserPreferencesApi").add(
   UserPreferencesApiGroup
 );
 
+export const CONNECTED_APP_SCOPE_GROUP_KEYS = [
+  "identity",
+  "read",
+  "write",
+  "admin",
+  "offline",
+  "other",
+] as const;
+
+export const ConnectedAppScopeGroupKey = Schema.Literals(
+  CONNECTED_APP_SCOPE_GROUP_KEYS
+);
+export type ConnectedAppScopeGroupKey = Schema.Schema.Type<
+  typeof ConnectedAppScopeGroupKey
+>;
+
+export const ConnectedAppScopeGroupSchema = Schema.Struct({
+  key: ConnectedAppScopeGroupKey,
+  label: Schema.String,
+  scopes: Schema.Array(Schema.NonEmptyString),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type ConnectedAppScopeGroup = Schema.Schema.Type<
+  typeof ConnectedAppScopeGroupSchema
+>;
+
+export const ConnectedAppGrantContextSchema = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("account"),
+  }).annotate({
+    parseOptions: { onExcessProperty: "error" },
+  }),
+  Schema.Struct({
+    organizationId: OrganizationId,
+    organizationName: Schema.String,
+    type: Schema.Literal("organization"),
+  }).annotate({
+    parseOptions: { onExcessProperty: "error" },
+  }),
+]);
+export type ConnectedAppGrantContext = Schema.Schema.Type<
+  typeof ConnectedAppGrantContextSchema
+>;
+
+const NonNegativeInteger = Schema.Number.pipe(
+  Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+);
+
+export const ConnectedAppGrantSchema = Schema.Struct({
+  activeAccessTokenCount: NonNegativeInteger,
+  activeRefreshTokenCount: NonNegativeInteger,
+  clientId: Schema.NonEmptyString,
+  clientName: Schema.optional(Schema.String),
+  clientUri: Schema.optional(Schema.String),
+  context: ConnectedAppGrantContextSchema,
+  grantId: ConnectedAppGrantId,
+  grantedAt: IsoDateTimeString,
+  latestAccessTokenExpiresAt: Schema.optional(IsoDateTimeString),
+  latestRefreshTokenExpiresAt: Schema.optional(IsoDateTimeString),
+  offlineAccess: Schema.Boolean,
+  policyUri: Schema.optional(Schema.String),
+  redirectHosts: Schema.Array(Schema.NonEmptyString),
+  scopes: Schema.Array(Schema.NonEmptyString),
+  scopeGroups: Schema.Array(ConnectedAppScopeGroupSchema),
+  tosUri: Schema.optional(Schema.String),
+  updatedAt: IsoDateTimeString,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type ConnectedAppGrant = Schema.Schema.Type<
+  typeof ConnectedAppGrantSchema
+>;
+
+export const ConnectedAppGrantListResponseSchema = Schema.Struct({
+  grants: Schema.Array(ConnectedAppGrantSchema),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type ConnectedAppGrantListResponse = Schema.Schema.Type<
+  typeof ConnectedAppGrantListResponseSchema
+>;
+
+export const DisconnectConnectedAppGrantInputSchema = Schema.Struct({
+  grantId: ConnectedAppGrantId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type DisconnectConnectedAppGrantInput = Schema.Schema.Type<
+  typeof DisconnectConnectedAppGrantInputSchema
+>;
+
+export const DisconnectConnectedAppGrantResponseSchema = Schema.Struct({
+  disconnectedGrantId: ConnectedAppGrantId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type DisconnectConnectedAppGrantResponse = Schema.Schema.Type<
+  typeof DisconnectConnectedAppGrantResponseSchema
+>;
+
+export const CONNECTED_APP_GRANT_ACCESS_DENIED_ERROR_TAG =
+  "@ceird/identity-core/ConnectedAppGrantAccessDeniedError" as const;
+export class ConnectedAppGrantAccessDeniedError extends Schema.TaggedErrorClass<ConnectedAppGrantAccessDeniedError>()(
+  CONNECTED_APP_GRANT_ACCESS_DENIED_ERROR_TAG,
+  {
+    message: Schema.String,
+  },
+  { httpApiStatus: 403 }
+) {}
+
+export const CONNECTED_APP_GRANT_NOT_FOUND_ERROR_TAG =
+  "@ceird/identity-core/ConnectedAppGrantNotFoundError" as const;
+export class ConnectedAppGrantNotFoundError extends Schema.TaggedErrorClass<ConnectedAppGrantNotFoundError>()(
+  CONNECTED_APP_GRANT_NOT_FOUND_ERROR_TAG,
+  {
+    grantId: ConnectedAppGrantId,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 }
+) {}
+
+export const CONNECTED_APP_GRANT_STORAGE_ERROR_TAG =
+  "@ceird/identity-core/ConnectedAppGrantStorageError" as const;
+export class ConnectedAppGrantStorageError extends Schema.TaggedErrorClass<ConnectedAppGrantStorageError>()(
+  CONNECTED_APP_GRANT_STORAGE_ERROR_TAG,
+  {
+    cause: Schema.optional(Schema.String),
+    message: Schema.String,
+  },
+  { httpApiStatus: 503 }
+) {}
+
 export type CreateOrganizationInput = Schema.Schema.Type<
   typeof CreateOrganizationInputSchema
 >;
@@ -496,27 +636,57 @@ export class OrganizationSecurityActivityStorageError extends Schema.TaggedError
 ) {}
 
 export type IdentityError =
+  | ConnectedAppGrantAccessDeniedError
+  | ConnectedAppGrantNotFoundError
+  | ConnectedAppGrantStorageError
   | OrganizationSecurityActivityAccessDeniedError
   | OrganizationSecurityActivityCursorInvalidError
   | OrganizationSecurityActivityStorageError
   | UserPreferencesAccessDeniedError
   | UserPreferencesStorageError;
 
-export const IdentityApiGroup = HttpApiGroup.make("identity").add(
-  HttpApiEndpoint.get(
-    "listOrganizationSecurityActivity",
-    "/organization/security/activity",
-    {
-      error: [
-        OrganizationSecurityActivityAccessDeniedError,
-        OrganizationSecurityActivityCursorInvalidError,
-        OrganizationSecurityActivityStorageError,
-      ],
-      query: OrganizationSecurityActivityQuerySchema,
-      success: OrganizationSecurityActivityListResponseSchema,
-    }
+export const IdentityApiGroup = HttpApiGroup.make("identity")
+  .add(
+    HttpApiEndpoint.get(
+      "listOrganizationSecurityActivity",
+      "/organization/security/activity",
+      {
+        error: [
+          OrganizationSecurityActivityAccessDeniedError,
+          OrganizationSecurityActivityCursorInvalidError,
+          OrganizationSecurityActivityStorageError,
+        ],
+        query: OrganizationSecurityActivityQuerySchema,
+        success: OrganizationSecurityActivityListResponseSchema,
+      }
+    )
   )
-);
+  .add(
+    HttpApiEndpoint.get("listConnectedAppGrants", "/user/connected-apps", {
+      error: [
+        ConnectedAppGrantAccessDeniedError,
+        ConnectedAppGrantStorageError,
+      ],
+      success: ConnectedAppGrantListResponseSchema,
+    })
+  )
+  .add(
+    HttpApiEndpoint.delete(
+      "disconnectConnectedAppGrant",
+      "/user/connected-apps/:grantId",
+      {
+        error: [
+          ConnectedAppGrantAccessDeniedError,
+          ConnectedAppGrantNotFoundError,
+          ConnectedAppGrantStorageError,
+        ],
+        params: { grantId: ConnectedAppGrantId },
+        success: DisconnectConnectedAppGrantResponseSchema,
+      }
+    )
+  );
+
+export const IdentityApi = HttpApi.make("IdentityApi").add(IdentityApiGroup);
 
 export function decodeCreateOrganizationInput(
   input: unknown
@@ -562,6 +732,20 @@ export function decodeUserId(input: unknown): UserId {
 
 export function decodeSessionId(input: unknown): SessionId {
   return Schema.decodeUnknownSync(SessionId)(input);
+}
+
+export function decodeConnectedAppGrantListResponse(
+  input: unknown
+): ConnectedAppGrantListResponse {
+  return Schema.decodeUnknownSync(ConnectedAppGrantListResponseSchema)(input);
+}
+
+export function decodeDisconnectConnectedAppGrantInput(
+  input: unknown
+): DisconnectConnectedAppGrantInput {
+  return Schema.decodeUnknownSync(DisconnectConnectedAppGrantInputSchema)(
+    input
+  );
 }
 
 export function decodeOrganizationSecurityActivityListResponse(

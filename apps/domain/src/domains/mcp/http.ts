@@ -1,6 +1,6 @@
 import { mcpHandler } from "@better-auth/oauth-provider";
 import { OrganizationId, SessionId, UserId } from "@ceird/identity-core";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { McpServer } from "effect/unstable/ai";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
@@ -45,6 +45,7 @@ const MCP_DISPOSAL_SECRET_ASSIGNMENT_PATTERN =
 const MCP_DISPOSAL_SECRET_LIKE_ASSIGNMENT_PATTERN =
   /(["']?(?:access_token|refresh_token|client_secret|token|code|secret|password|key)["']?\s*[:=]\s*["']?)([^"',\s}&]+)/gi;
 const MCP_DISPOSAL_BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const MCP_DISPOSAL_BARE_TOKEN_PATTERN = /\b[A-Za-z0-9_-]{32,}\b/g;
 const CEIRD_ORGANIZATION_ID_TOKEN_CLAIM = "ceird_org_id";
 type McpPath = `/${string}`;
 
@@ -72,6 +73,9 @@ interface AuthorizedMcpAppCacheEntry {
 interface McpAuthorizedClientIdentity {
   readonly clientId: string;
   readonly session: McpSessionIdentity;
+}
+interface McpConnectedAppGrantRow {
+  readonly scopes: readonly string[];
 }
 
 export class McpAuthorizedAppCache {
@@ -326,6 +330,7 @@ function makeMcpJwksUrl(oauthIssuerUrl: string) {
 
 const TokenPayloadSchema = Schema.Struct({
   [CEIRD_ORGANIZATION_ID_TOKEN_CLAIM]: Schema.optional(Schema.String),
+  azp: Schema.optional(Schema.String),
   client_id: Schema.optional(Schema.String),
   exp: Schema.optional(Schema.Number),
   scope: Schema.optional(Schema.Unknown),
@@ -371,6 +376,22 @@ async function handleAuthorizedMcpRequest<ERuntime>(
     });
   }
 
+  const connectedAppGrantActive = await verifyMcpConnectedAppGrant({
+    baseLive: runtime.baseLive,
+    clientId: identity.clientId,
+    organizationId,
+    runtimeLive: runtime.runtimeLive,
+    scopes,
+    userId: identity.session.userId,
+  });
+
+  if (!connectedAppGrantActive) {
+    return new Response(null, {
+      headers: { "WWW-Authenticate": 'Bearer error="invalid_token"' },
+      status: 401,
+    });
+  }
+
   const app = await getOrCreateAuthorizedMcpApp(runtime.authorizedAppCache, {
     baseLive: runtime.baseLive,
     clientId: identity.clientId,
@@ -405,6 +426,57 @@ async function handleAuthorizedMcpRequest<ERuntime>(
   }
 
   return response;
+}
+
+function verifyMcpConnectedAppGrant<ERuntime>(options: {
+  readonly baseLive: McpBaseLayer;
+  readonly clientId: string;
+  readonly organizationId: OrganizationId | undefined;
+  readonly runtimeLive: Layer.Layer<McpRuntimeServices, ERuntime, never>;
+  readonly scopes: readonly string[];
+  readonly userId: UserId;
+}) {
+  const grantActive = Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const rows = yield* sql<McpConnectedAppGrantRow>`
+      select scopes
+      from oauth_consent
+      where user_id = ${options.userId}
+        and client_id = ${options.clientId}
+        and reference_id is not distinct from ${options.organizationId ?? null}
+      limit 1
+    `;
+    const [grant] = rows;
+
+    return (
+      grant !== undefined &&
+      options.scopes.every((scope) => grant.scopes.includes(scope))
+    );
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("MCP connected app consent check failed").pipe(
+        Effect.annotateLogs({
+          mcpConsentCheckAlertPolicy:
+            "dashboard_until_sustained_mcp_consent_check_failure",
+          mcpConsentCheckFailure: "storage_or_layer_failure",
+          mcpConsentCheckFailureCause: sanitizeMcpDisposalFailureMessage(
+            serializeMcpConsentCheckFailureCause(cause)
+          ),
+          mcpConsentCheckFailureCauseType: typeof Cause.squash(cause),
+          mcpConsentCheckClientId: options.clientId,
+          mcpConsentCheckOrganizationId: options.organizationId ?? null,
+          mcpConsentCheckSignal: "mcp_connected_app_consent_check_failed",
+          mcpConsentCheckSignalSeverity: "dashboard",
+          mcpConsentCheckUserId: options.userId,
+        }),
+        Effect.as(false)
+      )
+    ),
+    Effect.provide(options.runtimeLive),
+    Effect.provide(options.baseLive)
+  );
+
+  return Effect.runPromise(grantActive).catch(() => false);
 }
 
 function getOrCreateAuthorizedMcpApp<ERuntime>(
@@ -618,14 +690,24 @@ function toMcpAuthorizedClientIdentity(
   jwt: TokenPayload
 ): McpAuthorizedClientIdentity | undefined {
   const session = toMcpSessionIdentity(jwt);
-  const clientId =
-    typeof jwt.client_id === "string" ? jwt.client_id.trim() : "";
+  let clientId = "";
+  if (typeof jwt.client_id === "string") {
+    clientId = jwt.client_id.trim();
+  } else if (typeof jwt.azp === "string") {
+    clientId = jwt.azp.trim();
+  }
 
   if (session === undefined || clientId.length === 0) {
     return undefined;
   }
 
   return { clientId, session };
+}
+
+function serializeMcpConsentCheckFailureCause(cause: Cause.Cause<unknown>) {
+  const squashed = Cause.squash(cause);
+
+  return squashed instanceof Error ? squashed.message : String(squashed);
 }
 
 function resolveMcpTokenOrganizationId(
@@ -699,7 +781,8 @@ function sanitizeMcpDisposalFailureMessage(message: string) {
     )
     .replaceAll(MCP_DISPOSAL_SECRET_LIKE_ASSIGNMENT_PATTERN, "$1[redacted]")
     .replaceAll(MCP_DISPOSAL_SECRET_ASSIGNMENT_PATTERN, "$1=[redacted]")
-    .replaceAll(MCP_DISPOSAL_BEARER_TOKEN_PATTERN, "Bearer [redacted]");
+    .replaceAll(MCP_DISPOSAL_BEARER_TOKEN_PATTERN, "Bearer [redacted]")
+    .replaceAll(MCP_DISPOSAL_BARE_TOKEN_PATTERN, "[redacted-token]");
 }
 
 function sanitizeMcpDisposalFailureUrl(value: string) {
@@ -716,7 +799,8 @@ function sanitizeMcpDisposalFailureUrl(value: string) {
   } catch {
     return value
       .replaceAll(MCP_DISPOSAL_SECRET_ASSIGNMENT_PATTERN, "$1=[redacted]")
-      .replaceAll(MCP_DISPOSAL_BEARER_TOKEN_PATTERN, "Bearer [redacted]");
+      .replaceAll(MCP_DISPOSAL_BEARER_TOKEN_PATTERN, "Bearer [redacted]")
+      .replaceAll(MCP_DISPOSAL_BARE_TOKEN_PATTERN, "[redacted-token]");
   }
 }
 

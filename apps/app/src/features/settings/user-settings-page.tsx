@@ -24,6 +24,7 @@ import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
 import { LocationPreferencePanel } from "./location-preference-panel";
+import { UserConnectedAppsPanel } from "./user-connected-apps-panel";
 import {
   DEFAULT_USER_PREFERENCES,
   updateCurrentUserPreferences,
@@ -532,6 +533,7 @@ export function UserSettingsPage({
               submitControlsRef={twoFactorSubmitControlsRef}
             />
             {activeTab === "security" ? <UserSecuritySessionsPanel /> : null}
+            {activeTab === "security" ? <UserConnectedAppsPanel /> : null}
           </div>
         </TabsContent>
 
