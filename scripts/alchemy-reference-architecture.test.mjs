@@ -168,41 +168,47 @@ test("state audit flags legacy migration state and validates expected managed re
     Agent: {
       resourceType: "Cloudflare.Worker",
       props: {
-        bindings: { ANALYTICS: { name: "ANALYTICS" } },
-        env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
+        env: {
+          ANALYTICS: { name: "ANALYTICS" },
+          CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+        },
       },
     },
     Api: {
       resourceType: "Cloudflare.Worker",
       props: {
-        bindings: { ANALYTICS: { name: "ANALYTICS" } },
-        env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
+        env: {
+          ANALYTICS: { name: "ANALYTICS" },
+          CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+        },
       },
     },
     Domain: {
       resourceType: "Cloudflare.Worker",
       props: {
-        bindings: { ANALYTICS: { name: "ANALYTICS" } },
-        env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
+        env: {
+          ANALYTICS: { name: "ANALYTICS" },
+          CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+        },
         placement: { mode: "smart" },
       },
     },
     Mcp: {
       resourceType: "Cloudflare.Worker",
       props: {
-        bindings: { ANALYTICS: { name: "ANALYTICS" } },
-        env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
+        env: {
+          ANALYTICS: { name: "ANALYTICS" },
+          CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+        },
       },
     },
     Sync: {
       resourceType: "Cloudflare.Worker",
       props: {
-        bindings: {
+        env: {
           ANALYTICS: { name: "ANALYTICS" },
           DOMAIN: { name: "DOMAIN" },
           ElectricSql: { name: "ElectricSql" },
-        },
-        env: {
           AUTH_APP_ORIGIN: "https://app.ceird.app",
           CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
           ELECTRIC_SOURCE_SECRET: "secret",
@@ -329,6 +335,24 @@ test("state audit flags legacy migration state and validates expected managed re
           attr: {
             bindings: { ANALYTICS: { name: "ANALYTICS" } },
             env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
+            placement: { mode: "smart" },
+          },
+        },
+      },
+      stage: "main",
+      tenantRoutingRequired: true,
+    }).checks.find((check) => check.name === "domain_worker")?.status,
+    "pass"
+  );
+  assert.equal(
+    analyzeAlchemyStateResources({
+      resources: {
+        ...healthyResources,
+        Domain: {
+          resourceType: "Cloudflare.Worker",
+          attr: {
+            bindings: { ANALYTICS: { name: "ANALYTICS" } },
+            env: { CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1" },
           },
         },
       },
@@ -345,11 +369,9 @@ test("state audit flags legacy migration state and validates expected managed re
         Sync: {
           resourceType: "Cloudflare.Worker",
           attr: {
-            bindings: {
+            env: {
               ANALYTICS: { name: "ANALYTICS" },
               DOMAIN: { name: "DOMAIN" },
-            },
-            env: {
               AUTH_APP_ORIGIN: "https://app.ceird.app",
               CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
               ELECTRIC_SOURCE_SECRET: "secret",
