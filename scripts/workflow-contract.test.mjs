@@ -62,6 +62,17 @@ function assertElectricStorageCredentialsEnv(text) {
   );
 }
 
+function assertNoElectricStorageCredentialsEnv(text) {
+  assert.doesNotMatch(
+    text,
+    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
+  );
+  assert.doesNotMatch(
+    text,
+    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
+  );
+}
+
 const activeTextFileExtensions = new Set([
   ".css",
   ".html",
@@ -430,6 +441,7 @@ test("main deploy workflow uses current Alchemy command order explicitly", () =>
   );
   assert.doesNotMatch(deployWorkflow, /pnpm alchemy cloudflare bootstrap/);
   assert.match(deployWorkflow, /run: pnpm alchemy deploy --stage main --yes\b/);
+  assertElectricStorageCredentialsEnv(deployWorkflow);
   assert.match(
     deployWorkflow,
     /pnpm alchemy:state-audit --stage main --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
@@ -815,10 +827,10 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
     ciDeployJob,
     /"\$PLAYWRIGHT_SYNC_URL\/v1\/shapes\/jobs\?offset=-1"/
   );
-  assertElectricStorageCredentialsEnv(ciDeployJob);
-  assertElectricStorageCredentialsEnv(ciAuditStep);
-  assertElectricStorageCredentialsEnv(ciDatabaseExportStep);
-  assertElectricStorageCredentialsEnv(ciDestroyJob);
+  assertNoElectricStorageCredentialsEnv(ciDeployJob);
+  assertNoElectricStorageCredentialsEnv(ciAuditStep);
+  assertNoElectricStorageCredentialsEnv(ciDatabaseExportStep);
+  assertNoElectricStorageCredentialsEnv(ciDestroyJob);
   assert.match(
     buildWorkflow,
     /\[\[ ! "\$CI_STAGE" =~ \^ci-\[0-9\]\+-\[0-9\]\+\$ \]\]/
@@ -862,7 +874,7 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   );
   assert.match(
     cloudflareCiGuide,
-    /Cloud E2E and preview deploys pass\s+Electric storage credentials/
+    /preview environments do not hold production Electric\s+runtime credentials/
   );
   assert.match(
     developmentGuide,
@@ -1035,9 +1047,9 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assert.match(previewWorkflow, /Preview environment is ready/);
   assert.match(previewWorkflow, /Agent \|/);
   assert.match(previewWorkflow, /Sync \|/);
-  assertElectricStorageCredentialsEnv(previewDeployJob);
-  assertElectricStorageCredentialsEnv(previewAuditStep);
-  assertElectricStorageCredentialsEnv(previewDatabaseExportStep);
+  assertNoElectricStorageCredentialsEnv(previewDeployJob);
+  assertNoElectricStorageCredentialsEnv(previewAuditStep);
+  assertNoElectricStorageCredentialsEnv(previewDatabaseExportStep);
   assert.match(previewWorkflow, /pnpm --filter app e2e/);
 });
 
@@ -1051,7 +1063,7 @@ test("preview workflow destroys PR stages from the default branch on close", () 
   assert.match(previewWorkflow, /github\.event\.action == 'closed'/);
   assert.match(previewWorkflow, /github\.event_name == 'workflow_dispatch'/);
   assert.match(previewWorkflow, /environment: preview-cleanup/);
-  assertElectricStorageCredentialsEnv(previewCleanupJob);
+  assertNoElectricStorageCredentialsEnv(previewCleanupJob);
   assert.match(
     previewWorkflow,
     /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/

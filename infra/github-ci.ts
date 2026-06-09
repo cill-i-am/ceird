@@ -5,13 +5,21 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
-import { makeR2SecretAccessKey } from "./cloudflare-r2.ts";
+import {
+  makeCloudflareR2BucketResourceKey,
+  makeR2SecretAccessKey,
+} from "./cloudflare-r2.ts";
 
 export const gitHubCiDeployEnvironments = [
   "main",
   "preview-deploy",
   "preview-cleanup",
 ] as const;
+
+export const gitHubCiElectricStorageRuntimeEnvironment = "main";
+
+export const gitHubCiProductionElectricStorageBucketName =
+  "ceird-main-electric-storage";
 
 export interface GitHubCiConfig {
   readonly cloudflareAccountId: string;
@@ -78,11 +86,15 @@ export function makeCloudflareElectricStorageTokenProps(
       {
         effect: "allow",
         permissionGroups: [
-          "Workers R2 Storage Read",
-          "Workers R2 Storage Write",
+          "Workers R2 Storage Bucket Item Read",
+          "Workers R2 Storage Bucket Item Write",
         ],
         resources: {
-          [`com.cloudflare.api.account.${config.cloudflareAccountId}`]: "*",
+          [makeCloudflareR2BucketResourceKey({
+            accountId: config.cloudflareAccountId,
+            bucketName: gitHubCiProductionElectricStorageBucketName,
+            jurisdiction: "default",
+          })]: "*",
         },
       },
     ],
@@ -142,21 +154,33 @@ export const makeGitHubCiStack = Effect.fn("GitHubCiStack.make")(function* (
           name: "ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS",
           value: config.stateStoreCredentials,
         }),
-        GitHub.Secret(`GitHubElectricStorageAccessKeyId${environment}`, {
-          ...repository,
-          environment,
-          name: "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID",
-          value: electricStorageAccessKeyId,
-        }),
-        GitHub.Secret(`GitHubElectricStorageSecretAccessKey${environment}`, {
-          ...repository,
-          environment,
-          name: "CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY",
-          value: electricStorageSecretAccessKey,
-        }),
       ],
       { discard: true }
     )
+  );
+
+  yield* Effect.all(
+    [
+      GitHub.Secret(
+        `GitHubElectricStorageAccessKeyId${gitHubCiElectricStorageRuntimeEnvironment}`,
+        {
+          ...repository,
+          environment: gitHubCiElectricStorageRuntimeEnvironment,
+          name: "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID",
+          value: electricStorageAccessKeyId,
+        }
+      ),
+      GitHub.Secret(
+        `GitHubElectricStorageSecretAccessKey${gitHubCiElectricStorageRuntimeEnvironment}`,
+        {
+          ...repository,
+          environment: gitHubCiElectricStorageRuntimeEnvironment,
+          name: "CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY",
+          value: electricStorageSecretAccessKey,
+        }
+      ),
+    ],
+    { discard: true }
   );
 
   const variables = makeGitHubCiVariables(config);

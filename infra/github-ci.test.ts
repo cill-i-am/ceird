@@ -2,6 +2,8 @@ import { describe, expect, it } from "@effect/vitest";
 
 import {
   gitHubCiDeployEnvironments,
+  gitHubCiElectricStorageRuntimeEnvironment,
+  gitHubCiProductionElectricStorageBucketName,
   makeCloudflareCiDeployTokenProps,
   makeCloudflareElectricStorageTokenProps,
   makeGitHubCiVariables,
@@ -57,7 +59,7 @@ describe("GitHub CI credentials stack", () => {
     });
   });
 
-  it("keeps Electric runtime R2 credentials in a separate account-scoped token", () => {
+  it("keeps Electric runtime R2 credentials in a separate production bucket token", () => {
     expect(
       makeCloudflareElectricStorageTokenProps({
         cloudflareAccountId: "account-id",
@@ -69,11 +71,12 @@ describe("GitHub CI credentials stack", () => {
         {
           effect: "allow",
           permissionGroups: [
-            "Workers R2 Storage Read",
-            "Workers R2 Storage Write",
+            "Workers R2 Storage Bucket Item Read",
+            "Workers R2 Storage Bucket Item Write",
           ],
           resources: {
-            "com.cloudflare.api.account.account-id": "*",
+            "com.cloudflare.edge.r2.bucket.account-id_default_ceird-main-electric-storage":
+              "*",
           },
         },
       ],
@@ -98,5 +101,9 @@ describe("GitHub CI credentials stack", () => {
       "preview-deploy",
       "preview-cleanup",
     ]);
+    expect(gitHubCiElectricStorageRuntimeEnvironment).toBe("main");
+    expect(gitHubCiProductionElectricStorageBucketName).toBe(
+      "ceird-main-electric-storage"
+    );
   });
 });
