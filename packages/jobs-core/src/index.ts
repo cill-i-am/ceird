@@ -20,11 +20,13 @@ export type {
 } from "./ids.js";
 export {
   JOB_ACTIVITY_EVENT_TYPES,
+  ACTIVE_JOB_STATUSES,
   JOB_COLLABORATOR_ACCESS_LEVELS,
   JOB_COLLABORATOR_SUBJECT_TYPES,
   JOB_KINDS,
   JOB_PRIORITIES,
   JOB_STATUSES,
+  TERMINAL_JOB_STATUSES,
   ContactEmailSchema,
   ContactNameSchema,
   ContactNotesSchema,
@@ -42,6 +44,7 @@ export {
   JobStatusSchema,
   JobTitleSchema,
   JobVisitNoteSchema,
+  isActiveJobStatus,
 } from "./domain.js";
 export type {
   ContactEmail,

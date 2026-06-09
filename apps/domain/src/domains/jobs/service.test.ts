@@ -363,6 +363,88 @@ describe("JobsService contracts", () => {
     });
   });
 
+  it("respects an exact job status filter before route ranking", async () => {
+    let capturedFilters: JobProximityFilters | undefined;
+    let capturedRankInput: RankRoutesInput | undefined;
+
+    const completedJob = {
+      ...makeJobListItem(
+        "11111111-1111-4111-8111-111111111206",
+        "Completed boiler service",
+        "high",
+        "22222222-2222-4222-8222-222222222206"
+      ),
+      status: "completed" as const,
+    };
+    const completedSite = makeMappedSite(
+      "22222222-2222-4222-8222-222222222206",
+      "Completed Terrace",
+      53.341,
+      -6.259
+    );
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.rankNearbyJobs({
+          filters: {
+            priority: "high",
+            status: "completed",
+          },
+          origin: {
+            accuracyMeters: 9,
+            coordinates: { latitude: 53.34, longitude: -6.26 },
+            mode: "current_location",
+          },
+        });
+      }).pipe(
+        Effect.provide(JobsService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsProximityTestLayer({
+            listProximityCandidates: (_organizationId, filters) => {
+              capturedFilters = filters;
+              return Effect.succeed({
+                candidateCount: 1,
+                candidateLimitApplied: false,
+                candidates: [{ job: completedJob, site: completedSite }],
+                excluded: [],
+              });
+            },
+            previewRoute: (_input) =>
+              Effect.die("RouteProvider.previewRoute was not expected"),
+            rankRoutes: (input) => {
+              capturedRankInput = input;
+              return Effect.succeed({
+                rows: [
+                  {
+                    destinationId: completedJob.id,
+                    routeSummary: makeRouteSummary(300, 1400),
+                  },
+                ],
+                unavailableDestinationIds: [],
+              });
+            },
+          })
+        )
+      )
+    );
+
+    expect(capturedFilters).toMatchObject({
+      priority: "high",
+      status: "completed",
+    });
+    expect(capturedRankInput?.destinations).toStrictEqual([
+      {
+        coordinates: { latitude: 53.341, longitude: -6.259 },
+        destinationId: completedJob.id,
+      },
+    ]);
+    expect(result.rows.map((row) => row.job.status)).toStrictEqual([
+      "completed",
+    ]);
+  });
+
   it("returns an inline route preview for a mapped job site", async () => {
     let capturedPreviewInput: RoutePreviewInput | undefined;
     const site = makeMappedSite(

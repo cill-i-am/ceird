@@ -14,6 +14,7 @@ import type {
   JobStatus,
   UserIdType,
 } from "@ceird/jobs-core";
+import { isActiveJobStatus } from "@ceird/jobs-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/query-core";
@@ -923,15 +924,6 @@ async function refreshJobOptionsStateWhen({
   );
 }
 
-function isActiveStatus(status: JobStatus) {
-  return (
-    status === "new" ||
-    status === "triaged" ||
-    status === "in_progress" ||
-    status === "blocked"
-  );
-}
-
 function matchesAssigneeFilter(
   assigneeId: UserIdType | undefined,
   filter: JobsAssigneeFilter
@@ -966,7 +958,7 @@ function matchesStatusFilter(status: JobStatus, filter: JobsStatusFilter) {
   }
 
   if (filter === "active") {
-    return isActiveStatus(status);
+    return isActiveJobStatus(status);
   }
 
   return status === filter;

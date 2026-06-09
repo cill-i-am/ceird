@@ -43,6 +43,22 @@ export const JOB_STATUSES = [
 export const JobStatusSchema = Schema.Literals(JOB_STATUSES);
 export type JobStatus = Schema.Schema.Type<typeof JobStatusSchema>;
 
+export const ACTIVE_JOB_STATUSES = [
+  "new",
+  "triaged",
+  "in_progress",
+  "blocked",
+] as const satisfies readonly JobStatus[];
+
+export const TERMINAL_JOB_STATUSES = [
+  "completed",
+  "canceled",
+] as const satisfies readonly JobStatus[];
+
+export function isActiveJobStatus(status: JobStatus): boolean {
+  return (ACTIVE_JOB_STATUSES as readonly JobStatus[]).includes(status);
+}
+
 export const JOB_PRIORITIES = [
   "none",
   "low",

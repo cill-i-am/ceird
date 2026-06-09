@@ -27,6 +27,7 @@ import {
   OrganizationActivityItemSchema,
   OrganizationActivityListResponseSchema,
   OrganizationId as OrganizationIdSchema,
+  TERMINAL_JOB_STATUSES,
   OrganizationMemberNotFoundError,
   UserId as UserIdSchema,
   WorkItemId as WorkItemIdSchema,
@@ -954,7 +955,9 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         const statusFilter = filters.status ?? "active";
 
         if (statusFilter === "active") {
-          clauses.push(sql`work_items.status not in ('completed', 'canceled')`);
+          clauses.push(
+            sql`work_items.status not in ${sql.in(TERMINAL_JOB_STATUSES)}`
+          );
         } else if (statusFilter !== "all") {
           clauses.push(sql`work_items.status = ${statusFilter}`);
         }

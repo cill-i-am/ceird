@@ -263,6 +263,40 @@ describe("jobs proximity panel", () => {
     expect(screen.getByText("14 min")).toBeVisible();
   });
 
+  it("keeps completed status selected when ranking nearby jobs", async () => {
+    const user = userEvent.setup();
+    const { JobsProximityPanel } = await import("./jobs-proximity-panel");
+
+    render(
+      <ControlledJobsProximityPanel
+        Component={JobsProximityPanel}
+        filters={{
+          ...defaultFilters,
+          priority: "high",
+          status: "completed",
+        }}
+        limit={15}
+        viewMode="list"
+        onClearFilters={vi.fn<() => void>()}
+        onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /near me/i }));
+
+    await waitFor(() => {
+      expect(mockedRankNearbyJobs).toHaveBeenCalledWith({
+        filters: {
+          priority: "high",
+          status: "completed",
+        },
+        includeRouteLines: false,
+        limit: 15,
+        origin: currentLocationOrigin,
+      });
+    });
+  });
+
   it("uses typed-origin fallback without geolocation when location preference is disabled", async () => {
     const user = userEvent.setup();
     const { JobsProximityPanel } = await import("./jobs-proximity-panel");

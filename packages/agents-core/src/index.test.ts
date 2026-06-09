@@ -113,11 +113,14 @@ describe("@ceird/agents-core", () => {
 
     expect(
       decodeNearbyJobs({
-        filters: { priority: "urgent", status: "active" },
+        filters: { priority: "urgent", status: "completed" },
         limit: 25,
         origin,
       }).filters?.status
-    ).toBe("active");
+    ).toBe("completed");
+    expect(
+      getAgentActionDefinition("ceird.jobs.proximity").modelDescription
+    ).toContain("Defaults to active jobs");
     expect(
       decodeJobRoutePreview({
         input: { includeRouteLine: true, origin },
