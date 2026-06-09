@@ -20,6 +20,7 @@ import type {
 import type * as AiChatReactModule from "@cloudflare/ai-chat/react";
 import {
   act,
+  cleanup,
   render,
   screen,
   waitFor,
@@ -389,11 +390,12 @@ describe("global agent chat", () => {
   });
 
   afterEach(() => {
+    cleanup();
     Object.defineProperty(navigator, "geolocation", {
       configurable: true,
       value: originalGeolocation,
     });
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it("stays hidden when there is no active organization", () => {
