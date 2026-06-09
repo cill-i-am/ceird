@@ -193,15 +193,19 @@ storage path is ready, but it does not create the Cloudflare Container
 application. Alchemy local Workers run in workerd with local Durable Object
 namespaces, and the cloud Containers API can only attach a container to a cloud
 Durable Object namespace. In deployed stages, the separate GitHub credential
-stack owns an account-scoped Electric R2 API token with R2 read/write
-permissions and stores `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
-`CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` in the GitHub environments that
-deploy or destroy app stacks. The app stack consumes those values instead of
-creating API tokens during routine deploys, so the deploy token does not need
-`API Tokens Write`. Production, pull-request previews, and push-to-main cloud
-E2E stages all provision the Electric Container and stage-scoped R2 bucket; a
-deployed stack fails closed when either Electric storage credential is absent.
-During reconciliation, the app stack passes the R2 credentials, stage Neon
+stack owns a bucket-scoped Electric R2 API token for
+`ceird-main-electric-storage` and stores
+`CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` plus
+`CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` in the `main` GitHub environment.
+The app stack consumes those values instead of creating API tokens during
+routine production deploys, so the deploy token does not need `API Tokens
+Write`. Production provisions the Electric Container and stage-scoped R2
+bucket, and fails closed when either Electric storage credential is absent.
+Pull-request previews and ephemeral push-to-main cloud E2E stages do not receive
+the production Electric runtime token. They deploy the public sync Worker and
+Durable Object authorization path, but skip the Cloudflare Container and R2
+runtime storage until a per-stage credential flow exists. During full Electric
+reconciliation, the app stack passes the R2 credentials, stage Neon
 connection URL, and generated Electric source secret into the Sync Worker as
 secrets. The `ElectricSql` Durable Object passes those values to the Cloudflare
 Container as startup environment variables, so the Containers application
@@ -245,12 +249,14 @@ parameters, and source secret before forwarding to the `ElectricSql` Durable
 Object and container. Postgres remains the source of truth; Electric provides
 client-facing shape replication for selected domain tables.
 Pull-request previews can temporarily deploy the sync Worker without the
-Electric Container when the GitHub environment has not yet received the
-separate Electric R2 runtime credentials. Local Alchemy dev also runs without
+Electric Container because the preview environments intentionally do not hold
+the production Electric R2 runtime token. Ephemeral push-to-main cloud E2E uses
+the same shallow sync authorization probe. Local Alchemy dev also runs without
 the Cloudflare Container application; its local `ElectricSql` Durable Object
 fails explicitly with `electric_container_unavailable` if a shape request
-reaches the container bridge. Production and cloud E2E stages provision the
-full Worker, Durable Object, Container, R2, and Neon path.
+reaches the container bridge. Production provisions the full Worker, Durable
+Object, Container, R2, and Neon path. Add a per-stage runtime credential flow
+before requiring the full Electric Container path in preview or ephemeral CI.
 
 The deployed sync path is ready for Electric/TanStack DB clients, but the app's
 existing route-scoped TanStack DB collections remain query-backed in this

@@ -377,21 +377,47 @@ test("state audit flags legacy migration state and validates expected managed re
     }).ok,
     true
   );
-  assert.equal(
-    analyzeAlchemyStateResources({
-      resources: {
-        ...healthyResources,
-        ElectricSql: undefined,
-        ElectricStorageBucket: undefined,
-        TenantWorkerRoute: {
-          resourceType: "Ceird.CloudflareTenantWorkerRoute",
-          attr: { pattern: "*--pr-104.ceird.app/*" },
-        },
+  const previewShallowSyncReport = analyzeAlchemyStateResources({
+    resources: {
+      ...healthyResources,
+      ElectricSql: undefined,
+      ElectricStorageBucket: undefined,
+      TenantWorkerRoute: {
+        resourceType: "Ceird.CloudflareTenantWorkerRoute",
+        attr: { pattern: "*--pr-104.ceird.app/*" },
       },
-      stage: "pr-104",
-      tenantRoutingRequired: true,
-    }).ok,
-    false
+    },
+    stage: "pr-104",
+    tenantRoutingRequired: true,
+  });
+
+  assert.equal(previewShallowSyncReport.ok, true);
+  assert.equal(
+    previewShallowSyncReport.checks.find(
+      (check) => check.name === "electric_preview_shallow_sync"
+    )?.status,
+    "pass"
+  );
+  const nonPreviewMissingElectricReport = analyzeAlchemyStateResources({
+    resources: {
+      ...healthyResources,
+      ElectricSql: undefined,
+      ElectricStorageBucket: undefined,
+      TenantWorkerRoute: {
+        resourceType: "Ceird.CloudflareTenantWorkerRoute",
+        attr: { pattern: "*--qa-sync.ceird.app/*" },
+      },
+    },
+    stage: "qa-sync",
+    tenantRoutingRequired: true,
+  });
+
+  assert.equal(nonPreviewMissingElectricReport.ok, false);
+  assert.equal(
+    nonPreviewMissingElectricReport.checks.find(
+      (check) => check.name === "electric_storage_bucket"
+    )?.status,
+    "fail"
   );
   assert.equal(
     analyzeAlchemyStateResources({

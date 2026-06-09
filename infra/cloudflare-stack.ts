@@ -32,7 +32,11 @@ import {
 } from "./cloudflare-tenant-routing.ts";
 import type { NeonPostgresResources } from "./neon.ts";
 import type { InfraStageConfig } from "./stages.ts";
-import { makeInfraConfigSourceError, resourceName } from "./stages.ts";
+import {
+  makeAlchemyStageIdentity,
+  makeInfraConfigSourceError,
+  resourceName,
+} from "./stages.ts";
 
 export interface CloudflareStackInput {
   readonly config: InfraStageConfig;
@@ -556,7 +560,11 @@ function makeLocalElectricStorageCredentials(input: {
 export function shouldProvisionElectricStorage(input: {
   readonly config: Pick<
     InfraStageConfig,
-    "electricStorageAccessKeyId" | "electricStorageSecretAccessKey"
+    | "appName"
+    | "electricStorageAccessKeyId"
+    | "electricStorageSecretAccessKey"
+    | "neonParentStage"
+    | "stage"
   >;
   readonly localDev: boolean;
 }) {
@@ -578,6 +586,16 @@ export function shouldProvisionElectricStorage(input: {
         "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY must be configured together"
       )
     );
+  }
+
+  const identity = makeAlchemyStageIdentity({
+    appName: input.config.appName,
+    productionStage: input.config.neonParentStage,
+    stage: input.config.stage,
+  });
+
+  if (identity.isPullRequestPreview || identity.isEphemeralCi) {
+    return Effect.succeed(false);
   }
 
   return Effect.fail(

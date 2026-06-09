@@ -95,6 +95,14 @@ function makeTenantStageAlias(stage) {
   return `s-${hash}`;
 }
 
+function isPullRequestPreviewStage(stage) {
+  return /^pr-\d+$/.test(stage);
+}
+
+function isEphemeralCiStage(stage) {
+  return /^ci-\d+-\d+$/.test(stage);
+}
+
 function expectedTenantRoutePattern(input) {
   return input.stage === input.productionStage
     ? `*.${input.zoneName}/*`
@@ -277,13 +285,30 @@ function workerBindingCheck(
 
 function electricSyncStorageChecks(input) {
   const productionStage = input.productionStage ?? defaultProductionStage;
+  const electricContainer = input.resources.ElectricSql;
+  const electricStorageBucket = input.resources.ElectricStorageBucket;
+  const optionalProbeStage =
+    input.stage !== productionStage &&
+    (isPullRequestPreviewStage(input.stage) || isEphemeralCiStage(input.stage));
+
+  if (
+    optionalProbeStage &&
+    electricContainer === undefined &&
+    electricStorageBucket === undefined
+  ) {
+    return [
+      check(
+        "electric_preview_shallow_sync",
+        "pass",
+        "Preview and ephemeral CI stages may run the sync authorization probe without Electric runtime storage credentials."
+      ),
+    ];
+  }
 
   if (input.stage !== productionStage && input.tenantRoutingRequired !== true) {
     return [];
   }
 
-  const electricContainer = input.resources.ElectricSql;
-  const electricStorageBucket = input.resources.ElectricStorageBucket;
   const stageDescription =
     input.stage === productionStage ? "production sync" : "audited cloud sync";
 
