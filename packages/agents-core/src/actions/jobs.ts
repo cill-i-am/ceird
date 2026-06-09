@@ -118,7 +118,7 @@ export const jobAgentActions = [
     executionStatus: "executable",
     kind: "read",
     modelDescription:
-      "Rank Ceird jobs near a current-location or app-resolved signed origin by traffic-aware driving time, respecting supplied job filters.",
+      "Rank Ceird jobs near a current-location or app-resolved signed origin by traffic-aware driving time, respecting supplied job filters. Defaults to active jobs when filters.status is omitted; pass filters.status as all, completed, canceled, or an exact active status when the user asks for that state.",
     modelName: "rankNearbyJobs",
     name: "ceird.jobs.proximity",
   }),

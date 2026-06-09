@@ -5,6 +5,7 @@ import type {
   JobStatus,
   UserIdType,
 } from "@ceird/jobs-core";
+import { isActiveJobStatus } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
 import type { ProximityLimit } from "@ceird/proximity-core";
 import {
@@ -1539,7 +1540,7 @@ function buildJobStatusCounts(jobs: readonly JobListItem[]): JobStatusCounts {
   };
 
   for (const job of jobs) {
-    if (job.status !== "completed" && job.status !== "canceled") {
+    if (isActiveJobStatus(job.status)) {
       counts.active += 1;
     }
 

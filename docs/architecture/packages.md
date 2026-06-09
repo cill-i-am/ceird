@@ -107,11 +107,13 @@ Exports the shared jobs contract:
 - branded IDs for jobs, contacts, visits, collaborators, activity, users, and
   organizations
 - domain literals and schemas for job kind, status, priority, collaborator
-  access, visits, and activity event types
+  access, visits, activity event types, and shared active/terminal status
+  groupings
 - job comment DTOs extended from `@ceird/comments-core`
 - DTO schemas and inferred DTO types
-- route-aware proximity request/response DTOs for ranking filtered active jobs
-  and previewing one job route by driving time
+- route-aware proximity request/response DTOs for ranking filtered jobs by
+  driving time, defaulting to active jobs unless an explicit status filter such
+  as completed, canceled, all, or a concrete active state is supplied
 - typed `Schema.TaggedError` classes with HTTP status annotations
 - `JobsApi`, an Effect `HttpApi` contract for jobs, job label assignment,
   collaborators, visits, comments, activity, and route-aware proximity

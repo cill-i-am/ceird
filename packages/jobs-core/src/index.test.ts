@@ -32,8 +32,12 @@ import {
   JobStatusSchema,
   JobTitleSchema,
   JobViewerAccessSchema,
+  ACTIVE_JOB_STATUSES,
   JOB_COLLABORATOR_ACCESS_LEVELS,
   JOB_COLLABORATOR_SUBJECT_TYPES,
+  JOB_PROXIMITY_STATUS_FILTERS,
+  JOB_STATUSES,
+  TERMINAL_JOB_STATUSES,
   OrganizationActivityListResponseSchema,
   PatchJobInputSchema,
   TransitionJobInputSchema,
@@ -43,6 +47,21 @@ import {
 } from "./index.js";
 
 describe("jobs-core", () => {
+  it("defines shared job status groups for active and terminal work", () => {
+    expect(ACTIVE_JOB_STATUSES).toStrictEqual([
+      "new",
+      "triaged",
+      "in_progress",
+      "blocked",
+    ]);
+    expect(TERMINAL_JOB_STATUSES).toStrictEqual(["completed", "canceled"]);
+    expect(JOB_PROXIMITY_STATUS_FILTERS).toStrictEqual([
+      "active",
+      "all",
+      ...JOB_STATUSES,
+    ]);
+  });
+
   it("decodes job collaborator domain contracts", () => {
     expect(JOB_COLLABORATOR_SUBJECT_TYPES).toStrictEqual(["user"]);
     expect(JOB_COLLABORATOR_ACCESS_LEVELS).toStrictEqual(["read", "comment"]);
