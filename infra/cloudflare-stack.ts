@@ -70,9 +70,19 @@ export function makeCloudflareWorkerOrigin(input: {
   }
 
   const [domain] = input.domains;
+  const origin =
+    typeof domain === "string" ? readOptionalUrlOrigin(domain) : undefined;
   const hostname = typeof domain === "string" ? domain : domain?.hostname;
 
-  return `https://${hostname ?? input.fallbackHostname}`;
+  return origin ?? `https://${hostname ?? input.fallbackHostname}`;
+}
+
+function readOptionalUrlOrigin(value: string) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return;
+  }
 }
 
 export function makeCloudflareHyperdrive(input: {

@@ -1100,6 +1100,12 @@ describe("Cloudflare stack", () => {
     ).toBe("https://api.stage.example.com");
     expect(
       makeCloudflareWorkerOrigin({
+        domains: ["https://api.stage.example.com"],
+        fallbackHostname: "api.example.com",
+      })
+    ).toBe("https://api.stage.example.com");
+    expect(
+      makeCloudflareWorkerOrigin({
         domains: [],
         fallbackHostname: "api.example.com",
       })
