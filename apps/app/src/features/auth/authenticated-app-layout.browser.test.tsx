@@ -1,6 +1,8 @@
+import type * as RouterModule from "@tanstack/react-router";
 import { render } from "@testing-library/react";
 import type { ReactNode } from "react";
 
+import type * as AppLayoutModule from "#/components/app-layout";
 import type { AppLayoutProps } from "#/components/app-layout";
 
 import { AuthenticatedAppLayout } from "./authenticated-app-layout";
@@ -55,29 +57,19 @@ const {
   )),
 }));
 
-vi.mock(import("@tanstack/react-router"), async (importActual) => {
-  const actual = await importActual();
+vi.mock(import("@tanstack/react-router"), () => ({
+  Outlet: (() => (
+    <div data-testid="onboarding-outlet" />
+  )) as unknown as typeof RouterModule.Outlet,
+  useRouteContext: mockedUseRouteContext as typeof RouterModule.useRouteContext,
+  useRouter: mockedUseRouter as unknown as typeof RouterModule.useRouter,
+  useRouterState:
+    mockedUseRouterState as unknown as typeof RouterModule.useRouterState,
+}));
 
-  return {
-    ...actual,
-    Outlet: (() => (
-      <div data-testid="onboarding-outlet" />
-    )) as unknown as typeof actual.Outlet,
-    useRouteContext: mockedUseRouteContext as typeof actual.useRouteContext,
-    useRouter: mockedUseRouter as unknown as typeof actual.useRouter,
-    useRouterState:
-      mockedUseRouterState as unknown as typeof actual.useRouterState,
-  };
-});
-
-vi.mock(import("#/components/app-layout"), async (importActual) => {
-  const actual = await importActual();
-
-  return {
-    ...actual,
-    AppLayout: mockedAppLayout as typeof actual.AppLayout,
-  };
-});
+vi.mock(import("#/components/app-layout"), () => ({
+  AppLayout: mockedAppLayout as unknown as typeof AppLayoutModule.AppLayout,
+}));
 
 describe("authenticated app layout", () => {
   afterEach(() => {

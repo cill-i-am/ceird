@@ -6,6 +6,7 @@ import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Skeleton } from "#/components/ui/skeleton";
 import { authClient } from "#/lib/auth-client";
+import { navigateBrowserTo } from "#/lib/browser-navigation";
 import { cn } from "#/lib/utils";
 
 import { EntryShell, EntrySurfaceCard } from "./entry-shell";
@@ -736,7 +737,7 @@ export function OAuthConsentPage({ rawSearch, search }: OAuthConsentPageProps) {
         return;
       }
 
-      window.location.assign(redirectUrl);
+      navigateBrowserTo(redirectUrl);
       return;
     } catch (error) {
       setErrorNotice(getConsentErrorNotice(action, error));

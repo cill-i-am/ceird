@@ -1,8 +1,7 @@
-import { setTimeout as sleep } from "node:timers/promises";
-
 import type { JobListItem, WorkItemIdType } from "@ceird/jobs-core";
 import type { SiteIdType } from "@ceird/sites-core";
 import { act, render, screen } from "@testing-library/react";
+import { Duration, Effect } from "effect";
 import type { ComponentProps } from "react";
 
 import { JobsCoverageMap } from "./jobs-coverage-map";
@@ -241,6 +240,10 @@ async function flushScrollAreaEffects() {
   await act(async () => {
     await sleep(0);
   });
+}
+
+function sleep(ms: number) {
+  return Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 }
 
 function buildJob(

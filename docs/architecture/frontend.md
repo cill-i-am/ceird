@@ -507,7 +507,12 @@ workflow-specific layouts over decorative landing-page patterns.
 ## Tests
 
 - Unit and component tests live next to routes, components, and features as
-  `*.test.ts` or `*.test.tsx`.
+  `*.test.ts`, `*.browser.test.ts`, or `*.browser.test.tsx`.
+- Runtime-neutral and server-facing `*.test.ts` files run in the `app-node`
+  Vitest project.
+- Browser-mode tests use `*.browser.test.ts` or `*.browser.test.tsx` and run in
+  the `app-browser-chromium` Vitest project. They share the app Vitest setup but
+  run in Chromium through `@vitest/browser-playwright`.
 - Vitest setup lives in `src/test/setup.ts`.
 - Playwright config lives in `playwright.config.ts`.
 - E2E tests live in `apps/app/e2e`.
@@ -531,5 +536,7 @@ Run app tests:
 
 ```bash
 pnpm --filter app test
+pnpm --filter app test:browser
+pnpm --filter app test:node
 pnpm --filter app e2e
 ```

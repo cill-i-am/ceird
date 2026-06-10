@@ -281,15 +281,17 @@ vi.mock(import("maplibre-gl"), () => {
     }
   }
 
+  const mapLibreMock = {
+    LngLatBounds: MockLngLatBounds as unknown as typeof MapLibreGL.LngLatBounds,
+    Map: MockMap as unknown as typeof MapLibreGL.Map,
+    Marker: MockMarker as unknown as typeof MapLibreGL.Marker,
+    Popup: MockPopup as unknown as typeof MapLibreGL.Popup,
+  } as typeof MapLibreGL;
+
   return {
-    default: {
-      LngLatBounds:
-        MockLngLatBounds as unknown as typeof MapLibreGL.LngLatBounds,
-      Map: MockMap as unknown as typeof MapLibreGL.Map,
-      Marker: MockMarker as unknown as typeof MapLibreGL.Marker,
-      Popup: MockPopup as unknown as typeof MapLibreGL.Popup,
-    },
-  } as unknown as { default: typeof MapLibreGL };
+    ...mapLibreMock,
+    default: mapLibreMock,
+  };
 });
 
 describe("map controls hotkeys", () => {

@@ -14,7 +14,9 @@
     "preview": "vite preview",
     "react-doctor": "react-doctor --full --fail-on warning --offline",
     "react-doctor:staged": "react-doctor --staged --fail-on warning --offline",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser": "vitest run --project app-browser-chromium",
+    "test:node": "vitest run --project app-node"
   },
   "dependencies": {
     "@ai-sdk/react": "3.0.187",
@@ -79,7 +81,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
-    "jsdom": "^28.1.0",
+    "@vitest/browser-playwright": "4.1.8",
     "react-doctor": "0.1.2",
     "typescript": "^5.9.3",
     "vite": "^8.0.10",

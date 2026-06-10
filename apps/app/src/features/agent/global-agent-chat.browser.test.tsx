@@ -24,7 +24,6 @@ import {
   render,
   screen,
   waitFor,
-  waitForElementToBeRemoved,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -276,33 +275,28 @@ vi.mock(import("#/components/ui/responsive-drawer"), () => {
   return { ResponsiveDrawer };
 });
 
-vi.mock(import("#/components/ui/drawer"), async (importActual) => {
-  const actual = await importActual<typeof DrawerModule>();
-
-  return {
-    ...actual,
-    DrawerClose: (({
-      children,
-    }: ComponentProps<typeof DrawerModule.DrawerClose>) => (
-      <>{children}</>
-    )) as typeof DrawerModule.DrawerClose,
-    DrawerContent: (({ children, ...props }: ComponentProps<"section">) => (
-      <section {...props}>{children}</section>
-    )) as typeof DrawerModule.DrawerContent,
-    DrawerDescription: ((props: ComponentProps<"p">) => (
-      <p {...props} />
-    )) as typeof DrawerModule.DrawerDescription,
-    DrawerFooter: ((props: ComponentProps<"div">) => (
-      <div {...props} />
-    )) as typeof DrawerModule.DrawerFooter,
-    DrawerHeader: ((props: ComponentProps<"div">) => (
-      <div {...props} />
-    )) as typeof DrawerModule.DrawerHeader,
-    DrawerTitle: (({ children, ...props }: ComponentProps<"h2">) => (
-      <h2 {...props}>{children}</h2>
-    )) as typeof DrawerModule.DrawerTitle,
-  };
-});
+vi.mock(import("#/components/ui/drawer"), () => ({
+  DrawerClose: (({
+    children,
+  }: ComponentProps<typeof DrawerModule.DrawerClose>) => (
+    <>{children}</>
+  )) as typeof DrawerModule.DrawerClose,
+  DrawerContent: (({ children, ...props }: ComponentProps<"section">) => (
+    <section {...props}>{children}</section>
+  )) as typeof DrawerModule.DrawerContent,
+  DrawerDescription: ((props: ComponentProps<"p">) => (
+    <p {...props} />
+  )) as typeof DrawerModule.DrawerDescription,
+  DrawerFooter: ((props: ComponentProps<"div">) => (
+    <div {...props} />
+  )) as typeof DrawerModule.DrawerFooter,
+  DrawerHeader: ((props: ComponentProps<"div">) => (
+    <div {...props} />
+  )) as typeof DrawerModule.DrawerHeader,
+  DrawerTitle: (({ children, ...props }: ComponentProps<"h2">) => (
+    <h2 {...props}>{children}</h2>
+  )) as typeof DrawerModule.DrawerTitle,
+}));
 
 describe("global agent chat", () => {
   let originalGeolocation: Geolocation | undefined;
@@ -440,7 +434,9 @@ describe("global agent chat", () => {
     await expect(
       screen.findByRole("heading", { name: /ask ceird/i })
     ).resolves.toBeVisible();
-    expect(mockedPrepareCurrentAgentSession).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(mockedPrepareCurrentAgentSession).toHaveBeenCalledOnce();
+    });
     expect(screen.getByText(/owner access/i)).toBeVisible();
     const workspaceBadges = await screen.findAllByText("Read workspace");
     expect(workspaceBadges.length).toBeGreaterThan(0);
@@ -841,7 +837,9 @@ describe("global agent chat", () => {
     await user.click(
       within(originDialog).getByRole("button", { name: /close/i })
     );
-    await waitForElementToBeRemoved(originDialog);
+    await waitFor(() => {
+      expect(originDialog).not.toBeInTheDocument();
+    });
     placeResolution.resolve({ origin: typedOrigin });
     await Promise.resolve();
 

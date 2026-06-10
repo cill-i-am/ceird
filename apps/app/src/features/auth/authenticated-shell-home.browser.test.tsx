@@ -54,7 +54,7 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 
 describe("authenticated shell home", () => {
   beforeEach(() => {
-    window.history.replaceState({}, "", "http://localhost:3000/tasks");
+    window.history.replaceState({}, "", "/tasks");
     mockedUseRouteContext.mockImplementation(({ from }) => {
       if (from === "/_app/_org") {
         return {

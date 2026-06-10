@@ -33,6 +33,11 @@ import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import type { HotkeyId } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
 import {
+  getBrowserLocationHref,
+  getBrowserLocationPath,
+  navigateBrowserTo,
+} from "#/lib/browser-navigation";
+import {
   buildOrganizationTenantUrl,
   readTenantHostConfigFromEnv,
 } from "#/lib/tenant-host";
@@ -111,8 +116,8 @@ export function OrganizationSwitcher({
           readTenantHostConfigFromEnv()
         );
 
-        if (tenantUrl && tenantUrl !== window.location.href) {
-          window.location.assign(tenantUrl);
+        if (tenantUrl && tenantUrl !== getBrowserLocationHref()) {
+          navigateBrowserTo(tenantUrl);
           return;
         }
 
@@ -142,8 +147,8 @@ export function OrganizationSwitcher({
         readTenantHostConfigFromEnv()
       );
 
-      if (tenantUrl && tenantUrl !== window.location.href) {
-        window.location.assign(tenantUrl);
+      if (tenantUrl && tenantUrl !== getBrowserLocationHref()) {
+        navigateBrowserTo(tenantUrl);
         return;
       }
 
@@ -242,11 +247,14 @@ export function OrganizationSwitcher({
 }
 
 function getCurrentLocationPath() {
-  if (!shouldHydrateOrganizationContext(window.location.pathname)) {
+  const locationPath = getBrowserLocationPath();
+  const pathname = locationPath.split(/[?#]/u, 1)[0] ?? "/";
+
+  if (!shouldHydrateOrganizationContext(pathname)) {
     return "/";
   }
 
-  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  return locationPath;
 }
 
 function useOrganizationListState(

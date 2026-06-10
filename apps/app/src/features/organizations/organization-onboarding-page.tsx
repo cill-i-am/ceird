@@ -24,6 +24,10 @@ import { AuthFormField } from "#/features/auth/auth-form-field";
 import { EntryShell, EntrySurfaceCard } from "#/features/auth/entry-shell";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { authClient } from "#/lib/auth-client";
+import {
+  getBrowserLocationHref,
+  navigateBrowserTo,
+} from "#/lib/browser-navigation";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 import {
@@ -205,8 +209,8 @@ async function continueToCreatedOrganization({
     readTenantHostConfigFromEnv()
   );
 
-  if (tenantUrl && tenantUrl !== window.location.href) {
-    window.location.assign(tenantUrl);
+  if (tenantUrl && tenantUrl !== getBrowserLocationHref()) {
+    navigateBrowserTo(tenantUrl);
     return;
   }
 

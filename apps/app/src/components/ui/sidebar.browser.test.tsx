@@ -25,6 +25,18 @@ function setSidebarCookie(value: string) {
   document.cookie = value;
 }
 
+function getModBKeyboardInput() {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? "{Meta>}b{/Meta}"
+    : "{Control>}b{/Control}";
+}
+
+function getModBEventExpectation() {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? { key: "b", metaKey: true }
+    : { ctrlKey: true, key: "b" };
+}
+
 describe("sidebar provider", () => {
   beforeEach(() => {
     setSidebarCookie("sidebar_state=; path=/; max-age=0");
@@ -102,7 +114,7 @@ describe("sidebar provider", () => {
       "expanded"
     );
 
-    await user.keyboard("{Control>}b{/Control}");
+    await user.keyboard(getModBKeyboardInput());
 
     expect(screen.getByLabelText("Sidebar state")).toHaveTextContent(
       "collapsed"
@@ -120,7 +132,7 @@ describe("sidebar provider", () => {
       </HotkeysProvider>
     );
 
-    await user.keyboard("{Control>}b{/Control}");
+    await user.keyboard(getModBKeyboardInput());
 
     expect(document.cookie).toContain("sidebar_state=false");
   }, 1000);
@@ -138,16 +150,13 @@ describe("sidebar provider", () => {
       </HotkeysProvider>
     );
 
-    await user.keyboard("{Control>}b{/Control}");
+    await user.keyboard(getModBKeyboardInput());
 
     expect(screen.getByLabelText("Sidebar state")).toHaveTextContent(
       "collapsed"
     );
     expect(documentListener).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ctrlKey: true,
-        key: "b",
-      })
+      expect.objectContaining(getModBEventExpectation())
     );
 
     document.removeEventListener("keydown", documentListener);

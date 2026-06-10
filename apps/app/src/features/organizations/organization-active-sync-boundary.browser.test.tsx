@@ -1,4 +1,5 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
+import type * as RouterModule from "@tanstack/react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -20,24 +21,14 @@ const {
   };
 });
 
-vi.mock(import("@tanstack/react-router"), async (importActual) => {
-  const actual = await importActual();
+vi.mock(import("@tanstack/react-router"), () => ({
+  useRouter: (() => mockedRouter) as typeof RouterModule.useRouter,
+}));
 
-  return {
-    ...actual,
-    useRouter: (() => mockedRouter) as typeof actual.useRouter,
-  };
-});
-
-vi.mock(import("./organization-access"), async (importActual) => {
-  const actual = await importActual();
-
-  return {
-    ...actual,
-    synchronizeClientActiveOrganization:
-      mockedSynchronizeClientActiveOrganization as unknown as typeof actual.synchronizeClientActiveOrganization,
-  };
-});
+vi.mock(import("./organization-access"), () => ({
+  synchronizeClientActiveOrganization:
+    mockedSynchronizeClientActiveOrganization,
+}));
 
 const promiseWithResolvers = Promise as unknown as {
   withResolvers<Value>(): {
