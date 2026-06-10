@@ -311,13 +311,13 @@ describe("app API client", () => {
     expect(requestInit?.credentials).toBe("include");
   }, 1000);
 
-  it("uses the local app proxy base path for app.localhost browser clients", async () => {
+  it("uses the local app proxy base path for stage-scoped Portless browser clients", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json(listResponse));
 
     const client = await makeBrowserAppApiClient(
-      "http://app.localhost:1337"
+      "https://app.codex-portless.ceird.localhost"
     ).pipe(provideBrowserAppApiHttp, Effect.runPromise);
 
     await expect(
@@ -330,7 +330,9 @@ describe("app API client", () => {
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
-    expect(String(url)).toBe("http://app.localhost:1337/api/jobs");
+    expect(String(url)).toBe(
+      "https://app.codex-portless.ceird.localhost/api/jobs"
+    );
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.credentials).toBe("include");
   }, 1000);

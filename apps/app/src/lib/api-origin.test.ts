@@ -49,28 +49,40 @@ describe("api origin resolution", () => {
     );
   }, 1000);
 
-  it("maps the local app origin to the matching local API origin", () => {
-    expect(resolveApiOrigin("http://app.localhost:1337")).toBe(
-      "http://api.localhost:1337"
+  it("maps the stage-scoped Portless app origin to the matching local API origin", () => {
+    expect(resolveApiOrigin("https://app.codex-portless.ceird.localhost")).toBe(
+      "https://api.codex-portless.ceird.localhost"
     );
+    expect(
+      resolveApiOrigin("http://app.codex-portless.ceird.localhost:1355")
+    ).toBe("http://api.codex-portless.ceird.localhost:1355");
   }, 1000);
 
-  it("keeps browser requests same-origin for local Alchemy app hosts", () => {
+  it("keeps browser requests same-origin for stage-scoped Portless app hosts", () => {
     expect(
       resolveBrowserApiOrigin(
-        "http://app.localhost:1337",
-        "http://api.localhost:1337"
+        "https://app.codex-portless.ceird.localhost",
+        "https://api.codex-portless.ceird.localhost"
       )
-    ).toBe("http://app.localhost:1337");
+    ).toBe("https://app.codex-portless.ceird.localhost");
   }, 1000);
 
-  it("uses the app proxy base path for local Alchemy browser API requests", () => {
+  it("does not treat local app hosts without a stage as the Portless browser contract", () => {
+    expect(
+      resolveBrowserApiOrigin(
+        "https://app.ceird.localhost",
+        "https://api.ceird.localhost"
+      )
+    ).toBe("https://api.ceird.localhost");
+  }, 1000);
+
+  it("uses the app proxy base path for stage-scoped Portless browser API requests", () => {
     expect(
       resolveBrowserAppApiBaseURL(
-        "http://app.localhost:1337",
-        "http://api.localhost:1337"
+        "https://app.codex-portless.ceird.localhost",
+        "https://api.codex-portless.ceird.localhost"
       )
-    ).toBe("http://app.localhost:1337/api");
+    ).toBe("https://app.codex-portless.ceird.localhost/api");
   }, 1000);
 
   it("uses the configured browser API origin outside the local app proxy", () => {

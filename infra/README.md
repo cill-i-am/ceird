@@ -43,11 +43,14 @@ its origin directly from the typed Neon branch output. The parent stage defaults
 to the adopted `ceird-production-postgres` Hyperdrive name; non-parent stages
 use stage-scoped names unless `CEIRD_HYPERDRIVE_NAME` is set.
 
-The root stack outputs `app`, `api`, `mcp`, and `agent` as stage HTTPS origins
-derived from the reconciled public Cloudflare Worker domains. In local
-`alchemy dev`, those outputs switch to Alchemy proxy URLs such as
-`http://app.localhost:1337` and `http://api.localhost:1337` when the local
-provider supplies them. It also outputs
+The root stack outputs `app`, `api`, `mcp`, and `agent` as the current runtime
+origins for operators. In local `alchemy dev`, Alchemy may expose raw loopback
+Worker URLs while `scripts/alchemy-dev.mjs` registers stage-scoped Portless
+aliases for browser use, such as
+`https://app.codex-my-task.ceird.localhost` and
+`https://api.codex-my-task.ceird.localhost`. Portless aliases are static routes
+over Alchemy-owned workerd ports; service bindings remain internal Alchemy
+bindings. The stack also outputs
 tenant routing details: `tenantRoutePattern`,
 `tenantWildcardDnsRecordId`, and
 `tenantReservedHostBypassRoutePatterns`. The configured app/API/MCP/Agent

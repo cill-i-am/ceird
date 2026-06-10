@@ -15,21 +15,35 @@ export function toURL(input: string): URL | undefined {
   }
 }
 
+export function isLocalAppBrowserOrigin(url: URL): boolean {
+  const labels = url.hostname.split(".");
+
+  return (
+    (url.protocol === "http:" || url.protocol === "https:") &&
+    labels.length >= 4 &&
+    labels[0] === "app" &&
+    labels.at(-2) === "ceird" &&
+    labels.at(-1) === "localhost"
+  );
+}
+
+export function isMatchingMappedServiceOrigin(
+  appUrl: URL,
+  serviceUrl: URL,
+  serviceLabel: string
+): boolean {
+  return (
+    mapAppOriginToServiceOrigin(appUrl, { serviceLabel })?.origin ===
+    serviceUrl.origin
+  );
+}
+
 export function mapAppOriginToServiceOrigin(
   url: URL,
   options: AppServiceOriginOptions
 ): URL | undefined {
   const mapped = new URL(url.toString());
   const localAppPorts = options.localAppPorts ?? DEFAULT_LOCAL_APP_PORTS;
-
-  if (mapped.hostname === "app.localhost") {
-    mapped.hostname = `${options.serviceLabel}.localhost`;
-    return mapped;
-  }
-
-  if (mapped.hostname.endsWith(".localhost")) {
-    return undefined;
-  }
 
   if (
     (mapped.hostname === "127.0.0.1" || mapped.hostname === "localhost") &&
@@ -63,6 +77,10 @@ export function mapAppOriginToServiceOrigin(
       ].join(".");
       return mapped;
     }
+  }
+
+  if (mapped.hostname.endsWith(".localhost")) {
+    return undefined;
   }
 
   return undefined;

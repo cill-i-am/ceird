@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +15,104 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultEnvFile = ".env.local";
 const defaultAlchemyProfile = "ceird-env";
 const node26ModuleRegisterWarningOption = "--disable-warning=DEP0205";
+const portlessLocalBaseName = "ceird";
+const portlessLocalTld = "localhost";
+const portlessServices = ["agent", "api", "app", "mcp", "sync"];
+const portlessOriginEnvKeys = {
+  agent: "CEIRD_LOCAL_AGENT_ORIGIN",
+  api: "CEIRD_LOCAL_API_ORIGIN",
+  app: "CEIRD_LOCAL_APP_ORIGIN",
+  mcp: "CEIRD_LOCAL_MCP_ORIGIN",
+  sync: "CEIRD_LOCAL_SYNC_ORIGIN",
+};
+
+function makeStageSlug(value) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .replaceAll(/-{2,}/g, "-");
+  const base = slug.length > 0 ? slug : "stage";
+
+  if (base.length <= 40) {
+    return base;
+  }
+
+  // Keep long explicit stages DNS-safe while preserving stable uniqueness.
+  const hash = createHash("sha256").update(value).digest("hex").slice(0, 8);
+  const prefix = base.slice(0, 31).replaceAll(/-+$/g, "");
+  return `${prefix}-${hash}`;
+}
+
+export function makePortlessLocalServiceName(service, stage) {
+  return `${service}.${makeStageSlug(stage)}.${portlessLocalBaseName}`;
+}
+
+export function makeDefaultPortlessLocalServiceOrigin(service, stage) {
+  return `https://${makePortlessLocalServiceName(service, stage)}.${portlessLocalTld}`;
+}
+
+export function makePortlessOriginEnvKey(service) {
+  return portlessOriginEnvKeys[service];
+}
+
+export function makePortlessAliasCommand({
+  portlessBin = "portless",
+  service,
+  stage,
+  targetPort,
+}) {
+  return [
+    portlessBin,
+    "alias",
+    makePortlessLocalServiceName(service, stage),
+    targetPort,
+    "--force",
+  ];
+}
+
+export function readAlchemyLocalServiceUrlFromLine(line) {
+  const match =
+    /^\s*["']?(?<service>agent|api|app|mcp|sync)["']?\s*[:=]\s*["']?(?<url>https?:\/\/[^"'\s,]+)/u.exec(
+      line
+    );
+
+  if (!match?.groups) {
+    return;
+  }
+
+  const { service, url: rawUrl } = match.groups;
+
+  if (!URL.canParse(rawUrl)) {
+    return;
+  }
+
+  const url = new URL(rawUrl);
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return;
+  }
+
+  if (
+    url.hostname !== "localhost" &&
+    url.hostname !== "127.0.0.1" &&
+    url.hostname !== "[::1]" &&
+    url.hostname !== "::1"
+  ) {
+    return;
+  }
+
+  if (!url.port) {
+    return;
+  }
+
+  return {
+    port: url.port,
+    service,
+    targetOrigin: url.origin,
+  };
+}
 
 export function normalizeAlchemyDevArgs(args) {
   return args[0] === "--" ? args.slice(1) : args;
@@ -165,6 +264,209 @@ function readEnvFileValues(envFile) {
   return parseEnv(readFileSync(envFilePath, "utf8"));
 }
 
+function isPortlessDisabled(env) {
+  return env.PORTLESS === "0" || env.PORTLESS === "false";
+}
+
+function runPortlessCommand(args, { env, timeout = 10_000 } = {}) {
+  return spawnSync("portless", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env,
+    timeout,
+  });
+}
+
+function formatCommandFailure(result) {
+  const stderr = result.stderr?.trim();
+  const stdout = result.stdout?.trim();
+
+  if (stderr) {
+    return stderr;
+  }
+
+  if (stdout) {
+    return stdout;
+  }
+
+  if (result.error) {
+    return result.error.message;
+  }
+
+  return `exit status ${result.status ?? "unknown"}`;
+}
+
+function isUnsupportedPortlessPruneFailureMessage(failure) {
+  return (
+    failure.includes("No command provided") ||
+    failure.includes("Unknown command") ||
+    failure.includes('Unknown flag "--help"')
+  );
+}
+
+export function makePortlessPruneFailureWarning(result) {
+  const failure = formatCommandFailure(result);
+
+  if (isUnsupportedPortlessPruneFailureMessage(failure)) {
+    return "[ceird dev] Installed Portless does not support prune; stage aliases will still be overwritten with --force after Alchemy starts.";
+  }
+
+  return `[ceird dev] Portless prune failed; stale aliases may remain. Details: ${failure}`;
+}
+
+function readPortlessPublicOrigin({ env, service, stage }) {
+  const name = makePortlessLocalServiceName(service, stage);
+  const result = runPortlessCommand(["get", "--no-worktree", name], { env });
+
+  if (result.status !== 0) {
+    return {
+      origin: makeDefaultPortlessLocalServiceOrigin(service, stage),
+      warning: `portless get failed for ${name}: ${formatCommandFailure(result)}`,
+    };
+  }
+
+  const rawUrl = result.stdout.trim();
+
+  if (!URL.canParse(rawUrl)) {
+    return {
+      origin: makeDefaultPortlessLocalServiceOrigin(service, stage),
+      warning: `portless get returned an invalid URL for ${name}: ${rawUrl}`,
+    };
+  }
+
+  const url = new URL(rawUrl);
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return {
+      origin: makeDefaultPortlessLocalServiceOrigin(service, stage),
+      warning: `portless get returned a non-HTTP URL for ${name}: ${rawUrl}`,
+    };
+  }
+
+  return { origin: url.origin };
+}
+
+function preparePortlessDevOrigins({ baseEnv, stage }) {
+  if (isPortlessDisabled(baseEnv)) {
+    console.warn(
+      "[ceird dev] PORTLESS=0 is set. Alchemy will run, but browser auth requires the stage-scoped Portless app URL."
+    );
+    return { enabled: false, env: {} };
+  }
+
+  const versionResult = runPortlessCommand(["--version"], { env: baseEnv });
+
+  if (versionResult.status !== 0) {
+    console.warn(
+      `[ceird dev] Portless was not found. Install it globally with Node.js 24+ for the preferred local browser URLs, or set PORTLESS=0 to acknowledge raw Alchemy debug mode. Details: ${formatCommandFailure(versionResult)}`
+    );
+    return { enabled: false, env: {} };
+  }
+
+  const startResult = runPortlessCommand(["proxy", "start"], {
+    env: baseEnv,
+    timeout: 20_000,
+  });
+
+  if (startResult.status !== 0) {
+    console.warn(
+      `[ceird dev] Portless proxy did not start automatically. Browser auth may not work until the proxy is running. Details: ${formatCommandFailure(startResult)}`
+    );
+  }
+
+  const pruneResult = runPortlessCommand(["prune"], { env: baseEnv });
+
+  if (pruneResult.status !== 0) {
+    console.warn(makePortlessPruneFailureWarning(pruneResult));
+  }
+
+  const env = {};
+
+  for (const service of portlessServices) {
+    const { origin, warning } = readPortlessPublicOrigin({
+      env: baseEnv,
+      service,
+      stage,
+    });
+
+    if (warning) {
+      console.warn(`[ceird dev] ${warning}`);
+    }
+
+    env[makePortlessOriginEnvKey(service)] = origin;
+  }
+
+  console.log(
+    `[ceird dev] Portless browser origins are stage-scoped under ${makeStageSlug(stage)}.ceird.localhost.`
+  );
+  console.log(`[ceird dev] App: ${env.CEIRD_LOCAL_APP_ORIGIN}`);
+
+  return { enabled: true, env };
+}
+
+function createPortlessAliasManager({ env, stage }) {
+  const registeredPorts = new Map();
+  let pending = "";
+
+  function registerServiceTarget(target) {
+    if (registeredPorts.get(target.service) === target.port) {
+      return;
+    }
+
+    const [command, ...args] = makePortlessAliasCommand({
+      service: target.service,
+      stage,
+      targetPort: target.port,
+    });
+    const result = spawnSync(command, args, {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env,
+    });
+
+    if (result.status !== 0) {
+      console.warn(
+        `[ceird dev] Failed to register Portless alias for ${target.service}: ${formatCommandFailure(result)}`
+      );
+      return;
+    }
+
+    registeredPorts.set(target.service, target.port);
+    console.log(
+      `[ceird dev] Portless alias ${makePortlessLocalServiceName(
+        target.service,
+        stage
+      )} -> ${target.targetOrigin}`
+    );
+  }
+
+  function observeLine(line) {
+    const target = readAlchemyLocalServiceUrlFromLine(line);
+
+    if (target) {
+      registerServiceTarget(target);
+    }
+  }
+
+  return {
+    flush() {
+      if (pending.length > 0) {
+        observeLine(pending);
+        pending = "";
+      }
+    },
+    observe(chunk) {
+      pending += chunk;
+      const lines = pending.split(/\r?\n/u);
+      pending = lines.pop() ?? "";
+
+      for (const line of lines) {
+        observeLine(line);
+      }
+    },
+  };
+}
+
 export function makeFallbackStage({
   branch = readGitBranch(),
   user = process.env.USER ?? process.env.USERNAME ?? "unknown",
@@ -202,8 +504,18 @@ function readGitBranch() {
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
-function runAlchemyExec({ env, execPath, options, spawnerUrl }) {
+function runAlchemyExec({
+  env,
+  execPath,
+  options,
+  portlessAliasManager,
+  spawnerUrl,
+}) {
   return Effect.callback((resume) => {
+    const stdio =
+      portlessAliasManager === undefined
+        ? "inherit"
+        : ["inherit", "pipe", "pipe"];
     const child = spawn(
       process.execPath,
       [...makeAlchemyNodeExecArgv(), execPath],
@@ -214,14 +526,27 @@ function runAlchemyExec({ env, execPath, options, spawnerUrl }) {
           ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
           [RpcProviderProxy.SPAWNER_URL_ENV_KEY]: spawnerUrl,
         },
-        stdio: "inherit",
+        stdio,
       }
     );
+
+    if (portlessAliasManager !== undefined) {
+      child.stdout?.on("data", (chunk) => {
+        process.stdout.write(chunk);
+        portlessAliasManager.observe(chunk.toString("utf8"));
+      });
+      child.stderr?.on("data", (chunk) => {
+        process.stderr.write(chunk);
+        portlessAliasManager.observe(chunk.toString("utf8"));
+      });
+    }
 
     child.on("error", (error) => {
       resume(Effect.fail(error));
     });
     child.on("exit", (code, signal) => {
+      portlessAliasManager?.flush();
+
       if (signal) {
         process.kill(process.pid, signal);
         return;
@@ -244,10 +569,20 @@ async function main() {
     fallbackStage,
   });
   const envFileValues = readEnvFileValues(initialOptions.envFile);
+  const portless = preparePortlessDevOrigins({
+    baseEnv: {
+      ...process.env,
+      ...envFileValues,
+    },
+    stage: initialOptions.stage,
+  });
   const env = makeAlchemyDevEnvironment({
     baseEnv: process.env,
     defaultProfile: defaultAlchemyProfile,
-    envFileValues,
+    envFileValues: {
+      ...envFileValues,
+      ...portless.env,
+    },
   });
   const options = makeAlchemyExecOptions({
     args: process.argv.slice(2),
@@ -255,6 +590,12 @@ async function main() {
     envFile: initialOptions.envFile,
     fallbackStage,
   });
+  const portlessAliasManager = portless.enabled
+    ? createPortlessAliasManager({
+        env,
+        stage: options.stage,
+      })
+    : undefined;
 
   if (env.NODE_OPTIONS) {
     process.env.NODE_OPTIONS = env.NODE_OPTIONS;
@@ -267,6 +608,7 @@ async function main() {
         env,
         execPath,
         options,
+        portlessAliasManager,
         spawnerUrl: spawner.url,
       });
     }).pipe(

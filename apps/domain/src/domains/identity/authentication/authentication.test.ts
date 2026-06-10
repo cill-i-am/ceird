@@ -390,7 +390,8 @@ describe("makeAuthenticationConfig()", () => {
   it("keeps password compromise checks disabled by default for loopback auth config", async () => {
     await withEnvironment(
       {
-        BETTER_AUTH_BASE_URL: "http://api.localhost:1337/api/auth",
+        BETTER_AUTH_BASE_URL:
+          "http://api.codex-portless.ceird.localhost:1355/api/auth",
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
         DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       },
@@ -657,11 +658,13 @@ describe("makeAuthenticationConfig()", () => {
     );
   }, 10_000);
 
-  it("keeps local Alchemy proxy OAuth issuer URLs on HTTP", async () => {
+  it("keeps legacy HTTP Portless OAuth issuer URLs on HTTP", async () => {
     await withEnvironment(
       {
-        OAUTH_ISSUER_URL: "http://api.localhost:1337/api/auth",
-        BETTER_AUTH_BASE_URL: "http://api.localhost:1337/api/auth",
+        OAUTH_ISSUER_URL:
+          "http://api.codex-portless.ceird.localhost:1355/api/auth",
+        BETTER_AUTH_BASE_URL:
+          "http://api.codex-portless.ceird.localhost:1355/api/auth",
         BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
         DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5439/ceird",
       },
@@ -669,7 +672,7 @@ describe("makeAuthenticationConfig()", () => {
         const config = await loadAuthenticationConfigForTest(provider);
 
         expect(config.oauthIssuerUrl).toBe(
-          "http://api.localhost:1337/api/auth"
+          "http://api.codex-portless.ceird.localhost:1355/api/auth"
         );
       }
     );

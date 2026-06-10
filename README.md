@@ -35,10 +35,13 @@ pnpm dev -- --stage codex-my-task
 
 Alchemy creates or updates the stage-scoped Cloudflare Workers, app, Agent
 Worker, sync Worker, Electric SQL container, Hyperdrive, Neon branch, queues,
-and routes. In local dev it prints local proxy origins such as
-`http://app.localhost:1337` for the running stack. The wrapper leaves Alchemy
-confirmations enabled by default; add `--yes` only for an intentional
-non-interactive run against the selected stage.
+and routes. In local dev the wrapper uses Portless, when available, as the
+browser-facing origin layer over Alchemy's actual workerd ports. The preferred
+app URL for a stage such as `codex-my-task` is
+`https://app.codex-my-task.ceird.localhost`; sibling service URLs follow the
+same shape, such as `https://api.codex-my-task.ceird.localhost`. The wrapper
+leaves Alchemy confirmations enabled by default; add `--yes` only for an
+intentional non-interactive run against the selected stage.
 
 Non-parent stages depend on the parent `main` stage because they fork Neon
 branches from its shared project. If a worktree stage reports a missing

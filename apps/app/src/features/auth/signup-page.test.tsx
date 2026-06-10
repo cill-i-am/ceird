@@ -409,6 +409,24 @@ describe("signup page", () => {
     ).resolves.toBeInTheDocument();
   }, 10_000);
 
+  it("shows a safe server error when sign-up throws during transport", async () => {
+    mockedSignUpEmail.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const user = userEvent.setup();
+
+    render(<SignupPage />);
+
+    await user.type(screen.getByLabelText("Name"), "Taylor Example");
+    await user.type(screen.getByLabelText("Email"), "person@example.com");
+    await user.type(screen.getByLabelText("Password"), "password1234");
+    await user.click(screen.getByRole("button", { name: /sign up/i }));
+
+    await expect(
+      screen.findByText("We couldn't create your account. Please try again.")
+    ).resolves.toBeInTheDocument();
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  }, 10_000);
+
   it("shows password length errors inline", async () => {
     const user = userEvent.setup();
 

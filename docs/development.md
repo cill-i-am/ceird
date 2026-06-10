@@ -37,10 +37,19 @@ pnpm dev -- --stage codex-my-task
 
 Alchemy creates or updates the selected stage's Cloudflare Workers/Vite app,
 Agent Worker, Hyperdrive config, queues, and Neon branch. Local Workerd serves
-the running stack through Alchemy proxy origins such as
-`http://app.localhost:1337`, `http://api.localhost:1337`, and
-`http://agent.localhost:1337`; these are the origins printed by `pnpm dev` for
-browser and API smoke checks.
+the running stack on dynamic loopback ports. The root wrapper layers Portless
+aliases over those ports so browser-facing origins are predictable and
+stage-scoped. For stage `codex-my-task`, use:
+
+- `https://app.codex-my-task.ceird.localhost`
+- `https://api.codex-my-task.ceird.localhost`
+- `https://agent.codex-my-task.ceird.localhost`
+- `https://mcp.codex-my-task.ceird.localhost`
+- `https://sync.codex-my-task.ceird.localhost`
+
+If Portless is missing or `PORTLESS=0` is set, Alchemy still starts for raw
+debugging, but browser auth and cookies are only supported through the
+stage-scoped Portless app URL.
 The wrapper keeps Alchemy's confirmation prompt enabled by default. For a
 known stage in a non-interactive workflow, pass `--yes` after the Alchemy args:
 
