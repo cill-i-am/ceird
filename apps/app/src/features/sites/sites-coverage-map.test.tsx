@@ -8,6 +8,9 @@ import { SitesCoverageMap } from "./sites-coverage-map";
 
 const depotSiteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
 const schoolSiteId = "44444444-4444-4444-8444-444444444444" as SiteIdType;
+const { canRenderInteractiveMap } = vi.hoisted(() => ({
+  canRenderInteractiveMap: { current: true },
+}));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -39,16 +42,13 @@ vi.mock(import("./sites-coverage-map-canvas"), () => ({
   ),
 }));
 
+vi.mock(import("#/components/ui/use-can-render-interactive-map"), () => ({
+  useCanRenderInteractiveMap: () => canRenderInteractiveMap.current,
+}));
+
 describe("sites coverage map", () => {
   beforeEach(() => {
-    Object.defineProperty(URL, "createObjectURL", {
-      configurable: true,
-      value: vi.fn<() => string>(() => "blob:test"),
-    });
-  });
-
-  afterEach(() => {
-    Reflect.deleteProperty(URL, "createObjectURL");
+    canRenderInteractiveMap.current = true;
   });
 
   it("renders mapped sites into the canvas and lists unmapped sites", async () => {
@@ -126,7 +126,7 @@ describe("sites coverage map", () => {
   });
 
   it("uses compact fallback pins when the interactive map cannot render", async () => {
-    Reflect.deleteProperty(URL, "createObjectURL");
+    canRenderInteractiveMap.current = false;
 
     render(
       <SitesCoverageMap

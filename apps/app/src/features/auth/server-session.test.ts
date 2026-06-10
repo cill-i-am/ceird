@@ -53,6 +53,8 @@ describe("server session lookup", () => {
   let originalApiOrigin: string | undefined;
 
   beforeEach(() => {
+    mockedGetGlobalStartContext.mockReset();
+    mockedGetRequestHeader.mockReset();
     originalApiOrigin = process.env.API_ORIGIN;
   });
 

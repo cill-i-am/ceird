@@ -35,7 +35,9 @@ describe("shared app database effect layers", () => {
         Promise.resolve({ rows: [{ one: 1 }] })
       ),
     } as unknown as Pool;
-    const PoolMock = vi.fn<() => Pool>(() => pool) as unknown as typeof Pool;
+    const PoolMock = vi.fn<() => Pool>(function MockPool() {
+      return pool;
+    }) as unknown as typeof Pool;
 
     vi.doMock(import("pg"), () => ({ Pool: PoolMock }));
 
