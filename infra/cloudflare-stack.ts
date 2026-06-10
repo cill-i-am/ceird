@@ -78,10 +78,8 @@ export function makeCloudflareWorkerOrigin(input: {
 }
 
 function readOptionalUrlOrigin(value: string) {
-  try {
+  if (URL.canParse(value)) {
     return new URL(value).origin;
-  } catch {
-    return;
   }
 }
 
