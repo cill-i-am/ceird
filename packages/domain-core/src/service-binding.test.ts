@@ -90,4 +90,47 @@ describe("Domain service binding client", () => {
       "http://127.0.0.1:3002/jobs?limit=10"
     );
   });
+
+  it("supplies a loopback client IP for local stage-scoped service requests", async () => {
+    const response = Response.json({ ok: true });
+    const fetch = vi.fn<(request: Request) => Promise<Response>>(() =>
+      Promise.resolve(response)
+    );
+    const binding = makeDomainService(fetch);
+
+    await makeDomainServiceClient(binding).request(
+      new Request(
+        "http://api.codex-portless.ceird.localhost/api/auth/sign-up/email"
+      )
+    );
+
+    const forwardedRequest = fetch.mock.calls[0]?.[0];
+    expect(forwardedRequest?.headers.get("x-forwarded-for")).toBe("127.0.0.1");
+  });
+
+  it("preserves an explicit forwarded client IP for local origin requests", async () => {
+    const fetcher = vi.fn<(request: Request) => Promise<Response>>(() =>
+      Promise.resolve(Response.json({ ok: true }))
+    );
+    const client = makeDomainOriginClient(
+      "http://127.0.0.1:3002/",
+      fetcher as unknown as typeof fetch
+    );
+
+    await client.request(
+      new Request(
+        "http://api.codex-portless.ceird.localhost/api/auth/sign-up/email",
+        {
+          headers: {
+            "x-forwarded-for": "203.0.113.80",
+          },
+        }
+      )
+    );
+
+    const forwardedRequest = fetcher.mock.calls[0]?.[0];
+    expect(forwardedRequest?.headers.get("x-forwarded-for")).toBe(
+      "203.0.113.80"
+    );
+  });
 });

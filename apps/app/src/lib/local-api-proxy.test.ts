@@ -43,6 +43,8 @@ describe("local API proxy", () => {
       "api.codex-portless.ceird.localhost"
     );
     expect(forwardedRequest.headers.get("x-forwarded-proto")).toBe("https");
+    expect(forwardedRequest.headers.get("cf-connecting-ip")).toBe("127.0.0.1");
+    expect(forwardedRequest.headers.get("x-forwarded-for")).toBe("127.0.0.1");
     expect(forwardedRequest.headers.get("cookie")).toBe(
       "better-auth.session_token=existing"
     );
@@ -75,6 +77,37 @@ describe("local API proxy", () => {
     );
     expect(forwardedRequest.headers.get("origin")).toBe(
       "https://app.codex-portless.ceird.localhost"
+    );
+  });
+
+  it("preserves an upstream client IP when one is already available", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(Response.json({ ok: true }));
+
+    await proxyLocalAppApiRequest(
+      new Request(
+        "https://app.codex-portless.ceird.localhost/api/auth/sign-up/email",
+        {
+          headers: {
+            "cf-connecting-ip": "203.0.113.12",
+            "x-forwarded-for": "203.0.113.11",
+          },
+          method: "POST",
+        }
+      ),
+      {
+        apiOrigin: "https://api.codex-portless.ceird.localhost",
+        fetch,
+      }
+    );
+
+    const forwardedRequest = fetch.mock.calls[0]?.[0] as Request;
+    expect(forwardedRequest.headers.get("cf-connecting-ip")).toBe(
+      "203.0.113.12"
+    );
+    expect(forwardedRequest.headers.get("x-forwarded-for")).toBe(
+      "203.0.113.11"
     );
   });
 

@@ -58,6 +58,7 @@ async function makeDomainBoundaryRequest(
 
 function makeDomainBoundaryHeaders(request: Request) {
   const headers = new Headers(request.headers);
+  const incomingForwardedFor = headers.get("x-forwarded-for");
 
   const forwardedHeaderNames: string[] = [];
 
@@ -85,7 +86,24 @@ function makeDomainBoundaryHeaders(request: Request) {
 
   if (cloudflareConnectingIp !== null && cloudflareConnectingIp.length > 0) {
     headers.set("x-forwarded-for", cloudflareConnectingIp);
+  } else if (
+    isLocalBoundaryHost(url.hostname) &&
+    incomingForwardedFor !== null &&
+    incomingForwardedFor.length > 0
+  ) {
+    headers.set("x-forwarded-for", incomingForwardedFor);
+  } else if (isLocalBoundaryHost(url.hostname)) {
+    headers.set("x-forwarded-for", "127.0.0.1");
   }
 
   return headers;
+}
+
+function isLocalBoundaryHost(hostname: string) {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname.endsWith(".localhost")
+  );
 }

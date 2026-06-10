@@ -12,6 +12,7 @@ const HOP_BY_HOP_HEADERS = new Set([
   "transfer-encoding",
   "upgrade",
 ]);
+const LOCAL_PROXY_CLIENT_IP = "127.0.0.1";
 
 export function canProxyLocalAppApiRequest(requestUrl: URL) {
   return isLocalAppBrowserOrigin(requestUrl);
@@ -113,6 +114,11 @@ function makeProxyHeaders(request: Request, targetUrl: URL) {
     "x-forwarded-proto",
     targetUrl.protocol === "https:" ? "https" : "http"
   );
+
+  if (!headers.has("cf-connecting-ip") && !headers.has("x-forwarded-for")) {
+    headers.set("cf-connecting-ip", LOCAL_PROXY_CLIENT_IP);
+    headers.set("x-forwarded-for", LOCAL_PROXY_CLIENT_IP);
+  }
 
   return headers;
 }
