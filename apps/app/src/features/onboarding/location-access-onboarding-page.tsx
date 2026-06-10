@@ -1,5 +1,6 @@
 import type { UserPreferences } from "@ceird/identity-core";
 import { useNavigate } from "@tanstack/react-router";
+import { Effect } from "effect";
 import * as React from "react";
 
 import { Button } from "#/components/ui/button";
@@ -9,6 +10,11 @@ import {
   DEFAULT_USER_PREFERENCES,
   updateCurrentUserPreferences,
 } from "#/features/settings/user-preferences-api";
+import {
+  formatBrowserGeolocationError,
+  requestBrowserGeolocation,
+} from "#/lib/browser-geolocation";
+import type { BrowserGeolocationError } from "#/lib/browser-geolocation";
 import { cn } from "#/lib/utils";
 
 export function LocationAccessOnboardingPage({
@@ -64,6 +70,21 @@ export function LocationAccessOnboardingPage({
           <LocationPreferencePanel
             preferences={preferences}
             unavailable={preferencesUnavailable}
+            getPreferenceChangeFailureMessage={(error) =>
+              error instanceof Error ? error.message : undefined
+            }
+            onBeforeEnable={async () => {
+              try {
+                await Effect.runPromise(requestBrowserGeolocation());
+              } catch (error) {
+                throw new Error(
+                  formatBrowserGeolocationError(
+                    error as BrowserGeolocationError
+                  ),
+                  { cause: error }
+                );
+              }
+            }}
             onPreferenceChange={async (routeProximityLocationEnabled) => {
               setLocationPreferenceSaving(true);
 

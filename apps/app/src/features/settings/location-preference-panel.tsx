@@ -7,12 +7,18 @@ import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 
 export interface LocationPreferencePanelProps {
+  readonly getPreferenceChangeFailureMessage?:
+    | ((error: unknown) => string | undefined)
+    | undefined;
   readonly preferences: UserPreferences;
   readonly unavailable?: boolean | undefined;
+  readonly onBeforeEnable?: (() => Promise<void>) | undefined;
   readonly onPreferenceChange: (enabled: boolean) => Promise<UserPreferences>;
 }
 
 export function LocationPreferencePanel({
+  getPreferenceChangeFailureMessage,
+  onBeforeEnable,
   preferences,
   unavailable = false,
   onPreferenceChange,
@@ -51,14 +57,28 @@ export function LocationPreferencePanel({
     setMessage(null);
 
     try {
+      if (nextEnabled && onBeforeEnable) {
+        await onBeforeEnable();
+      }
+
       await onPreferenceChange(nextEnabled);
+
+      if (!nextEnabled) {
+        setMessage("Ceird will ask before using current location again.");
+      } else if (onBeforeEnable) {
+        setMessage(
+          "Location permission granted. Ceird will use fresh location when you run nearby jobs or sites."
+        );
+      } else {
+        setMessage(
+          "Ceird will ask this browser for fresh location when you run nearby jobs or sites."
+        );
+      }
+    } catch (error) {
       setMessage(
-        nextEnabled
-          ? "Ceird will ask this browser for fresh location when you run nearby jobs or sites."
-          : "Ceird will ask before using current location again."
+        getPreferenceChangeFailureMessage?.(error) ??
+          "Location preference could not be updated."
       );
-    } catch {
-      setMessage("Location preference could not be updated.");
     } finally {
       setIsSaving(false);
     }

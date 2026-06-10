@@ -109,9 +109,26 @@ describe("location access onboarding page", () => {
     ).toBeDisabled();
   }, 10_000);
 
-  it("enables location access without requesting coordinates during onboarding", async () => {
+  it("requests browser location before enabling access during onboarding", async () => {
     const user = userEvent.setup();
-    const getCurrentPosition = vi.fn<Geolocation["getCurrentPosition"]>();
+    const getCurrentPosition = vi.fn<Geolocation["getCurrentPosition"]>(
+      (success) => {
+        success({
+          coords: {
+            accuracy: 10,
+            altitude: null,
+            altitudeAccuracy: null,
+            heading: null,
+            latitude: 53.3498,
+            longitude: -6.2603,
+            speed: null,
+            toJSON: () => ({}),
+          },
+          timestamp: Date.now(),
+          toJSON: () => ({}),
+        });
+      }
+    );
 
     Object.defineProperty(navigator, "geolocation", {
       configurable: true,
@@ -129,16 +146,67 @@ describe("location access onboarding page", () => {
         routeProximityLocationEnabled: true,
       });
     });
-    expect(getCurrentPosition).not.toHaveBeenCalled();
+    expect(getCurrentPosition).toHaveBeenCalledOnce();
     expect(screen.getByText("Enabled")).toBeVisible();
+    expect(screen.getByText(/Location permission granted/i)).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Continue to Ceird" }));
 
     expect(mockedNavigate).toHaveBeenCalledWith({ to: "/" });
   }, 10_000);
 
+  it("does not save the location preference when browser permission is denied", async () => {
+    const user = userEvent.setup();
+    const getCurrentPosition = vi.fn<Geolocation["getCurrentPosition"]>(
+      (_success, error) => {
+        error?.({
+          code: 1,
+          message: "User denied Geolocation",
+          PERMISSION_DENIED: 1,
+          POSITION_UNAVAILABLE: 2,
+          TIMEOUT: 3,
+        });
+      }
+    );
+
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition },
+    });
+
+    render(<LocationAccessOnboardingPage />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Enable location access" })
+    );
+
+    await expect(
+      screen.findByText("Location permission was denied.")
+    ).resolves.toBeVisible();
+    expect(mockedUpdateCurrentUserPreferences).not.toHaveBeenCalled();
+    expect(screen.getByText("Disabled")).toBeVisible();
+  }, 10_000);
+
   it("keeps onboarding navigation disabled while saving the preference", async () => {
     const user = userEvent.setup();
+    const getCurrentPosition = vi.fn<Geolocation["getCurrentPosition"]>(
+      (success) => {
+        success({
+          coords: {
+            accuracy: 10,
+            altitude: null,
+            altitudeAccuracy: null,
+            heading: null,
+            latitude: 53.3498,
+            longitude: -6.2603,
+            speed: null,
+            toJSON: () => ({}),
+          },
+          timestamp: Date.now(),
+          toJSON: () => ({}),
+        });
+      }
+    );
     const preferenceUpdate = Promise.withResolvers<{
       preferences: {
         routeProximityLocationEnabled: boolean;
@@ -148,6 +216,10 @@ describe("location access onboarding page", () => {
     mockedUpdateCurrentUserPreferences.mockReturnValueOnce(
       preferenceUpdate.promise
     );
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition },
+    });
 
     render(<LocationAccessOnboardingPage />);
 
