@@ -23,8 +23,8 @@ Current visible routes:
 | `/reset-password`                  | `reset-password.tsx`                  | Complete password reset.                                        |
 | `/verify-email`                    | `verify-email.tsx`                    | Show email verification result.                                 |
 | `/accept-invitation/$invitationId` | `accept-invitation.$invitationId.tsx` | Accept organization invitation.                                 |
-| `/location-access`                 | `_app.location-access.tsx`            | Authenticated, shellless, skippable location-access onboarding. |
-| `/create-organization`             | `_app.create-organization.tsx`        | Create a team and optionally invite initial members.            |
+| `/location-access`                 | `location-access.tsx`                 | Authenticated, shellless, skippable location-access onboarding. |
+| `/create-organization`             | `create-organization.tsx`             | Create a team and optionally invite initial members.            |
 | `/settings`                        | `_app.settings.tsx`                   | User profile, email, password, and account security settings.   |
 | `/activity`                        | `_app._org.activity.tsx`              | Organization activity feed.                                     |
 | `/jobs`                            | `_app._org.jobs.tsx`                  | Jobs list and saved views.                                      |
@@ -116,6 +116,13 @@ routes reuse that parent session through
 state. Internal guard redirects use typed router targets so client-side
 navigation and SSR stay on the same route transition path; raw `href` redirects
 are reserved for external or intentionally document-level navigation.
+Authenticated onboarding routes that need the session but not the product
+chrome, currently `/location-access` and `/create-organization`, live outside
+the `_app` route and carry explicit auth or organization guards. The `_app`
+layout still bypasses `AppLayout` when the latest router destination path or
+active TanStack Router matches point at those shellless routes, so loading
+transitions after signup or organization setup cannot briefly render onboarding
+cards inside the sidebar shell while the destination route is resolving.
 Tenant host parsing lives in `apps/app/src/lib/tenant-host.ts`. The parser
 treats configured system hosts as neutral, ignores hosts outside the tenant base
 domain, and resolves only valid non-reserved organization slugs from the first

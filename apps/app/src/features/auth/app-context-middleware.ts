@@ -2,6 +2,7 @@ import { createMiddleware } from "@tanstack/react-start";
 
 export {
   shouldBypassAuthenticatedAppShell,
+  shouldBypassAuthenticatedAppShellForRouteMatches,
   shouldHydrateAuthContext,
   shouldHydrateOrganizationContext,
 } from "./app-context-route-selection";

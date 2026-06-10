@@ -13,15 +13,15 @@ import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LocationAccessRouteImport } from './routes/location-access'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as CreateOrganizationRouteImport } from './routes/create-organization'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as OauthConsentRouteImport } from './routes/oauth.consent'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
 import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accept-invitation.$invitationId'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
-import { Route as AppLocationAccessRouteImport } from './routes/_app.location-access'
-import { Route as AppCreateOrganizationRouteImport } from './routes/_app.create-organization'
 import { Route as AppOrgRouteImport } from './routes/_app._org'
 import { Route as AppOrgIndexRouteImport } from './routes/_app._org.index'
 import { Route as AppOrgSitesRouteImport } from './routes/_app._org.sites'
@@ -51,6 +51,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LocationAccessRoute = LocationAccessRouteImport.update({
+  id: '/location-access',
+  path: '/location-access',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HealthRoute = HealthRouteImport.update({
   id: '/health',
   path: '/health',
@@ -59,6 +64,11 @@ const HealthRoute = HealthRouteImport.update({
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CreateOrganizationRoute = CreateOrganizationRouteImport.update({
+  id: '/create-organization',
+  path: '/create-organization',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -84,16 +94,6 @@ const AcceptInvitationInvitationIdRoute =
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppLocationAccessRoute = AppLocationAccessRouteImport.update({
-  id: '/location-access',
-  path: '/location-access',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppCreateOrganizationRoute = AppCreateOrganizationRouteImport.update({
-  id: '/create-organization',
-  path: '/create-organization',
   getParentRoute: () => AppRoute,
 } as any)
 const AppOrgRoute = AppOrgRouteImport.update({
@@ -140,14 +140,14 @@ const AppOrgOrganizationSecurityRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof AppOrgIndexRoute
+  '/create-organization': typeof CreateOrganizationRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/health': typeof HealthRoute
+  '/location-access': typeof LocationAccessRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/create-organization': typeof AppCreateOrganizationRoute
-  '/location-access': typeof AppLocationAccessRoute
   '/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/api/$': typeof ApiSplatRoute
@@ -161,14 +161,14 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof AppOrgIndexRoute
+  '/create-organization': typeof CreateOrganizationRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/health': typeof HealthRoute
+  '/location-access': typeof LocationAccessRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
-  '/create-organization': typeof AppCreateOrganizationRoute
-  '/location-access': typeof AppLocationAccessRoute
   '/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/api/$': typeof ApiSplatRoute
@@ -183,15 +183,15 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
+  '/create-organization': typeof CreateOrganizationRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/health': typeof HealthRoute
+  '/location-access': typeof LocationAccessRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/_app/_org': typeof AppOrgRouteWithChildren
-  '/_app/create-organization': typeof AppCreateOrganizationRoute
-  '/_app/location-access': typeof AppLocationAccessRoute
   '/_app/settings': typeof AppSettingsRoute
   '/accept-invitation/$invitationId': typeof AcceptInvitationInvitationIdRoute
   '/api/$': typeof ApiSplatRoute
@@ -208,14 +208,14 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/create-organization'
     | '/forgot-password'
     | '/health'
+    | '/location-access'
     | '/login'
     | '/reset-password'
     | '/signup'
     | '/verify-email'
-    | '/create-organization'
-    | '/location-access'
     | '/settings'
     | '/accept-invitation/$invitationId'
     | '/api/$'
@@ -229,14 +229,14 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/create-organization'
     | '/forgot-password'
     | '/health'
+    | '/location-access'
     | '/login'
     | '/reset-password'
     | '/signup'
     | '/verify-email'
-    | '/create-organization'
-    | '/location-access'
     | '/settings'
     | '/accept-invitation/$invitationId'
     | '/api/$'
@@ -250,15 +250,15 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_app'
+    | '/create-organization'
     | '/forgot-password'
     | '/health'
+    | '/location-access'
     | '/login'
     | '/reset-password'
     | '/signup'
     | '/verify-email'
     | '/_app/_org'
-    | '/_app/create-organization'
-    | '/_app/location-access'
     | '/_app/settings'
     | '/accept-invitation/$invitationId'
     | '/api/$'
@@ -274,8 +274,10 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
+  CreateOrganizationRoute: typeof CreateOrganizationRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HealthRoute: typeof HealthRoute
+  LocationAccessRoute: typeof LocationAccessRoute
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
@@ -315,6 +317,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/location-access': {
+      id: '/location-access'
+      path: '/location-access'
+      fullPath: '/location-access'
+      preLoaderRoute: typeof LocationAccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/health': {
       id: '/health'
       path: '/health'
@@ -327,6 +336,13 @@ declare module '@tanstack/react-router' {
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/create-organization': {
+      id: '/create-organization'
+      path: '/create-organization'
+      fullPath: '/create-organization'
+      preLoaderRoute: typeof CreateOrganizationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -362,20 +378,6 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AppSettingsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/location-access': {
-      id: '/_app/location-access'
-      path: '/location-access'
-      fullPath: '/location-access'
-      preLoaderRoute: typeof AppLocationAccessRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/create-organization': {
-      id: '/_app/create-organization'
-      path: '/create-organization'
-      fullPath: '/create-organization'
-      preLoaderRoute: typeof AppCreateOrganizationRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/_org': {
@@ -462,15 +464,11 @@ const AppOrgRouteWithChildren =
 
 interface AppRouteChildren {
   AppOrgRoute: typeof AppOrgRouteWithChildren
-  AppCreateOrganizationRoute: typeof AppCreateOrganizationRoute
-  AppLocationAccessRoute: typeof AppLocationAccessRoute
   AppSettingsRoute: typeof AppSettingsRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppOrgRoute: AppOrgRouteWithChildren,
-  AppCreateOrganizationRoute: AppCreateOrganizationRoute,
-  AppLocationAccessRoute: AppLocationAccessRoute,
   AppSettingsRoute: AppSettingsRoute,
 }
 
@@ -478,8 +476,10 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  CreateOrganizationRoute: CreateOrganizationRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   HealthRoute: HealthRoute,
+  LocationAccessRoute: LocationAccessRoute,
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,

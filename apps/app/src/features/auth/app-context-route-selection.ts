@@ -41,3 +41,15 @@ export function shouldHydrateOrganizationContext(pathname: string) {
 export function shouldBypassAuthenticatedAppShell(pathname: string) {
   return pathname === "/create-organization" || pathname === "/location-access";
 }
+
+export function shouldBypassAuthenticatedAppShellForRouteMatches(
+  routeMatches: readonly { readonly routeId: string }[] | undefined
+) {
+  return (
+    routeMatches?.some(
+      (match) =>
+        match.routeId === "/create-organization" ||
+        match.routeId === "/location-access"
+    ) ?? false
+  );
+}
