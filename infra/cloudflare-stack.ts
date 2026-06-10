@@ -44,12 +44,81 @@ export interface CloudflareStackInput {
   readonly hyperdrive: Cloudflare.Hyperdrive;
 }
 
-const alchemyLocalProxyPort = 1337;
+type LocalWorkerName = "agent" | "api" | "app" | "mcp" | "sync";
+type LocalWorkerOrigins = Record<LocalWorkerName, string>;
 
-export function makeAlchemyLocalWorkerOrigin(
-  worker: "agent" | "api" | "app" | "mcp" | "sync"
+const localWorkerOriginEnvKeys = {
+  agent: "CEIRD_LOCAL_AGENT_ORIGIN",
+  api: "CEIRD_LOCAL_API_ORIGIN",
+  app: "CEIRD_LOCAL_APP_ORIGIN",
+  mcp: "CEIRD_LOCAL_MCP_ORIGIN",
+  sync: "CEIRD_LOCAL_SYNC_ORIGIN",
+} as const satisfies Record<LocalWorkerName, string>;
+
+const portlessLocalBaseName = "ceird";
+const portlessLocalTld = "localhost";
+
+export function makePortlessLocalServiceName(input: {
+  readonly stage: string;
+  readonly worker: LocalWorkerName;
+}) {
+  const identity = makeAlchemyStageIdentity({ stage: input.stage });
+  return `${input.worker}.${identity.stageSlug}.${portlessLocalBaseName}`;
+}
+
+export function makePortlessLocalWorkerOrigin(input: {
+  readonly stage: string;
+  readonly worker: LocalWorkerName;
+}) {
+  return `https://${makePortlessLocalServiceName(input)}.${portlessLocalTld}`;
+}
+
+function readLocalWorkerOriginOverride(
+  env: Record<string, string | undefined>,
+  key: string
 ) {
-  return `http://${worker}.localhost:${alchemyLocalProxyPort}`;
+  const value = env[key];
+
+  if (value === undefined || value.length === 0) {
+    return;
+  }
+
+  if (!URL.canParse(value)) {
+    throw new Error(`${key} must be an absolute HTTP(S) origin.`);
+  }
+
+  const url = new URL(value);
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`${key} must use http or https.`);
+  }
+
+  return url.origin;
+}
+
+export function makeLocalWorkerOrigins(input: {
+  readonly env?: Record<string, string | undefined>;
+  readonly stage: string;
+}): LocalWorkerOrigins {
+  const env = input.env ?? process.env;
+
+  return {
+    agent:
+      readLocalWorkerOriginOverride(env, localWorkerOriginEnvKeys.agent) ??
+      makePortlessLocalWorkerOrigin({ stage: input.stage, worker: "agent" }),
+    api:
+      readLocalWorkerOriginOverride(env, localWorkerOriginEnvKeys.api) ??
+      makePortlessLocalWorkerOrigin({ stage: input.stage, worker: "api" }),
+    app:
+      readLocalWorkerOriginOverride(env, localWorkerOriginEnvKeys.app) ??
+      makePortlessLocalWorkerOrigin({ stage: input.stage, worker: "app" }),
+    mcp:
+      readLocalWorkerOriginOverride(env, localWorkerOriginEnvKeys.mcp) ??
+      makePortlessLocalWorkerOrigin({ stage: input.stage, worker: "mcp" }),
+    sync:
+      readLocalWorkerOriginOverride(env, localWorkerOriginEnvKeys.sync) ??
+      makePortlessLocalWorkerOrigin({ stage: input.stage, worker: "sync" }),
+  };
 }
 
 export function makeCloudflareWorkerOrigin(input: {
@@ -216,13 +285,9 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     electricStorageCredentials =
       yield* readConfiguredElectricStorageCredentials(input.config);
   }
-  const localOrigins = {
-    agent: makeAlchemyLocalWorkerOrigin("agent"),
-    api: makeAlchemyLocalWorkerOrigin("api"),
-    app: makeAlchemyLocalWorkerOrigin("app"),
-    mcp: makeAlchemyLocalWorkerOrigin("mcp"),
-    sync: makeAlchemyLocalWorkerOrigin("sync"),
-  };
+  const localOrigins = makeLocalWorkerOrigins({
+    stage: input.config.stage,
+  });
   yield* Effect.annotateCurrentSpan("alchemy.localDev", localDev);
   yield* Effect.annotateCurrentSpan(
     "electricStorageProvisioned",
@@ -398,14 +463,14 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   );
 
   const app = yield* makeAppWorker({
-    agentOrigin,
-    apiOrigin,
+    agentOrigin: localDev ? localOrigins.agent : agentOrigin,
+    apiOrigin: localDev ? localOrigins.api : apiOrigin,
     config: input.config,
     hostname: input.config.appHostname,
     localDev,
     localAppOrigin: localOrigins.app,
     name: resourceName(input.config, "app"),
-    syncOrigin,
+    syncOrigin: localDev ? localOrigins.sync : syncOrigin,
   });
 
   const appOrigin = Output.all(app.domains, app.url).pipe(

@@ -145,6 +145,26 @@ test("doctor reports detached worktrees and missing required Alchemy env without
     ["stage", "env"]
   );
   assert.match(report.summary, /GOOGLE_MAPS_API_KEY/);
+  assert.deepEqual(
+    makeAlchemyDoctorReport({
+      branch: "codex/portless-local-origins",
+      envFileExists: true,
+      envFileValues: {
+        AUTH_EMAIL_FROM: "noreply@example.com",
+        GOOGLE_MAPS_API_KEY: "maps-key",
+        NEON_API_KEY: "neon-key",
+      },
+      explicitStage: undefined,
+      nodeMajor: 23,
+      packageAlchemyVersion: "2.0.0-beta.44",
+      user: "cillian",
+    }).checks.find((check) => check.name === "node"),
+    {
+      message: "Node 24 or newer is required.",
+      name: "node",
+      status: "fail",
+    }
+  );
   assert.throws(() => parseAlchemyDoctorArgs(["--stage", "--json"]), /stage/);
   assert.throws(() => parseAlchemyDoctorArgs(["--unknown"]), /Unknown option/);
 });

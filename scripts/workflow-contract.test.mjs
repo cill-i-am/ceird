@@ -166,7 +166,8 @@ test("root workflow scripts call the Alchemy CLI directly", () => {
   assert.equal(rootPackage.scripts["infra:deploy"], undefined);
   assert.equal(rootPackage.scripts["infra:destroy"], undefined);
   assert.equal(rootPackage.scripts["infra:dev"], undefined);
-  assert.equal(rootPackage.devDependencies.portless, undefined);
+  assert.equal(rootPackage.engines.node, ">=24");
+  assert.equal(rootPackage.devDependencies.portless, "^0.14.0");
 });
 
 test("Alchemy dev wrapper keeps local development to one command", async () => {
@@ -175,6 +176,12 @@ test("Alchemy dev wrapper keeps local development to one command", async () => {
     makeAlchemyNodeExecArgv,
     makeAlchemyDevEnvironment,
     makeFallbackStage,
+    makePortlessAliasCommand,
+    makePortlessLocalServiceName,
+    makePortlessOriginEnvKey,
+    makePortlessPruneFailureWarning,
+    makeDefaultPortlessLocalServiceOrigin,
+    readAlchemyLocalServiceUrlFromLine,
     normalizeAlchemyDevArgs,
     readExplicitAlchemyStageArg,
   } = await import(path.join(repoRoot, "scripts/alchemy-dev.mjs"));
@@ -244,6 +251,57 @@ test("Alchemy dev wrapper keeps local development to one command", async () => {
   assert.throws(
     () => makeFallbackStage({ branch: "", user: "cillian" }),
     /detached worktree/
+  );
+  assert.equal(
+    makePortlessLocalServiceName("app", "codex/Portless Local Origins"),
+    "app.codex-portless-local-origins.ceird"
+  );
+  assert.equal(
+    makeDefaultPortlessLocalServiceOrigin(
+      "app",
+      "codex/Portless Local Origins"
+    ),
+    "https://app.codex-portless-local-origins.ceird.localhost"
+  );
+  assert.equal(makePortlessOriginEnvKey("app"), "CEIRD_LOCAL_APP_ORIGIN");
+  assert.deepEqual(
+    readAlchemyLocalServiceUrlFromLine("  app: http://localhost:1342/"),
+    {
+      port: "1342",
+      service: "app",
+      targetOrigin: "http://localhost:1342",
+    }
+  );
+  assert.deepEqual(
+    readAlchemyLocalServiceUrlFromLine("  api: 'http://localhost:1348/',"),
+    {
+      port: "1348",
+      service: "api",
+      targetOrigin: "http://localhost:1348",
+    }
+  );
+  assert.deepEqual(
+    makePortlessAliasCommand({
+      portlessBin: "portless",
+      service: "app",
+      stage: "codex-portless-local-origins",
+      targetPort: "1342",
+    }),
+    [
+      "portless",
+      "alias",
+      "app.codex-portless-local-origins.ceird",
+      "1342",
+      "--force",
+    ]
+  );
+  assert.equal(
+    makePortlessPruneFailureWarning({
+      stderr: "Error: No command provided.",
+      stdout: "",
+      status: 1,
+    }),
+    "[ceird dev] Installed Portless does not support prune; stage aliases will still be overwritten with --force after Alchemy starts."
   );
   assert.deepEqual(
     makeAlchemyDevEnvironment({

@@ -1,4 +1,5 @@
 import { readConfiguredServerApiOrigin } from "./api-origin.server";
+import { isLocalAppBrowserOrigin } from "./app-service-origin";
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -13,9 +14,7 @@ const HOP_BY_HOP_HEADERS = new Set([
 ]);
 
 export function canProxyLocalAppApiRequest(requestUrl: URL) {
-  return (
-    requestUrl.protocol === "http:" && requestUrl.hostname === "app.localhost"
-  );
+  return isLocalAppBrowserOrigin(requestUrl);
 }
 
 function readHeaderHostUrl(host: string | null) {
@@ -142,9 +141,12 @@ export async function proxyLocalAppApiRequest(
   const requestUrl = new URL(request.url);
 
   if (!canProxyLocalAppApiRequestFromRequest(request)) {
-    return new Response("Local API proxy is only available on app.localhost.", {
-      status: 404,
-    });
+    return new Response(
+      "Local API proxy is only available on stage-scoped local app hosts.",
+      {
+        status: 404,
+      }
+    );
   }
 
   const apiOrigin = options.apiOrigin ?? readConfiguredServerApiOrigin();

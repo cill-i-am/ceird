@@ -1,7 +1,7 @@
 import { proxyLocalAppApiRequest } from "./local-api-proxy";
 
 describe("local API proxy", () => {
-  it("proxies app.localhost API requests to the configured API origin", async () => {
+  it("proxies stage-scoped Portless app API requests to the configured API origin", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
       Response.json(
         { ok: true },
@@ -14,16 +14,19 @@ describe("local API proxy", () => {
     );
 
     const response = await proxyLocalAppApiRequest(
-      new Request("http://app.localhost:1337/api/auth/sign-in/email?x=1", {
-        body: JSON.stringify({ email: "user@example.com" }),
-        headers: {
-          "content-type": "application/json",
-          cookie: "better-auth.session_token=existing",
-        },
-        method: "POST",
-      }),
+      new Request(
+        "https://app.codex-portless.ceird.localhost/api/auth/sign-in/email?x=1",
+        {
+          body: JSON.stringify({ email: "user@example.com" }),
+          headers: {
+            "content-type": "application/json",
+            cookie: "better-auth.session_token=existing",
+          },
+          method: "POST",
+        }
+      ),
       {
-        apiOrigin: "http://api.localhost:1337",
+        apiOrigin: "https://api.codex-portless.ceird.localhost",
         fetch,
       }
     );
@@ -31,15 +34,15 @@ describe("local API proxy", () => {
     expect(fetch).toHaveBeenCalledOnce();
     const forwardedRequest = fetch.mock.calls[0]?.[0] as Request;
     expect(forwardedRequest.url).toBe(
-      "http://api.localhost:1337/api/auth/sign-in/email?x=1"
+      "https://api.codex-portless.ceird.localhost/api/auth/sign-in/email?x=1"
     );
     expect(forwardedRequest.headers.get("origin")).toBe(
-      "http://app.localhost:1337"
+      "https://app.codex-portless.ceird.localhost"
     );
     expect(forwardedRequest.headers.get("x-forwarded-host")).toBe(
-      "api.localhost:1337"
+      "api.codex-portless.ceird.localhost"
     );
-    expect(forwardedRequest.headers.get("x-forwarded-proto")).toBe("http");
+    expect(forwardedRequest.headers.get("x-forwarded-proto")).toBe("https");
     expect(forwardedRequest.headers.get("cookie")).toBe(
       "better-auth.session_token=existing"
     );
@@ -56,19 +59,22 @@ describe("local API proxy", () => {
     await proxyLocalAppApiRequest(
       new Request("http://internal.local/api/jobs", {
         headers: {
-          host: "app.localhost:1337",
+          host: "app.codex-portless.ceird.localhost",
+          "x-forwarded-proto": "https",
         },
       }),
       {
-        apiOrigin: "http://api.localhost:1337",
+        apiOrigin: "https://api.codex-portless.ceird.localhost",
         fetch,
       }
     );
 
     const forwardedRequest = fetch.mock.calls[0]?.[0] as Request;
-    expect(forwardedRequest.url).toBe("http://api.localhost:1337/jobs");
+    expect(forwardedRequest.url).toBe(
+      "https://api.codex-portless.ceird.localhost/jobs"
+    );
     expect(forwardedRequest.headers.get("origin")).toBe(
-      "http://app.localhost:1337"
+      "https://app.codex-portless.ceird.localhost"
     );
   });
 
@@ -78,16 +84,18 @@ describe("local API proxy", () => {
       .mockResolvedValue(Response.json({ items: [] }));
 
     await proxyLocalAppApiRequest(
-      new Request("http://app.localhost:1337/api/jobs?limit=25"),
+      new Request(
+        "https://app.codex-portless.ceird.localhost/api/jobs?limit=25"
+      ),
       {
-        apiOrigin: "http://api.localhost:1337",
+        apiOrigin: "https://api.codex-portless.ceird.localhost",
         fetch,
       }
     );
 
     const forwardedRequest = fetch.mock.calls[0]?.[0] as Request;
     expect(forwardedRequest.url).toBe(
-      "http://api.localhost:1337/jobs?limit=25"
+      "https://api.codex-portless.ceird.localhost/jobs?limit=25"
     );
   });
 
@@ -97,18 +105,20 @@ describe("local API proxy", () => {
       .mockResolvedValue(Response.json(null));
 
     await proxyLocalAppApiRequest(
-      new Request("http://app.localhost:1337/api/auth/get-session"),
+      new Request(
+        "https://app.codex-portless.ceird.localhost/api/auth/get-session"
+      ),
       {
-        apiOrigin: "http://api.localhost:1337",
+        apiOrigin: "https://api.codex-portless.ceird.localhost",
         fetch,
       }
     );
     await proxyLocalAppApiRequest(
       new Request(
-        "http://app.localhost:1337/api/public/invitations/inv_123/preview"
+        "https://app.codex-portless.ceird.localhost/api/public/invitations/inv_123/preview"
       ),
       {
-        apiOrigin: "http://api.localhost:1337",
+        apiOrigin: "https://api.codex-portless.ceird.localhost",
         fetch,
       }
     );
@@ -119,10 +129,10 @@ describe("local API proxy", () => {
     expect(sessionRequest).toBeInstanceOf(Request);
     expect(previewRequest).toBeInstanceOf(Request);
     expect((sessionRequest as Request).url).toBe(
-      "http://api.localhost:1337/api/auth/get-session"
+      "https://api.codex-portless.ceird.localhost/api/auth/get-session"
     );
     expect((previewRequest as Request).url).toBe(
-      "http://api.localhost:1337/api/public/invitations/inv_123/preview"
+      "https://api.codex-portless.ceird.localhost/api/public/invitations/inv_123/preview"
     );
   });
 
@@ -132,6 +142,20 @@ describe("local API proxy", () => {
       new Request("https://app.ceird.example.com/api/auth/get-session"),
       {
         apiOrigin: "https://api.ceird.example.com",
+        fetch,
+      }
+    );
+
+    expect(response.status).toBe(404);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not expose the proxy on local app hosts without a stage", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const response = await proxyLocalAppApiRequest(
+      new Request("https://app.ceird.localhost/api/auth/get-session"),
+      {
+        apiOrigin: "https://api.ceird.localhost",
         fetch,
       }
     );

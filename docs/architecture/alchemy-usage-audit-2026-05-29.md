@@ -175,13 +175,15 @@ bindings. This keeps database access out of public adapters, which is the right
 Cloudflare/Alchemy boundary for this app.
 
 Local dev now uses Alchemy's dev context explicitly. `infra/cloudflare-stack.ts`
-derives local Worker origins like `http://app.localhost:1337`, passes those
-origins into app-owned Worker env, skips tenant routing and the auth email queue
-consumer locally, keeps the Domain `DATABASE` Hyperdrive binding through the
-native beta.52 local provider path, and omits only the deployed-only
-email/queue/analytics bindings that local workerd cannot provide. That is a
-good example of using Alchemy's dev mode as a first-class control plane input
-instead of creating a parallel local stack.
+derives stage-scoped local browser origins such as
+`https://app.codex-my-task.ceird.localhost`, passes those origins into
+app-owned Worker env, skips tenant routing and the auth email queue consumer
+locally, keeps the Domain `DATABASE` Hyperdrive binding through the native
+beta.52 local provider path, and omits only the deployed-only
+email/queue/analytics bindings that local workerd cannot provide. Alchemy still
+owns the actual Workerd ports; `scripts/alchemy-dev.mjs` bridges those ports to
+Portless static aliases. That is a good example of using Alchemy's dev mode as
+a first-class control plane input instead of creating a parallel local stack.
 
 ### Runtime database usage
 

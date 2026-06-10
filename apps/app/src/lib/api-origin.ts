@@ -1,4 +1,9 @@
-import { mapAppOriginToServiceOrigin, toURL } from "./app-service-origin";
+import {
+  isLocalAppBrowserOrigin,
+  isMatchingMappedServiceOrigin,
+  mapAppOriginToServiceOrigin,
+  toURL,
+} from "./app-service-origin";
 
 const LOCAL_API_PORT = "3001";
 
@@ -35,12 +40,9 @@ function shouldUseLocalAppApiProxy(
   configuredUrl: URL | undefined
 ) {
   return (
-    origin.protocol === "http:" &&
-    origin.hostname === "app.localhost" &&
+    isLocalAppBrowserOrigin(origin) &&
     (configuredUrl === undefined ||
-      (configuredUrl.protocol === "http:" &&
-        configuredUrl.hostname === "api.localhost" &&
-        configuredUrl.port === origin.port))
+      isMatchingMappedServiceOrigin(origin, configuredUrl, "api"))
   );
 }
 

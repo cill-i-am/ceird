@@ -83,9 +83,10 @@ import {
 } from "./cloudflare-r2.ts";
 import type { makeCloudflareStack } from "./cloudflare-stack.ts";
 import {
-  makeAlchemyLocalWorkerOrigin,
   makeCloudflareHyperdriveProps,
   makeDurableObjectLocationHintForNeonRegion,
+  makeLocalWorkerOrigins,
+  makePortlessLocalWorkerOrigin,
   makeTenantReservedHostBypassRoutePatterns,
   makeCloudflareWorkerOrigin,
   redactInput,
@@ -1115,9 +1116,9 @@ describe("Cloudflare stack", () => {
         domains: [{ hostname: "api.stage.example.com" }],
         fallbackHostname: "api.example.com",
         localDev: true,
-        localUrl: "http://api.localhost:1337",
+        localUrl: "http://localhost:1340",
       })
-    ).toBe("http://api.localhost:1337");
+    ).toBe("http://localhost:1340");
     expect(
       makeCloudflareWorkerOrigin({
         domains: [{ hostname: "api.stage.example.com" }],
@@ -1155,6 +1156,23 @@ describe("Cloudflare stack", () => {
         "app.example.com,api.example.com,agent.example.com,mcp.example.com,sync.example.com",
       VITE_TENANT_STAGE_ALIAS: "main",
     });
+  });
+
+  it("derives stage-scoped Portless local Worker origins", () => {
+    expect(
+      makePortlessLocalWorkerOrigin({
+        stage: "codex/Portless Local Origins",
+        worker: "app",
+      })
+    ).toBe("https://app.codex-portless-local-origins.ceird.localhost");
+    expect(
+      makeLocalWorkerOrigins({
+        env: {
+          CEIRD_LOCAL_APP_ORIGIN: "http://app.custom.ceird.localhost:1355",
+        },
+        stage: "codex-portless-local-origins",
+      }).app
+    ).toBe("http://app.custom.ceird.localhost:1355");
   });
 
   it("declares private domain and public adapter Worker env bindings", () => {
@@ -1469,13 +1487,9 @@ describe("Cloudflare stack", () => {
     const aiGateway = {
       gatewayId: "ceird-main-agent-ai",
     } as unknown as Cloudflare.AiGateway;
-    const localOrigins = {
-      agent: makeAlchemyLocalWorkerOrigin("agent"),
-      api: makeAlchemyLocalWorkerOrigin("api"),
-      app: makeAlchemyLocalWorkerOrigin("app"),
-      mcp: makeAlchemyLocalWorkerOrigin("mcp"),
-      sync: makeAlchemyLocalWorkerOrigin("sync"),
-    };
+    const localOrigins = makeLocalWorkerOrigins({
+      stage: "codex-portless-local-origins",
+    });
 
     const domainResourceEnv = makeDomainWorkerResourceEnv({
       analytics: workerAnalytics,
@@ -1577,24 +1591,26 @@ describe("Cloudflare stack", () => {
       "false"
     );
     expect(domainWorkerProps.env.AUTH_APP_ORIGIN).toBe(
-      "http://app.localhost:1337"
+      "https://app.codex-portless-local-origins.ceird.localhost"
     );
     expect(domainWorkerProps.env.AUTH_COOKIE_DOMAIN).toBeUndefined();
     expect(domainWorkerProps.env.AUTH_TRUSTED_ORIGINS).toBe(
-      "http://app.localhost:1337"
+      "https://app.codex-portless-local-origins.ceird.localhost"
     );
     expect(domainWorkerProps.env.BETTER_AUTH_BASE_URL).toBe(
-      "http://api.localhost:1337/api/auth"
+      "https://api.codex-portless-local-origins.ceird.localhost/api/auth"
     );
     expect(domainWorkerProps.env.MCP_RESOURCE_URL).toBe(
-      "http://mcp.localhost:1337/mcp"
+      "https://mcp.codex-portless-local-origins.ceird.localhost/mcp"
     );
     expect(agentWorkerProps.env).toMatchObject({
       AGENT_AI_GATEWAY_ID: aiGateway.gatewayId,
       AGENT_INTERNAL_SECRET: expect.any(Object),
       AGENT_MUTATION_TOOLS_ENABLED: "true",
-      AUTH_APP_ORIGIN: "http://app.localhost:1337",
-      AUTH_TRUSTED_ORIGINS: "http://app.localhost:1337",
+      AUTH_APP_ORIGIN:
+        "https://app.codex-portless-local-origins.ceird.localhost",
+      AUTH_TRUSTED_ORIGINS:
+        "https://app.codex-portless-local-origins.ceird.localhost",
       CEIRD_LOCAL_DEV: "true",
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
       NODE_ENV: "production",
@@ -1605,19 +1621,25 @@ describe("Cloudflare stack", () => {
       className: "CeirdAgent",
     });
     expect(appEnv).toStrictEqual({
-      AGENT_ORIGIN: "http://agent.localhost:1337",
-      API_ORIGIN: "http://api.localhost:1337",
+      AGENT_ORIGIN:
+        "https://agent.codex-portless-local-origins.ceird.localhost",
+      API_ORIGIN: "https://api.codex-portless-local-origins.ceird.localhost",
       CEIRD_CLOUDFLARE: "1",
       CEIRD_LOCAL_DEV: "true",
-      SYNC_ORIGIN: "http://sync.localhost:1337",
-      SYSTEM_APP_ORIGIN: "http://app.localhost:1337",
+      SYNC_ORIGIN: "https://sync.codex-portless-local-origins.ceird.localhost",
+      SYSTEM_APP_ORIGIN:
+        "https://app.codex-portless-local-origins.ceird.localhost",
       TENANT_BASE_DOMAIN: "example.com",
       TENANT_HOST_MODE: "disabled",
       TENANT_RESERVED_HOSTNAMES: "",
-      VITE_AGENT_ORIGIN: "http://agent.localhost:1337",
-      VITE_API_ORIGIN: "http://api.localhost:1337",
-      VITE_SYNC_ORIGIN: "http://sync.localhost:1337",
-      VITE_SYSTEM_APP_ORIGIN: "http://app.localhost:1337",
+      VITE_AGENT_ORIGIN:
+        "https://agent.codex-portless-local-origins.ceird.localhost",
+      VITE_API_ORIGIN:
+        "https://api.codex-portless-local-origins.ceird.localhost",
+      VITE_SYNC_ORIGIN:
+        "https://sync.codex-portless-local-origins.ceird.localhost",
+      VITE_SYSTEM_APP_ORIGIN:
+        "https://app.codex-portless-local-origins.ceird.localhost",
       VITE_TENANT_BASE_DOMAIN: "example.com",
       VITE_TENANT_HOST_MODE: "disabled",
       VITE_TENANT_RESERVED_HOSTNAMES: "",

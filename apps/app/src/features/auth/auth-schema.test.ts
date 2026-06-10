@@ -182,19 +182,22 @@ describe("auth base URL resolution", () => {
     );
   }, 1000);
 
-  it("maps the local app origin to the matching local API auth origin", () => {
-    expect(resolveAuthBaseURL("http://app.localhost:1337")).toBe(
-      "http://api.localhost:1337/api/auth"
-    );
+  it("maps the stage-scoped Portless app origin to the matching local API auth origin", () => {
+    expect(
+      resolveAuthBaseURL("https://app.codex-portless.ceird.localhost")
+    ).toBe("https://api.codex-portless.ceird.localhost/api/auth");
+    expect(
+      resolveAuthBaseURL("http://app.codex-portless.ceird.localhost:1355")
+    ).toBe("http://api.codex-portless.ceird.localhost:1355/api/auth");
   }, 1000);
 
-  it("keeps browser auth same-origin for local Alchemy app hosts", () => {
+  it("keeps browser auth same-origin for stage-scoped Portless app hosts", () => {
     expect(
       resolveBrowserAuthBaseURL(
-        "http://app.localhost:1337",
-        "http://api.localhost:1337"
+        "https://app.codex-portless.ceird.localhost",
+        "https://api.codex-portless.ceird.localhost"
       )
-    ).toBe("http://app.localhost:1337/api/auth");
+    ).toBe("https://app.codex-portless.ceird.localhost/api/auth");
   }, 1000);
 
   it("returns undefined when no origin is available", () => {

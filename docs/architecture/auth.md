@@ -837,16 +837,18 @@ The app resolves its auth base URL in two steps:
 - otherwise rewrite the current app origin to the matching API origin in the
   narrow fallback cases below
 
-The fallback host-rewrite behavior is intentionally limited to local and legacy
-localhost-alias development.
+The fallback host-rewrite behavior is intentionally limited to local and
+stage-scoped localhost development.
 
-Local Alchemy stages run the app and API on sibling hosts such as
-`app.localhost:1337` and `api.localhost:1337`. Browser auth and product API
-traffic uses the app-owned local proxy at `app.localhost:<port>/api` when the
-configured API origin is the matching `api.localhost:<port>` origin. The proxy is
-local-only, accepts only `app.localhost` callers, preserves Better Auth and
-public auth paths under `/api/auth` and `/api/public`, and strips the app-local
-`/api` prefix for product API calls such as `/api/jobs -> /jobs`.
+Local Alchemy stages use Portless sibling hosts such as
+`https://app.codex-my-task.ceird.localhost` and
+`https://api.codex-my-task.ceird.localhost`. Browser auth and product API
+traffic uses the app-owned local proxy at
+`https://app.<stage>.ceird.localhost/api` when the configured API origin is the
+matching `api.<stage>.ceird.localhost` origin. The proxy is local-only, accepts
+only `app.<stage>.ceird.localhost` callers, preserves Better Auth and public
+auth paths under `/api/auth` and `/api/public`, and strips the app-local `/api`
+prefix for product API calls such as `/api/jobs -> /jobs`.
 
 This keeps local browser traffic same-origin with the app so Better Auth session
 cookies are retained by the browser. Server-side app helpers continue to call the
@@ -885,7 +887,7 @@ Current mappings:
 
 - injected `API_ORIGIN` or `VITE_API_ORIGIN` wins when present
 - conventional `app.<domain>` origins map to matching `api.<domain>` origins
-- `app.localhost` maps to `api.localhost`
+- `app.<stage>.ceird.localhost` maps to `api.<stage>.ceird.localhost`
 - `localhost:3000` or `127.0.0.1:3000` -> port `3001`
 - `localhost:4173` or `127.0.0.1:4173` -> port `3001`
 

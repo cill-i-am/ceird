@@ -72,13 +72,13 @@ export function makeAlchemyDoctorReport(input) {
           "fail",
           `Missing required environment values: ${missingEnv.join(", ")}.`
         ),
-    input.nodeMajor >= 22
+    input.nodeMajor >= 24
       ? check(
           "node",
           "pass",
           `Node ${input.nodeMajor} satisfies the repo engine.`
         )
-      : check("node", "fail", "Node 22 or newer is required."),
+      : check("node", "fail", "Node 24 or newer is required."),
     input.packageAlchemyVersion === "2.0.0-beta.44"
       ? check("alchemy", "pass", "Alchemy package matches the audited beta.")
       : check(

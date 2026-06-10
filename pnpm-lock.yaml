@@ -79,6 +79,9 @@ importers:
       oxlint:
         specifier: ^1.62.0
         version: 1.62.0
+      portless:
+        specifier: ^0.14.0
+        version: 0.14.0
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -114,7 +117,7 @@ importers:
         version: 0.7.1(@ai-sdk/react@3.0.187(react@19.2.7)(zod@4.4.3))(agents@0.13.2)(ai@6.0.185(zod@4.4.3))(react@19.2.7)(zod@4.4.3)
       agents:
         specifier: 0.13.2
-        version: 0.13.2(patch_hash=nb526rhsyrlakzxxhp4rnyoozy)(@babel/core@7.29.0)(@babel/runtime@7.29.2)(@cloudflare/ai-chat@0.7.1)(@cloudflare/workers-types@4.20260501.1)(ai@6.0.185(zod@4.4.3))(react@19.2.7)(rolldown@1.0.1)(vite@7.3.2(@types/node@25.6.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0))(zod@4.4.3)
+        version: 0.13.2(patch_hash=nb526rhsyrlakzxxhp4rnyoozy)(@babel/core@7.29.0)(@babel/runtime@7.29.2)(@cloudflare/ai-chat@0.7.1)(@cloudflare/workers-types@4.20260501.1)(ai@6.0.185(zod@4.4.3))(react@19.2.7)(rolldown@1.0.1)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))(zod@4.4.3)
       ai:
         specifier: 6.0.185
         version: 6.0.185(zod@4.4.3)
@@ -5908,6 +5911,12 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  portless@0.14.0:
+    resolution: {integrity: sha512-kKxmxB1DQ9gI8t+V13VhuwTXu31io5nbFubvZAE82AxzXBsvcJV7qQJbmomrQUpbVxo2UVHqs14iX4YK0BClmQ==}
+    engines: {node: '>=24'}
+    os: [darwin, linux, win32]
+    hasBin: true
+
   postcss-selector-parser@6.0.10:
     resolution: {integrity: sha512-IQ7TZdoaqbT+LCpShg46jnZVlhWD2w6iQYAcYXfHARZ7X1t/UGhhceQDs5X0cGqKvYlHNOuv7Oa1xmb0oQuA3w==}
     engines: {node: '>=4'}
@@ -7652,7 +7661,7 @@ snapshots:
   '@cloudflare/ai-chat@0.7.1(@ai-sdk/react@3.0.187(react@19.2.7)(zod@4.4.3))(agents@0.13.2)(ai@6.0.185(zod@4.4.3))(react@19.2.7)(zod@4.4.3)':
     dependencies:
       '@ai-sdk/react': 3.0.187(react@19.2.7)(zod@4.4.3)
-      agents: 0.13.2(patch_hash=nb526rhsyrlakzxxhp4rnyoozy)(@babel/core@7.29.0)(@babel/runtime@7.29.2)(@cloudflare/ai-chat@0.7.1)(@cloudflare/workers-types@4.20260501.1)(ai@6.0.185(zod@4.4.3))(react@19.2.7)(rolldown@1.0.1)(vite@7.3.2(@types/node@25.6.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0))(zod@4.4.3)
+      agents: 0.13.2(patch_hash=nb526rhsyrlakzxxhp4rnyoozy)(@babel/core@7.29.0)(@babel/runtime@7.29.2)(@cloudflare/ai-chat@0.7.1)(@cloudflare/workers-types@4.20260501.1)(ai@6.0.185(zod@4.4.3))(react@19.2.7)(rolldown@1.0.1)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))(zod@4.4.3)
       ai: 6.0.185(zod@4.4.3)
       nanoid: 5.1.11
       react: 19.2.7
@@ -9036,15 +9045,6 @@ snapshots:
   '@rolldown/binding-win32-x64-msvc@1.0.1':
     optional: true
 
-  '@rolldown/plugin-babel@0.2.3(@babel/core@7.29.0)(@babel/runtime@7.29.2)(rolldown@1.0.1)(vite@7.3.2(@types/node@25.6.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0))':
-    dependencies:
-      '@babel/core': 7.29.0
-      picomatch: 4.0.4
-      rolldown: 1.0.1
-    optionalDependencies:
-      '@babel/runtime': 7.29.2
-      vite: 7.3.2(@types/node@25.6.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0)
-
   '@rolldown/plugin-babel@0.2.3(@babel/core@7.29.0)(@babel/runtime@7.29.2)(rolldown@1.0.1)(vite@8.0.10(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))':
     dependencies:
       '@babel/core': 7.29.0
@@ -9053,6 +9053,15 @@ snapshots:
     optionalDependencies:
       '@babel/runtime': 7.29.2
       vite: 8.0.10(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0)
+
+  '@rolldown/plugin-babel@0.2.3(@babel/core@7.29.0)(@babel/runtime@7.29.2)(rolldown@1.0.1)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))':
+    dependencies:
+      '@babel/core': 7.29.0
+      picomatch: 4.0.4
+      rolldown: 1.0.1
+    optionalDependencies:
+      '@babel/runtime': 7.29.2
+      vite: 8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0)
 
   '@rolldown/pluginutils@1.0.0-beta.40': {}
 
@@ -10048,12 +10057,12 @@ snapshots:
       - rolldown
       - supports-color
 
-  agents@0.13.2(patch_hash=nb526rhsyrlakzxxhp4rnyoozy)(@babel/core@7.29.0)(@babel/runtime@7.29.2)(@cloudflare/ai-chat@0.7.1)(@cloudflare/workers-types@4.20260501.1)(ai@6.0.185(zod@4.4.3))(react@19.2.7)(rolldown@1.0.1)(vite@7.3.2(@types/node@25.6.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0))(zod@4.4.3):
+  agents@0.13.2(patch_hash=nb526rhsyrlakzxxhp4rnyoozy)(@babel/core@7.29.0)(@babel/runtime@7.29.2)(@cloudflare/ai-chat@0.7.1)(@cloudflare/workers-types@4.20260501.1)(ai@6.0.185(zod@4.4.3))(react@19.2.7)(rolldown@1.0.1)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))(zod@4.4.3):
     dependencies:
       '@babel/plugin-proposal-decorators': 7.29.0(@babel/core@7.29.0)
       '@cfworker/json-schema': 4.1.1
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
-      '@rolldown/plugin-babel': 0.2.3(@babel/core@7.29.0)(@babel/runtime@7.29.2)(rolldown@1.0.1)(vite@7.3.2(@types/node@25.6.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0))
+      '@rolldown/plugin-babel': 0.2.3(@babel/core@7.29.0)(@babel/runtime@7.29.2)(rolldown@1.0.1)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
       ai: 6.0.185(zod@4.4.3)
       cron-schedule: 6.0.0
       mimetext: 3.0.28
@@ -10065,7 +10074,7 @@ snapshots:
       zod: 4.4.3
     optionalDependencies:
       '@cloudflare/ai-chat': 0.7.1(@ai-sdk/react@3.0.187(react@19.2.7)(zod@4.4.3))(agents@0.13.2)(ai@6.0.185(zod@4.4.3))(react@19.2.7)(zod@4.4.3)
-      vite: 7.3.2(@types/node@25.6.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0)
+      vite: 8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0)
     transitivePeerDependencies:
       - '@babel/core'
       - '@babel/plugin-transform-runtime'
@@ -12232,6 +12241,8 @@ snapshots:
       playwright-core: 1.59.1
     optionalDependencies:
       fsevents: 2.3.2
+
+  portless@0.14.0: {}
 
   postcss-selector-parser@6.0.10:
     dependencies:

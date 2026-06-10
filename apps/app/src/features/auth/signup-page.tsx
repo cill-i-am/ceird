@@ -68,7 +68,21 @@ export function SignupPage({
         callbackURL: buildEmailVerificationRedirectTo(window.location.origin),
         ...makeAuthCaptchaFetchOptions(captchaToken),
       };
-      const result = await authClient.signUp.email(payload);
+      let result: Awaited<ReturnType<typeof authClient.signUp.email>>;
+
+      try {
+        result = await authClient.signUp.email(payload);
+      } catch (error) {
+        setCaptchaResetKey((currentValue) => currentValue + 1);
+        formApi.setErrorMap({
+          onSubmit: {
+            form: getAuthFailureMessage("signUp", error),
+            fields: {},
+          },
+        });
+
+        return;
+      }
 
       if (result.error) {
         setCaptchaResetKey((currentValue) => currentValue + 1);
