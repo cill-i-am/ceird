@@ -53,8 +53,9 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 
 In local dev, Alchemy remains the source of truth for stages, cloud resources,
 service bindings, Neon branches, and the actual Workerd loopback ports.
-Portless is only the browser-facing origin layer. The root wrapper starts or
-uses the local Portless proxy, asks Portless for the public URL shape with
+Portless is only the browser-facing origin layer. The root wrapper uses the
+root `portless` dev dependency to start or reach the local proxy, asks Portless
+for the public URL shape with
 `portless get --no-worktree`, injects those origins into the local Worker env,
 and registers static aliases after Alchemy prints the real local Worker ports.
 For stage `codex-my-task`, the default browser URLs are:
@@ -65,11 +66,11 @@ For stage `codex-my-task`, the default browser URLs are:
 - `https://mcp.codex-my-task.ceird.localhost`
 - `https://sync.codex-my-task.ceird.localhost`
 
-Portless is a global or otherwise externally installed local tool, not a root
-dev dependency, because current published Portless releases require Node.js 24+
-while this repo supports Node.js 22+. If Portless is unavailable, the wrapper
-prints a warning and Alchemy can still run for raw loopback debugging, but local
-browser auth is supported through the stage-scoped Portless app URL.
+The repo requires Node.js 24+ so the current Portless package can be installed
+with the rest of the workspace. If dependencies are missing or Portless is
+disabled with `PORTLESS=0`, the wrapper prints a warning and Alchemy can still
+run for raw loopback debugging, but local browser auth is supported through the
+stage-scoped Portless app URL.
 The wrapper keeps Alchemy's confirmation prompt enabled by default. Use
 `pnpm dev -- --stage <stage> --yes` only for an intentional non-interactive run
 against a known stage.

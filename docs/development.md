@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 22 or newer.
+- Node.js 24 or newer.
 - pnpm 9.15.9, as declared by `packageManager` in `package.json`.
 - Cloudflare and Neon credentials for Alchemy-managed stages.
 - jq.
@@ -47,9 +47,10 @@ stage-scoped. For stage `codex-my-task`, use:
 - `https://mcp.codex-my-task.ceird.localhost`
 - `https://sync.codex-my-task.ceird.localhost`
 
-If Portless is missing or `PORTLESS=0` is set, Alchemy still starts for raw
-debugging, but browser auth and cookies are only supported through the
-stage-scoped Portless app URL.
+Portless is installed as a root dev dependency. If dependencies are not
+installed or `PORTLESS=0` is set, Alchemy still starts for raw debugging, but
+browser auth and cookies are only supported through the stage-scoped Portless
+app URL.
 The wrapper keeps Alchemy's confirmation prompt enabled by default. For a
 known stage in a non-interactive workflow, pass `--yes` after the Alchemy args:
 

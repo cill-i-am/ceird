@@ -358,7 +358,7 @@ function preparePortlessDevOrigins({ baseEnv, stage }) {
 
   if (versionResult.status !== 0) {
     console.warn(
-      `[ceird dev] Portless was not found. Install it globally with Node.js 24+ for the preferred local browser URLs, or set PORTLESS=0 to acknowledge raw Alchemy debug mode. Details: ${formatCommandFailure(versionResult)}`
+      `[ceird dev] Portless was not found. Run pnpm install to install the root dev dependency, or set PORTLESS=0 to acknowledge raw Alchemy debug mode. Details: ${formatCommandFailure(versionResult)}`
     );
     return { enabled: false, env: {} };
   }
