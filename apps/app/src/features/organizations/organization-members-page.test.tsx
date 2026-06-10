@@ -554,9 +554,11 @@ describe("organization members page", () => {
       screen.findByText("pending@example.com")
     ).resolves.toBeVisible();
 
-    expect(screen.getByTestId("registered-actions")).toHaveTextContent(
-      "Invite teammate, Refresh members"
-    );
+    await waitFor(() => {
+      expect(screen.getByTestId("registered-actions")).toHaveTextContent(
+        "Invite teammate, Refresh members"
+      );
+    });
   }, 10_000);
 
   it("loads every member page and reports Better Auth's total", async () => {

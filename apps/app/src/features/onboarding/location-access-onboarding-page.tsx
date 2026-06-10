@@ -58,7 +58,7 @@ export function LocationAccessOnboardingPage({
                     : "min-h-11 px-3 text-muted-foreground sm:min-h-9"
                 )}
                 disabled={locationPreferenceSaving}
-                onClick={() => void navigate({ to: "/" })}
+                onClick={() => void navigate({ to: "/create-organization" })}
               >
                 {hasEnabledLocationAccess
                   ? "Continue to Ceird"

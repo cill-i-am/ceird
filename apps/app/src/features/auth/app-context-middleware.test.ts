@@ -6,6 +6,7 @@ import {
   organizationFunctionMiddleware,
   requiredAuthFunctionMiddleware,
   shouldBypassAuthenticatedAppShell,
+  shouldBypassAuthenticatedAppShellForRouteMatches,
   shouldHydrateAuthContext,
   shouldHydrateOrganizationContext,
 } from "./app-context-middleware";
@@ -155,6 +156,28 @@ describe("app context request middleware route selection", () => {
       expect(shouldBypassAuthenticatedAppShell(pathname)).toBeFalsy();
     }
   );
+
+  it.each(["/create-organization", "/location-access"])(
+    "bypasses the authenticated app shell for route match %s",
+    (routeId) => {
+      expect(
+        shouldBypassAuthenticatedAppShellForRouteMatches([
+          { routeId: "__root__" },
+          { routeId },
+        ])
+      ).toBeTruthy();
+    }
+  );
+
+  it("keeps the authenticated app shell for ordinary route matches", () => {
+    expect(
+      shouldBypassAuthenticatedAppShellForRouteMatches([
+        { routeId: "/_app" },
+        { routeId: "/_app/_org" },
+        { routeId: "/_app/_org/jobs" },
+      ])
+    ).toBeFalsy();
+  });
 });
 
 describe("app context request middleware payload", () => {

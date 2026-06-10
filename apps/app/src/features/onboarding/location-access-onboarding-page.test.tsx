@@ -5,7 +5,10 @@ import { LocationAccessOnboardingPage } from "./location-access-onboarding-page"
 
 const { mockedNavigate, mockedUpdateCurrentUserPreferences } = vi.hoisted(
   () => ({
-    mockedNavigate: vi.fn<(options: { readonly to: "/" }) => Promise<void>>(),
+    mockedNavigate:
+      vi.fn<
+        (options: { readonly to: "/create-organization" }) => Promise<void>
+      >(),
     mockedUpdateCurrentUserPreferences: vi.fn<
       (input: { readonly routeProximityLocationEnabled: boolean }) => Promise<{
         preferences: {
@@ -68,7 +71,9 @@ describe("location access onboarding page", () => {
 
     await user.click(screen.getByRole("button", { name: "Skip for now" }));
 
-    expect(mockedNavigate).toHaveBeenCalledWith({ to: "/" });
+    expect(mockedNavigate).toHaveBeenCalledWith({
+      to: "/create-organization",
+    });
     expect(mockedUpdateCurrentUserPreferences).not.toHaveBeenCalled();
   }, 10_000);
 
@@ -152,7 +157,9 @@ describe("location access onboarding page", () => {
 
     await user.click(screen.getByRole("button", { name: "Continue to Ceird" }));
 
-    expect(mockedNavigate).toHaveBeenCalledWith({ to: "/" });
+    expect(mockedNavigate).toHaveBeenCalledWith({
+      to: "/create-organization",
+    });
   }, 10_000);
 
   it("does not save the location preference when browser permission is denied", async () => {
