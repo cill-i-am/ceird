@@ -6,7 +6,7 @@ import type {
   CreateOrganizationNameInput,
   OrganizationId as OrganizationIdType,
 } from "@ceird/identity-core";
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 
 import {
   organizationFunctionMiddleware,
@@ -27,52 +27,32 @@ export const createCurrentServerOrganization = createServerFn({
     );
   });
 
-const getCurrentServerOrganizationSessionFn = createServerFn({
-  method: "GET",
-}).handler(async () => {
-  const { getCurrentServerOrganizationSessionDirect } =
-    await import("./organization-server-impl.server");
+export const getCurrentServerOrganizationSession = createServerOnlyFn(
+  async () => {
+    const { getCurrentServerOrganizationSessionDirect } =
+      await import("./organization-server-impl.server");
 
-  return await getCurrentServerOrganizationSessionDirect();
-});
+    return await getCurrentServerOrganizationSessionDirect();
+  }
+);
 
-export async function getCurrentServerOrganizationSession() {
-  return await getCurrentServerOrganizationSessionFn();
-}
-
-const getCurrentServerOrganizationsFn = createServerFn({
-  method: "GET",
-}).handler(async () => {
+export const getCurrentServerOrganizations = createServerOnlyFn(async () => {
   const { getCurrentServerOrganizationsDirect } =
     await import("./organization-server-impl.server");
 
   return await getCurrentServerOrganizationsDirect();
 });
 
-export async function getCurrentServerOrganizations() {
-  return await getCurrentServerOrganizationsFn();
-}
-
-const getCurrentServerOrganizationMemberRoleFn = createServerFn({
-  method: "GET",
-})
-  .inputValidator((input: unknown) => decodeOrganizationId(input))
-  .handler(async ({ data }) => {
+export const getCurrentServerOrganizationMemberRole = createServerOnlyFn(
+  async (organizationId: OrganizationIdType) => {
     const { getCurrentServerOrganizationMemberRoleDirect } =
       await import("./organization-server-impl.server");
 
     return await getCurrentServerOrganizationMemberRoleDirect(
-      decodeOrganizationId(data)
+      decodeOrganizationId(organizationId)
     );
-  });
-
-export async function getCurrentServerOrganizationMemberRole(
-  organizationId: OrganizationIdType
-) {
-  return await getCurrentServerOrganizationMemberRoleFn({
-    data: organizationId,
-  });
-}
+  }
+);
 
 const setCurrentServerActiveOrganizationFn = createServerFn({
   method: "POST",

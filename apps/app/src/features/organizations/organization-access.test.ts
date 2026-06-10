@@ -1145,6 +1145,26 @@ describe("organization access helpers", () => {
     expect(mockedGetStrictServerOrganizations).not.toHaveBeenCalled();
   }, 1000);
 
+  it("keeps server onboarding requests on the no-org path without client or mutation fallbacks", async () => {
+    mockedIsServerEnvironment.mockReturnValue(true);
+    mockedGetStrictServerSession.mockResolvedValue(
+      createAppContextSession({ activeOrganizationId: null })
+    );
+    mockedGetStrictServerOrganizations.mockResolvedValue([]);
+
+    await expect(redirectIfOrganizationReady()).resolves.toStrictEqual({
+      activeOrganizationSync: {
+        required: false,
+        targetOrganizationId: null,
+      },
+    });
+    expect(mockedGetStrictServerSession).toHaveBeenCalledOnce();
+    expect(mockedGetStrictServerOrganizations).toHaveBeenCalledOnce();
+    expect(mockedGetCurrentAppContext).not.toHaveBeenCalled();
+    expect(mockedGetSession).not.toHaveBeenCalled();
+    expect(mockedSetClientActiveOrganization).not.toHaveBeenCalled();
+  }, 1000);
+
   it("redirects onboarding users away when organization access is already ready", async () => {
     mockedIsServerEnvironment.mockReturnValue(false);
     mockedGetSession.mockResolvedValue({

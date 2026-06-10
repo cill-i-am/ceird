@@ -279,6 +279,36 @@ describe("app context request middleware payload", () => {
     });
   });
 
+  it("preserves an empty organization snapshot for authenticated root requests", async () => {
+    const authSessionWithoutActiveOrganization: ServerAuthSession =
+      decodeServerAuthSession({
+        ...betterAuthSessionWithActiveOrganization,
+        session: {
+          ...betterAuthSessionWithActiveOrganization.session,
+          activeOrganizationId: null,
+        },
+      });
+
+    process.env.API_ORIGIN = "https://api.example.com";
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json(
+          createBetterAuthSessionPayload(authSessionWithoutActiveOrganization)
+        )
+      )
+      .mockResolvedValueOnce(Response.json([]));
+
+    await expect(
+      loadRequestAppContextMiddlewareContext({
+        pathname: "/",
+        request: buildAuthRequest(),
+      })
+    ).resolves.toStrictEqual({
+      authSession: authSessionWithoutActiveOrganization,
+      organizations: [],
+    });
+  });
+
   it("does not expose the session active organization on auth-only tenant routes", async () => {
     process.env.API_ORIGIN = "https://api.example.com";
     vi.stubEnv("VITE_TENANT_BASE_DOMAIN", "ceird.app");
@@ -467,10 +497,10 @@ describe("app context request middleware payload", () => {
     expect(context).toStrictEqual({
       activeOrganizationId: null,
       authSession: authSessionWithActiveOrganization,
+      organizations,
       requestedOrganizationSlug: "gamma-field-ops",
     });
     expect(context).not.toHaveProperty("currentOrganizationRole");
-    expect(context).not.toHaveProperty("organizations");
   });
 
   it.each([

@@ -1,5 +1,9 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
-import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
+import type {
+  OrganizationId,
+  OrganizationRole,
+  OrganizationSummary,
+} from "@ceird/identity-core";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { getCachedClientAppContext } from "#/features/auth/app-context-client-cache";
@@ -11,8 +15,9 @@ import { requireAuthenticatedSession } from "#/features/auth/require-authenticat
 import { isServerEnvironment } from "#/features/auth/runtime-environment";
 
 export const Route = createFileRoute("/_app")({
-  beforeLoad: ({ location, serverContext }) =>
+  beforeLoad: ({ context, location, serverContext }) =>
     loadAuthenticatedAppRoute({
+      context,
       pathname: location.pathname,
       serverContext,
     }),
@@ -20,10 +25,13 @@ export const Route = createFileRoute("/_app")({
 });
 
 export async function loadAuthenticatedAppRoute(input?: {
+  readonly context?: unknown;
   readonly pathname?: string | undefined;
   readonly serverContext?: unknown;
 }) {
-  const serverContext = readAppServerContext(input?.serverContext);
+  const serverContext = readAppServerContext(
+    resolveRouteServerContextInput(input)
+  );
   const hydrateOrganizationContext =
     input?.pathname !== undefined &&
     shouldHydrateOrganizationContext(input.pathname);
@@ -48,8 +56,24 @@ export async function loadAuthenticatedAppRoute(input?: {
       clientAppContext?.currentOrganizationRole ??
       (await resolveCurrentOrganizationRoleOrUndefined(activeOrganizationId)))
     : undefined;
+  const organizations = resolveOrganizations({
+    clientAppContext,
+    serverContextOrganizations: serverContext.organizations,
+  });
 
-  return { activeOrganizationId, currentOrganizationRole, session };
+  if (hydrateOrganizationContext && activeOrganizationId === null) {
+    throw redirect({ to: "/create-organization" });
+  }
+
+  return {
+    activeOrganizationId,
+    currentOrganizationRole,
+    ...(organizations ? { organizations } : {}),
+    ...(serverContext.requestedOrganizationSlug
+      ? { requestedOrganizationSlug: serverContext.requestedOrganizationSlug }
+      : {}),
+    session,
+  };
 }
 
 async function getAuthenticatedRouteSession({
@@ -137,4 +161,36 @@ async function resolveCurrentOrganizationRoleOrUndefined(
   } catch {
     return undefined;
   }
+}
+
+function resolveOrganizations(input: {
+  readonly clientAppContext:
+    | Awaited<ReturnType<typeof getCachedClientAppContext>>
+    | undefined;
+  readonly serverContextOrganizations:
+    | readonly OrganizationSummary[]
+    | undefined;
+}) {
+  return (
+    input.serverContextOrganizations ?? input.clientAppContext?.organizations
+  );
+}
+
+function resolveRouteServerContextInput(input?: {
+  readonly context?: unknown;
+  readonly serverContext?: unknown;
+}) {
+  if (hasServerContext(input?.context)) {
+    return input.context.serverContext;
+  }
+
+  return input?.serverContext ?? input?.context;
+}
+
+function hasServerContext(
+  input: unknown
+): input is { readonly serverContext: unknown } {
+  return (
+    typeof input === "object" && input !== null && "serverContext" in input
+  );
 }

@@ -339,30 +339,38 @@ function electricSyncStorageChecks(input) {
 }
 
 function workerHasBinding(attr, bindingName) {
-  const bindings = attr.bindings ?? attr.Bindings ?? {};
+  const bindingSources = [
+    attr.bindings,
+    attr.Bindings,
+    attr.env,
+    attr.Env,
+    attr.environment,
+  ].filter(Boolean);
 
-  if (Array.isArray(bindings)) {
-    return bindings.some((binding) =>
-      [
-        binding?.name,
-        binding?.Name,
-        binding?.binding,
-        binding?.Binding,
-      ].includes(bindingName)
+  return bindingSources.some((bindings) => {
+    if (Array.isArray(bindings)) {
+      return bindings.some((binding) =>
+        [
+          binding?.name,
+          binding?.Name,
+          binding?.binding,
+          binding?.Binding,
+        ].includes(bindingName)
+      );
+    }
+
+    return (
+      Object.hasOwn(bindings, bindingName) ||
+      Object.values(bindings).some((binding) =>
+        [
+          binding?.name,
+          binding?.Name,
+          binding?.binding,
+          binding?.Binding,
+        ].includes(bindingName)
+      )
     );
-  }
-
-  return (
-    Object.hasOwn(bindings, bindingName) ||
-    Object.values(bindings).some((binding) =>
-      [
-        binding?.name,
-        binding?.Name,
-        binding?.binding,
-        binding?.Binding,
-      ].includes(bindingName)
-    )
-  );
+  });
 }
 
 function workerHasEnvValue(attr, name) {

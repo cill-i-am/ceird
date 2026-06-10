@@ -3,7 +3,7 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { WorkerProps } from "alchemy/Cloudflare";
 import type { Input, InputProps } from "alchemy/Input";
-import type * as Effect from "effect/Effect";
+import * as Output from "alchemy/Output";
 import * as Redacted from "effect/Redacted";
 
 import {
@@ -48,45 +48,52 @@ export interface DomainWorkerStageConfig {
   readonly workerAnalyticsSampleRate: number;
 }
 
-// oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for InferEnv.
-export type DomainWorkerBindings = {
-  readonly ANALYTICS?: Cloudflare.AnalyticsEngineDataset | undefined;
-  readonly AUTH_EMAIL?: Cloudflare.SendEmail | undefined;
-  readonly AUTH_EMAIL_QUEUE?: Cloudflare.Queue | undefined;
-  readonly DATABASE?: Cloudflare.Hyperdrive | undefined;
-};
+export interface DomainWorkerResourceEnv {
+  readonly ANALYTICS: Cloudflare.AnalyticsEngineDataset;
+  readonly AUTH_EMAIL: Cloudflare.SendEmail;
+  readonly AUTH_EMAIL_QUEUE: Cloudflare.Queue;
+  readonly DATABASE: Cloudflare.Hyperdrive;
+}
+
+type DomainWorkerLocalResourceEnv = Pick<DomainWorkerResourceEnv, "DATABASE">;
+type DomainWorkerSecretEnvValue = string | Redacted.Redacted<string>;
+type SerializedRedactedMarker =
+  | {
+      readonly _tag: "Redacted";
+      readonly value: string;
+    }
+  | {
+      readonly __redacted__: string;
+    };
+type WorkerEnvShape<Env extends object> = Env extends object
+  ? {
+      readonly [Key in keyof Env]: Env[Key];
+    }
+  : never;
+type WorkerEnvInput<Env extends object> = Env extends object
+  ? {
+      readonly [Key in keyof WorkerEnvShape<Env>]: undefined extends WorkerEnvShape<Env>[Key]
+        ? Input<Exclude<WorkerEnvShape<Env>[Key], undefined>> | undefined
+        : Input<WorkerEnvShape<Env>[Key]>;
+    }
+  : never;
 
 export type DomainWorkerBindingEnv = Cloudflare.InferEnv<
-  Cloudflare.Worker<DomainWorkerBindings>
+  WorkerEnvShape<DomainWorkerResourceEnv>
 >;
-
-export type DomainWorkerResource = Cloudflare.Worker<DomainWorkerBindings>;
-
-type DomainWorkerBindingProps = {
-  readonly [BindingName in keyof DomainWorkerBindings]:
-    | NonNullable<DomainWorkerBindings[BindingName]>
-    | Effect.Effect<
-        NonNullable<DomainWorkerBindings[BindingName]>,
-        never,
-        never
-      >;
-};
-
-type WorkerConfiguredEnvValue = Input<NonNullable<WorkerProps["env"]>[string]>;
-type WorkerConfiguredEnv = Record<string, WorkerConfiguredEnvValue>;
 
 export interface DomainWorkerConfiguredEnv {
   readonly AGENT_ACTION_RUN_STALE_AFTER_SECONDS: string;
-  readonly AGENT_INTERNAL_SECRET: Input<Redacted.Redacted<string>>;
+  readonly AGENT_INTERNAL_SECRET: DomainWorkerSecretEnvValue;
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_CAPTCHA_ENABLED?: "false" | "true" | undefined;
   readonly AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE?: string | undefined;
   readonly AUTH_CAPTCHA_TURNSTILE_SECRET_KEY?:
-    | Redacted.Redacted<string>
+    | DomainWorkerSecretEnvValue
     | undefined;
   readonly AUTH_COOKIE_DOMAIN?: string | undefined;
   readonly AUTH_COOKIE_PREFIX: string;
-  readonly AUTH_EMAIL_FROM: Redacted.Redacted<string>;
+  readonly AUTH_EMAIL_FROM: DomainWorkerSecretEnvValue;
   readonly AUTH_EMAIL_FROM_NAME: string;
   readonly AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED?:
     | "false"
@@ -102,14 +109,14 @@ export interface DomainWorkerConfiguredEnv {
   readonly AUTH_RATE_LIMIT_ENABLED: "false" | "true";
   readonly AUTH_TRUSTED_ORIGINS: string;
   readonly BETTER_AUTH_BASE_URL: string;
-  readonly BETTER_AUTH_SECRET: Input<Redacted.Redacted<string>>;
-  readonly BETTER_AUTH_SECRETS?: Input<Redacted.Redacted<string>> | undefined;
+  readonly BETTER_AUTH_SECRET: DomainWorkerSecretEnvValue;
+  readonly BETTER_AUTH_SECRETS?: DomainWorkerSecretEnvValue | undefined;
   readonly CEIRD_LOCAL_DEV?: "true" | undefined;
   readonly CEIRD_ROUTE_PROVIDER: "google_routes" | "test";
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
-  readonly DATABASE_URL?: Input<Redacted.Redacted<string>> | undefined;
-  readonly GOOGLE_MAPS_API_KEY: Redacted.Redacted<string>;
-  readonly GOOGLE_MAPS_ROUTES_API_KEY?: Redacted.Redacted<string> | undefined;
+  readonly DATABASE_URL?: DomainWorkerSecretEnvValue | undefined;
+  readonly GOOGLE_MAPS_API_KEY: DomainWorkerSecretEnvValue;
+  readonly GOOGLE_MAPS_ROUTES_API_KEY?: DomainWorkerSecretEnvValue | undefined;
   readonly MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES?: string | undefined;
   readonly MCP_AUTHORIZED_APP_CACHE_TTL_SECONDS?: string | undefined;
   readonly MCP_RESOURCE_URL: string;
@@ -118,19 +125,144 @@ export interface DomainWorkerConfiguredEnv {
   readonly PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS?: string | undefined;
 }
 
+type DomainWorkerLocalEnv = DomainWorkerLocalResourceEnv &
+  DomainWorkerConfiguredEnv;
+type DomainWorkerDeployedEnv = DomainWorkerResourceEnv &
+  DomainWorkerConfiguredEnv;
+type DomainWorkerConfiguredEnvInput = WorkerEnvInput<DomainWorkerConfiguredEnv>;
+type DomainWorkerResourceEnvInput = WorkerEnvInput<DomainWorkerResourceEnv>;
+type DomainWorkerLocalEnvInput = WorkerEnvInput<DomainWorkerLocalEnv>;
+type DomainWorkerDeployedEnvInput = WorkerEnvInput<DomainWorkerDeployedEnv>;
+interface DomainWorkerBaseProps {
+  readonly name: string;
+  readonly main: typeof domainWorkerMain;
+  readonly compatibility: typeof ceirdWorkerCompatibility;
+  readonly observability: typeof ceirdWorkerObservability;
+  readonly placement: typeof ceirdDomainWorkerPlacement;
+  readonly url: false;
+}
+type DomainWorkerLocalProps = DomainWorkerBaseProps & {
+  readonly env: DomainWorkerLocalEnvInput;
+  readonly crons: [];
+};
+type DomainWorkerDeployedProps = DomainWorkerBaseProps & {
+  readonly env: DomainWorkerDeployedEnvInput;
+  readonly crons: [typeof DOMAIN_WORKER_AUTH_RATE_LIMIT_CLEANUP_CRON];
+};
+
+interface MakeDomainWorkerResourceEnvInput {
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
+  readonly authEmailQueue: Cloudflare.Queue;
+  readonly config: Pick<DomainWorkerStageConfig, "authEmailFrom">;
+  readonly hyperdrive: Cloudflare.Hyperdrive;
+}
+
+type MakeDomainWorkerEnvInput = MakeDomainWorkerResourceEnvInput & {
+  readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
+  readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
+  readonly betterAuthSecrets?: Input<Redacted.Redacted<string>> | undefined;
+  readonly config: DomainWorkerStageConfig;
+  readonly databaseUrl?: Input<Redacted.Redacted<string>> | undefined;
+  readonly localOrigins?:
+    | {
+        readonly app: string;
+        readonly api: string;
+        readonly mcp: string;
+      }
+    | undefined;
+};
+
+type MakeDomainWorkerPropsInput = MakeDomainWorkerEnvInput & {
+  readonly name: string;
+};
+
+export type DomainWorkerResource = Cloudflare.Worker;
+
 function optionalDomainWorkerEnv<
-  const Key extends keyof DomainWorkerConfiguredEnv,
+  const Key extends keyof DomainWorkerConfiguredEnvInput,
 >(
   key: Key,
-  value: DomainWorkerConfiguredEnv[Key] | undefined
-): Partial<Pick<DomainWorkerConfiguredEnv, Key>> {
+  value: DomainWorkerConfiguredEnvInput[Key] | undefined
+): Partial<Pick<DomainWorkerConfiguredEnvInput, Key>> {
   if (value === undefined) {
     return {};
   }
 
   return {
     [key]: value,
-  } as Pick<DomainWorkerConfiguredEnv, Key>;
+  } as Pick<DomainWorkerConfiguredEnvInput, Key>;
+}
+
+function isSerializedRedactedMarker(
+  value: unknown
+): value is SerializedRedactedMarker {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (("_tag" in value &&
+      value._tag === "Redacted" &&
+      "value" in value &&
+      typeof value.value === "string") ||
+      ("__redacted__" in value && typeof value.__redacted__ === "string"))
+  );
+}
+
+function redactedSecretString(value: unknown): string {
+  if (Redacted.isRedacted(value)) {
+    return Redacted.value(value) as string;
+  }
+
+  if (isSerializedRedactedMarker(value)) {
+    return "__redacted__" in value ? value.__redacted__ : value.value;
+  }
+
+  throw new TypeError("Expected a redacted string Worker env value");
+}
+
+function localDomainWorkerSecretInput<Req>(
+  value: Output.Output<Redacted.Redacted<string>, Req>
+): Output.Output<string, Req>;
+function localDomainWorkerSecretInput(value: Redacted.Redacted<string>): string;
+function localDomainWorkerSecretInput(
+  value: Input<Redacted.Redacted<string>>
+): Input<string>;
+function localDomainWorkerSecretInput(
+  value: Input<Redacted.Redacted<string>>
+): Input<string> {
+  if (Output.isOutput(value)) {
+    return value.pipe(Output.map(redactedSecretString));
+  }
+
+  if (Redacted.isRedacted(value)) {
+    return redactedSecretString(value);
+  }
+
+  return redactedSecretString(value);
+}
+
+function domainWorkerSecretEnvValue(
+  value: Input<Redacted.Redacted<string>>,
+  localDev: boolean | undefined
+): Input<DomainWorkerSecretEnvValue> {
+  return localDev === true ? localDomainWorkerSecretInput(value) : value;
+}
+
+function optionalDomainWorkerSecretEnv<
+  const Key extends keyof DomainWorkerConfiguredEnvInput,
+>(
+  key: Key,
+  value: Input<Redacted.Redacted<string>> | undefined,
+  localDev: boolean | undefined
+): Partial<Pick<DomainWorkerConfiguredEnvInput, Key>> {
+  return optionalDomainWorkerEnv(
+    key,
+    value === undefined
+      ? undefined
+      : (domainWorkerSecretEnvValue(
+          value,
+          localDev
+        ) as DomainWorkerConfiguredEnvInput[Key])
+  );
 }
 
 function booleanWorkerEnvValue(value: boolean | undefined) {
@@ -203,17 +335,20 @@ function makeDomainWorkerRateLimitCleanupEnabledEnvValue(input: {
   );
 }
 
-export function makeDomainWorkerBindings(input: {
+function makeLocalDomainWorkerResourceEnv(input: {
+  readonly hyperdrive: Cloudflare.Hyperdrive;
+}) {
+  return {
+    DATABASE: input.hyperdrive,
+  } satisfies WorkerEnvInput<DomainWorkerLocalResourceEnv>;
+}
+
+function makeDeployedDomainWorkerResourceEnv(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly authEmailQueue: Cloudflare.Queue;
   readonly config: Pick<DomainWorkerStageConfig, "authEmailFrom">;
   readonly hyperdrive: Cloudflare.Hyperdrive;
-  readonly localDev?: boolean | undefined;
-}): DomainWorkerBindingProps {
-  if (input.localDev === true) {
-    return {} satisfies DomainWorkerBindingProps;
-  }
-
+}) {
   return {
     ANALYTICS: input.analytics,
     AUTH_EMAIL: Cloudflare.SendEmail("AuthEmailBinding", {
@@ -221,10 +356,35 @@ export function makeDomainWorkerBindings(input: {
     }),
     AUTH_EMAIL_QUEUE: input.authEmailQueue,
     DATABASE: input.hyperdrive,
-  } satisfies DomainWorkerBindingProps;
+  } satisfies DomainWorkerResourceEnvInput;
 }
 
-export function makeDomainWorkerEnv(input: {
+export function makeDomainWorkerResourceEnv(
+  input: MakeDomainWorkerResourceEnvInput & { readonly localDev: true }
+): WorkerEnvInput<DomainWorkerLocalResourceEnv>;
+export function makeDomainWorkerResourceEnv(
+  input: MakeDomainWorkerResourceEnvInput & {
+    readonly localDev?: false | undefined;
+  }
+): DomainWorkerResourceEnvInput;
+export function makeDomainWorkerResourceEnv(
+  input: MakeDomainWorkerResourceEnvInput & {
+    readonly localDev?: boolean | undefined;
+  }
+): DomainWorkerResourceEnvInput | WorkerEnvInput<DomainWorkerLocalResourceEnv>;
+export function makeDomainWorkerResourceEnv(
+  input: MakeDomainWorkerResourceEnvInput & {
+    readonly localDev?: boolean | undefined;
+  }
+): DomainWorkerResourceEnvInput | WorkerEnvInput<DomainWorkerLocalResourceEnv> {
+  if (input.localDev === true) {
+    return makeLocalDomainWorkerResourceEnv({ hyperdrive: input.hyperdrive });
+  }
+
+  return makeDeployedDomainWorkerResourceEnv(input);
+}
+
+export function makeDomainWorkerConfiguredEnv(input: {
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
   readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
   readonly betterAuthSecrets?: Input<Redacted.Redacted<string>> | undefined;
@@ -238,7 +398,7 @@ export function makeDomainWorkerEnv(input: {
         readonly mcp: string;
       }
     | undefined;
-}): DomainWorkerConfiguredEnv {
+}) {
   const authAppOrigin = makeDomainWorkerOrigin({
     hostname: input.config.appHostname,
     localDev: input.localDev,
@@ -270,7 +430,10 @@ export function makeDomainWorkerEnv(input: {
     AGENT_ACTION_RUN_STALE_AFTER_SECONDS: String(
       input.config.agentActionRunStaleAfterSeconds
     ),
-    AGENT_INTERNAL_SECRET: input.agentInternalSecret,
+    AGENT_INTERNAL_SECRET: domainWorkerSecretEnvValue(
+      input.agentInternalSecret,
+      input.localDev
+    ),
     AUTH_APP_ORIGIN: authAppOrigin,
     ...optionalDomainWorkerEnv(
       "AUTH_CAPTCHA_ENABLED",
@@ -280,12 +443,16 @@ export function makeDomainWorkerEnv(input: {
       "AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE",
       input.config.authCaptchaSiteVerifyUrlOverride
     ),
-    ...optionalDomainWorkerEnv(
+    ...optionalDomainWorkerSecretEnv(
       "AUTH_CAPTCHA_TURNSTILE_SECRET_KEY",
-      input.config.authCaptchaTurnstileSecretKey
+      input.config.authCaptchaTurnstileSecretKey,
+      input.localDev
     ),
     AUTH_COOKIE_PREFIX: input.config.authCookiePrefix,
-    AUTH_EMAIL_FROM: input.config.authEmailFrom,
+    AUTH_EMAIL_FROM: domainWorkerSecretEnvValue(
+      input.config.authEmailFrom,
+      input.localDev
+    ),
     AUTH_EMAIL_FROM_NAME: input.config.authEmailFromName,
     ...optionalDomainWorkerEnv(
       "AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED",
@@ -314,8 +481,15 @@ export function makeDomainWorkerEnv(input: {
       : "false",
     AUTH_TRUSTED_ORIGINS: authTrustedOrigins,
     BETTER_AUTH_BASE_URL: betterAuthBaseUrl,
-    BETTER_AUTH_SECRET: input.betterAuthSecret,
-    ...optionalDomainWorkerEnv("BETTER_AUTH_SECRETS", input.betterAuthSecrets),
+    BETTER_AUTH_SECRET: domainWorkerSecretEnvValue(
+      input.betterAuthSecret,
+      input.localDev
+    ),
+    ...optionalDomainWorkerSecretEnv(
+      "BETTER_AUTH_SECRETS",
+      input.betterAuthSecrets,
+      input.localDev
+    ),
     ...optionalDomainWorkerEnv(
       "CEIRD_LOCAL_DEV",
       input.localDev === true ? "true" : undefined
@@ -324,11 +498,19 @@ export function makeDomainWorkerEnv(input: {
     CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: String(
       input.config.workerAnalyticsSampleRate
     ),
-    ...optionalDomainWorkerEnv("DATABASE_URL", input.databaseUrl),
-    GOOGLE_MAPS_API_KEY: input.config.googleMapsApiKey,
-    ...optionalDomainWorkerEnv(
+    ...optionalDomainWorkerSecretEnv(
+      "DATABASE_URL",
+      input.databaseUrl,
+      input.localDev
+    ),
+    GOOGLE_MAPS_API_KEY: domainWorkerSecretEnvValue(
+      input.config.googleMapsApiKey,
+      input.localDev
+    ),
+    ...optionalDomainWorkerSecretEnv(
       "GOOGLE_MAPS_ROUTES_API_KEY",
-      input.config.googleMapsRoutesApiKey
+      input.config.googleMapsRoutesApiKey,
+      input.localDev
     ),
     ...optionalDomainWorkerEnv(
       "AUTH_COOKIE_DOMAIN",
@@ -358,58 +540,94 @@ export function makeDomainWorkerEnv(input: {
     MCP_RESOURCE_URL: `${mcpOrigin}/mcp`,
     NODE_ENV: "production",
     OAUTH_ISSUER_URL: betterAuthBaseUrl,
-  } satisfies DomainWorkerConfiguredEnv & WorkerConfiguredEnv;
+  } satisfies DomainWorkerConfiguredEnvInput;
 }
 
-export function makeDomainWorkerProps(input: {
-  readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
-  readonly analytics: Cloudflare.AnalyticsEngineDataset;
-  readonly authEmailQueue: Cloudflare.Queue;
-  readonly betterAuthSecret: Input<Redacted.Redacted<string>>;
-  readonly betterAuthSecrets?: Input<Redacted.Redacted<string>> | undefined;
-  readonly config: DomainWorkerStageConfig;
-  readonly databaseUrl?: Input<Redacted.Redacted<string>> | undefined;
-  readonly hyperdrive: Cloudflare.Hyperdrive;
-  readonly localDev?: boolean | undefined;
-  readonly localOrigins?:
-    | {
-        readonly app: string;
-        readonly api: string;
-        readonly mcp: string;
-      }
-    | undefined;
-  readonly name: string;
-}) {
+function makeLocalDomainWorkerEnv(
+  input: MakeDomainWorkerEnvInput & { readonly localDev: true }
+): DomainWorkerLocalEnvInput {
   return {
-    name: input.name,
-    main: domainWorkerMain,
-    compatibility: ceirdWorkerCompatibility,
-    bindings: makeDomainWorkerBindings({
+    ...makeLocalDomainWorkerResourceEnv({ hyperdrive: input.hyperdrive }),
+    ...makeDomainWorkerConfiguredEnv(input),
+  } satisfies DomainWorkerLocalEnvInput;
+}
+
+function makeDeployedDomainWorkerEnv(
+  input: MakeDomainWorkerEnvInput & { readonly localDev?: false | undefined }
+): DomainWorkerDeployedEnvInput {
+  return {
+    ...makeDeployedDomainWorkerResourceEnv({
       analytics: input.analytics,
       authEmailQueue: input.authEmailQueue,
       config: input.config,
       hyperdrive: input.hyperdrive,
-      localDev: input.localDev,
     }),
-    env: {
-      ...makeDomainWorkerEnv({
-        agentInternalSecret: input.agentInternalSecret,
-        betterAuthSecret: input.betterAuthSecret,
-        betterAuthSecrets: input.betterAuthSecrets,
-        config: input.config,
-        databaseUrl: input.databaseUrl,
-        localDev: input.localDev,
-        localOrigins: input.localOrigins,
-      }),
-    },
-    crons:
-      input.localDev === true
-        ? []
-        : [DOMAIN_WORKER_AUTH_RATE_LIMIT_CLEANUP_CRON],
+    ...makeDomainWorkerConfiguredEnv(input),
+  } satisfies DomainWorkerDeployedEnvInput;
+}
+
+export function makeDomainWorkerEnv(
+  input: MakeDomainWorkerEnvInput & {
+    readonly localDev?: boolean | undefined;
+  }
+): DomainWorkerLocalEnvInput | DomainWorkerDeployedEnvInput {
+  if (input.localDev === true) {
+    return makeLocalDomainWorkerEnv({ ...input, localDev: true });
+  }
+
+  return makeDeployedDomainWorkerEnv({ ...input, localDev: false });
+}
+
+export function makeDomainWorkerProps(
+  input: MakeDomainWorkerPropsInput & { readonly localDev: true }
+): DomainWorkerLocalProps;
+export function makeDomainWorkerProps(
+  input: MakeDomainWorkerPropsInput & {
+    readonly localDev?: false | undefined;
+  }
+): DomainWorkerDeployedProps;
+export function makeDomainWorkerProps(
+  input: MakeDomainWorkerPropsInput & {
+    readonly localDev?: boolean | undefined;
+  }
+): DomainWorkerLocalProps | DomainWorkerDeployedProps;
+export function makeDomainWorkerProps(
+  input: MakeDomainWorkerPropsInput & {
+    readonly localDev?: boolean | undefined;
+  }
+): DomainWorkerLocalProps | DomainWorkerDeployedProps {
+  const baseProps = {
+    name: input.name,
+    main: domainWorkerMain,
+    compatibility: ceirdWorkerCompatibility,
     observability: ceirdWorkerObservability,
     placement: ceirdDomainWorkerPlacement,
-    url: false,
-  } satisfies InputProps<WorkerProps<DomainWorkerBindingProps>>;
+    url: false as const,
+  };
+
+  if (input.localDev === true) {
+    const props = {
+      ...baseProps,
+      env: makeLocalDomainWorkerEnv({ ...input, localDev: true }),
+      crons: [],
+    } satisfies DomainWorkerLocalProps;
+
+    props satisfies InputProps<
+      WorkerProps<WorkerEnvShape<DomainWorkerLocalEnv>>
+    >;
+    return props;
+  }
+
+  const props = {
+    ...baseProps,
+    env: makeDeployedDomainWorkerEnv({ ...input, localDev: false }),
+    crons: [DOMAIN_WORKER_AUTH_RATE_LIMIT_CLEANUP_CRON],
+  } satisfies DomainWorkerDeployedProps;
+
+  props satisfies InputProps<
+    WorkerProps<WorkerEnvShape<DomainWorkerDeployedEnv>>
+  >;
+  return props;
 }
 
 export function makeDomainWorker(input: {

@@ -20,7 +20,7 @@ Worker does with `aiGateway`.
 
 ## Add a Binding
 
-Prefer native Alchemy resources in the Worker `bindings` object. Avoid raw
+Prefer native Alchemy resources in the Worker `env` object. Avoid raw
 `worker.bind(...)` escape hatches unless there is no native resource shape and
 the reason is documented beside the helper.
 
@@ -29,10 +29,17 @@ type aligned in `infra/cloudflare-stack.test.ts`. For database access, public
 adapters should call the private domain Worker through `DOMAIN`; only the
 domain Worker should bind Hyperdrive.
 
-The deployed domain runtime should resolve database connectivity in one place:
-prefer the Hyperdrive binding, and allow `DATABASE_URL` only for explicit
-local Alchemy dev where Workerd cannot emulate Hyperdrive. Do not add parallel
-database URL helpers outside `apps/domain/src/platform/cloudflare/runtime.ts`.
+When local Alchemy dev must omit an unsupported binding, return an exact env
+shape that leaves the binding key absent instead of present-with-`undefined`.
+`alchemy@2.0.0-beta.52` still constrains `WorkerProps["env"]` as a binding map,
+so optional `undefined` resource keys can leak into the type and break
+`Cloudflare.Worker(...)` calls even when the runtime object looks correct.
+
+The domain runtime should resolve database connectivity in one place: prefer
+the Hyperdrive binding in deployed stages and local Alchemy dev. Allow
+`DATABASE_URL` only for package-local domain runs or other non-Alchemy runtime
+paths that bypass the Worker binding layer. Do not add parallel database URL
+helpers outside `apps/domain/src/platform/cloudflare/runtime.ts`.
 
 ## Add a Secret
 

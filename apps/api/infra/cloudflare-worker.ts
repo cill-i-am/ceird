@@ -1,9 +1,9 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import type { DomainServiceBinding } from "@ceird/domain-core";
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { WorkerProps } from "alchemy/Cloudflare";
-import type { InputProps } from "alchemy/Input";
-import type * as Effect from "effect/Effect";
+import type { Input, InputProps } from "alchemy/Input";
 
 import {
   ceirdWorkerCompatibility,
@@ -13,31 +13,32 @@ import type { DomainWorkerResource } from "../../domain/infra/cloudflare-worker.
 
 const apiWorkerMain = new URL("../src/worker.ts", import.meta.url).pathname;
 
-export type WorkerServiceBinding = Service;
-
-// oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for service bindings.
-export type ApiWorkerBindings = {
+export interface ApiWorkerResourceEnv {
   readonly ANALYTICS?: Cloudflare.AnalyticsEngineDataset | undefined;
   readonly DOMAIN: DomainWorkerResource;
-};
+}
 
 export interface ApiWorkerBindingEnv {
   readonly ANALYTICS?: AnalyticsEngineDataset | undefined;
-  readonly DOMAIN: WorkerServiceBinding;
+  readonly DOMAIN: DomainServiceBinding;
 }
-
-type ApiWorkerBindingProps = {
-  readonly [BindingName in keyof ApiWorkerBindings]:
-    | NonNullable<ApiWorkerBindings[BindingName]>
-    | Effect.Effect<NonNullable<ApiWorkerBindings[BindingName]>, never, never>;
-};
 
 export interface ApiWorkerConfiguredEnv {
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
   readonly NODE_ENV: "production";
 }
 
-export function makeApiWorkerBindings(input: {
+type ApiWorkerEnv = ApiWorkerResourceEnv & ApiWorkerConfiguredEnv;
+type WorkerEnvShape<Env extends object> = {
+  readonly [Key in keyof Env]: Env[Key];
+};
+type WorkerEnvInput<Env extends object> = {
+  readonly [Key in keyof WorkerEnvShape<Env>]: undefined extends WorkerEnvShape<Env>[Key]
+    ? Input<Exclude<WorkerEnvShape<Env>[Key], undefined>> | undefined
+    : Input<WorkerEnvShape<Env>[Key]>;
+};
+
+export function makeApiWorkerResourceEnv(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly domain: DomainWorkerResource;
   readonly localDev?: boolean | undefined;
@@ -45,17 +46,34 @@ export function makeApiWorkerBindings(input: {
   return {
     ...(input.localDev === true ? {} : { ANALYTICS: input.analytics }),
     DOMAIN: input.domain,
-  } satisfies ApiWorkerBindingProps;
+  } satisfies WorkerEnvInput<ApiWorkerResourceEnv>;
 }
 
-export function makeApiWorkerEnv(input: {
+export function makeApiWorkerConfiguredEnv(input: {
   readonly workerAnalyticsSampleRate: number;
 }): ApiWorkerConfiguredEnv {
   return {
     CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: String(input.workerAnalyticsSampleRate),
     NODE_ENV: "production",
-  } satisfies ApiWorkerConfiguredEnv &
-    Record<string, NonNullable<WorkerProps["env"]>[string]>;
+  };
+}
+
+export function makeApiWorkerEnv(input: {
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
+  readonly config: { readonly workerAnalyticsSampleRate: number };
+  readonly domain: DomainWorkerResource;
+  readonly localDev?: boolean | undefined;
+}) {
+  return {
+    ...makeApiWorkerResourceEnv({
+      analytics: input.analytics,
+      domain: input.domain,
+      localDev: input.localDev,
+    }),
+    ...makeApiWorkerConfiguredEnv({
+      workerAnalyticsSampleRate: input.config.workerAnalyticsSampleRate,
+    }),
+  } satisfies WorkerEnvInput<ApiWorkerEnv>;
 }
 
 export function makeApiWorkerProps(input: {
@@ -70,20 +88,16 @@ export function makeApiWorkerProps(input: {
     name: input.name,
     main: apiWorkerMain,
     compatibility: ceirdWorkerCompatibility,
-    bindings: makeApiWorkerBindings({
+    env: makeApiWorkerEnv({
       analytics: input.analytics,
+      config: input.config,
       domain: input.domain,
       localDev: input.localDev,
     }),
-    env: {
-      ...makeApiWorkerEnv({
-        workerAnalyticsSampleRate: input.config.workerAnalyticsSampleRate,
-      }),
-    },
     domain: input.hostname,
     observability: ceirdWorkerObservability,
     url: true,
-  } satisfies InputProps<WorkerProps<ApiWorkerBindingProps>>;
+  } satisfies InputProps<WorkerProps<WorkerEnvShape<ApiWorkerEnv>>>;
 }
 
 export function makeApiWorker(input: {

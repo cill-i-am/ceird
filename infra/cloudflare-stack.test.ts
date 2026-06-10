@@ -2,20 +2,22 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Cloudflare from "alchemy/Cloudflare";
 import type { WorkerProps } from "alchemy/Cloudflare";
 import type { Input } from "alchemy/Input";
+import * as Output from "alchemy/Output";
+import * as State from "alchemy/State";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
 import type {
   AgentWorkerBindingEnv,
-  AgentWorkerBindings,
   AgentWorkerConfiguredEnv,
+  AgentWorkerResourceEnv,
 } from "../apps/agent/infra/cloudflare-worker.ts";
 import {
   makeAgentAiGatewayProps,
-  makeAgentWorkerBindings,
-  makeAgentWorkerEnv,
+  makeAgentWorkerConfiguredEnv,
   makeAgentWorkerProps,
+  makeAgentWorkerResourceEnv,
 } from "../apps/agent/infra/cloudflare-worker.ts";
 import type {
   AgentWorkerBindingRuntimeEnv,
@@ -23,9 +25,9 @@ import type {
 } from "../apps/agent/src/platform/cloudflare/env.ts";
 import type { ApiWorkerConfiguredEnv } from "../apps/api/infra/cloudflare-worker.ts";
 import {
-  makeApiWorkerBindings,
-  makeApiWorkerEnv,
+  makeApiWorkerConfiguredEnv,
   makeApiWorkerProps,
+  makeApiWorkerResourceEnv,
 } from "../apps/api/infra/cloudflare-worker.ts";
 import type {
   ApiWorkerBindingEnv,
@@ -36,13 +38,13 @@ import { makeAppWorkerEnv } from "../apps/app/infra/cloudflare-vite.ts";
 import type { AppCloudflareEnv } from "../apps/app/src/cloudflare-env.d.ts";
 import type {
   DomainWorkerBindingEnv,
-  DomainWorkerBindings,
   DomainWorkerConfiguredEnv,
+  DomainWorkerResource,
 } from "../apps/domain/infra/cloudflare-worker.ts";
 import {
-  makeDomainWorkerBindings,
-  makeDomainWorkerEnv,
+  makeDomainWorkerConfiguredEnv,
   makeDomainWorkerProps,
+  makeDomainWorkerResourceEnv,
 } from "../apps/domain/infra/cloudflare-worker.ts";
 import type {
   DomainWorkerBindingRuntimeEnv,
@@ -50,9 +52,9 @@ import type {
 } from "../apps/domain/src/platform/cloudflare/env.ts";
 import type { McpWorkerConfiguredEnv } from "../apps/mcp/infra/cloudflare-worker.ts";
 import {
-  makeMcpWorkerBindings,
-  makeMcpWorkerEnv,
+  makeMcpWorkerConfiguredEnv,
   makeMcpWorkerProps,
+  makeMcpWorkerResourceEnv,
 } from "../apps/mcp/infra/cloudflare-worker.ts";
 import type {
   McpWorkerBindingEnv,
@@ -67,9 +69,9 @@ import {
   electricContainerDockerfile,
   makeElectricContainerEnv,
   makeElectricContainerProps,
-  makeSyncWorkerBindings,
-  makeSyncWorkerEnv,
+  makeSyncWorkerConfiguredEnv,
   makeSyncWorkerProps,
+  makeSyncWorkerResourceEnv,
 } from "../apps/sync/infra/cloudflare-worker.ts";
 import type {
   SyncWorkerBindingRuntimeEnv,
@@ -86,6 +88,7 @@ import {
   makeDurableObjectLocationHintForNeonRegion,
   makeTenantReservedHostBypassRoutePatterns,
   makeCloudflareWorkerOrigin,
+  redactInput,
   shouldProvisionElectricContainer,
   shouldReconcileTenantRouting,
   shouldProvisionElectricStorage,
@@ -119,6 +122,92 @@ type RequiredNonNullableProperties<Type> = {
   readonly [Key in keyof Type]-?: NonNullable<Type[Key]>;
 };
 
+interface DomainWorkerDeployedResourceEnvForAssertions {
+  readonly ANALYTICS: Input<Cloudflare.AnalyticsEngineDataset>;
+  readonly AUTH_EMAIL: Input<Cloudflare.SendEmail>;
+  readonly AUTH_EMAIL_QUEUE: Input<Cloudflare.Queue>;
+  readonly DATABASE: Input<Cloudflare.Hyperdrive>;
+}
+
+interface DomainWorkerDeployedEnvForAssertions {
+  readonly ANALYTICS: unknown;
+  readonly AUTH_EMAIL_QUEUE: unknown;
+  readonly DATABASE: unknown;
+}
+
+interface DomainWorkerLocalEnvForAssertions {
+  readonly AUTH_APP_ORIGIN: unknown;
+  readonly AUTH_COOKIE_DOMAIN?: unknown;
+  readonly AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED?: unknown;
+  readonly AUTH_RATE_LIMIT_CLEANUP_BATCH_SIZE: unknown;
+  readonly AUTH_RATE_LIMIT_CLEANUP_ENABLED: unknown;
+  readonly AUTH_RATE_LIMIT_CLEANUP_MAX_BATCHES: unknown;
+  readonly AUTH_RATE_LIMIT_RETENTION_HOURS: unknown;
+  readonly AUTH_TRUSTED_ORIGINS: unknown;
+  readonly BETTER_AUTH_BASE_URL: unknown;
+  readonly DATABASE: unknown;
+  readonly CEIRD_LOCAL_DEV?: unknown;
+  readonly DATABASE_URL?: unknown;
+  readonly MCP_RESOURCE_URL: unknown;
+}
+
+function isInputEffect<Value>(
+  value: Input<Value>
+): value is Effect.Effect<Value, never, never> {
+  return Effect.isEffect(value);
+}
+
+function assertDeployedDomainWorkerResourceEnv(
+  value: ReturnType<typeof makeDomainWorkerResourceEnv>
+): asserts value is DomainWorkerDeployedResourceEnvForAssertions {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("ANALYTICS" in value) ||
+    !("AUTH_EMAIL" in value) ||
+    !("AUTH_EMAIL_QUEUE" in value) ||
+    !("DATABASE" in value)
+  ) {
+    throw new Error("Expected deployed domain Worker resource env");
+  }
+}
+
+function assertDeployedDomainWorkerEnv(
+  value: ReturnType<typeof makeDomainWorkerProps>["env"]
+): asserts value is ReturnType<typeof makeDomainWorkerProps>["env"] &
+  DomainWorkerDeployedEnvForAssertions {
+  if (
+    value === undefined ||
+    typeof value !== "object" ||
+    value === null ||
+    !("ANALYTICS" in value) ||
+    !("AUTH_EMAIL_QUEUE" in value) ||
+    !("DATABASE" in value)
+  ) {
+    throw new Error("Expected deployed domain Worker env");
+  }
+}
+
+function assertLocalDomainWorkerEnv(
+  value: ReturnType<typeof makeDomainWorkerProps>["env"]
+): asserts value is ReturnType<typeof makeDomainWorkerProps>["env"] &
+  DomainWorkerLocalEnvForAssertions {
+  if (
+    value === undefined ||
+    typeof value !== "object" ||
+    value === null ||
+    !("AUTH_APP_ORIGIN" in value) ||
+    !("AUTH_RATE_LIMIT_CLEANUP_ENABLED" in value) ||
+    !("DATABASE" in value) ||
+    !("MCP_RESOURCE_URL" in value) ||
+    "ANALYTICS" in value ||
+    "AUTH_EMAIL_QUEUE" in value ||
+    "AUTH_EMAIL" in value
+  ) {
+    throw new Error("Expected local domain Worker env");
+  }
+}
+
 const domainWorkerBindingKeys = [
   "ANALYTICS",
   "AUTH_EMAIL",
@@ -143,15 +232,15 @@ const agentWorkerResourceBindingKeys = [
   "ANALYTICS",
   "CeirdAgent",
   "DOMAIN",
-] as const satisfies readonly (keyof AgentWorkerBindings)[];
+] as const satisfies readonly (keyof AgentWorkerResourceEnv)[];
 
 const domainWorkerBindingKeysMatchRuntimeContract: AssertTrue<
   HasSameKeys<DomainWorkerBindingEnv, DomainWorkerBindingRuntimeEnv>
 > = true;
-const domainWorkerBindingsSatisfyRuntimeContract: AssertTrue<
+const domainWorkerEnvSatisfiesRuntimeContract: AssertTrue<
   DomainWorkerBindingEnv extends DomainWorkerBindingRuntimeEnv ? true : false
 > = true;
-const domainWorkerRuntimeContractSatisfiesBindings: AssertTrue<
+const domainWorkerRuntimeContractSatisfiesEnv: AssertTrue<
   RequiredNonNullableProperties<DomainWorkerBindingRuntimeEnv> extends DomainWorkerBindingEnv
     ? true
     : false
@@ -160,10 +249,10 @@ const domainWorkerRuntimeContractSatisfiesBindings: AssertTrue<
 const apiWorkerBindingKeysMatchRuntimeContract: AssertTrue<
   HasSameKeys<ApiWorkerBindingEnv, ApiWorkerBindingRuntimeEnv>
 > = true;
-const apiWorkerBindingsSatisfyRuntimeContract: AssertTrue<
+const apiWorkerEnvSatisfiesRuntimeContract: AssertTrue<
   ApiWorkerBindingEnv extends ApiWorkerBindingRuntimeEnv ? true : false
 > = true;
-const apiWorkerRuntimeContractSatisfiesBindings: AssertTrue<
+const apiWorkerRuntimeContractSatisfiesEnv: AssertTrue<
   RequiredNonNullableProperties<ApiWorkerBindingRuntimeEnv> extends ApiWorkerBindingEnv
     ? true
     : false
@@ -171,10 +260,10 @@ const apiWorkerRuntimeContractSatisfiesBindings: AssertTrue<
 const mcpWorkerBindingKeysMatchRuntimeContract: AssertTrue<
   HasSameKeys<McpWorkerBindingEnv, McpWorkerBindingRuntimeEnv>
 > = true;
-const mcpWorkerBindingsSatisfyRuntimeContract: AssertTrue<
+const mcpWorkerEnvSatisfiesRuntimeContract: AssertTrue<
   McpWorkerBindingEnv extends McpWorkerBindingRuntimeEnv ? true : false
 > = true;
-const mcpWorkerRuntimeContractSatisfiesBindings: AssertTrue<
+const mcpWorkerRuntimeContractSatisfiesEnv: AssertTrue<
   RequiredNonNullableProperties<McpWorkerBindingRuntimeEnv> extends McpWorkerBindingEnv
     ? true
     : false
@@ -182,10 +271,10 @@ const mcpWorkerRuntimeContractSatisfiesBindings: AssertTrue<
 const agentWorkerBindingKeysMatchRuntimeContract: AssertTrue<
   HasSameKeys<AgentWorkerBindingEnv, AgentWorkerBindingRuntimeEnv>
 > = true;
-const agentWorkerBindingsSatisfyRuntimeContract: AssertTrue<
+const agentWorkerEnvSatisfiesRuntimeContract: AssertTrue<
   AgentWorkerBindingEnv extends AgentWorkerBindingRuntimeEnv ? true : false
 > = true;
-const agentWorkerRuntimeContractSatisfiesBindings: AssertTrue<
+const agentWorkerRuntimeContractSatisfiesEnv: AssertTrue<
   RequiredNonNullableProperties<AgentWorkerBindingRuntimeEnv> extends AgentWorkerBindingEnv
     ? true
     : false
@@ -193,10 +282,10 @@ const agentWorkerRuntimeContractSatisfiesBindings: AssertTrue<
 const syncWorkerBindingKeysMatchRuntimeContract: AssertTrue<
   HasSameKeys<SyncWorkerBindingEnv, SyncWorkerBindingRuntimeEnv>
 > = true;
-const syncWorkerBindingsSatisfyRuntimeContract: AssertTrue<
+const syncWorkerEnvSatisfiesRuntimeContract: AssertTrue<
   SyncWorkerBindingEnv extends SyncWorkerBindingRuntimeEnv ? true : false
 > = true;
-const syncWorkerRuntimeContractSatisfiesBindings: AssertTrue<
+const syncWorkerRuntimeContractSatisfiesEnv: AssertTrue<
   RequiredNonNullableProperties<SyncWorkerBindingRuntimeEnv> extends SyncWorkerBindingEnv
     ? true
     : false
@@ -329,7 +418,7 @@ type DomainWorkerStackStringValueEnv = Pick<
   DomainWorkerRuntimeStringValueKeys
 >;
 type WorkerEnvValue = NonNullable<WorkerProps["env"]>[string];
-type WorkerConfiguredEnvValue = Input<WorkerEnvValue>;
+type WorkerConfiguredEnvInputValue = Input<WorkerEnvValue>;
 const apiWorkerConfiguredEnvKeysMatchRuntimeConfig: AssertTrue<
   HasSameKeys<ApiWorkerStackEnv, ApiWorkerStackRuntimeConfigEnv>
 > = true;
@@ -351,19 +440,19 @@ const domainWorkerConfiguredStringValuesSatisfyRuntimeConfig: AssertTrue<
     : false
 > = true;
 const apiWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
-  AllPropertyValuesExtend<ApiWorkerConfiguredEnv, WorkerConfiguredEnvValue>
+  AllPropertyValuesExtend<ApiWorkerConfiguredEnv, WorkerEnvValue>
 > = true;
 const domainWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
-  AllPropertyValuesExtend<DomainWorkerConfiguredEnv, WorkerConfiguredEnvValue>
+  AllPropertyValuesExtend<DomainWorkerConfiguredEnv, WorkerEnvValue>
 > = true;
 const mcpWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
-  AllPropertyValuesExtend<McpWorkerConfiguredEnv, WorkerConfiguredEnvValue>
+  AllPropertyValuesExtend<McpWorkerConfiguredEnv, WorkerEnvValue>
 > = true;
 const agentWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
-  AllPropertyValuesExtend<AgentWorkerConfiguredEnv, WorkerConfiguredEnvValue>
+  AllPropertyValuesExtend<AgentWorkerConfiguredEnv, WorkerEnvValue>
 > = true;
 const syncWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
-  AllPropertyValuesExtend<SyncWorkerConfiguredEnv, WorkerConfiguredEnvValue>
+  AllPropertyValuesExtend<SyncWorkerConfiguredEnv, WorkerEnvValue>
 > = true;
 
 type AppWorkerStackEnv = ReturnType<typeof makeAppWorkerEnv> &
@@ -381,7 +470,7 @@ const appContractSatisfiesStackEnv: AssertTrue<
 const appWorkerConfiguredValuesSatisfyAlchemyWorkerEnv: AssertTrue<
   AllPropertyValuesExtend<
     ReturnType<typeof makeAppWorkerEnv>,
-    WorkerConfiguredEnvValue
+    WorkerConfiguredEnvInputValue
   >
 > = true;
 type EffectSuccess<Value> =
@@ -457,20 +546,20 @@ describe("Cloudflare stack", () => {
   it("lets Alchemy own runtime stage injection for Worker env vars", () => {
     const betterAuthSecret = Redacted.make("better-auth-secret");
     const agentInternalSecret = Redacted.make("agent-secret");
-    const apiEnv = makeApiWorkerEnv({
+    const apiEnv = makeApiWorkerConfiguredEnv({
       workerAnalyticsSampleRate:
         configWithoutCloudflareBootstrapSecrets.workerAnalyticsSampleRate,
     });
-    const domainEnv = makeDomainWorkerEnv({
+    const domainEnv = makeDomainWorkerConfiguredEnv({
       agentInternalSecret,
       betterAuthSecret,
       config: configWithoutCloudflareBootstrapSecrets,
     });
-    const mcpEnv = makeMcpWorkerEnv({
+    const mcpEnv = makeMcpWorkerConfiguredEnv({
       workerAnalyticsSampleRate:
         configWithoutCloudflareBootstrapSecrets.workerAnalyticsSampleRate,
     });
-    const agentEnv = makeAgentWorkerEnv({
+    const agentEnv = makeAgentWorkerConfiguredEnv({
       aiGatewayId: "ceird-main-agent-ai",
       agentInternalSecret,
       config: configWithoutCloudflareBootstrapSecrets,
@@ -481,7 +570,7 @@ describe("Cloudflare stack", () => {
       config: configWithoutCloudflareBootstrapSecrets,
       syncOrigin: "https://sync.example.com",
     });
-    const syncEnv = makeSyncWorkerEnv({
+    const syncEnv = makeSyncWorkerConfiguredEnv({
       config: configWithoutCloudflareBootstrapSecrets,
       electricSqlLocationHint: "weur",
       electricSourceSecret: Redacted.make("electric-secret"),
@@ -571,6 +660,54 @@ describe("Cloudflare stack", () => {
     });
   });
 
+  it("unwraps redacted Domain runtime secrets for the local workerd env", () => {
+    const agentInternalSecret = Redacted.make("agent-secret");
+    const betterAuthSecret = Redacted.make("better-auth-secret");
+    const betterAuthSecrets = Redacted.make(
+      "2:current-secret-value-0123456789abcdef,1:previous-secret-value-0123456789abcdef"
+    );
+    const authEmailFrom = Redacted.make("local-auth@example.com");
+    const turnstileSecretKey = Redacted.make("turnstile-secret-key");
+    const googleMapsApiKey = Redacted.make(
+      Schema.decodeUnknownSync(InfraGoogleMapsApiKey)("google-maps-key")
+    );
+    const googleMapsRoutesApiKey = Redacted.make(
+      Schema.decodeUnknownSync(InfraGoogleMapsApiKey)("google-routes-key")
+    );
+
+    const domainEnv = makeDomainWorkerConfiguredEnv({
+      agentInternalSecret,
+      betterAuthSecret,
+      betterAuthSecrets,
+      config: {
+        ...configWithoutCloudflareBootstrapSecrets,
+        authCaptchaTurnstileSecretKey: turnstileSecretKey,
+        authEmailFrom,
+        googleMapsApiKey,
+        googleMapsRoutesApiKey,
+      },
+      localDev: true,
+    });
+
+    expect(domainEnv.AGENT_INTERNAL_SECRET).toBe(
+      Redacted.value(agentInternalSecret)
+    );
+    expect(domainEnv.AUTH_CAPTCHA_TURNSTILE_SECRET_KEY).toBe(
+      Redacted.value(turnstileSecretKey)
+    );
+    expect(domainEnv.AUTH_EMAIL_FROM).toBe(Redacted.value(authEmailFrom));
+    expect(domainEnv.BETTER_AUTH_SECRET).toBe(Redacted.value(betterAuthSecret));
+    expect(domainEnv.BETTER_AUTH_SECRETS).toBe(
+      Redacted.value(betterAuthSecrets)
+    );
+    expect(domainEnv.GOOGLE_MAPS_API_KEY).toBe(
+      Redacted.value(googleMapsApiKey)
+    );
+    expect(domainEnv.GOOGLE_MAPS_ROUTES_API_KEY).toBe(
+      Redacted.value(googleMapsRoutesApiKey)
+    );
+  });
+
   it("passes tenant host config to app and auth domain Workers", () => {
     const betterAuthSecret = Redacted.make("better-auth-secret");
     const agentInternalSecret = Redacted.make("agent-secret");
@@ -580,12 +717,12 @@ describe("Cloudflare stack", () => {
       config: previewTenantConfig,
       syncOrigin: "https://sync.pr-123.example.com",
     });
-    const domainEnv = makeDomainWorkerEnv({
+    const domainEnv = makeDomainWorkerConfiguredEnv({
       agentInternalSecret,
       betterAuthSecret,
       config: previewTenantConfig,
     });
-    const agentEnv = makeAgentWorkerEnv({
+    const agentEnv = makeAgentWorkerConfiguredEnv({
       aiGatewayId: "ceird-pr-123-agent-ai",
       agentInternalSecret,
       config: previewTenantConfig,
@@ -771,7 +908,7 @@ describe("Cloudflare stack", () => {
   it("sets cross-subdomain auth cookies from the configured tenant base domain", () => {
     const betterAuthSecret = Redacted.make("better-auth-secret");
     const agentInternalSecret = Redacted.make("agent-secret");
-    const domainEnv = makeDomainWorkerEnv({
+    const domainEnv = makeDomainWorkerConfiguredEnv({
       agentInternalSecret,
       betterAuthSecret,
       config: {
@@ -792,7 +929,7 @@ describe("Cloudflare stack", () => {
     const googleMapsRoutesApiKey = Redacted.make(
       Schema.decodeUnknownSync(InfraGoogleMapsApiKey)("google-routes-key")
     );
-    const domainEnv = makeDomainWorkerEnv({
+    const domainEnv = makeDomainWorkerConfiguredEnv({
       agentInternalSecret: Redacted.make("agent-secret"),
       betterAuthSecret: Redacted.make("better-auth-secret"),
       config: {
@@ -808,7 +945,7 @@ describe("Cloudflare stack", () => {
   });
 
   it("passes the selected route provider to domain Workers", () => {
-    const domainEnv = makeDomainWorkerEnv({
+    const domainEnv = makeDomainWorkerConfiguredEnv({
       agentInternalSecret: Redacted.make("agent-secret"),
       betterAuthSecret: Redacted.make("better-auth-secret"),
       config: {
@@ -821,7 +958,7 @@ describe("Cloudflare stack", () => {
   });
 
   it("passes the optional proximity origin token TTL to domain Workers", () => {
-    const domainEnv = makeDomainWorkerEnv({
+    const domainEnv = makeDomainWorkerConfiguredEnv({
       agentInternalSecret: Redacted.make("agent-secret"),
       betterAuthSecret: Redacted.make("better-auth-secret"),
       config: {
@@ -838,7 +975,7 @@ describe("Cloudflare stack", () => {
     const agentInternalSecret = Redacted.make("agent-secret");
 
     expect(
-      makeDomainWorkerEnv({
+      makeDomainWorkerConfiguredEnv({
         agentInternalSecret,
         betterAuthSecret,
         config: {
@@ -857,7 +994,7 @@ describe("Cloudflare stack", () => {
     const agentInternalSecret = Redacted.make("agent-secret");
 
     expect(
-      makeDomainWorkerEnv({
+      makeDomainWorkerConfiguredEnv({
         agentInternalSecret,
         betterAuthSecret,
         config: {
@@ -886,7 +1023,7 @@ describe("Cloudflare stack", () => {
       authCaptchaTurnstileSiteKey: "turnstile-site-key",
     };
 
-    const domainEnv = makeDomainWorkerEnv({
+    const domainEnv = makeDomainWorkerConfiguredEnv({
       agentInternalSecret,
       betterAuthSecret,
       config,
@@ -918,7 +1055,7 @@ describe("Cloudflare stack", () => {
     );
     const agentInternalSecret = Redacted.make("agent-secret");
 
-    const domainEnv = makeDomainWorkerEnv({
+    const domainEnv = makeDomainWorkerConfiguredEnv({
       agentInternalSecret,
       betterAuthSecret,
       betterAuthSecrets,
@@ -933,7 +1070,7 @@ describe("Cloudflare stack", () => {
     const agentInternalSecret = Redacted.make("agent-secret");
 
     expect(
-      makeDomainWorkerEnv({
+      makeDomainWorkerConfiguredEnv({
         agentInternalSecret,
         betterAuthSecret,
         config: {
@@ -958,6 +1095,12 @@ describe("Cloudflare stack", () => {
             zoneId: "zone-id",
           },
         ],
+        fallbackHostname: "api.example.com",
+      })
+    ).toBe("https://api.stage.example.com");
+    expect(
+      makeCloudflareWorkerOrigin({
+        domains: ["https://api.stage.example.com"],
         fallbackHostname: "api.example.com",
       })
     ).toBe("https://api.stage.example.com");
@@ -1014,7 +1157,7 @@ describe("Cloudflare stack", () => {
     });
   });
 
-  it("declares private domain and public adapter Worker bindings", () => {
+  it("declares private domain and public adapter Worker env bindings", () => {
     const authEmailQueue = {
       accountId: "account-id",
       queueId: "queue-id",
@@ -1027,13 +1170,13 @@ describe("Cloudflare stack", () => {
     } as unknown as Cloudflare.Hyperdrive;
     const domain = {
       workerName: "ceird-test-domain",
-    } as unknown as Cloudflare.Worker<DomainWorkerBindings>;
+    } as unknown as DomainWorkerResource;
     const aiGateway = {
       gatewayId: "ceird-main-agent-ai",
     } as unknown as Cloudflare.AiGateway;
     const electricSourceSecret = Redacted.make("electric-secret");
 
-    const domainBindings = makeDomainWorkerBindings({
+    const domainResourceEnv = makeDomainWorkerResourceEnv({
       analytics: workerAnalytics,
       authEmailQueue,
       config: configWithoutCloudflareBootstrapSecrets,
@@ -1048,7 +1191,7 @@ describe("Cloudflare stack", () => {
       hyperdrive,
       name: "ceird-main-domain",
     });
-    const apiBindings = makeApiWorkerBindings({
+    const apiResourceEnv = makeApiWorkerResourceEnv({
       analytics: workerAnalytics,
       domain,
     });
@@ -1059,16 +1202,16 @@ describe("Cloudflare stack", () => {
       hostname: "api.example.com",
       name: "ceird-main-api",
     });
-    const mcpBindings = makeMcpWorkerBindings({
+    const mcpResourceEnv = makeMcpWorkerResourceEnv({
       analytics: workerAnalytics,
       domain,
     });
-    const agentBindings = makeAgentWorkerBindings({
+    const agentResourceEnv = makeAgentWorkerResourceEnv({
       aiGateway,
       analytics: workerAnalytics,
       domain,
     });
-    const syncBindings = makeSyncWorkerBindings({
+    const syncResourceEnv = makeSyncWorkerResourceEnv({
       analytics: workerAnalytics,
       domain,
     });
@@ -1099,52 +1242,55 @@ describe("Cloudflare stack", () => {
       config: configWithoutCloudflareBootstrapSecrets,
       name: "ceird-main-electric",
     });
-    const authEmailBinding = domainBindings.AUTH_EMAIL;
-
-    if (authEmailBinding === undefined) {
-      throw new Error("Expected deployed domain Worker auth email binding");
-    }
-
-    const authEmail = Effect.isEffect(authEmailBinding)
+    assertDeployedDomainWorkerResourceEnv(domainResourceEnv);
+    assertDeployedDomainWorkerEnv(domainWorkerProps.env);
+    const authEmailBinding = domainResourceEnv.AUTH_EMAIL;
+    const authEmail = isInputEffect(authEmailBinding)
       ? Effect.runSync(authEmailBinding)
       : authEmailBinding;
 
-    expect(Object.keys(domainBindings)).toStrictEqual([
+    expect(Object.keys(domainResourceEnv)).toStrictEqual([
       ...domainWorkerBindingKeys,
     ]);
-    expect(Object.keys(apiBindings)).toStrictEqual([...apiWorkerBindingKeys]);
-    expect(Object.keys(mcpBindings)).toStrictEqual([...mcpWorkerBindingKeys]);
-    expect(Object.keys(syncBindings)).toStrictEqual([...syncWorkerBindingKeys]);
-    expect(Object.keys(agentBindings)).toStrictEqual([
+    expect(Object.keys(apiResourceEnv)).toStrictEqual([
+      ...apiWorkerBindingKeys,
+    ]);
+    expect(Object.keys(mcpResourceEnv)).toStrictEqual([
+      ...mcpWorkerBindingKeys,
+    ]);
+    expect(Object.keys(syncResourceEnv)).toStrictEqual([
+      ...syncWorkerBindingKeys,
+    ]);
+    expect(Object.keys(agentResourceEnv)).toStrictEqual([
       ...agentWorkerResourceBindingKeys,
     ]);
     expect(domainWorkerBindingKeysMatchRuntimeContract).toBeTruthy();
-    expect(domainWorkerBindingsSatisfyRuntimeContract).toBeTruthy();
-    expect(domainWorkerRuntimeContractSatisfiesBindings).toBeTruthy();
+    expect(domainWorkerEnvSatisfiesRuntimeContract).toBeTruthy();
+    expect(domainWorkerRuntimeContractSatisfiesEnv).toBeTruthy();
     expect(apiWorkerBindingKeysMatchRuntimeContract).toBeTruthy();
-    expect(apiWorkerBindingsSatisfyRuntimeContract).toBeTruthy();
-    expect(apiWorkerRuntimeContractSatisfiesBindings).toBeTruthy();
+    expect(apiWorkerEnvSatisfiesRuntimeContract).toBeTruthy();
+    expect(apiWorkerRuntimeContractSatisfiesEnv).toBeTruthy();
     expect(mcpWorkerBindingKeysMatchRuntimeContract).toBeTruthy();
-    expect(mcpWorkerBindingsSatisfyRuntimeContract).toBeTruthy();
-    expect(mcpWorkerRuntimeContractSatisfiesBindings).toBeTruthy();
+    expect(mcpWorkerEnvSatisfiesRuntimeContract).toBeTruthy();
+    expect(mcpWorkerRuntimeContractSatisfiesEnv).toBeTruthy();
     expect(agentWorkerBindingKeysMatchRuntimeContract).toBeTruthy();
-    expect(agentWorkerBindingsSatisfyRuntimeContract).toBeTruthy();
-    expect(agentWorkerRuntimeContractSatisfiesBindings).toBeTruthy();
+    expect(agentWorkerEnvSatisfiesRuntimeContract).toBeTruthy();
+    expect(agentWorkerRuntimeContractSatisfiesEnv).toBeTruthy();
     expect(syncWorkerBindingKeysMatchRuntimeContract).toBeTruthy();
-    expect(syncWorkerBindingsSatisfyRuntimeContract).toBeTruthy();
-    expect(syncWorkerRuntimeContractSatisfiesBindings).toBeTruthy();
-    expect(domainBindings.AUTH_EMAIL_QUEUE).toBe(authEmailQueue);
-    expect(domainBindings.ANALYTICS).toBe(workerAnalytics);
-    expect(domainBindings.DATABASE).toBe(hyperdrive);
-    expect(apiBindings.ANALYTICS).toBe(workerAnalytics);
-    expect(apiBindings.DOMAIN).toBe(domain);
-    expect(mcpBindings.ANALYTICS).toBe(workerAnalytics);
-    expect(mcpBindings.DOMAIN).toBe(domain);
-    expect(agentBindings.AI).toBe(aiGateway);
-    expect(agentBindings.ANALYTICS).toBe(workerAnalytics);
-    expect(agentBindings.DOMAIN).toBe(domain);
-    expect(syncBindings.ANALYTICS).toBe(workerAnalytics);
-    expect(syncBindings.DOMAIN).toBe(domain);
+    expect(syncWorkerEnvSatisfiesRuntimeContract).toBeTruthy();
+    expect(syncWorkerRuntimeContractSatisfiesEnv).toBeTruthy();
+    expect(domainResourceEnv.AUTH_EMAIL_QUEUE).toBe(authEmailQueue);
+    expect(domainResourceEnv.ANALYTICS).toBe(workerAnalytics);
+    expect(domainResourceEnv.DATABASE).toBe(hyperdrive);
+    expect(apiResourceEnv.ANALYTICS).toBe(workerAnalytics);
+    expect(apiResourceEnv.DOMAIN).toBe(domain);
+    expect(mcpResourceEnv.ANALYTICS).toBe(workerAnalytics);
+    expect(mcpResourceEnv.DOMAIN).toBe(domain);
+    expect(agentResourceEnv.AI).toBe(aiGateway);
+    expect(agentResourceEnv.ANALYTICS).toBe(workerAnalytics);
+    expect(agentResourceEnv.DOMAIN).toBe(domain);
+    expect(syncResourceEnv.ANALYTICS).toBe(workerAnalytics);
+    expect(syncResourceEnv.DOMAIN).toBe(domain);
     expect(domainWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
     expect(domainWorkerProps.crons).toStrictEqual(["17 3 * * *"]);
     expect(domainWorkerProps.observability).toBe(ceirdWorkerObservability);
@@ -1164,24 +1310,30 @@ describe("Cloudflare stack", () => {
     expect(domainWorkerProps).not.toHaveProperty("domain");
     expect(domainWorkerProps.main).toContain("/apps/domain/src/worker.ts");
     expect(domainWorkerProps.url).toBeFalsy();
+    expect(domainWorkerProps.env.ANALYTICS).toBe(workerAnalytics);
+    expect(domainWorkerProps.env.AUTH_EMAIL_QUEUE).toBe(authEmailQueue);
+    expect(domainWorkerProps.env.DATABASE).toBe(hyperdrive);
     expect(apiWorkerProps).toMatchObject({
       domain: "api.example.com",
       env: {
+        ANALYTICS: workerAnalytics,
         CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+        DOMAIN: domain,
         NODE_ENV: "production",
       },
       name: "ceird-main-api",
       url: true,
     });
     expect(apiWorkerProps.main).toContain("/apps/api/src/worker.ts");
-    expect(apiWorkerProps.bindings.DOMAIN).toBe(domain);
     expect(syncWorkerProps).toMatchObject({
       domain: "sync.example.com",
       env: {
+        ANALYTICS: workerAnalytics,
         AUTH_APP_ORIGIN: "https://app.example.com",
         AUTH_TRUSTED_ORIGINS:
           "https://app.example.com,https://*--main.example.com",
         CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+        DOMAIN: domain,
         ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID:
           electricContainerEnv.AWS_ACCESS_KEY_ID,
         ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY:
@@ -1199,8 +1351,7 @@ describe("Cloudflare stack", () => {
       url: false,
     });
     expect(syncWorkerProps.main).toContain("/apps/sync/src/worker.ts");
-    expect(syncWorkerProps.bindings.DOMAIN).toBe(domain);
-    expect(syncWorkerProps.bindings.ElectricSql).toMatchObject({
+    expect(syncWorkerProps.env.ElectricSql).toMatchObject({
       className: "ElectricSql",
     });
     expect(electricContainerEnv).toMatchObject({
@@ -1314,7 +1465,7 @@ describe("Cloudflare stack", () => {
     } as unknown as Cloudflare.Hyperdrive;
     const domain = {
       workerName: "ceird-test-domain",
-    } as unknown as Cloudflare.Worker<DomainWorkerBindings>;
+    } as unknown as DomainWorkerResource;
     const aiGateway = {
       gatewayId: "ceird-main-agent-ai",
     } as unknown as Cloudflare.AiGateway;
@@ -1326,7 +1477,7 @@ describe("Cloudflare stack", () => {
       sync: makeAlchemyLocalWorkerOrigin("sync"),
     };
 
-    const domainBindings = makeDomainWorkerBindings({
+    const domainResourceEnv = makeDomainWorkerResourceEnv({
       analytics: workerAnalytics,
       authEmailQueue,
       config: configWithoutCloudflareBootstrapSecrets,
@@ -1339,9 +1490,6 @@ describe("Cloudflare stack", () => {
       authEmailQueue,
       betterAuthSecret: Redacted.make("better-auth-secret"),
       config: configWithoutCloudflareBootstrapSecrets,
-      databaseUrl: Redacted.make(
-        "postgresql://ceird:secret@example.neon.tech/ceird"
-      ),
       hyperdrive,
       localDev: true,
       localOrigins: {
@@ -1397,30 +1545,23 @@ describe("Cloudflare stack", () => {
       localDev: true,
       syncOrigin: localOrigins.sync,
     });
+    assertLocalDomainWorkerEnv(domainWorkerProps.env);
 
-    expect(Object.keys(domainBindings)).toStrictEqual([]);
-    expect(domainWorkerProps.bindings).toStrictEqual(domainBindings);
-    expect(domainWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
-    expect(agentWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
-    expect(apiWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
-    expect(mcpWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
-    expect(syncWorkerProps.bindings).not.toHaveProperty("ANALYTICS");
+    expect(Object.keys(domainResourceEnv)).toStrictEqual(["DATABASE"]);
+    expect(domainWorkerProps.env).not.toHaveProperty("ANALYTICS");
+    expect(domainWorkerProps.env).not.toHaveProperty("AUTH_EMAIL");
+    expect(domainWorkerProps.env).not.toHaveProperty("AUTH_EMAIL_QUEUE");
+    expect(domainWorkerProps.env.DATABASE).toBe(hyperdrive);
+    expect(domainWorkerProps.env).not.toHaveProperty("DATABASE_URL");
+    expect(agentWorkerProps.env).not.toHaveProperty("ANALYTICS");
+    expect(apiWorkerProps.env).not.toHaveProperty("ANALYTICS");
+    expect(mcpWorkerProps.env).not.toHaveProperty("ANALYTICS");
+    expect(syncWorkerProps.env).not.toHaveProperty("ANALYTICS");
     expect(syncWorkerProps.env).not.toHaveProperty(
       "ELECTRIC_CONTAINER_DATABASE_URL"
     );
     expect(syncWorkerProps.env).not.toHaveProperty(
       "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
-    );
-    const localDatabaseUrl = domainWorkerProps.env.DATABASE_URL;
-
-    if (!Redacted.isRedacted(localDatabaseUrl)) {
-      throw new Error(
-        "Expected local domain Worker DATABASE_URL to be redacted"
-      );
-    }
-
-    expect(Redacted.value(localDatabaseUrl)).toBe(
-      "postgresql://ceird:secret@example.neon.tech/ceird"
     );
     expect(domainWorkerProps.env.CEIRD_LOCAL_DEV).toBe("true");
     expect(domainWorkerProps.env.AUTH_RATE_LIMIT_CLEANUP_ENABLED).toBe("false");
@@ -1448,7 +1589,7 @@ describe("Cloudflare stack", () => {
     expect(domainWorkerProps.env.MCP_RESOURCE_URL).toBe(
       "http://mcp.localhost:1337/mcp"
     );
-    expect(agentWorkerProps.env).toStrictEqual({
+    expect(agentWorkerProps.env).toMatchObject({
       AGENT_AI_GATEWAY_ID: aiGateway.gatewayId,
       AGENT_INTERNAL_SECRET: expect.any(Object),
       AGENT_MUTATION_TOOLS_ENABLED: "true",
@@ -1457,6 +1598,11 @@ describe("Cloudflare stack", () => {
       CEIRD_LOCAL_DEV: "true",
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
       NODE_ENV: "production",
+    });
+    expect(agentWorkerProps.env.AI).toBe(aiGateway);
+    expect(agentWorkerProps.env.DOMAIN).toBe(domain);
+    expect(agentWorkerProps.env.CeirdAgent).toMatchObject({
+      className: "CeirdAgent",
     });
     expect(appEnv).toStrictEqual({
       AGENT_ORIGIN: "http://agent.localhost:1337",
@@ -1478,10 +1624,69 @@ describe("Cloudflare stack", () => {
     });
   });
 
+  it("preserves already-redacted local database URLs without nesting the secret wrapper", async () => {
+    const databaseUrl = "postgresql://ceird:secret@example.neon.tech/ceird";
+    const alreadyRedactedDatabaseUrl = Output.asOutput(
+      Redacted.make(databaseUrl)
+    ) as Output.Output<Redacted.Redacted<string>, never>;
+    const redactedDatabaseUrl = redactInput(alreadyRedactedDatabaseUrl);
+
+    if (!Output.isOutput(redactedDatabaseUrl)) {
+      throw new Error("Expected local database URL helper to preserve Output");
+    }
+
+    const resolvedDatabaseUrl = await Effect.runPromise(
+      Output.evaluate(redactedDatabaseUrl, {}).pipe(
+        Effect.provide(State.inMemoryState())
+      )
+    );
+
+    if (!Redacted.isRedacted(resolvedDatabaseUrl)) {
+      throw new Error("Expected local database URL output to stay redacted");
+    }
+
+    expect(Redacted.value(resolvedDatabaseUrl)).toBe(databaseUrl);
+    expect(
+      Redacted.isRedacted(Redacted.value(resolvedDatabaseUrl))
+    ).toBeFalsy();
+  });
+
+  it("rebuilds serialized redacted marker outputs into live secrets", async () => {
+    const databaseUrl = "postgresql://ceird:secret@example.neon.tech/ceird";
+    const serializedRedactedDatabaseUrl = Output.asOutput({
+      _tag: "Redacted",
+      value: databaseUrl,
+    } as unknown as Redacted.Redacted<string>) as Output.Output<
+      Redacted.Redacted<string>,
+      never
+    >;
+    const redactedDatabaseUrl = redactInput(serializedRedactedDatabaseUrl);
+
+    if (!Output.isOutput(redactedDatabaseUrl)) {
+      throw new Error(
+        "Expected serialized redacted marker helper to preserve Output"
+      );
+    }
+
+    const resolvedDatabaseUrl = await Effect.runPromise(
+      Output.evaluate(redactedDatabaseUrl, {}).pipe(
+        Effect.provide(State.inMemoryState())
+      )
+    );
+
+    if (!Redacted.isRedacted(resolvedDatabaseUrl)) {
+      throw new Error(
+        "Expected serialized redacted marker output to rebuild a Redacted secret"
+      );
+    }
+
+    expect(Redacted.value(resolvedDatabaseUrl)).toBe(databaseUrl);
+  });
+
   it("declares the Agent Worker as a public observed Cloudflare Agent over the domain service", () => {
     const domain = {
       workerName: "ceird-test-domain",
-    } as unknown as Cloudflare.Worker<DomainWorkerBindings>;
+    } as unknown as DomainWorkerResource;
     const aiGateway = {
       gatewayId: "ceird-main-agent-ai",
     } as unknown as Cloudflare.AiGateway;
@@ -1536,10 +1741,10 @@ describe("Cloudflare stack", () => {
       rateLimitingInterval: null,
       rateLimitingLimit: null,
     });
-    expect(agentWorkerProps.bindings.AI).toBe(aiGateway);
-    expect(agentWorkerProps.bindings.ANALYTICS).toBe(workerAnalytics);
-    expect(agentWorkerProps.bindings.DOMAIN).toBe(domain);
-    expect(agentWorkerProps.bindings.CeirdAgent).toMatchObject({
+    expect(agentWorkerProps.env.AI).toBe(aiGateway);
+    expect(agentWorkerProps.env.ANALYTICS).toBe(workerAnalytics);
+    expect(agentWorkerProps.env.DOMAIN).toBe(domain);
+    expect(agentWorkerProps.env.CeirdAgent).toMatchObject({
       className: "CeirdAgent",
     });
   });
@@ -1547,7 +1752,7 @@ describe("Cloudflare stack", () => {
   it("declares the MCP Worker as a public observed adapter over the domain service", () => {
     const domain = {
       workerName: "ceird-test-domain",
-    } as unknown as Cloudflare.Worker<DomainWorkerBindings>;
+    } as unknown as DomainWorkerResource;
 
     const mcpWorkerProps = makeMcpWorkerProps({
       analytics: workerAnalytics,
@@ -1581,8 +1786,8 @@ describe("Cloudflare stack", () => {
     expect(mcpWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
     expect(mcpWorkerProps.observability).toBe(ceirdWorkerObservability);
     expect(mcpWorkerProps.main).toContain("/apps/mcp/src/worker.ts");
-    expect(mcpWorkerProps.bindings.ANALYTICS).toBe(workerAnalytics);
-    expect(mcpWorkerProps.bindings.DOMAIN).toBe(domain);
+    expect(mcpWorkerProps.env.ANALYTICS).toBe(workerAnalytics);
+    expect(mcpWorkerProps.env.DOMAIN).toBe(domain);
   });
 
   it("uses the configured Hyperdrive name instead of deriving a fresh provider name", () => {

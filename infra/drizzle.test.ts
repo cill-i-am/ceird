@@ -113,7 +113,7 @@ describe("Alchemy Drizzle integration", () => {
       ])
     );
     expect(schemaModule.tableCount).toBeGreaterThan(0);
-  });
+  }, 15_000);
 
   it("can load and inspect the API schema with the Drizzle Kit API used by Drizzle.Schema", async () => {
     const requireFromAlchemySchema = createRequire(

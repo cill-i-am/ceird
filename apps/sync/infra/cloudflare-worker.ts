@@ -1,5 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import type { DomainServiceBinding } from "@ceird/domain-core";
 import * as Cloudflare from "alchemy/Cloudflare";
 import type {
   ContainerApplicationProps,
@@ -29,29 +30,26 @@ const syncWorkerObservability = {
   },
 } satisfies WorkerProps["observability"];
 
-export type WorkerServiceBinding = Service;
-
-// oxlint-disable-next-line typescript-eslint/consistent-type-definitions -- Cloudflare.Worker needs an exact keyed object type for service bindings.
-export type SyncWorkerBindings = {
+export interface SyncWorkerResourceEnv {
   readonly ANALYTICS?: Cloudflare.AnalyticsEngineDataset | undefined;
   readonly DOMAIN: DomainWorkerResource;
   readonly ElectricSql: Cloudflare.DurableObjectNamespaceLike;
-};
+}
 
 export interface SyncWorkerBindingEnv {
   readonly ANALYTICS?: AnalyticsEngineDataset | undefined;
-  readonly DOMAIN: WorkerServiceBinding;
+  readonly DOMAIN: DomainServiceBinding;
   readonly ElectricSql: DurableObjectNamespace;
 }
 
-type SyncWorkerBindingProps = {
-  readonly [BindingName in keyof SyncWorkerBindings]:
-    | NonNullable<SyncWorkerBindings[BindingName]>
-    | Effect.Effect<NonNullable<SyncWorkerBindings[BindingName]>, never, never>;
+type WorkerEnvShape<Env extends object> = {
+  readonly [Key in keyof Env]: Env[Key];
 };
-
-type WorkerConfiguredEnvValue = Input<NonNullable<WorkerProps["env"]>[string]>;
-type WorkerConfiguredEnv = Record<string, WorkerConfiguredEnvValue>;
+type WorkerEnvInput<Env extends object> = {
+  readonly [Key in keyof WorkerEnvShape<Env>]: undefined extends WorkerEnvShape<Env>[Key]
+    ? Input<Exclude<WorkerEnvShape<Env>[Key], undefined>> | undefined
+    : Input<WorkerEnvShape<Env>[Key]>;
+};
 type SyncWorkerElectricContainerConfiguredEnv = Required<
   Pick<
     SyncWorkerConfiguredEnv,
@@ -75,20 +73,14 @@ export interface SyncWorkerConfiguredEnv {
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_TRUSTED_ORIGINS: string;
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
-  readonly ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID?: Input<
-    Redacted.Redacted<string>
-  >;
-  readonly ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY?: Input<
-    Redacted.Redacted<string>
-  >;
-  readonly ELECTRIC_CONTAINER_DATABASE_URL?: Input<Redacted.Redacted<string>>;
-  readonly ELECTRIC_CONTAINER_ELECTRIC_SECRET?: Input<
-    Redacted.Redacted<string>
-  >;
-  readonly ELECTRIC_CONTAINER_R2_ACCOUNT_ID?: Input<string>;
-  readonly ELECTRIC_CONTAINER_R2_BUCKET_NAME?: Input<string>;
+  readonly ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID?: Redacted.Redacted<string>;
+  readonly ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY?: Redacted.Redacted<string>;
+  readonly ELECTRIC_CONTAINER_DATABASE_URL?: Redacted.Redacted<string>;
+  readonly ELECTRIC_CONTAINER_ELECTRIC_SECRET?: Redacted.Redacted<string>;
+  readonly ELECTRIC_CONTAINER_R2_ACCOUNT_ID?: string;
+  readonly ELECTRIC_CONTAINER_R2_BUCKET_NAME?: string;
   readonly ELECTRIC_SQL_LOCATION_HINT: DurableObjectLocationHint;
-  readonly ELECTRIC_SOURCE_SECRET: Input<Redacted.Redacted<string>>;
+  readonly ELECTRIC_SOURCE_SECRET: Redacted.Redacted<string>;
   readonly NODE_ENV: "production";
 }
 
@@ -122,7 +114,10 @@ export interface ElectricContainerConfig {
   readonly name: string;
 }
 
-export function makeSyncWorkerBindings(input: {
+type SyncWorkerEnv = SyncWorkerResourceEnv & SyncWorkerConfiguredEnv;
+type SyncWorkerConfiguredEnvInput = WorkerEnvInput<SyncWorkerConfiguredEnv>;
+
+export function makeSyncWorkerResourceEnv(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly domain: DomainWorkerResource;
   readonly localDev?: boolean | undefined;
@@ -133,17 +128,17 @@ export function makeSyncWorkerBindings(input: {
     ElectricSql: Cloudflare.DurableObjectNamespace("ElectricSql", {
       className: "ElectricSql",
     }),
-  } satisfies SyncWorkerBindingProps;
+  } satisfies WorkerEnvInput<SyncWorkerResourceEnv>;
 }
 
-export function makeSyncWorkerEnv(input: {
+export function makeSyncWorkerConfiguredEnv(input: {
   readonly config: SyncWorkerStageConfig;
   readonly electricContainer?: ElectricContainerConfig | undefined;
   readonly electricSqlLocationHint: DurableObjectLocationHint;
   readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
   readonly localDev?: boolean | undefined;
   readonly localAppOrigin?: string | undefined;
-}): SyncWorkerConfiguredEnv {
+}) {
   const authAppOrigin =
     input.localDev === true && input.localAppOrigin
       ? input.localAppOrigin
@@ -166,7 +161,7 @@ export function makeSyncWorkerEnv(input: {
     ELECTRIC_SQL_LOCATION_HINT: input.electricSqlLocationHint,
     ELECTRIC_SOURCE_SECRET: input.electricSourceSecret,
     NODE_ENV: "production",
-  } satisfies SyncWorkerConfiguredEnv & WorkerConfiguredEnv;
+  } satisfies SyncWorkerConfiguredEnvInput;
   const electricContainerEnv = makeSyncWorkerElectricContainerEnv(
     input.electricContainer
   );
@@ -178,7 +173,7 @@ export function makeSyncWorkerEnv(input: {
   return {
     ...baseEnv,
     ...electricContainerEnv,
-  } satisfies SyncWorkerConfiguredEnv & WorkerConfiguredEnv;
+  } satisfies SyncWorkerConfiguredEnvInput;
 }
 
 export function makeElectricContainerEnv(input: {
@@ -207,7 +202,7 @@ export function makeElectricContainerEnv(input: {
 
 function makeSyncWorkerElectricContainerEnv(
   electricContainer: ElectricContainerConfig | undefined
-): SyncWorkerElectricContainerConfiguredEnv | undefined {
+): WorkerEnvInput<SyncWorkerElectricContainerConfiguredEnv> | undefined {
   if (electricContainer === undefined) {
     return;
   }
@@ -291,25 +286,47 @@ export function makeSyncWorkerProps(input: {
     name: input.name,
     main: syncWorkerMain,
     compatibility: ceirdWorkerCompatibility,
-    bindings: makeSyncWorkerBindings({
+    env: makeSyncWorkerEnv({
+      analytics: input.analytics,
+      config: input.config,
+      domain: input.domain,
+      electricContainer: input.electricContainer,
+      electricSqlLocationHint: input.electricSqlLocationHint,
+      electricSourceSecret: input.electricSourceSecret,
+      localDev: input.localDev,
+      localAppOrigin: input.localAppOrigin,
+    }),
+    domain: input.hostname,
+    observability: syncWorkerObservability,
+    url: false,
+  } satisfies InputProps<WorkerProps<WorkerEnvShape<SyncWorkerEnv>>>;
+}
+
+export function makeSyncWorkerEnv(input: {
+  readonly analytics: Cloudflare.AnalyticsEngineDataset;
+  readonly config: SyncWorkerStageConfig;
+  readonly domain: DomainWorkerResource;
+  readonly electricContainer?: ElectricContainerConfig | undefined;
+  readonly electricSqlLocationHint: DurableObjectLocationHint;
+  readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
+  readonly localDev?: boolean | undefined;
+  readonly localAppOrigin?: string | undefined;
+}) {
+  return {
+    ...makeSyncWorkerResourceEnv({
       analytics: input.analytics,
       domain: input.domain,
       localDev: input.localDev,
     }),
-    env: {
-      ...makeSyncWorkerEnv({
-        config: input.config,
-        electricContainer: input.electricContainer,
-        electricSqlLocationHint: input.electricSqlLocationHint,
-        electricSourceSecret: input.electricSourceSecret,
-        localDev: input.localDev,
-        localAppOrigin: input.localAppOrigin,
-      }),
-    },
-    domain: input.hostname,
-    observability: syncWorkerObservability,
-    url: false,
-  } satisfies InputProps<WorkerProps<SyncWorkerBindingProps>>;
+    ...makeSyncWorkerConfiguredEnv({
+      config: input.config,
+      electricContainer: input.electricContainer,
+      electricSqlLocationHint: input.electricSqlLocationHint,
+      electricSourceSecret: input.electricSourceSecret,
+      localDev: input.localDev,
+      localAppOrigin: input.localAppOrigin,
+    }),
+  } satisfies WorkerEnvInput<SyncWorkerEnv>;
 }
 
 export function makeSyncWorker(input: {

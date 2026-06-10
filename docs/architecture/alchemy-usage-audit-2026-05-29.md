@@ -63,14 +63,14 @@ resource bindings, app-owned infra modules, guarded CI preview stages, and an
 Alchemy-native local dev wrapper.
 
 The latest upstream changes resolved two of the biggest previous audit items:
-the repo now tracks `alchemy@2.0.0-beta.44`, and `pnpm dev` now runs through
+the repo now tracks `alchemy@2.0.0-beta.52`, and `pnpm dev` now runs through
 `scripts/alchemy-dev.mjs`, which derives intentional branch-based stages,
 refuses detached worktrees without an explicit stage, loads `.env.local`,
 starts Alchemy local RPC services, and configures local Worker origins.
 
 The remaining highest-value improvements are now narrower:
 
-- Retest beta-era workarounds now that beta.44 is in place, especially
+- Retest beta-era workarounds now that beta.52 is in place, especially
   `alchemy/Drizzle/Providers` and manual service binding types.
 - Retire the legacy `Drizzle.Migrations` tombstone once live state confirms it
   is safe.
@@ -81,20 +81,20 @@ The remaining highest-value improvements are now narrower:
 
 ## Scorecard
 
-| Area                  | Assessment        | Notes                                                                                                                                                                                                                                                                      |
-| --------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stack and stage model | Excellent         | `alchemy.run.ts` owns one root stack, reads `Stack.stage`, and uses explicit stage-derived naming. The dev wrapper now derives branch-based stages and rejects detached worktrees without `--stage`.                                                                       |
-| State store           | Excellent         | `Cloudflare.state()` is used, `.alchemy/` is ignored, and CI/local docs avoid checked-in state.                                                                                                                                                                            |
-| Monorepo layout       | Excellent         | Root stack orchestrates shared infra while app-owned `apps/*/infra` modules own Worker declarations. This matches the single-stack monorepo recommendation for one deploy cadence.                                                                                         |
-| Local Alchemy dev     | Excellent         | `pnpm dev` now runs a project wrapper around Alchemy local dev, loads `.env.local`, supplies local Worker origins, and explicitly works around local Workerd provider gaps.                                                                                                |
-| Neon and Hyperdrive   | Excellent         | Parent stage creates the Neon project; child stages `Neon.Project.ref` the parent; Hyperdrive consumes `branch.origin`, not a pooled URI. Local Workerd receives a redacted direct `DATABASE_URL` only because Hyperdrive is unavailable locally.                          |
-| Drizzle deploy path   | Excellent         | `Drizzle.Schema` feeds `Neon.Branch` migration ordering; production and child migration directories are intentionally separated.                                                                                                                                           |
-| Worker bindings       | Excellent         | Async Worker `bindings` plus typed runtime env contracts match current Worker docs. The Agent Worker now uses a native AI Gateway resource, and local dev omits unsupported Hyperdrive/email/queue bindings deliberately. Some manual typing remains for service bindings. |
-| Effect-native runtime | Strong but uneven | Domain/API/MCP are Effect-based behind async Workers; Domain local database configuration is now typed and explicit. Agent routing improved, but still has the clearest upside from Effect-style cleanup.                                                                  |
-| Custom providers      | Strong            | Tenant DNS/routes implement `read`, `reconcile`, `diff`, and idempotent-ish delete behavior with focused tests and Alchemy lifecycle tests. Native Alchemy does not currently expose a generic Worker route/DNS resource that covers the wildcard use case.                |
-| CI/previews           | Excellent         | Explicit `pr-<number>` stages, same-repo secret gates, protected environments, health probes, state reads, post-deploy state audits, shared credential restore, and destroy guardrails are in place.                                                                       |
-| Observability         | Strong            | Worker health consistently reports stack/stage identity, and Agent health exposes its AI Gateway ID. AI Gateway gives model calls a managed Cloudflare observability point.                                                                                                |
-| Simplicity            | Strong            | The remaining complexity is explainable. The raw AI binding, duplicated database URL helper, and CI credential restore duplication have been removed; legacy tombstones and provider-layer casts remain the main cleanup candidates.                                       |
+| Area                  | Assessment        | Notes                                                                                                                                                                                                                                                                                                        |
+| --------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Stack and stage model | Excellent         | `alchemy.run.ts` owns one root stack, reads `Stack.stage`, and uses explicit stage-derived naming. The dev wrapper now derives branch-based stages and rejects detached worktrees without `--stage`.                                                                                                         |
+| State store           | Excellent         | `Cloudflare.state()` is used, `.alchemy/` is ignored, and CI/local docs avoid checked-in state.                                                                                                                                                                                                              |
+| Monorepo layout       | Excellent         | Root stack orchestrates shared infra while app-owned `apps/*/infra` modules own Worker declarations. This matches the single-stack monorepo recommendation for one deploy cadence.                                                                                                                           |
+| Local Alchemy dev     | Excellent         | `pnpm dev` now runs a project wrapper around Alchemy local dev, loads `.env.local`, supplies local Worker origins, and uses the same native Hyperdrive binding locally while omitting only the deployed-only resource bindings that workerd still rejects.                                                   |
+| Neon and Hyperdrive   | Excellent         | Parent stage creates the Neon project; child stages `Neon.Project.ref` the parent; Hyperdrive consumes `branch.origin`, not a pooled URI. Local Alchemy dev now uses beta.52's native local Hyperdrive path, while `DATABASE_URL` remains reserved for package-local domain runs outside the Worker runtime. |
+| Drizzle deploy path   | Excellent         | `Drizzle.Schema` feeds `Neon.Branch` migration ordering; production and child migration directories are intentionally separated.                                                                                                                                                                             |
+| Worker bindings       | Excellent         | Async Worker `env` declarations plus typed runtime env contracts match current Worker docs. The Agent Worker now uses a native AI Gateway resource, and local dev omits only unsupported email/queue/analytics bindings by leaving those `env` keys absent. Some manual typing remains for service bindings. |
+| Effect-native runtime | Strong but uneven | Domain/API/MCP are Effect-based behind async Workers; Domain local database configuration is now typed and explicit. Agent routing improved, but still has the clearest upside from Effect-style cleanup.                                                                                                    |
+| Custom providers      | Strong            | Tenant DNS/routes implement `read`, `reconcile`, `diff`, and idempotent-ish delete behavior with focused tests and Alchemy lifecycle tests. Native Alchemy does not currently expose a generic Worker route/DNS resource that covers the wildcard use case.                                                  |
+| CI/previews           | Excellent         | Explicit `pr-<number>` stages, same-repo secret gates, protected environments, health probes, state reads, post-deploy state audits, shared credential restore, and destroy guardrails are in place.                                                                                                         |
+| Observability         | Strong            | Worker health consistently reports stack/stage identity, and Agent health exposes its AI Gateway ID. AI Gateway gives model calls a managed Cloudflare observability point.                                                                                                                                  |
+| Simplicity            | Strong            | The remaining complexity is explainable. The raw AI binding, duplicated database URL helper, and CI credential restore duplication have been removed; legacy tombstones and provider-layer casts remain the main cleanup candidates.                                                                         |
 
 ## Current Architecture Inventory
 
@@ -147,9 +147,9 @@ The database path is strongly aligned with current best practice:
 - Hyperdrive uses `branch.origin` via `database.hyperdriveOrigin`.
 - Direct database URLs are not stack outputs; CI reads `PostgresBranch` state
   only for masked Playwright setup.
-- Local Workerd receives a redacted `DATABASE_URL` from `branch.connectionUri`
-  only when `AlchemyContext.dev` is true, because local Hyperdrive bindings are
-  not available.
+- Local Alchemy dev now keeps the Domain `DATABASE` Hyperdrive binding through
+  beta.52's local provider support. `DATABASE_URL` remains the package-local
+  fallback for non-Alchemy domain runs.
 
 This is the exact shape Alchemy's current Hyperdrive/Drizzle/shared-database
 guides push toward. The extra `makeAppliedMigrationsDir` dependency wrapper is
@@ -164,7 +164,7 @@ The app/API/MCP/Agent/domain resources are app-owned modules under
 split is good: infra controls shared topology; each surface owns its Worker
 binding and env contract.
 
-The async Worker resources use `bindings` and `Cloudflare.InferEnv` where it is
+The async Worker resources use `env` and `Cloudflare.InferEnv` where it is
 usable. API/MCP/Agent service bindings still need manual runtime env typing
 because the typed resource does not infer the Cloudflare `Service` runtime shape
 cleanly for these cross-Worker bindings.
@@ -177,10 +177,11 @@ Cloudflare/Alchemy boundary for this app.
 Local dev now uses Alchemy's dev context explicitly. `infra/cloudflare-stack.ts`
 derives local Worker origins like `http://app.localhost:1337`, passes those
 origins into app-owned Worker env, skips tenant routing and the auth email queue
-consumer locally, and lets the Domain Worker omit Hyperdrive/email/queue
-bindings that local Workerd cannot provide. That is a good example of using
-Alchemy's dev mode as a first-class control plane input instead of creating a
-parallel local stack.
+consumer locally, keeps the Domain `DATABASE` Hyperdrive binding through the
+native beta.52 local provider path, and omits only the deployed-only
+email/queue/analytics bindings that local workerd cannot provide. That is a
+good example of using Alchemy's dev mode as a first-class control plane input
+instead of creating a parallel local stack.
 
 ### Runtime database usage
 
@@ -213,7 +214,7 @@ routes and refuses to silently overwrite unmanaged conflicts. Tests cover
 foreign resources, pagination, no-script bypass routes, idempotent wildcard
 retention, and validation that wildcard routes remain inside the zone.
 
-The current `alchemy@2.0.0-beta.44` package has Worker `domain` support for
+The current `alchemy@2.0.0-beta.52` package has Worker `domain` support for
 exact custom hostnames, but it does not expose a first-class generic Cloudflare
 DNS record or Worker route resource that covers Ceird's wildcard tenant route
 model. Keeping the custom providers is therefore justified for now.
@@ -290,13 +291,13 @@ Why it matters:
 This was the clearest "not taking advantage of Alchemy yet" gap. It now gives
 the Agent surface a managed operational point before model usage grows.
 
-### 2. Complete the post-beta.44 cleanup pass
+### 2. Complete the post-beta.52 cleanup pass
 
 Priority: High
 
 Current state:
 
-- The repo now pins `alchemy@2.0.0-beta.44`.
+- The repo now pins `alchemy@2.0.0-beta.52`.
 - `pnpm dev` now runs through an Alchemy local dev wrapper.
 - App-local package ownership is cleaner: the root package owns Alchemy rather
   than duplicating the dependency in app packages.
@@ -305,13 +306,16 @@ Current state:
 
 Recommendation:
 
-Treat beta.44 as a landed platform upgrade, then do a focused cleanup pass
+Treat beta.52 as a landed platform upgrade, then do a focused cleanup pass
 against the workarounds that were previously tolerated for beta.40:
 
 - Whether `alchemy/Drizzle/Providers` can become a top-level
   `alchemy/Drizzle` provider import.
 - Whether Worker service binding inference improved enough to remove manual
-  `Service` env types.
+  `Service` env types. After the `2.0.0-beta.52` upgrade, the answer is still
+  "not yet" for Ceird's cross-Worker `DOMAIN` contracts even though the old
+  `WorkerProps.bindings` shape is gone and Worker helpers should now write
+  resources through `env`.
 - Whether custom tenant routing can use any new native Cloudflare resources.
 
 Run `pnpm run check-types:infra`, `pnpm run test:infra`, and the app-owned
@@ -584,7 +588,7 @@ cast hides type detail from the compiler.
 
 Recommendation:
 
-On the beta.44 cleanup pass, try removing or narrowing the cast. If Alchemy
+On the beta.52 cleanup pass, try removing or narrowing the cast. If Alchemy
 types still require it, isolate it in a named helper with a comment explaining
 why it is the boundary where provider setup errors become fatal.
 
@@ -633,8 +637,9 @@ secret rotation affects domain-to-agent authorization.
 - Do not replace `branch.origin` with `connectionUri` or `pooledConnectionUri`
   for Hyperdrive.
 - Do not output raw database URLs from the stack.
-- Do not let the local Workerd `DATABASE_URL` fallback become a deployed
-  database path; deployed Workers should use Hyperdrive.
+- Do not reintroduce a local Workerd `DATABASE_URL` fallback for Alchemy dev
+  stages; package-local domain runs may still use `DATABASE_URL`, but
+  Alchemy-managed Workers should use Hyperdrive.
 - Do not split stack/stage identity into an additional `CEIRD_*_STAGE`
   environment axis.
 - Do not move Alchemy imports into request handlers or shared domain packages.
@@ -655,7 +660,7 @@ secret rotation affects domain-to-agent authorization.
 5. Added Alchemy doctor/state-audit scripts, CI audit hooks, lifecycle tests,
    and the reference architecture guide.
 
-### Post-beta.44 simplification branch
+### Post-beta.52 simplification branch
 
 1. Reassess CI state-store restore, Drizzle provider imports, service binding
    inference, and custom provider native alternatives.

@@ -890,12 +890,12 @@ describe("makeAuthenticationConfig()", () => {
       makeAuthenticationTrustedOrigins({
         trustedOrigins: ["ftp://*--pr-123.ceird.app"],
       })
-    ).toThrow(Error);
+    ).toThrow(/a string matching the RegExp/);
     expect(() =>
       makeAuthenticationTrustedOrigins({
         trustedOrigins: ["https://tenant.ceird.app/path"],
       })
-    ).toThrow(Error);
+    ).toThrow(/a string matching the RegExp/);
   }, 10_000);
 
   it("reflects configured cookie prefixes in the Better Auth advanced config", () => {

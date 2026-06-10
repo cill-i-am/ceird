@@ -57,16 +57,19 @@ export async function loadRequestAppContextMiddlewareContext({
     request,
   });
   const shouldIncludeOrganizationContext =
-    hydrateOrganizationContext && snapshot.activeOrganizationId !== null;
+    hydrateOrganizationContext && snapshot.organizations !== undefined;
 
   if (shouldIncludeOrganizationContext && snapshot.organizations) {
     return {
-      ...(snapshot.activeOrganizationId
+      ...(snapshot.activeOrganizationId !== null ||
+      snapshot.requestedOrganizationSlug
         ? { activeOrganizationId: snapshot.activeOrganizationId }
         : {}),
       authSession: snapshot.session,
-      currentOrganizationRole: snapshot.currentOrganizationRole,
       organizations: snapshot.organizations,
+      ...(snapshot.currentOrganizationRole
+        ? { currentOrganizationRole: snapshot.currentOrganizationRole }
+        : {}),
       ...(requestSearch ? { requestSearch } : {}),
       ...(snapshot.requestedOrganizationSlug
         ? { requestedOrganizationSlug: snapshot.requestedOrganizationSlug }
