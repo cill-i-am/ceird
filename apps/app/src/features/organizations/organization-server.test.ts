@@ -190,38 +190,29 @@ describe("server organization function middleware", () => {
     expect(setCurrentServerActiveOrganizationServerFn).toStrictEqual(
       expect.any(Function)
     );
+    expect(capturedCreateServerFns).toHaveLength(2);
     expect(capturedCreateServerFns[0]?.middlewareCalls).toContainEqual([
       requiredAuthFunctionMiddleware,
     ]);
-    expect(capturedCreateServerFns[4]?.middlewareCalls).toContainEqual([
+    expect(capturedCreateServerFns[1]?.middlewareCalls).toContainEqual([
       organizationFunctionMiddleware,
     ]);
   });
 
-  it("validates organization id inputs at the server-function boundary", async () => {
+  it("keeps server-function validation only on mutation boundaries", async () => {
     const {
-      getCurrentServerOrganizationMemberRole:
-        getCurrentServerOrganizationMemberRoleServerFn,
       setCurrentServerActiveOrganization:
         setCurrentServerActiveOrganizationServerFn,
     } = await import("./organization-server");
-    const [roleValidator] = capturedCreateServerFns[3]?.inputValidators ?? [];
     const [setActiveValidator] =
-      capturedCreateServerFns[4]?.inputValidators ?? [];
+      capturedCreateServerFns[1]?.inputValidators ?? [];
 
-    expect(getCurrentServerOrganizationMemberRoleServerFn).toStrictEqual(
-      expect.any(Function)
-    );
     expect(setCurrentServerActiveOrganizationServerFn).toStrictEqual(
       expect.any(Function)
-    );
-    expect(roleValidator?.("org_123")).toStrictEqual(
-      decodeOrganizationId("org_123")
     );
     expect(setActiveValidator?.("org_123")).toStrictEqual(
       decodeOrganizationId("org_123")
     );
-    expect(() => roleValidator?.("")).toThrow(/Expected/);
     expect(() => setActiveValidator?.("")).toThrow(/Expected/);
   });
 });
