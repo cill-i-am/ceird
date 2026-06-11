@@ -261,11 +261,11 @@ test("teardown is a no-op for Alchemy-native local environments", async (t) => {
   assert.match(result.stdout, /Alchemy stages are managed explicitly/);
   assert.match(
     result.stdout,
-    /CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --env-file \.env\.local --stage <stage>/
+    /CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --profile ceird-env --env-file \.env\.local --stage <stage>/
   );
   assert.doesNotMatch(
     result.stdout,
-    /(?<!CEIRD_CLOUDFLARE=1 )pnpm alchemy destroy --env-file \.env\.local --stage <stage>/
+    /(?<!CEIRD_CLOUDFLARE=1 )pnpm alchemy destroy --profile ceird-env --env-file \.env\.local --stage <stage>/
   );
   assert.doesNotMatch(result.stdout, /pnpm alchemy destroy\.$/m);
   assert.doesNotMatch(result.stdout, /Docker/);

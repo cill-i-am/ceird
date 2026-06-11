@@ -15,27 +15,27 @@ command = "pnpm dev -- --stage codex-alchemy-v2-native-migration"
 [[actions]]
 name = "Alchemy plan"
 icon = "tool"
-command = "CEIRD_CLOUDFLARE=1 pnpm alchemy plan --env-file .env.local --stage codex-alchemy-v2-native-migration"
+command = "CEIRD_CLOUDFLARE=1 pnpm alchemy plan --profile ceird-env --env-file .env.local --stage codex-alchemy-v2-native-migration"
 
 [[actions]]
 name = "Plan parent Alchemy stage"
 icon = "tool"
-command = "CEIRD_CLOUDFLARE=1 pnpm alchemy plan --env-file .env.local --stage main"
+command = "CEIRD_CLOUDFLARE=1 pnpm alchemy plan --profile ceird-env --env-file .env.local --stage main"
 
 [[actions]]
 name = "Inspect parent Alchemy state"
 icon = "debug"
-command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --env-file .env.local --stage main"
+command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --profile ceird-env --env-file .env.local --stage main"
 
 [[actions]]
 name = "Alchemy state tree"
 icon = "debug"
-command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --env-file .env.local --stage codex-alchemy-v2-native-migration"
+command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --profile ceird-env --env-file .env.local --stage codex-alchemy-v2-native-migration"
 
 [[actions]]
 name = "Alchemy logs"
 icon = "debug"
-command = "CEIRD_CLOUDFLARE=1 pnpm alchemy logs --env-file .env.local --stage codex-alchemy-v2-native-migration"
+command = "CEIRD_CLOUDFLARE=1 pnpm alchemy logs --profile ceird-env --env-file .env.local --stage codex-alchemy-v2-native-migration"
 
 [[actions]]
 name = "Local env cleanup"

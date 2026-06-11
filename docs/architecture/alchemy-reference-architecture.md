@@ -51,10 +51,10 @@ from stack outputs.
 GitHub Actions should restore state-store credentials only through
 `scripts/restore-alchemy-state-store-credentials.mjs`; do not duplicate shell
 snippets that create `~/.alchemy/credentials/default/cloudflare-state-store.json`.
-The long-lived GitHub Actions Cloudflare API token and baseline GitHub
-variables are declared in `alchemy.github.run.ts`. Reconcile that stack with a
-bootstrap token that has account API-token write access; do not hand-create or
-hand-rotate the deploy token in GitHub.
+Baseline GitHub Actions environment secrets and variables are declared in
+`alchemy.github.run.ts`. Store the global Cloudflare API key and email manually
+in GitHub deploy environments, and do not add `CLOUDFLARE_API_TOKEN` alongside
+them.
 
 ## Worker Observability
 

@@ -803,7 +803,7 @@ describe("Cloudflare stack", () => {
     ).toBe(false);
   });
 
-  it("bootstraps local Electric storage and requires deployed runtime credentials outside preview probes", () => {
+  it("provisions Electric storage for local and ordinary stages but skips preview probes", () => {
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({
@@ -815,13 +815,7 @@ describe("Cloudflare stack", () => {
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({
-          config: {
-            ...previewTenantConfig,
-            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
-            electricStorageSecretAccessKey: Redacted.make(
-              "electric-secret-access-key"
-            ),
-          },
+          config: configWithoutCloudflareBootstrapSecrets,
           localDev: false,
         })
       )
@@ -850,34 +844,12 @@ describe("Cloudflare stack", () => {
         shouldProvisionElectricStorage({
           config: {
             ...configWithoutCloudflareBootstrapSecrets,
-            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
-            electricStorageSecretAccessKey: Redacted.make(
-              "electric-secret-access-key"
-            ),
+            stage: "codex-electric-storage",
           },
           localDev: false,
         })
       )
     ).toBe(true);
-    expect(() =>
-      Effect.runSync(
-        shouldProvisionElectricStorage({
-          config: {
-            ...configWithoutCloudflareBootstrapSecrets,
-            electricStorageAccessKeyId: Redacted.make("electric-access-key-id"),
-          },
-          localDev: false,
-        })
-      )
-    ).toThrow(/must be configured together/);
-    expect(() =>
-      Effect.runSync(
-        shouldProvisionElectricStorage({
-          config: configWithoutCloudflareBootstrapSecrets,
-          localDev: false,
-        })
-      )
-    ).toThrow(/required outside local Alchemy dev/);
   });
 
   it("creates the Electric container only outside local Alchemy dev", () => {

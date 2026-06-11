@@ -158,10 +158,6 @@ export interface InfraStageConfig {
   readonly hyperdriveName: ProviderResourceName;
   readonly hyperdriveOriginConnectionLimit: number;
   readonly electricContainerInstanceType: ElectricContainerInstanceType;
-  readonly electricStorageAccessKeyId: Redacted.Redacted<string> | undefined;
-  readonly electricStorageSecretAccessKey:
-    | Redacted.Redacted<string>
-    | undefined;
   readonly mcpAuthorizedAppCacheMaxEntries: number | undefined;
   readonly mcpAuthorizedAppCacheTtlSeconds: number | undefined;
   readonly neonDatabaseName: string;
@@ -491,42 +487,8 @@ function decodeElectricContainerInstanceType(value: string) {
   );
 }
 
-function readOptionalNonEmptyRedactedConfig(name: string) {
-  return Config.option(Config.redacted(name)).pipe(
-    Effect.map((option) => {
-      let result: Redacted.Redacted<string> | undefined;
-
-      if (Option.isSome(option)) {
-        const trimmed = Redacted.value(option.value).trim();
-
-        if (trimmed.length > 0) {
-          result = Redacted.make(trimmed);
-        }
-      }
-
-      return result;
-    })
-  );
-}
-
 export function makeInfraConfigSourceError(message: string) {
   return new Config.ConfigError(new ConfigProvider.SourceError({ message }));
-}
-
-function validateElectricStorageCredentialPair(input: {
-  readonly accessKeyId: Redacted.Redacted<string> | undefined;
-  readonly secretAccessKey: Redacted.Redacted<string> | undefined;
-}) {
-  const hasAccessKey = input.accessKeyId !== undefined;
-  const hasSecretKey = input.secretAccessKey !== undefined;
-
-  return hasAccessKey === hasSecretKey
-    ? Effect.void
-    : Effect.fail(
-        makeInfraConfigSourceError(
-          "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY must be configured together"
-        )
-      );
 }
 
 export function loadInfraStageConfig(stageInput: string) {
@@ -710,18 +672,6 @@ export function loadInfraStageConfig(stageInput: string) {
       Config.withDefault(identity.isProduction ? "basic" : "dev"),
       Config.mapOrFail(decodeElectricContainerInstanceType)
     );
-    const electricStorageAccessKeyId =
-      yield* readOptionalNonEmptyRedactedConfig(
-        "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID"
-      );
-    const electricStorageSecretAccessKey =
-      yield* readOptionalNonEmptyRedactedConfig(
-        "CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY"
-      );
-    yield* validateElectricStorageCredentialPair({
-      accessKeyId: electricStorageAccessKeyId,
-      secretAccessKey: electricStorageSecretAccessKey,
-    });
     const mcpAuthorizedAppCacheMaxEntries = yield* Config.option(
       Config.int("CEIRD_MCP_AUTHORIZED_APP_CACHE_MAX_ENTRIES").pipe(
         Config.mapOrFail(
@@ -810,8 +760,6 @@ export function loadInfraStageConfig(stageInput: string) {
       hyperdriveName,
       hyperdriveOriginConnectionLimit,
       electricContainerInstanceType,
-      electricStorageAccessKeyId,
-      electricStorageSecretAccessKey,
       mcpAuthorizedAppCacheMaxEntries,
       mcpAuthorizedAppCacheTtlSeconds,
       neonDatabaseName,
