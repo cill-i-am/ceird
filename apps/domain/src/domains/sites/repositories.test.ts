@@ -293,7 +293,10 @@ describe("sites repository", () => {
       activeJobCount: 2,
       highestActiveJobPriority: "urgent",
     });
-    expect(quietSummary).toStrictEqual({ activeJobCount: 0 });
+    expect(quietSummary).toStrictEqual({
+      activeJobCount: 0,
+      highestActiveJobPriority: undefined,
+    });
   });
 });
 

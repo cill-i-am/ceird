@@ -25,12 +25,15 @@ const alchemyLifecycle = AlchemyTest.make({
   ).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        Layer.succeed(Cloudflare.CloudflareEnvironment, {
-          accountId: "account-id",
-          apiToken: Redacted.make("environment-token"),
-          source: { type: "env" },
-          type: "apiToken",
-        }),
+        Layer.succeed(
+          Cloudflare.CloudflareEnvironment,
+          Effect.succeed({
+            accountId: "account-id",
+            apiToken: Redacted.make("environment-token"),
+            source: { type: "env" },
+            type: "apiToken",
+          })
+        ),
         Layer.succeed(
           Cloudflare.Credentials,
           Effect.succeed({
@@ -90,12 +93,15 @@ async function runTenantRoutingEffect<A, Error, Requirements>(
     effect.pipe(
       Effect.provide(TenantWildcardDnsRecordProvider()),
       Effect.provide(TenantWorkerRouteProvider()),
-      Effect.provideService(Cloudflare.CloudflareEnvironment, {
-        accountId: "account-id",
-        apiToken: Redacted.make("environment-token"),
-        source: { type: "env" },
-        type: "apiToken",
-      }),
+      Effect.provideService(
+        Cloudflare.CloudflareEnvironment,
+        Effect.succeed({
+          accountId: "account-id",
+          apiToken: Redacted.make("environment-token"),
+          source: { type: "env" },
+          type: "apiToken",
+        })
+      ),
       Effect.provideService(
         Cloudflare.Credentials,
         Effect.succeed({

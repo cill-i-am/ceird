@@ -11,12 +11,12 @@
     "test": "vitest run --globals"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260501.1",
-    "@effect/language-service": "^0.84.3",
-    "@effect/vitest": "4.0.0-beta.78",
-    "@types/node": "^25.6.0",
-    "effect": "4.0.0-beta.78",
-    "typescript": "5.9.2",
+    "@cloudflare/workers-types": "^4.20260611.1",
+    "@effect/language-service": "^0.86.2",
+    "@effect/vitest": "4.0.0-beta.79",
+    "@types/node": "^25.9.3",
+    "effect": "4.0.0-beta.79",
+    "typescript": "6.0.3",
     "vitest": "^4.1.8"
   }
 }

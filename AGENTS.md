@@ -14,11 +14,11 @@ This is a greenfield project and has not been released.
 
 ## Dependency Source
 
-This repo keeps fetched dependency source code in `opensrc/` for local agent context.
+This repo uses `opensrc`'s global dependency-source cache for local agent context.
 
-- Check `opensrc/sources.json` for the current fetched package list.
+- Check `${OPENSRC_HOME:-~/.opensrc}/sources.json` for the current fetched package list.
 - Use those local sources when behavior is unclear from types alone.
-- Do not commit files from `opensrc/`; the directory is intentionally gitignored.
+- Do not commit fetched dependency sources; repo-local `opensrc/` remains gitignored only as a legacy/manual override location.
 
 ## Documentation And Source Of Truth
 

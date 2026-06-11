@@ -6,12 +6,14 @@ import {
   decodePublicInvitationPreview,
 } from "@ceird/identity-core";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Deferred, Effect } from "effect";
+import { ConfigProvider, Deferred, Effect } from "effect";
 import { Pool } from "pg";
 
 import {
   AppDatabase,
   AppDatabaseLive,
+  makeAppDatabaseLive,
+  makeAppDatabaseRuntimeLive,
 } from "../../../platform/database/database.js";
 import {
   applyAllMigrations,
@@ -21,6 +23,7 @@ import {
   withPool,
 } from "../../../platform/database/test-database.js";
 import { makeApiWebHandler } from "../../../server.js";
+import { configProviderFromMap } from "../../../test/effect-test-helpers.js";
 import type { PasswordResetEmailInput } from "./auth-email.js";
 import { createAuthentication, findPublicInvitationPreview } from "./auth.js";
 import { DEFAULT_AUTH_BASE_PATH, makeAuthenticationConfig } from "./config.js";
@@ -2539,7 +2542,9 @@ describe("authentication integration", () => {
     } as const;
 
     await withEnvironment(publicPreviewEnvironment, async () => {
-      const webHandler = await makeApiWebHandler();
+      const webHandler = await makeApiWebHandler(
+        makeTestApiWebHandlerInput(databaseUrl, publicPreviewEnvironment)
+      );
 
       try {
         const response = await webHandler.handler(
@@ -2562,7 +2567,9 @@ describe("authentication integration", () => {
     });
 
     await withEnvironment(publicPreviewEnvironment, async () => {
-      const webHandler = await makeApiWebHandler();
+      const webHandler = await makeApiWebHandler(
+        makeTestApiWebHandlerInput(databaseUrl, publicPreviewEnvironment)
+      );
 
       try {
         const response = await webHandler.handler(
@@ -2579,7 +2586,9 @@ describe("authentication integration", () => {
     });
 
     await withEnvironment(publicPreviewEnvironment, async () => {
-      const webHandler = await makeApiWebHandler();
+      const webHandler = await makeApiWebHandler(
+        makeTestApiWebHandlerInput(databaseUrl, publicPreviewEnvironment)
+      );
 
       try {
         const response = await webHandler.handler(
@@ -2628,6 +2637,7 @@ describe("authentication integration", () => {
     await applyMigration(databaseUrl, "0005_add-site-coordinates.sql");
     await applyMigration(databaseUrl, "0006_careless_william_stryker.sql");
     await applyMigration(databaseUrl, "0007_organization_role_contracts.sql");
+    await applyMigration(databaseUrl, "20260607122344_better_auth_two_factor");
 
     const migrationRows = await adminPool.query<{
       id: string;
@@ -3244,18 +3254,53 @@ async function withEnvironment(
   nextEnvironment: Record<string, string>,
   run: () => Promise<void>
 ) {
-  const previousEnvironment = { ...process.env };
+  const managedKeys = [
+    "AUTH_APP_ORIGIN",
+    "BETTER_AUTH_BASE_URL",
+    "BETTER_AUTH_SECRET",
+    "DATABASE_URL",
+  ] as const;
+  const previousEnvironment = snapshotEnv(managedKeys);
 
-  delete process.env.AUTH_APP_ORIGIN;
-  delete process.env.BETTER_AUTH_BASE_URL;
-  delete process.env.BETTER_AUTH_SECRET;
-  delete process.env.DATABASE_URL;
+  for (const key of managedKeys) {
+    Reflect.deleteProperty(process.env, key);
+  }
 
   Object.assign(process.env, nextEnvironment);
 
   try {
     await run();
   } finally {
-    process.env = previousEnvironment;
+    restoreEnv(previousEnvironment);
   }
+}
+
+function snapshotEnv<const Keys extends readonly string[]>(keys: Keys) {
+  return Object.fromEntries(
+    keys.map((key) => [key, process.env[key]])
+  ) as Record<Keys[number], string | undefined>;
+}
+
+function restoreEnv(previous: Record<string, string | undefined>) {
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) {
+      Reflect.deleteProperty(process.env, key);
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
+function makeTestApiWebHandlerInput(
+  databaseUrl: string,
+  environment: Readonly<Record<string, string>>
+) {
+  return {
+    baseLive: ConfigProvider.layer(
+      configProviderFromMap(new Map(Object.entries(environment)))
+    ),
+    databaseRuntimeLive: makeAppDatabaseRuntimeLive(
+      makeAppDatabaseLive(databaseUrl)
+    ),
+  };
 }

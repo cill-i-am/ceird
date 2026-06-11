@@ -1,6 +1,5 @@
 const INCLUDED_PACKAGE_NAMES = new Set([
   "@tanstack/db",
-  "@tanstack/react-form",
   "@tanstack/react-router",
   "@tanstack/react-router-ssr-query",
   "@tanstack/react-start",
@@ -13,8 +12,6 @@ const INCLUDED_PACKAGE_NAMES = new Set([
 ]);
 
 const INCLUDED_PACKAGE_PREFIXES = ["@effect/"];
-
-const EXTRA_SOURCES = ["github:facebook/react"];
 
 export function shouldIncludeOpensrcPackage(packageName) {
   return (
@@ -40,5 +37,5 @@ export function buildOpensrcSourceList(workspacePackageJsons) {
     }
   }
 
-  return [...packages, ...EXTRA_SOURCES].toSorted();
+  return [...packages].toSorted();
 }

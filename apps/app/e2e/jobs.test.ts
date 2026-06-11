@@ -70,6 +70,7 @@ test.describe("jobs flow", () => {
     const jobTitle = `Replace boiler relay ${randomUUID().slice(0, 8)}`;
     const siteName = `North depot ${randomUUID().slice(0, 4)}`;
     const contactName = `Pat Caller ${randomUUID().slice(0, 4)}`;
+    const labelName = `Urgent relay ${randomUUID().slice(0, 4)}`;
     const comment = "Crew inspected the panel and isolated the failed relay.";
     const visitNote =
       "Second trip to fit the replacement relay and verify startup.";
@@ -158,6 +159,11 @@ test.describe("jobs flow", () => {
       await detailSheet.openPanel("Status");
     }
     await expect(detailSheet.pickStatusChange).toBeDisabled();
+
+    await detailSheet.createAndAssignLabel(labelName);
+    await expect(
+      detailSheet.root.getByText(labelName, { exact: true })
+    ).toBeVisible();
   });
 });
 

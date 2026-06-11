@@ -1,7 +1,8 @@
 # Better Auth Implementation Gaps
 
 Audited on 2026-06-06 from the current Ceird source, the local Better Auth
-1.6.11 source snapshot under `opensrc/`, and the Better Auth v1.6 docs.
+1.6.16 source snapshot under `${OPENSRC_HOME:-~/.opensrc}`, and the Better Auth
+v1.6 docs.
 
 ## Goal
 
@@ -346,8 +347,8 @@ Better move:
 - Generate and inspect Drizzle migrations under `apps/domain/drizzle`.
 - Add focused tests around auth schema decoding, app auth context hydration,
   route guards, and Better Auth client methods exposed in the UI.
-- Re-check local `opensrc/` package source when docs and TypeScript behavior
-  disagree.
+- Re-check local package source under `${OPENSRC_HOME:-~/.opensrc}` when docs
+  and TypeScript behavior disagree.
 
 ## Source Links
 

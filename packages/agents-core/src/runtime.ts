@@ -1,10 +1,7 @@
 import { OrganizationId, UserId } from "@ceird/identity-core";
 import { Schema } from "effect";
 
-import {
-  AgentActionNameSchema,
-  ExecutableAgentActionNameSchema,
-} from "./action-definitions.js";
+import { ExecutableAgentActionNameSchema } from "./action-definitions.js";
 
 export {
   AGENT_ACTION_DEFINITIONS,

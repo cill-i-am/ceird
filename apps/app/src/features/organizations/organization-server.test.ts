@@ -84,6 +84,11 @@ interface MockServerFnBuilder {
   middleware: ReturnType<
     typeof vi.fn<(middlewares: readonly unknown[]) => MockServerFnBuilder>
   >;
+  validator: ReturnType<
+    typeof vi.fn<
+      (validator: (input: unknown) => unknown) => MockServerFnBuilder
+    >
+  >;
 }
 
 type MockServerFn = ReturnType<typeof vi.fn<() => void>>;
@@ -134,6 +139,12 @@ const {
         (middlewares: readonly unknown[]) => MockServerFnBuilder
       >((middlewares) => {
         record.middlewareCalls.push(middlewares);
+        return readMockServerFnBuilder(builderReference);
+      }),
+      validator: vi.fn<
+        (validator: (input: unknown) => unknown) => MockServerFnBuilder
+      >((validator) => {
+        record.inputValidators.push(validator);
         return readMockServerFnBuilder(builderReference);
       }),
     });

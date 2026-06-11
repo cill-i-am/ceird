@@ -235,7 +235,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   );
 
   const { accountId: cloudflareAccountId } =
-    yield* Cloudflare.CloudflareEnvironment;
+    yield* yield* Cloudflare.CloudflareEnvironment;
   const alchemyContext = yield* Alchemy.AlchemyContext;
   const localDev = alchemyContext.dev;
   const betterAuthSecret = yield* Alchemy.Random("BetterAuthSecret", {

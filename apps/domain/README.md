@@ -16,9 +16,11 @@ pnpm --filter domain db:migrate
 pnpm --filter domain db:studio
 ```
 
-The `db:*` commands are the package-local database workflow. Stage deploys and
-cloud-backed local development apply migrations through the root Alchemy stack's
-native Neon branch resource.
+The `db:*` commands are the package-local database workflow. They pass Drizzle
+Kit's `--ignore-conflicts` flag because the historical bootstrap migration graph
+contains known non-commutative branches. Stage deploys and cloud-backed local
+development apply migrations through the root Alchemy stack's native Neon branch
+resource.
 
 For package-local Node development, the domain server listens on port `3002` by
 default so `apps/api` can listen on `3001` and forward through `DOMAIN_ORIGIN`.

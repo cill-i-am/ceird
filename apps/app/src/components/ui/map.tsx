@@ -4,11 +4,13 @@
 import { Cause, Effect, Exit, Option } from "effect";
 
 import "maplibre-gl/dist/maplibre-gl.css";
+import type { Feature, LineString } from "geojson";
 import { X, Minus, Plus, Locate, Maximize } from "lucide-react";
-import MapLibreGL from "maplibre-gl";
+import * as MapLibreGL from "maplibre-gl";
 import type {
   AddLayerObject,
   GeoJSONSourceSpecification,
+  LayerSpecification,
   MarkerOptions,
   PopupOptions,
 } from "maplibre-gl";
@@ -21,6 +23,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import type { ReactNode, Ref } from "react";
 import { createPortal } from "react-dom";
@@ -66,43 +69,45 @@ function getSystemTheme(): Theme {
     : "light";
 }
 
+function subscribeToThemeChanges(onChange: () => void): () => void {
+  if (typeof document === "undefined" || typeof window === "undefined") {
+    return () => void 0;
+  }
+
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const handleSystemChange = () => {
+    if (!getDocumentTheme()) {
+      onChange();
+    }
+  };
+  mediaQuery.addEventListener("change", handleSystemChange);
+
+  return () => {
+    observer.disconnect();
+    mediaQuery.removeEventListener("change", handleSystemChange);
+  };
+}
+
+function getDetectedThemeSnapshot(): Theme {
+  return getDocumentTheme() ?? getSystemTheme();
+}
+
+function getServerThemeSnapshot(): Theme {
+  return "light";
+}
+
 function useResolvedTheme(themeProp?: "light" | "dark"): Theme {
-  const [detectedTheme, setDetectedTheme] = useState<Theme>(
-    () => getDocumentTheme() ?? getSystemTheme()
+  const detectedTheme = useSyncExternalStore(
+    subscribeToThemeChanges,
+    getDetectedThemeSnapshot,
+    getServerThemeSnapshot
   );
-
-  useEffect(() => {
-    if (themeProp) {
-      return;
-    } // Skip detection if theme is provided via prop
-
-    // Watch for document class changes (e.g., next-themes toggling dark class)
-    const observer = new MutationObserver(() => {
-      const docTheme = getDocumentTheme();
-      if (docTheme) {
-        setDetectedTheme(docTheme);
-      }
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-
-    // Also watch for system preference changes
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleSystemChange = (e: MediaQueryListEvent) => {
-      // Only use system preference if no document class is set
-      if (!getDocumentTheme()) {
-        setDetectedTheme(e.matches ? "dark" : "light");
-      }
-    };
-    mediaQuery.addEventListener("change", handleSystemChange);
-
-    return () => {
-      observer.disconnect();
-      mediaQuery.removeEventListener("change", handleSystemChange);
-    };
-  }, [themeProp]);
 
   return themeProp ?? detectedTheme;
 }
@@ -346,6 +351,9 @@ function Map({
 
     clearStyleTimeout();
     currentStyleRef.current = newStyle;
+    // MapLibre style readiness is external async state; reset it before setStyle
+    // and let the styledata listener mark it ready again.
+    // react-doctor-disable-next-line
     setIsStyleLoaded(false);
 
     mapInstance.setStyle(newStyle, { diff: true });
@@ -361,16 +369,15 @@ function Map({
 
   return (
     <MapContext.Provider value={contextValue}>
-      <div
+      <section
         ref={containerRef}
         aria-label="Interactive map"
         className={cn("relative h-full w-full", className)}
-        role="region"
       >
         {(!isLoaded || loading) && <DefaultLoader />}
         {/* SSR-safe: children render only when map is loaded on client */}
         {mapInstance && children}
-      </div>
+      </section>
     </MapContext.Provider>
   );
 }
@@ -397,12 +404,13 @@ interface MapRouteLineProps {
 }
 
 interface RouteLineSource {
-  readonly setData: (data: GeoJSON.Feature<GeoJSON.LineString>) => void;
+  readonly setData: (data: Feature<LineString>) => void;
 }
 
 const DEFAULT_ROUTE_LINE_COLOR = "#2563eb";
 const DEFAULT_ROUTE_LINE_OPACITY = 0.9;
 const DEFAULT_ROUTE_LINE_WIDTH = 4;
+type LineLayerSpecification = Extract<LayerSpecification, { type: "line" }>;
 
 function isRouteLineSource(source: unknown): source is RouteLineSource {
   return (
@@ -415,7 +423,7 @@ function isRouteLineSource(source: unknown): source is RouteLineSource {
 
 function makeRouteLineFeature(
   coordinates: readonly MapRouteLineCoordinate[]
-): GeoJSON.Feature<GeoJSON.LineString> {
+): Feature<LineString> {
   return {
     geometry: {
       coordinates: coordinates.map(([longitude, latitude]) => [
@@ -498,7 +506,7 @@ function MapRouteLine({
     }
 
     if (map.getLayer(layerId) === undefined) {
-      const paint: NonNullable<AddLayerObject["paint"]> = {
+      const paint: NonNullable<LineLayerSpecification["paint"]> = {
         "line-color": color,
         "line-opacity": opacity,
         "line-width": width,
@@ -507,7 +515,7 @@ function MapRouteLine({
         paint["line-dasharray"] = dashPattern;
       }
 
-      const layer: AddLayerObject = {
+      const layer = {
         id: layerId,
         layout: {
           "line-cap": "round",
@@ -516,7 +524,7 @@ function MapRouteLine({
         paint,
         source: sourceId,
         type: "line",
-      };
+      } satisfies AddLayerObject;
       map.addLayer(layer, beforeId);
     }
 

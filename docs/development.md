@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Node.js 24 or newer.
-- pnpm 9.15.9, as declared by `packageManager` in `package.json`.
+- pnpm 10.34.3, as declared by `packageManager` in `package.json`.
 - Cloudflare and Neon credentials for Alchemy-managed stages.
 - jq.
 
@@ -13,8 +13,10 @@ Install dependencies from the repo root:
 pnpm install
 ```
 
-The root `postinstall` runs `pnpm opensrc:sync`, which refreshes the gitignored
-dependency source cache under `opensrc/`.
+The root `postinstall` runs `pnpm opensrc:sync`, which refreshes the shared
+dependency source cache at `${OPENSRC_HOME:-~/.opensrc}`. The cache is global
+by default, so linked worktrees reuse fetched package sources without
+worktree-local symlinks.
 
 ## Local Development Modes
 
@@ -82,12 +84,10 @@ development actions. The script prepares `.env.local` before dependency
 installation, preserving an existing file, copying one from `LOCAL_ENV_SOURCE`
 when supplied, and otherwise copying the `.env.local` from the primary Git
 worktree for linked worktrees. If no source exists, setup fails before running
-dependency installation so missing credentials are explicit. The script also
-links `opensrc/` from the same source directory or primary worktree when an
-existing dependency-source cache is available. In that linked-cache path,
-dependency installation runs with `CI=true` so the root `postinstall` does not
-repeat a network-backed `opensrc` sync during worktree creation. If no cache is
-available, setup lets `pnpm install` run the normal `opensrc` refresh.
+dependency installation so missing credentials are explicit. The script uses
+the global `opensrc` cache at `${OPENSRC_HOME:-~/.opensrc}` and then runs a
+normal `pnpm install --frozen-lockfile`; the root `postinstall` refreshes the
+shared cache and worktrees benefit from cache hits without linking `opensrc/`.
 
 ## Testing
 

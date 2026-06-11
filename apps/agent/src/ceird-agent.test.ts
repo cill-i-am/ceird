@@ -185,11 +185,16 @@ describe("CeirdAgent", () => {
   it("delegates chat recovery decisions to the recovery helper", async () => {
     const agent = new CeirdAgent({} as never, {} as never);
     const ctx = {
+      attempt: 1,
       createdAt: 1000,
+      incidentId: "incident-1",
+      maxAttempts: 3,
       messages: [],
       partialParts: [],
       partialText: "",
       recoveryData: null,
+      recoveryKind: "continue",
+      recoveryRootRequestId: "request-1",
       requestId: "request-1",
       streamId: "stream-1",
     } satisfies ChatRecoveryContext;

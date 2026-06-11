@@ -34,7 +34,7 @@ if (sourceList.length === 0) {
 
 const result = spawnSync(
   "pnpm",
-  ["exec", "opensrc", ...sourceList, "--modify=false"],
+  ["exec", "opensrc", "fetch", "--cwd", process.cwd(), ...sourceList],
   {
     stdio: "inherit",
     env: {

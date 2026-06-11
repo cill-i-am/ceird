@@ -4,7 +4,7 @@ import { JobOptionsResponseSchema } from "@ceird/jobs-core";
 import { SiteOptionSchema } from "@ceird/sites-core";
 import { NodeHttpServer } from "@effect/platform-node";
 import { afterAll, describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { ConfigProvider, Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import {
   HttpApi,
@@ -17,12 +17,17 @@ import type { Pool } from "pg";
 
 import { AppApi } from "../http-api.js";
 import {
+  makeAppDatabaseLive,
+  makeAppDatabaseRuntimeLive,
+} from "../platform/database/database.js";
+import {
   applyAllMigrations,
   canConnect,
   createTestDatabase,
   withPool,
 } from "../platform/database/test-database.js";
 import { makeApiWebHandler } from "../server.js";
+import { configProviderFromMap } from "../test/effect-test-helpers.js";
 
 describe("domain HTTP API", () => {
   const cleanup: (() => Promise<void>)[] = [];
@@ -124,7 +129,7 @@ describe("domain HTTP API", () => {
     await applyAllMigrations(databaseUrl);
 
     await withJobsEnvironment(databaseUrl, async () => {
-      const api = makeApiWebHandler();
+      const api = makeApiWebHandler(makeTestApiWebHandlerInput(databaseUrl));
       cleanup.push(api.dispose);
 
       const noSessionResponse = await api.handler(makeRequest("/jobs"));
@@ -219,7 +224,7 @@ describe("domain HTTP API", () => {
     await applyAllMigrations(databaseUrl);
 
     await withJobsEnvironment(databaseUrl, async () => {
-      const api = makeApiWebHandler();
+      const api = makeApiWebHandler(makeTestApiWebHandlerInput(databaseUrl));
       cleanup.push(api.dispose);
 
       const noSessionResponse = await api.handler(
@@ -312,7 +317,7 @@ describe("domain HTTP API", () => {
     await applyAllMigrations(databaseUrl);
 
     await withJobsEnvironment(databaseUrl, async () => {
-      const api = makeApiWebHandler();
+      const api = makeApiWebHandler(makeTestApiWebHandlerInput(databaseUrl));
       cleanup.push(api.dispose);
       const threadId = "11111111-1111-4111-8111-111111111111";
       const actionBody = {
@@ -467,19 +472,38 @@ async function withJobsEnvironment<Result>(
     DATABASE_URL: process.env.DATABASE_URL,
   };
 
-  process.env.AGENT_INTERNAL_SECRET = "agent-integration-secret";
-  process.env.AUTH_APP_ORIGIN = "http://127.0.0.1:4173";
-  process.env.AUTH_EMAIL_FROM = "noreply@example.com";
-  process.env.AUTH_EMAIL_FROM_NAME = "Ceird Test";
-  process.env.BETTER_AUTH_BASE_URL = "http://127.0.0.1:3000";
-  process.env.BETTER_AUTH_SECRET = "0123456789abcdef0123456789abcdef";
-  process.env.DATABASE_URL = databaseUrl;
+  Object.assign(process.env, makeJobsEnvironment(databaseUrl));
 
   try {
     return await operation();
   } finally {
     restoreEnv(previous);
   }
+}
+
+function makeTestApiWebHandlerInput(databaseUrl: string) {
+  return {
+    baseLive: ConfigProvider.layer(
+      configProviderFromMap(
+        new Map(Object.entries(makeJobsEnvironment(databaseUrl)))
+      )
+    ),
+    databaseRuntimeLive: makeAppDatabaseRuntimeLive(
+      makeAppDatabaseLive(databaseUrl)
+    ),
+  };
+}
+
+function makeJobsEnvironment(databaseUrl: string) {
+  return {
+    AGENT_INTERNAL_SECRET: "agent-integration-secret",
+    AUTH_APP_ORIGIN: "http://127.0.0.1:4173",
+    AUTH_EMAIL_FROM: "noreply@example.com",
+    AUTH_EMAIL_FROM_NAME: "Ceird Test",
+    BETTER_AUTH_BASE_URL: "http://127.0.0.1:3000",
+    BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
+    DATABASE_URL: databaseUrl,
+  };
 }
 
 function makeRequest(

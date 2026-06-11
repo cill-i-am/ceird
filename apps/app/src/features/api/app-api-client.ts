@@ -37,8 +37,14 @@ const CeirdApi = HttpApi.make("CeirdApi")
   .add(ProximityApiGroup)
   .add(SitesApiGroup);
 
-const currentGlobalFetch: typeof globalThis.fetch = (input, init) =>
-  globalThis.fetch(input, init);
+const currentGlobalFetch: typeof globalThis.fetch = Object.assign(
+  (input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) =>
+    globalThis.fetch(input, init),
+  {
+    preconnect: (...args: Parameters<typeof globalThis.fetch.preconnect>) =>
+      globalThis.fetch.preconnect?.(...args),
+  }
+);
 
 const AppApiHttpClientLive = Layer.mergeAll(
   FetchHttpClient.layer,

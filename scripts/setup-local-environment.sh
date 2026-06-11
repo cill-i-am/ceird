@@ -7,11 +7,8 @@ cd "$repo_root"
 echo "Preparing local environment in $repo_root"
 
 env_target="$repo_root/.env.local"
-opensrc_target="$repo_root/opensrc"
 env_source=""
-local_env_source_root=""
 primary_worktree=""
-skip_opensrc_sync="false"
 
 git_common_dir="$(git rev-parse --git-common-dir)"
 if [[ "$git_common_dir" = /* ]]; then
@@ -30,10 +27,8 @@ else
   if [[ -n "${LOCAL_ENV_SOURCE:-}" ]]; then
     if [[ -f "$LOCAL_ENV_SOURCE" ]]; then
       env_source="$LOCAL_ENV_SOURCE"
-      local_env_source_root="$(dirname "$LOCAL_ENV_SOURCE")"
     elif [[ -d "$LOCAL_ENV_SOURCE" && -f "$LOCAL_ENV_SOURCE/.env.local" ]]; then
       env_source="$LOCAL_ENV_SOURCE/.env.local"
-      local_env_source_root="$LOCAL_ENV_SOURCE"
     else
       echo "LOCAL_ENV_SOURCE did not point to an env file: $LOCAL_ENV_SOURCE" >&2
     fi
@@ -63,29 +58,7 @@ else
   echo "Copied .env.local from $env_source"
 fi
 
-if [[ -f "$opensrc_target/sources.json" ]]; then
-  echo "Preserving existing opensrc cache"
-  skip_opensrc_sync="true"
-else
-  opensrc_source=""
-
-  if [[ -n "$local_env_source_root" && -f "$local_env_source_root/opensrc/sources.json" ]]; then
-    opensrc_source="$local_env_source_root/opensrc"
-  elif [[ -n "$primary_worktree" && "$primary_worktree" != "$repo_root" && -f "$primary_worktree/opensrc/sources.json" ]]; then
-    opensrc_source="$primary_worktree/opensrc"
-  fi
-
-  if [[ -n "$opensrc_source" ]]; then
-    if [[ -e "$opensrc_target" || -L "$opensrc_target" ]]; then
-      rm -rf "$opensrc_target"
-    fi
-    ln -s "$opensrc_source" "$opensrc_target"
-    echo "Linked opensrc cache from $opensrc_source"
-    skip_opensrc_sync="true"
-  else
-    echo "No opensrc cache source found; pnpm install will refresh opensrc"
-  fi
-fi
+echo "Using opensrc global cache at ${OPENSRC_HOME:-$HOME/.opensrc}"
 
 if command -v corepack >/dev/null 2>&1; then
   corepack enable
@@ -96,8 +69,4 @@ else
   exit 1
 fi
 
-if [[ "$skip_opensrc_sync" == "true" ]]; then
-  CI=true pnpm install --frozen-lockfile
-else
-  pnpm install --frozen-lockfile
-fi
+pnpm install --frozen-lockfile

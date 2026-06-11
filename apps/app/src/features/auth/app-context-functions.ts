@@ -12,7 +12,7 @@ export const getCurrentAppContext = createServerFn({
   method: "GET",
 })
   .middleware([optionalAuthFunctionMiddleware])
-  .inputValidator((input: unknown) =>
+  .validator((input: unknown) =>
     Schema.decodeUnknownSync(CurrentAppContextInputSchema)(input ?? {})
   )
   .handler(async ({ context, data }) => {

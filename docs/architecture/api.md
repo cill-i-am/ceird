@@ -700,7 +700,11 @@ data for workflows that need site choices.
 
 ## Database
 
-The domain Worker uses Drizzle with Postgres.
+The domain Worker uses Drizzle with Postgres. Package-local `db:generate` and
+`db:migrate` pass Drizzle Kit's `--ignore-conflicts` flag because the historical
+bootstrap migration graph contains known non-commutative branches. Remove that
+flag only after the historical migration graph is linearized or otherwise made
+commutative.
 
 | Area                  | Files                                                                 |
 | --------------------- | --------------------------------------------------------------------- |

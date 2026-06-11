@@ -1,0 +1,6 @@
+{
+  "ignore": {
+    "files": ["src/server.ts"],
+    "tags": ["test-noise"]
+  }
+}

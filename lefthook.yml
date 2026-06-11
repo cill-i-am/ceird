@@ -15,7 +15,7 @@ pre-commit:
       glob:
         - "apps/app/**/*.{js,jsx,ts,tsx}"
         - "apps/app/package.json"
-        - "apps/app/react-doctor.config.json"
+        - "apps/app/doctor.config.json"
     - name: check-types
       run: pnpm check-types
     - name: test

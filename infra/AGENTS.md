@@ -17,5 +17,6 @@ This directory owns infrastructure-as-code helpers for Ceird's root
 - Prefer explicit deploy, destroy, and bootstrap commands over hidden side
   effects. Make destructive or stateful operations easy to inspect before they
   run.
-- When provider behavior is unclear, check `opensrc/` and the local patches
-  before changing resource code.
+- When provider behavior is unclear, check `${OPENSRC_HOME:-~/.opensrc}` and
+  the local patches before changing resource code. Repo-local `opensrc/` is
+  only a legacy/manual override location.

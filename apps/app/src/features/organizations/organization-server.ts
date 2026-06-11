@@ -17,7 +17,7 @@ export const createCurrentServerOrganization = createServerFn({
   method: "POST",
 })
   .middleware([requiredAuthFunctionMiddleware])
-  .inputValidator((input: unknown) => decodeCreateOrganizationNameInput(input))
+  .validator((input: unknown) => decodeCreateOrganizationNameInput(input))
   .handler(async ({ data }) => {
     const { createCurrentServerOrganizationDirect } =
       await import("./organization-server-impl.server");
@@ -58,7 +58,7 @@ const setCurrentServerActiveOrganizationFn = createServerFn({
   method: "POST",
 })
   .middleware([organizationFunctionMiddleware])
-  .inputValidator((input: unknown) => decodeOrganizationId(input))
+  .validator((input: unknown) => decodeOrganizationId(input))
   .handler(async ({ data }) => {
     const { setCurrentServerActiveOrganizationDirect } =
       await import("./organization-server-impl.server");
