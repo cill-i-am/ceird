@@ -63,6 +63,17 @@ When a task is associated with a Linear issue, use the Linear issue title as the
 
 This lets Linear associate the pull request with the issue and move workflow states automatically.
 
+## Agent Skills
+
+Linear is the source of truth for active PRDs, Projects, Initiatives, issues,
+dependencies, execution status, and worker evidence. See
+`docs/agents/linear-workflow.md`.
+
+Use `docs/agents/triage-states.md` for canonical issue states and AFK/HITL
+classification. Use `docs/agents/domain.md` for domain-doc lookup rules. Use
+`docs/agents/execution-policy.md` for planner, orchestrator, worker,
+production-ready, and CI-watch responsibilities.
+
 ## Sub-Agent Defaults
 
 When spawning Codex sub-agents, set `reasoning_effort` explicitly because

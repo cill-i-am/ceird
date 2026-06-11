@@ -1,0 +1,23 @@
+{
+  "id": "reconcile-project-drift",
+  "title": "Project reconciliation recovers stale Linear, PR, CI, and spec state",
+  "prompt": "Before dispatching more workers, reconcile a Linear project whose issues and PRs may have drifted.",
+  "expectedSkills": ["reconcile-project", "ci-watch"],
+  "artifacts": [
+    {
+      "path": ".agents/skills/reconcile-project/SKILL.md",
+      "mustContain": [
+        "Make Linear truthful",
+        "PR failed CI but no `ci-watch` is active",
+        "parent PRD changed after issue dispatch",
+        "Do not implement code",
+        "issues made dispatchable",
+        "spec drift or HITL decisions needed"
+      ]
+    },
+    {
+      "path": ".agents/skills/orchestrator/SKILL.md",
+      "mustContain": ["Run `reconcile-project` before dispatching new work"]
+    }
+  ]
+}

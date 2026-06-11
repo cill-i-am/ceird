@@ -1,0 +1,28 @@
+{
+  "id": "worker-production-ready",
+  "title": "Worker ships one Linear issue through production-ready evidence",
+  "prompt": "Pick up this ready-for-agent Linear issue, implement it end to end, and hand back a production-ready PR.",
+  "expectedSkills": ["worker", "production-ready", "subagent-execution"],
+  "artifacts": [
+    {
+      "path": ".agents/skills/worker/SKILL.md",
+      "mustContain": [
+        "owns exactly one Linear issue",
+        "one Linear issue",
+        "tdd",
+        "systematic-debugging",
+        "subagent-execution",
+        "production-ready",
+        "CI-watch status"
+      ]
+    },
+    {
+      "path": "docs/agents/execution-policy.md",
+      "mustContain": [
+        "A worker owns one Linear issue",
+        "Use `subagent-execution` inside the worker",
+        "Production readiness requires"
+      ]
+    }
+  ]
+}

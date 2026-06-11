@@ -1,0 +1,27 @@
+{
+  "id": "to-prd-linear-source-of-truth",
+  "title": "Ideas become Linear-native PRDs",
+  "prompt": "Turn this product idea into a PRD that Linear can use as the source of truth for later project execution.",
+  "expectedSkills": ["to-prd"],
+  "artifacts": [
+    {
+      "path": ".agents/skills/to-prd/SKILL.md",
+      "mustContain": [
+        "Linear source of truth",
+        "docs/agents/linear-workflow.md",
+        "Use the Linear skill/app",
+        "Open Questions / HITL Decisions",
+        "`to-issues`"
+      ],
+      "mustNotContain": ["GitHub Issues", "gh issue create"]
+    },
+    {
+      "path": "docs/agents/linear-workflow.md",
+      "mustContain": [
+        "Linear is the durable source of truth",
+        "PRD-sized deliverable",
+        "Do not mark a Linear issue complete merely because a PR exists"
+      ]
+    }
+  ]
+}

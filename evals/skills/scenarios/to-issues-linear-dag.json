@@ -1,0 +1,29 @@
+{
+  "id": "to-issues-linear-dag",
+  "title": "PRDs become dependency-aware Linear issue graphs",
+  "prompt": "Turn this Linear PRD into implementation issues that can be handed to workers without babysitting.",
+  "expectedSkills": ["to-issues"],
+  "artifacts": [
+    {
+      "path": ".agents/skills/to-issues/SKILL.md",
+      "mustContain": [
+        "Linear blocker relations",
+        "AFK",
+        "HITL",
+        "vertical slices",
+        "orchestrator handoff",
+        "Expected review stack",
+        "ready for the orchestrator"
+      ],
+      "mustNotContain": ["GitHub Issues", "gh issue create"]
+    },
+    {
+      "path": "docs/agents/linear-workflow.md",
+      "mustContain": [
+        "Linear blockers define the execution graph",
+        "AFK or HITL classification",
+        "self-contained enough for a fresh Codex worker session"
+      ]
+    }
+  ]
+}

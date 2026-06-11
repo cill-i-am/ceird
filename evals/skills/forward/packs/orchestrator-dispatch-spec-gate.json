@@ -1,0 +1,25 @@
+{
+  "id": "orchestrator-dispatch-spec-gate",
+  "title": "Orchestrator dispatches unblocked work and rejects spec drift",
+  "prompt": "You are coordinating PROJ-42. Reconcile the project, decide what can be dispatched next, and review the returned TSK-103 PR against the parent PRD and issue.",
+  "skills": ["orchestrator", "reconcile-project"],
+  "fixturePaths": [
+    "evals/skills/forward/fixtures/mock-linear-project-state.json",
+    "evals/skills/forward/fixtures/mock-worker-pr-diff.md"
+  ],
+  "rubricPath": "evals/skills/forward/rubrics/linear-agent-workflow.json",
+  "rubricCriteria": [
+    "source-of-truth",
+    "blocker-graph",
+    "afk-hitl",
+    "spec-scope",
+    "output-clarity"
+  ],
+  "expectedOutputSections": [
+    "Reconciliation",
+    "Dispatch decision",
+    "Spec gate",
+    "Worker feedback",
+    "Linear updates"
+  ]
+}

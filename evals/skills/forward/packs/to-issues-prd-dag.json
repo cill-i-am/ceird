@@ -1,0 +1,22 @@
+{
+  "id": "to-issues-prd-dag",
+  "title": "Planner slices a Linear PRD into an AFK/HITL issue DAG",
+  "prompt": "Convert the mock Linear PRD into dependency-aware Linear issues that an orchestrator can dispatch without babysitting.",
+  "skills": ["to-issues"],
+  "fixturePaths": ["evals/skills/forward/fixtures/mock-linear-prd.md"],
+  "rubricPath": "evals/skills/forward/rubrics/linear-agent-workflow.json",
+  "rubricCriteria": [
+    "source-of-truth",
+    "blocker-graph",
+    "afk-hitl",
+    "vertical-slices",
+    "output-clarity"
+  ],
+  "expectedOutputSections": [
+    "Issue graph",
+    "AFK issues",
+    "HITL issues",
+    "Blocker relations",
+    "Orchestrator handoff"
+  ]
+}

@@ -1,12 +1,12 @@
 ---
-name: ceird-auth-context-review
-description: Use when reviewing Ceird changes that touch app auth context, organization context, route guards, session cookies, client/server auth caches, auth middleware, or app/domain boundary tests.
+name: auth-context-review
+description: Use when reviewing changes that touch app auth context, organization context, route guards, session cookies, client/server auth caches, auth middleware, forwarded request data, or auth boundary tests.
 ---
 
-# Ceird Auth Context Review
+# Auth Context Review
 
-Review Ceird auth and organization context changes for trust-boundary mistakes,
-stale context, and route/data-loading regressions.
+Review auth and organization context changes for trust-boundary mistakes, stale
+context, and route/data-loading regressions.
 
 ## Scope
 
@@ -15,7 +15,8 @@ Start by reading the current diff and the local source of truth:
 - `README.md`
 - `docs/README.md`
 - `docs/architecture/auth.md`
-- `docs/architecture/frontend.md` for app routes, loaders, server functions, and UI auth flows
+- `docs/architecture/frontend.md` for app routes, loaders, server functions,
+  and UI auth flows
 - `docs/architecture/api.md` when the API or identity-domain lane is touched
 - nearest `AGENTS.md`, especially type-boundary and verification rules
 
@@ -48,11 +49,11 @@ Check these areas before approving:
 
 ## Subagent Prompt
 
-When delegating, send the changed files, base/head range, intent, relevant docs,
-and this output contract:
+When delegating, send changed files, base/head range, intent, relevant docs, and
+this output contract:
 
 ```text
-Review Ceird auth/app context correctness only. Work read-only.
+Review auth/app context correctness only. Work read-only.
 
 Focus on trust boundaries, session/org semantics, cache invalidation, route
 loader/guard behavior, forwarded request data, Schema/branded ID decoding, and

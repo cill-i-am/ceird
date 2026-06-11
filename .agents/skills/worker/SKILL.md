@@ -1,0 +1,51 @@
+---
+name: worker
+description: Implement one Linear issue end to end in a Codex session. Use when assigned a Linear issue, spawned by an orchestrator, or asked to pick up a ready-for-agent issue and deliver a production-ready PR with evidence.
+---
+
+# Worker
+
+A worker owns exactly one Linear issue. The worker's job is to ship the vertical
+slice, prove it, and report evidence. The orchestrator owns final acceptance.
+
+## Read First
+
+- `docs/agents/linear-workflow.md`
+- `docs/agents/triage-states.md`
+- `docs/agents/execution-policy.md`
+- `docs/agents/domain.md`
+- the Linear issue, parent Project/PRD, blockers, and comments
+- nearest `AGENTS.md`
+
+## Workflow
+
+1. **Confirm assignment.** Ensure the issue is unblocked and in an implementable
+   state. If it is HITL, blocked, or under-specified, stop and update Linear.
+2. **Create a branch.** Use `codex/<linear-key>-<slug>` unless instructed
+   otherwise. Never start provider-mutating Alchemy work without confirming
+   stage and credentials.
+3. **Plan the narrow slice.** Re-state the acceptance criteria, out-of-scope
+   boundaries, expected files or modules, and verification commands. Keep this
+   brief.
+4. **Implement with the right discipline.**
+   - Use `tdd` for behavior changes when practical.
+   - Use `systematic-debugging` for failures, bugs, flakes, or unexpected
+     behavior.
+   - Use `subagent-execution` for bounded implementation, investigation, and
+     review tasks.
+5. **Review locally.** Before claiming done, run `production-ready`.
+6. **Open or update a PR.** Use the Linear issue title as the PR title when it
+   includes the key.
+7. **Update Linear.** Comment with PR URL, branch, commits, verification
+   evidence, CI-watch status, blockers, and residual risks.
+
+## Stop Conditions
+
+Stop and update Linear instead of improvising when:
+
+- blocker or HITL decision is discovered
+- acceptance criteria conflict with source or parent PRD
+- implementation requires out-of-scope files
+- verification fails repeatedly without a clear root cause
+- provider credentials, Alchemy stage mutation, or production data is needed
+- PR scope grows beyond one vertical slice
