@@ -1,6 +1,9 @@
+import type * as RouterModule from "@tanstack/react-router";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { memo } from "react";
 import type { ComponentProps, ReactElement } from "react";
+
+import type * as SidebarModule from "#/components/ui/sidebar";
 
 import { AppLayout } from "./app-layout";
 
@@ -79,29 +82,20 @@ const { mockedNavigate } = vi.hoisted(() => ({
   mockedNavigate: vi.fn<(...args: unknown[]) => unknown>(),
 }));
 
-vi.mock(import("@tanstack/react-router"), async (importActual) => {
-  const actual = await importActual();
+vi.mock(import("@tanstack/react-router"), () => ({
+  Outlet: memo(() => <div data-testid="app-layout-outlet" />),
+  useNavigate: (() => mockedNavigate) as typeof RouterModule.useNavigate,
+}));
 
-  return {
-    ...actual,
-    Outlet: memo(() => <div data-testid="app-layout-outlet" />),
-    useNavigate: (() => mockedNavigate) as typeof actual.useNavigate,
-  };
-});
-
-vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
-  const actual = await importActual();
-
-  return {
-    ...actual,
-    SidebarInset: mockedSidebarInset as typeof actual.SidebarInset,
-    SidebarProvider: (({ children, ...props }: ComponentProps<"div">) => (
-      <div data-testid="sidebar-provider" {...props}>
-        {children}
-      </div>
-    )) as typeof actual.SidebarProvider,
-  };
-});
+vi.mock(import("#/components/ui/sidebar"), () => ({
+  SidebarInset:
+    mockedSidebarInset as unknown as typeof SidebarModule.SidebarInset,
+  SidebarProvider: (({ children, ...props }: ComponentProps<"div">) => (
+    <div data-testid="sidebar-provider" {...props}>
+      {children}
+    </div>
+  )) as unknown as typeof SidebarModule.SidebarProvider,
+}));
 
 vi.mock(import("#/components/site-header"), () => ({
   SiteHeader: () => <header data-testid="site-header" />,

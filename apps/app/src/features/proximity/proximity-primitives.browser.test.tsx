@@ -184,6 +184,7 @@ describe("proximity shared primitives", () => {
         destination,
         destinationLabel: "14 Willow Close",
         origin: origin.coordinates,
+        platformUserAgent: "Mozilla/5.0 (Linux; Android 15; Pixel)",
       }).default.url
     ).toContain("travelmode=driving");
   });

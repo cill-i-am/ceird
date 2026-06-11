@@ -1,4 +1,10 @@
+import type * as RouterModule from "@tanstack/react-router";
 import { render } from "@testing-library/react";
+import type { ReactElement } from "react";
+
+import type * as UserSettingsPageModule from "#/features/settings/user-settings-page";
+import type * as UserSettingsRouteLoaderModule from "#/features/settings/user-settings-route-loader";
+import type * as UserSettingsSearchModule from "#/features/settings/user-settings-search";
 
 const {
   mockedUseLoaderData,
@@ -9,35 +15,40 @@ const {
   mockedUseLoaderData: vi.fn<() => unknown>(),
   mockedUseRouteContext: vi.fn<() => unknown>(),
   mockedUseSearch: vi.fn<() => unknown>(),
-  mockedUserSettingsPage: vi.fn<(props: unknown) => null>(() => null),
+  mockedUserSettingsPage: vi.fn<(props: unknown) => ReactElement>(() => (
+    <div data-testid="user-settings-page" />
+  )),
 }));
 
-vi.mock(import("@tanstack/react-router"), async (importActual) => {
-  const actual = await importActual();
+vi.mock(import("@tanstack/react-router"), () => ({
+  createFileRoute: (() => (options: unknown) => ({
+    options,
+    useLoaderData: mockedUseLoaderData,
+    useSearch: mockedUseSearch,
+  })) as unknown as typeof RouterModule.createFileRoute,
+  useRouteContext: mockedUseRouteContext as typeof RouterModule.useRouteContext,
+}));
 
-  return {
-    ...actual,
-    createFileRoute: (() => (options: unknown) => ({
-      options,
-      useLoaderData: mockedUseLoaderData,
-      useSearch: mockedUseSearch,
-    })) as unknown as typeof actual.createFileRoute,
-    useRouteContext: mockedUseRouteContext as typeof actual.useRouteContext,
-  };
-});
+vi.mock(import("#/features/settings/user-settings-page"), () => ({
+  UserSettingsPage:
+    mockedUserSettingsPage as unknown as typeof UserSettingsPageModule.UserSettingsPage,
+}));
 
-vi.mock(
-  import("#/features/settings/user-settings-page"),
-  async (importActual) => {
-    const actual = await importActual();
+vi.mock(import("#/features/settings/user-settings-route-loader"), () => ({
+  loadUserSettingsRouteData:
+    vi.fn<typeof UserSettingsRouteLoaderModule.loadUserSettingsRouteData>(),
+}));
 
-    return {
-      ...actual,
-      UserSettingsPage:
-        mockedUserSettingsPage as unknown as typeof actual.UserSettingsPage,
-    };
-  }
-);
+vi.mock(import("#/features/settings/user-settings-search"), () => ({
+  decodeUserSettingsSearch: vi.fn<
+    typeof UserSettingsSearchModule.decodeUserSettingsSearch
+  >(
+    (search) =>
+      search as ReturnType<
+        typeof UserSettingsSearchModule.decodeUserSettingsSearch
+      >
+  ),
+}));
 
 describe("settings route", () => {
   afterEach(() => {

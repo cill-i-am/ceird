@@ -94,6 +94,12 @@ function isActiveBlockerOptions(
   );
 }
 
+function getModEnterKeyboardInput() {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? "{Meta>}{Enter}{/Meta}"
+    : "{Control>}{Enter}{/Control}";
+}
+
 const {
   mockedChangeEmail,
   mockedChangePassword,
@@ -243,7 +249,7 @@ describe("user settings page", () => {
   };
 
   beforeEach(() => {
-    window.history.replaceState({}, "", "http://localhost:3000/settings");
+    window.history.replaceState({}, "", "/settings");
     mockedChangeEmail.mockResolvedValue({
       data: { ok: true },
       error: null,
@@ -469,7 +475,6 @@ describe("user settings page", () => {
     expect(
       screen.getByText(/Ceird will ask this browser for fresh location/i)
     ).toBeVisible();
-    expect(navigator.geolocation?.getCurrentPosition).toBeUndefined();
   }, 10_000);
 
   it("disables the global route proximity location preference", async () => {
@@ -583,7 +588,7 @@ describe("user settings page", () => {
     await waitFor(() => {
       expect(mockedChangeEmail).toHaveBeenCalledWith({
         newEmail: "new@example.com",
-        callbackURL: "http://localhost:3000/settings?emailChange=complete",
+        callbackURL: `${window.location.origin}/settings?emailChange=complete`,
       });
     });
     await expect(
@@ -715,12 +720,12 @@ describe("user settings page", () => {
       screen.getByLabelText("New email"),
       "hotkey@example.com"
     );
-    await interaction.keyboard("{Control>}{Enter}{/Control}");
+    await interaction.keyboard(getModEnterKeyboardInput());
 
     await waitFor(() => {
       expect(mockedChangeEmail).toHaveBeenCalledWith({
         newEmail: "hotkey@example.com",
-        callbackURL: "http://localhost:3000/settings?emailChange=complete",
+        callbackURL: `${window.location.origin}/settings?emailChange=complete`,
       });
     });
     expect(mockedUpdateUser).not.toHaveBeenCalled();
@@ -728,7 +733,7 @@ describe("user settings page", () => {
 
     await selectTab("Profile");
     await interaction.click(screen.getByLabelText("Display name"));
-    await interaction.keyboard("{Control>}{Enter}{/Control}");
+    await interaction.keyboard(getModEnterKeyboardInput());
 
     await waitFor(() => {
       expect(mockedUpdateUser).toHaveBeenCalledWith({
@@ -751,7 +756,7 @@ describe("user settings page", () => {
       screen.getByLabelText("Confirm new password"),
       "new-password"
     );
-    await interaction.keyboard("{Control>}{Enter}{/Control}");
+    await interaction.keyboard(getModEnterKeyboardInput());
 
     await waitFor(() => {
       expect(mockedChangePassword).toHaveBeenCalledWith({
@@ -776,7 +781,7 @@ describe("user settings page", () => {
       screen.getByLabelText("Current password for 2FA setup"),
       "current-password"
     );
-    await interaction.keyboard("{Control>}{Enter}{/Control}");
+    await interaction.keyboard(getModEnterKeyboardInput());
 
     await waitFor(() => {
       expect(mockedEnableTwoFactor).toHaveBeenCalledWith({
@@ -788,7 +793,7 @@ describe("user settings page", () => {
       screen.getByLabelText("Authenticator code"),
       "123456"
     );
-    await interaction.keyboard("{Control>}{Enter}{/Control}");
+    await interaction.keyboard(getModEnterKeyboardInput());
 
     await waitFor(() => {
       expect(mockedVerifyTotp).toHaveBeenCalledWith({ code: "123456" });

@@ -33,9 +33,12 @@ vi.mock(import("#/lib/auth-client"), async () => {
   };
 });
 
+const verificationSuccessCallbackUrl = () =>
+  `${window.location.origin}/verify-email?status=success`;
+
 describe("email verification banner", () => {
   beforeEach(() => {
-    window.history.replaceState({}, "", "http://localhost:3000/tasks");
+    window.history.replaceState({}, "", "/tasks");
     mockedSendVerificationEmail.mockResolvedValue({
       data: { ok: true },
       error: null,
@@ -88,7 +91,7 @@ describe("email verification banner", () => {
       await waitFor(() => {
         expect(mockedSendVerificationEmail).toHaveBeenCalledWith({
           email: "person@example.com",
-          callbackURL: "http://localhost:3000/verify-email?status=success",
+          callbackURL: verificationSuccessCallbackUrl(),
         });
       });
     }
@@ -140,7 +143,7 @@ describe("email verification banner", () => {
       await waitFor(() => {
         expect(mockedSendVerificationEmail).toHaveBeenCalledWith({
           email: "person@example.com",
-          callbackURL: "http://localhost:3000/verify-email?status=success",
+          callbackURL: verificationSuccessCallbackUrl(),
           fetchOptions: {
             headers: {
               [AUTH_CAPTCHA_RESPONSE_HEADER]: "captcha-token",
@@ -206,7 +209,7 @@ describe("email verification banner", () => {
       await waitFor(() => {
         expect(mockedSendVerificationEmail).toHaveBeenNthCalledWith(1, {
           email: "person@example.com",
-          callbackURL: "http://localhost:3000/verify-email?status=success",
+          callbackURL: verificationSuccessCallbackUrl(),
           fetchOptions: {
             headers: {
               [AUTH_CAPTCHA_RESPONSE_HEADER]: "captcha-token-1",
@@ -215,7 +218,7 @@ describe("email verification banner", () => {
         });
         expect(mockedSendVerificationEmail).toHaveBeenNthCalledWith(2, {
           email: "person@example.com",
-          callbackURL: "http://localhost:3000/verify-email?status=success",
+          callbackURL: verificationSuccessCallbackUrl(),
           fetchOptions: {
             headers: {
               [AUTH_CAPTCHA_RESPONSE_HEADER]: "captcha-token-2",

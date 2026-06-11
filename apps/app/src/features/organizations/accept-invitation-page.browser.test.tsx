@@ -2,10 +2,13 @@ import type {
   OrganizationRole,
   PublicInvitationPreview,
 } from "@ceird/identity-core";
+import type * as RouterModule from "@tanstack/react-router";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
+import type * as AppContextClientCacheModule from "#/features/auth/app-context-client-cache";
+import type * as AppContextClientCacheStateModule from "#/features/auth/app-context-client-cache-state";
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
 import type * as SignOutModule from "../auth/sign-out";
@@ -91,12 +94,11 @@ const {
   mockedSignOut: vi.fn<typeof SignOutModule.signOut>(),
 }));
 
-vi.mock(import("../auth/app-context-client-cache"), async (importActual) => {
-  const actual = await importActual();
-
-  return {
-    ...actual,
-    getCachedClientAppContext: (async () => {
+vi.mock(import("../auth/app-context-client-cache"), () => ({
+  getCachedClientAppContext: vi.fn<
+    typeof AppContextClientCacheModule.getCachedClientAppContext
+  >(() =>
+    (async () => {
       const sessionResponse = await mockedGetSession();
 
       return {
@@ -104,58 +106,58 @@ vi.mock(import("../auth/app-context-client-cache"), async (importActual) => {
         currentOrganizationRole: undefined,
         organizations: undefined,
         session: sessionResponse.data,
-      };
-    }) as typeof actual.getCachedClientAppContext,
-  };
-});
+      } as unknown as Awaited<
+        ReturnType<typeof AppContextClientCacheModule.getCachedClientAppContext>
+      >;
+    })()
+  ),
+  readFreshCachedClientAppContext:
+    vi.fn<typeof AppContextClientCacheModule.readFreshCachedClientAppContext>(),
+}));
 
-vi.mock(
-  import("../auth/app-context-client-cache-state"),
-  async (importActual) => {
-    const actual = await importActual();
+vi.mock(import("../auth/app-context-client-cache-state"), () => ({
+  clearAppContextClientCache: mockedClearAppContextClientCache,
+  clearAppContextClientCacheForPromise:
+    vi.fn<
+      typeof AppContextClientCacheStateModule.clearAppContextClientCacheForPromise
+    >(),
+  readFreshAppContextClientCache:
+    vi.fn<
+      typeof AppContextClientCacheStateModule.readFreshAppContextClientCache
+    >(),
+  setAppContextClientCache:
+    vi.fn<typeof AppContextClientCacheStateModule.setAppContextClientCache>(),
+}));
 
-    return {
-      ...actual,
-      clearAppContextClientCache:
-        mockedClearAppContextClientCache as typeof actual.clearAppContextClientCache,
-    };
-  }
-);
+vi.mock(import("@tanstack/react-router"), () => ({
+  Link: (({
+    children,
+    search,
+    to,
+    viewTransition: _viewTransition,
+    ...props
+  }: ComponentProps<"a"> & {
+    search?: Record<string, string | undefined>;
+    to?: string;
+    viewTransition?: unknown;
+  }) => {
+    const { href: initialHref } = props;
+    let href = initialHref;
 
-vi.mock(import("@tanstack/react-router"), async (importActual) => {
-  const actual = await importActual();
+    if (typeof to === "string") {
+      href = search?.invitation
+        ? `${to}?invitation=${encodeURIComponent(search.invitation)}`
+        : to;
+    }
 
-  return {
-    ...actual,
-    Link: (({
-      children,
-      search,
-      to,
-      viewTransition: _viewTransition,
-      ...props
-    }: ComponentProps<"a"> & {
-      search?: Record<string, string | undefined>;
-      to?: string;
-      viewTransition?: unknown;
-    }) => {
-      const { href: initialHref } = props;
-      let href = initialHref;
-
-      if (typeof to === "string") {
-        href = search?.invitation
-          ? `${to}?invitation=${encodeURIComponent(search.invitation)}`
-          : to;
-      }
-
-      return (
-        <a href={href} {...props}>
-          {children}
-        </a>
-      );
-    }) as typeof actual.Link,
-    useNavigate: (() => mockedNavigate) as typeof actual.useNavigate,
-  };
-});
+    return (
+      <a href={href} {...props}>
+        {children}
+      </a>
+    );
+  }) as typeof RouterModule.Link,
+  useNavigate: (() => mockedNavigate) as typeof RouterModule.useNavigate,
+}));
 
 vi.mock(import("#/lib/auth-client"), () => ({
   authClient: {

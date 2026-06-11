@@ -1,7 +1,9 @@
+import type * as RouterModule from "@tanstack/react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
+import type * as AppContextClientCacheModule from "#/features/auth/app-context-client-cache";
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
 import { listOrganizations } from "../organizations/organization-access";
@@ -78,6 +80,27 @@ vi.mock(import("./app-context-client-cache-state"), async (importActual) => {
   };
 });
 
+vi.mock(import("./app-context-client-cache"), () => ({
+  getCachedClientAppContext: vi.fn<
+    typeof AppContextClientCacheModule.getCachedClientAppContext
+  >(() =>
+    Promise.resolve({
+      activeOrganizationId: null,
+      currentOrganizationRole: undefined,
+      organizations: undefined,
+      session: null,
+    } as unknown as Awaited<
+      ReturnType<typeof AppContextClientCacheModule.getCachedClientAppContext>
+    >)
+  ),
+  readFreshCachedClientAppContext:
+    vi.fn<typeof AppContextClientCacheModule.readFreshCachedClientAppContext>(),
+}));
+
+vi.mock(import("./app-server-context"), () => ({
+  readGlobalAppServerContext: () => ({}),
+}));
+
 vi.mock(import("./auth-navigation"), async (importActual) => {
   const actual = await importActual();
 
@@ -87,39 +110,39 @@ vi.mock(import("./auth-navigation"), async (importActual) => {
   };
 });
 
-vi.mock(import("@tanstack/react-router"), async (importActual) => {
-  const actual = await importActual();
+vi.mock(import("@tanstack/react-router"), () => ({
+  Link: (({
+    children,
+    search,
+    to,
+    viewTransition: _viewTransition,
+    ...props
+  }: ComponentProps<"a"> & {
+    search?: Record<string, string | undefined>;
+    to?: string;
+    viewTransition?: unknown;
+  }) => {
+    const { href: initialHref } = props;
+    let href = initialHref;
 
-  return {
-    ...actual,
-    Link: (({
-      children,
-      search,
-      to,
-      viewTransition: _viewTransition,
-      ...props
-    }: ComponentProps<"a"> & {
-      search?: Record<string, string | undefined>;
-      to?: string;
-      viewTransition?: unknown;
-    }) => {
-      const { href: initialHref } = props;
-      let href = initialHref;
+    if (typeof to === "string") {
+      href = search?.invitation
+        ? `${to}?invitation=${encodeURIComponent(search.invitation)}`
+        : to;
+    }
 
-      if (typeof to === "string") {
-        href = search?.invitation
-          ? `${to}?invitation=${encodeURIComponent(search.invitation)}`
-          : to;
-      }
-
-      return (
-        <a data-router-link="true" href={href} {...props}>
-          {children}
-        </a>
-      );
-    }) as typeof actual.Link,
-  };
-});
+    return (
+      <a data-router-link="true" href={href} {...props}>
+        {children}
+      </a>
+    );
+  }) as typeof RouterModule.Link,
+  redirect: vi.fn<(options: unknown) => unknown>((options) => ({
+    options,
+  })) as unknown as typeof RouterModule.redirect,
+  useNavigate: (() =>
+    mockedNavigate) as unknown as typeof RouterModule.useNavigate,
+}));
 
 vi.mock(import("#/lib/auth-client"), () => ({
   authClient: {

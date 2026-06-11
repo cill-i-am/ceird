@@ -8,6 +8,7 @@ import { OAuthConsentPage, getConsentErrorNotice } from "./oauth-consent-page";
 const {
   mockedConsent,
   mockedGetSession,
+  mockedNavigateBrowserTo,
   mockedOrganizationList,
   mockedPublicClient,
 } = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ const {
       error: { message?: string } | null;
     }>
   >(),
+  mockedNavigateBrowserTo: vi.fn<(url: string) => void>(),
   mockedOrganizationList: vi.fn<
     () => Promise<{
       data: readonly { id: string; name: string; slug: string }[] | null;
@@ -48,6 +50,13 @@ const {
       error: { message?: string } | null;
     }>
   >(),
+}));
+
+vi.mock(import("#/lib/browser-navigation"), () => ({
+  getBrowserLocationHref: () => window.location.href,
+  getBrowserLocationPath: () =>
+    `${window.location.pathname}${window.location.search}${window.location.hash}`,
+  navigateBrowserTo: mockedNavigateBrowserTo,
 }));
 
 vi.mock(import("#/lib/auth-client"), () => ({
@@ -91,12 +100,8 @@ async function findEnabledAllowAccessButton() {
 }
 
 describe("OAuth consent page", () => {
-  let originalLocation: Location;
-  let assignedUrl: string | undefined;
-
   beforeEach(() => {
-    originalLocation = window.location;
-    assignedUrl = undefined;
+    mockedNavigateBrowserTo.mockReset();
     mockedConsent.mockResolvedValue({
       data: { url: "https://agent.example.com/oauth/callback?code=abc" },
       error: null,
@@ -123,23 +128,9 @@ describe("OAuth consent page", () => {
         error: null,
       })
     );
-
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: {
-        ...originalLocation,
-        assign: (url: string) => {
-          assignedUrl = url;
-        },
-      },
-    });
   });
 
   afterEach(() => {
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: originalLocation,
-    });
     vi.clearAllMocks();
   });
 
@@ -355,7 +346,7 @@ describe("OAuth consent page", () => {
     await user.click(await findEnabledAllowAccessButton());
 
     await waitFor(() => {
-      expect(assignedUrl).toBe(
+      expect(mockedNavigateBrowserTo).toHaveBeenCalledWith(
         "https://agent.example.com/oauth/callback?code=abc"
       );
     });
@@ -474,7 +465,7 @@ describe("OAuth consent page", () => {
     });
 
     await waitFor(() => {
-      expect(assignedUrl).toBe(
+      expect(mockedNavigateBrowserTo).toHaveBeenCalledWith(
         "https://agent.example.com/oauth/callback?code=abc"
       );
     });

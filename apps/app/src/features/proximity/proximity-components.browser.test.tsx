@@ -40,6 +40,10 @@ const suggestion = {
 } as ProximityOriginSuggestion;
 
 describe("proximity components", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("renders the compact route limit selector with the supported values", async () => {
     const user = userEvent.setup();
     const onLimitChange = vi.fn<(limit: 10 | 15 | 20 | 25) => void>();
@@ -100,6 +104,10 @@ describe("proximity components", () => {
   });
 
   it("renders route-ranked rows with drive time as the primary scan value and maps handoff", () => {
+    const userAgentSpy = vi
+      .spyOn(window.navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Linux; Android 15; Pixel)");
+
     render(
       <ProximityResultRow
         destination={{
@@ -125,6 +133,7 @@ describe("proximity components", () => {
       expect.stringContaining("travelmode=driving")
     );
     expect(screen.getByRole("button", { name: "View job" })).toBeVisible();
+    userAgentSpy.mockRestore();
   });
 
   it("selects route-ranked rows when users scan them with pointer or focus", () => {

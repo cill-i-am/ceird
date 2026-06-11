@@ -265,6 +265,12 @@ function RegisteredActionTitles() {
   );
 }
 
+function getModEnterKeyboardInput() {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? "{Meta>}{Enter}{/Meta}"
+    : "{Control>}{Enter}{/Control}";
+}
+
 describe("organization members page", () => {
   beforeEach(() => {
     mockedListMembers.mockReset();
@@ -1363,7 +1369,7 @@ describe("organization members page", () => {
 
     await openInviteDialog(user);
     await user.type(screen.getByLabelText("Email"), "member@example.com");
-    await user.keyboard("{Control>}{Enter}{/Control}");
+    await user.keyboard(getModEnterKeyboardInput());
 
     await waitFor(() => {
       expect(mockedInviteMember).toHaveBeenCalledWith({

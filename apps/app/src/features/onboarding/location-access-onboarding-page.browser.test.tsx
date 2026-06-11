@@ -39,11 +39,7 @@ vi.mock(import("#/features/settings/user-preferences-api"), () => ({
 
 describe("location access onboarding page", () => {
   beforeEach(() => {
-    window.history.replaceState(
-      {},
-      "",
-      "http://localhost:3000/location-access"
-    );
+    window.history.replaceState({}, "", "/location-access");
     mockedNavigate.mockResolvedValue();
     mockedUpdateCurrentUserPreferences.mockResolvedValue({
       preferences: {

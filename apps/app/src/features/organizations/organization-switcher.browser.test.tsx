@@ -1,11 +1,8 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
 import type { OrganizationId, OrganizationSummary } from "@ceird/identity-core";
-import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import * as React from "react";
-import { use } from "react";
 import type { ComponentProps, ReactNode } from "react";
 
 import { OrganizationSwitcher } from "./organization-switcher";
@@ -35,6 +32,16 @@ const { mockedReloadAfterActiveOrganizationRefreshFailure } = vi.hoisted(
   })
 );
 
+const {
+  mockedGetBrowserLocationHref,
+  mockedGetBrowserLocationPath,
+  mockedNavigateBrowserTo,
+} = vi.hoisted(() => ({
+  mockedGetBrowserLocationHref: vi.fn<() => string>(),
+  mockedGetBrowserLocationPath: vi.fn<() => string>(),
+  mockedNavigateBrowserTo: vi.fn<(url: string) => void>(),
+}));
+
 const promiseWithResolvers = Promise as unknown as {
   withResolvers<Value>(): {
     promise: Promise<Value>;
@@ -42,6 +49,12 @@ const promiseWithResolvers = Promise as unknown as {
     resolve: (value: Value | PromiseLike<Value>) => void;
   };
 };
+
+vi.mock(import("#/lib/browser-navigation"), () => ({
+  getBrowserLocationHref: mockedGetBrowserLocationHref,
+  getBrowserLocationPath: mockedGetBrowserLocationPath,
+  navigateBrowserTo: mockedNavigateBrowserTo,
+}));
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -54,27 +67,15 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
   };
 });
 
-vi.mock(import("./organization-access"), async (importActual) => {
-  const actual = await importActual();
+vi.mock(import("./organization-access"), () => ({
+  listOrganizations: mockedListOrganizations,
+  setActiveOrganization: mockedSetActiveOrganization,
+}));
 
-  return {
-    ...actual,
-    listOrganizations:
-      mockedListOrganizations as unknown as typeof actual.listOrganizations,
-    setActiveOrganization:
-      mockedSetActiveOrganization as unknown as typeof actual.setActiveOrganization,
-  };
-});
-
-vi.mock(import("./organization-refresh-recovery"), async (importActual) => {
-  const actual = await importActual();
-
-  return {
-    ...actual,
-    reloadAfterActiveOrganizationRefreshFailure:
-      mockedReloadAfterActiveOrganizationRefreshFailure as typeof actual.reloadAfterActiveOrganizationRefreshFailure,
-  };
-});
+vi.mock(import("./organization-refresh-recovery"), () => ({
+  reloadAfterActiveOrganizationRefreshFailure:
+    mockedReloadAfterActiveOrganizationRefreshFailure,
+}));
 
 vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
   const actual = await importActual();
@@ -110,7 +111,7 @@ vi.mock(import("#/components/ui/sidebar"), async (importActual) => {
 });
 
 vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
-  const actual = await importActual();
+  const [actual, React] = await Promise.all([importActual(), import("react")]);
   const DropdownMenuOpenContext = React.createContext<{
     readonly open: boolean;
     readonly setOpen: (open: boolean) => void;
@@ -140,7 +141,7 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
       children?: ReactNode;
       side?: string;
     }) => {
-      const dropdownMenu = use(DropdownMenuOpenContext);
+      const dropdownMenu = React.use(DropdownMenuOpenContext);
 
       if (!dropdownMenu?.open) {
         return null;
@@ -250,7 +251,7 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
       children?: ReactNode;
       render?: ReactNode;
     }) => {
-      const dropdownMenu = use(DropdownMenuOpenContext);
+      const dropdownMenu = React.use(DropdownMenuOpenContext);
 
       return (
         <div>
@@ -276,7 +277,10 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
 });
 
 vi.mock(import("@hugeicons/react"), async (importActual) => {
-  const actual = await importActual();
+  const [actual, { UnfoldMoreIcon }] = await Promise.all([
+    importActual(),
+    import("@hugeicons/core-free-icons"),
+  ]);
 
   return {
     ...actual,
@@ -317,13 +321,17 @@ function renderSwitcher(
   );
 }
 
-describe("organization switcher", () => {
-  let originalLocation: Location;
-  let assignedUrl: string | undefined;
+function getModNumberKeyboardInput(number: number) {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? `{Meta>}${number}{/Meta}`
+    : `{Control>}${number}{/Control}`;
+}
 
+describe("organization switcher", () => {
   beforeEach(() => {
-    originalLocation = window.location;
-    assignedUrl = undefined;
+    mockedGetBrowserLocationHref.mockReset();
+    mockedGetBrowserLocationPath.mockReset();
+    mockedNavigateBrowserTo.mockReset();
     mockedListOrganizations.mockReset();
     mockedRadioCancel.mockReset();
     mockedReloadAfterActiveOrganizationRefreshFailure.mockReset();
@@ -339,10 +347,6 @@ describe("organization switcher", () => {
   });
 
   afterEach(() => {
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: originalLocation,
-    });
     vi.unstubAllEnvs();
   });
 
@@ -355,19 +359,11 @@ describe("organization switcher", () => {
     readonly pathname: string;
     readonly search?: string;
   }) {
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: {
-        ...originalLocation,
-        assign: (url: string) => {
-          assignedUrl = url;
-        },
-        hash,
-        href: `https://app.pr-123.ceird.app${pathname}${search}${hash}`,
-        pathname,
-        search,
-      },
-    });
+    mockedGetBrowserLocationHref.mockReturnValue(
+      `https://app.pr-123.ceird.app${pathname}${search}${hash}`
+    );
+    mockedGetBrowserLocationPath.mockReturnValue(`${pathname}${search}${hash}`);
+    window.history.replaceState({}, "", `${pathname}${search}${hash}`);
   }
 
   it("shows a loading state while organizations are loading", async () => {
@@ -543,7 +539,7 @@ describe("organization switcher", () => {
     );
 
     expect(mockedSetActiveOrganization).toHaveBeenCalledWith("org_beta");
-    expect(assignedUrl).toBe(
+    expect(mockedNavigateBrowserTo).toHaveBeenCalledWith(
       "https://beta--pr-123.ceird.app/jobs/42?tab=notes#activity"
     );
     expect(mockedRouterInvalidate).not.toHaveBeenCalled();
@@ -578,14 +574,14 @@ describe("organization switcher", () => {
     );
 
     expect(mockedSetActiveOrganization).toHaveBeenCalledWith("org_beta");
-    expect(assignedUrl).toBeUndefined();
+    expect(mockedNavigateBrowserTo).not.toHaveBeenCalled();
 
     act(() => {
       activeOrganizationSwitch.resolve(null);
     });
 
     await waitFor(() => {
-      expect(assignedUrl).toBe(
+      expect(mockedNavigateBrowserTo).toHaveBeenCalledWith(
         "https://beta--pr-123.ceird.app/jobs/42?tab=notes#activity"
       );
     });
@@ -616,7 +612,9 @@ describe("organization switcher", () => {
       await screen.findByRole("menuitemradio", { name: /beta builds/i })
     );
 
-    expect(assignedUrl).toBe("https://beta--pr-123.ceird.app/");
+    expect(mockedNavigateBrowserTo).toHaveBeenCalledWith(
+      "https://beta--pr-123.ceird.app/"
+    );
     expect(mockedRouterInvalidate).not.toHaveBeenCalled();
   });
 
@@ -642,7 +640,7 @@ describe("organization switcher", () => {
       await screen.findByRole("menuitemradio", { name: /beta builds/i })
     );
 
-    expect(assignedUrl).toBeUndefined();
+    expect(mockedNavigateBrowserTo).not.toHaveBeenCalled();
     expect(mockedRouterInvalidate).toHaveBeenCalledWith({ sync: true });
   });
 
@@ -670,7 +668,7 @@ describe("organization switcher", () => {
       await screen.findByRole("menuitemradio", { name: /beta builds/i })
     );
 
-    expect(assignedUrl).toBeUndefined();
+    expect(mockedNavigateBrowserTo).not.toHaveBeenCalled();
     expect(mockedRouterInvalidate).toHaveBeenCalledWith({ sync: true });
   });
 
@@ -845,7 +843,7 @@ describe("organization switcher", () => {
 
     expect(mockedSetActiveOrganization).not.toHaveBeenCalled();
     expect(mockedRouterInvalidate).not.toHaveBeenCalled();
-    expect(assignedUrl).toBe(
+    expect(mockedNavigateBrowserTo).toHaveBeenCalledWith(
       "https://acme--pr-123.ceird.app/jobs/42?tab=notes#activity"
     );
   });
@@ -887,9 +885,11 @@ describe("organization switcher", () => {
     await user.click(
       await screen.findByRole("button", { name: /acme field ops/i })
     );
-    await user.keyboard("{Control>}2{/Control}");
+    await user.keyboard(getModNumberKeyboardInput(2));
 
-    expect(mockedSetActiveOrganization).toHaveBeenCalledWith("org_beta");
+    await waitFor(() => {
+      expect(mockedSetActiveOrganization).toHaveBeenCalledWith("org_beta");
+    });
     expect(mockedRouterInvalidate).toHaveBeenCalledWith({ sync: true });
   });
 });

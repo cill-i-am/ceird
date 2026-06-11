@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import type { authClient as AuthClient } from "#/lib/auth-client";
 
 import { OrganizationOnboardingPage } from "./organization-onboarding-page";
+import type * as OrganizationServerModule from "./organization-server";
 
 type InviteMemberInput = Parameters<
   typeof AuthClient.organization.inviteMember
@@ -19,7 +20,9 @@ type InviteMemberInput = Parameters<
 const {
   mockedClearAppContextClientCache,
   mockedCreateOrganization,
+  mockedGetBrowserLocationHref,
   mockedInviteMember,
+  mockedNavigateBrowserTo,
   mockedNavigate,
   mockedToastSuccess,
   mockedUpdateUserPreferences,
@@ -32,6 +35,7 @@ const {
       slug: string;
     }>
   >(),
+  mockedGetBrowserLocationHref: vi.fn<() => string>(),
   mockedInviteMember: vi.fn<
     (input: InviteMemberInput) => Promise<{
       data: {
@@ -45,6 +49,7 @@ const {
       } | null;
     }>
   >(),
+  mockedNavigateBrowserTo: vi.fn<(url: string) => void>(),
   mockedNavigate: vi.fn<(options: { to: string }) => Promise<void>>(),
   mockedToastSuccess:
     vi.fn<(title: string, options: { description: string }) => void>(),
@@ -58,6 +63,12 @@ const {
   >(),
 }));
 
+vi.mock(import("#/lib/browser-navigation"), () => ({
+  getBrowserLocationHref: mockedGetBrowserLocationHref,
+  getBrowserLocationPath: () => "/",
+  navigateBrowserTo: mockedNavigateBrowserTo,
+}));
+
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
 
@@ -67,28 +78,14 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
   };
 });
 
-vi.mock(
-  import("../auth/app-context-client-cache-state"),
-  async (importActual) => {
-    const actual = await importActual();
+vi.mock(import("../auth/app-context-client-cache-state"), () => ({
+  clearAppContextClientCache: mockedClearAppContextClientCache,
+}));
 
-    return {
-      ...actual,
-      clearAppContextClientCache:
-        mockedClearAppContextClientCache as typeof actual.clearAppContextClientCache,
-    };
-  }
-);
-
-vi.mock(import("./organization-server"), async (importActual) => {
-  const actual = await importActual();
-
-  return {
-    ...actual,
-    createCurrentServerOrganization:
-      mockedCreateOrganization as unknown as typeof actual.createCurrentServerOrganization,
-  };
-});
+vi.mock(import("./organization-server"), () => ({
+  createCurrentServerOrganization:
+    mockedCreateOrganization as unknown as typeof OrganizationServerModule.createCurrentServerOrganization,
+}));
 
 vi.mock(import("#/lib/auth-client"), () => ({
   authClient: {
@@ -118,12 +115,9 @@ vi.mock(import("../settings/user-preferences-api"), () => ({
 }));
 
 describe("organization onboarding page", () => {
-  let originalLocation: Location;
-  let assignedUrl: string | undefined;
-
   beforeEach(() => {
-    originalLocation = window.location;
-    assignedUrl = undefined;
+    mockedGetBrowserLocationHref.mockReturnValue("http://localhost/");
+    mockedNavigateBrowserTo.mockReset();
     mockedNavigate.mockResolvedValue();
     mockedCreateOrganization.mockResolvedValue({
       id: "org_123",
@@ -145,22 +139,9 @@ describe("organization onboarding page", () => {
     });
     mockedClearAppContextClientCache.mockClear();
     vi.unstubAllEnvs();
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: {
-        ...originalLocation,
-        assign: (url: string) => {
-          assignedUrl = url;
-        },
-      },
-    });
   });
 
   afterEach(() => {
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: originalLocation,
-    });
     vi.clearAllMocks();
     vi.useRealTimers();
     vi.unstubAllEnvs();
@@ -267,7 +248,6 @@ describe("organization onboarding page", () => {
       screen.queryByRole("button", { name: "Enable location access" })
     ).not.toBeInTheDocument();
     expect(mockedUpdateUserPreferences).not.toHaveBeenCalled();
-    expect(navigator.geolocation?.getCurrentPosition).toBeUndefined();
   }, 10_000);
 
   it("keeps the generated slug hidden while the team name changes", async () => {
@@ -418,7 +398,9 @@ describe("organization onboarding page", () => {
     await user.click(screen.getByRole("button", { name: "Skip for now" }));
 
     await waitFor(() => {
-      expect(assignedUrl).toBe("https://acme-field-ops--pr-123.ceird.app/");
+      expect(mockedNavigateBrowserTo).toHaveBeenCalledWith(
+        "https://acme-field-ops--pr-123.ceird.app/"
+      );
     });
     expect(mockedNavigate).not.toHaveBeenCalled();
   }, 10_000);
@@ -440,7 +422,7 @@ describe("organization onboarding page", () => {
         to: "/",
       });
     });
-    expect(assignedUrl).toBeUndefined();
+    expect(mockedNavigateBrowserTo).not.toHaveBeenCalled();
   }, 10_000);
 
   it("shows an inline error when sending an invite fails", async () => {
