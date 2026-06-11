@@ -66,7 +66,7 @@ const checkResult = ({ id, title, failures = [], details = "" }) => ({
   details,
 });
 
-const readText = async (cwd, relativeFilePath) =>
+const readText = (cwd, relativeFilePath) =>
   readFile(path.join(cwd, relativeFilePath), "utf8");
 
 const readJson = async (cwd, relativeFilePath) =>
@@ -124,7 +124,7 @@ function assertNotContains(text, snippets, artifactPath) {
   );
 }
 
-async function checkRequiredWorkflowSkills(cwd) {
+function checkRequiredWorkflowSkills(cwd) {
   const failures = requiredWorkflowSkills.flatMap((skill) => {
     const skillPath = `.agents/skills/${skill}/SKILL.md`;
 
@@ -143,7 +143,7 @@ async function checkRequiredWorkflowSkills(cwd) {
   });
 }
 
-async function checkRequiredAgentDocs(cwd) {
+function checkRequiredAgentDocs(cwd) {
   const failures = requiredAgentDocs.flatMap((docPath) =>
     pathExists(cwd, docPath) ? [] : [`Missing ${docPath}`]
   );
@@ -180,7 +180,7 @@ async function checkSkillLockOwnership(cwd) {
   });
 }
 
-async function checkNoDuplicateReviewSkills(cwd) {
+function checkNoDuplicateReviewSkills(cwd) {
   const failures = staleReviewSkillReferences.flatMap((skill) =>
     pathExists(cwd, `.agents/skills/${skill}/SKILL.md`)
       ? [`Remove duplicate skill .agents/skills/${skill}/SKILL.md`]
@@ -202,9 +202,10 @@ async function checkNoStaleReviewReferences(cwd) {
     ".agents/skills",
     ".codex/hooks",
   ];
-  const files = (
-    await Promise.all(scanRoots.map((scanRoot) => listTextFiles(cwd, scanRoot)))
-  ).flat();
+  const filesByRoot = await Promise.all(
+    scanRoots.map((scanRoot) => listTextFiles(cwd, scanRoot))
+  );
+  const files = filesByRoot.flat();
   const failures = [];
 
   for (const filePath of files) {
@@ -287,9 +288,11 @@ export async function discoverScenarioPaths(
     return [];
   }
 
-  return (await readdir(absoluteDirectory))
+  const entries = await readdir(absoluteDirectory);
+
+  return entries
     .filter((entry) => entry.endsWith(".json"))
-    .sort()
+    .toSorted()
     .map((entry) => path.join(scenarioDirectory, entry));
 }
 
@@ -303,9 +306,11 @@ export async function discoverForwardPackPaths(
     return [];
   }
 
-  return (await readdir(absoluteDirectory))
+  const entries = await readdir(absoluteDirectory);
+
+  return entries
     .filter((entry) => entry.endsWith(".json"))
-    .sort()
+    .toSorted()
     .map((entry) => path.join(forwardPackDirectory, entry));
 }
 
@@ -483,9 +488,7 @@ async function evaluateForwardPack(cwd, packPath, { includeForwardPrompts }) {
       }
     }
 
-    if (!pathExists(cwd, pack.rubricPath)) {
-      failures.push(`${packPath} expects missing rubric ${pack.rubricPath}`);
-    } else {
+    if (pathExists(cwd, pack.rubricPath)) {
       const { rubric, rubricFailures } = await loadRubric(cwd, pack.rubricPath);
       failures.push(...rubricFailures);
 
@@ -504,6 +507,8 @@ async function evaluateForwardPack(cwd, packPath, { includeForwardPrompts }) {
           forwardPrompt = buildForwardTestPrompt(pack, rubric);
         }
       }
+    } else {
+      failures.push(`${packPath} expects missing rubric ${pack.rubricPath}`);
     }
   }
 
@@ -521,6 +526,26 @@ async function evaluateForwardPack(cwd, packPath, { includeForwardPrompts }) {
   };
 }
 
+async function collectCheckResults(items, evaluateItem) {
+  const results = [];
+
+  for (const item of items) {
+    try {
+      results.push(await evaluateItem(item));
+    } catch (error) {
+      results.push(
+        checkResult({
+          id: typeof item === "string" ? item : evaluateItem.name,
+          title: typeof item === "string" ? item : evaluateItem.name,
+          failures: [error instanceof Error ? error.message : String(error)],
+        })
+      );
+    }
+  }
+
+  return results;
+}
+
 export async function runSkillEvals({
   cwd = process.cwd(),
   includeStaticChecks = true,
@@ -535,59 +560,18 @@ export async function runSkillEvals({
   const resolvedForwardPackPaths =
     forwardPackPaths ??
     (await discoverForwardPackPaths(cwd, forwardPackDirectory));
-  const staticCheckResults = [];
-
-  if (includeStaticChecks) {
-    for (const staticCheck of staticChecks) {
-      try {
-        staticCheckResults.push(await staticCheck(cwd));
-      } catch (error) {
-        staticCheckResults.push(
-          checkResult({
-            id: staticCheck.name,
-            title: staticCheck.name,
-            failures: [error instanceof Error ? error.message : String(error)],
-          })
-        );
-      }
-    }
-  }
-
-  const scenarioResults = [];
-
-  for (const scenarioPath of resolvedScenarioPaths) {
-    try {
-      scenarioResults.push(await evaluateScenario(cwd, scenarioPath));
-    } catch (error) {
-      scenarioResults.push(
-        checkResult({
-          id: scenarioPath,
-          title: scenarioPath,
-          failures: [error instanceof Error ? error.message : String(error)],
-        })
-      );
-    }
-  }
-
-  const forwardPackResults = [];
-
-  for (const forwardPackPath of resolvedForwardPackPaths) {
-    try {
-      forwardPackResults.push(
-        await evaluateForwardPack(cwd, forwardPackPath, {
-          includeForwardPrompts,
-        })
-      );
-    } catch (error) {
-      forwardPackResults.push(
-        checkResult({
-          id: forwardPackPath,
-          title: forwardPackPath,
-          failures: [error instanceof Error ? error.message : String(error)],
-        })
-      );
-    }
-  }
+  const staticCheckResults = includeStaticChecks
+    ? await collectCheckResults(staticChecks, (staticCheck) => staticCheck(cwd))
+    : [];
+  const scenarioResults = await collectCheckResults(
+    resolvedScenarioPaths,
+    (scenarioPath) => evaluateScenario(cwd, scenarioPath)
+  );
+  const forwardPackResults = await collectCheckResults(
+    resolvedForwardPackPaths,
+    (forwardPackPath) =>
+      evaluateForwardPack(cwd, forwardPackPath, { includeForwardPrompts })
+  );
 
   return {
     ok:
