@@ -30,14 +30,12 @@ test("includes runtime and framework packages in the opensrc source list", () =>
   assert.deepEqual(sourceList, [
     "@effect/platform",
     "@tanstack/db",
-    "@tanstack/react-form",
     "@tanstack/react-router",
     "@tanstack/react-router-ssr-query",
     "@tanstack/react-start",
     "better-auth",
     "drizzle-orm",
     "effect",
-    "github:facebook/react",
     "pg",
     "react-dom",
     "tailwindcss",
@@ -64,7 +62,7 @@ test("excludes assets, lightweight helpers, build tooling, and workspace package
     },
   ]);
 
-  assert.deepEqual(sourceList, ["github:facebook/react"]);
+  assert.deepEqual(sourceList, []);
 });
 
 test("matches allowed packages by exact name or approved scope prefix", () => {

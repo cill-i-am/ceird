@@ -15,7 +15,7 @@ type CeirdAgentConstructor = typeof CeirdAgentModule.CeirdAgent;
 const { agentFetch } = vi.hoisted(() => ({
   agentFetch: vi.fn<(request: Request) => Promise<Response>>(),
 }));
-const MockCeirdAgent = function CeirdAgent() {};
+function MockCeirdAgent() {}
 
 vi.mock(import("./ceird-agent.js"), () => ({
   CeirdAgent: MockCeirdAgent as unknown as CeirdAgentConstructor,

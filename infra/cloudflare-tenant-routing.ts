@@ -479,7 +479,7 @@ export const TenantWorkerRouteProvider = () =>
 
 function makeCloudflareTenantRoutingClient() {
   return Effect.gen(function* () {
-    const { accountId } = yield* Cloudflare.CloudflareEnvironment;
+    const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;
     const credentialsEffect = yield* Cloudflare.Credentials;
     const credentials = yield* credentialsEffect;
 

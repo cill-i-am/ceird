@@ -198,12 +198,15 @@ export class CeirdAgent extends AIChatAgent<AgentWorkerEnv> {
     return streamId;
   }
 
-  protected override _storeStreamChunk(streamId: string, body: string): void {
+  protected override async _storeStreamChunk(
+    streamId: string,
+    body: string
+  ): Promise<void> {
     const toolCallIds =
       this.proximityToolCallIdsByStreamId.get(streamId) ?? new Set<string>();
     this.proximityToolCallIdsByStreamId.set(streamId, toolCallIds);
 
-    super._storeStreamChunk(
+    await super._storeStreamChunk(
       streamId,
       redactProximityStreamChunkForPersistence({
         body,

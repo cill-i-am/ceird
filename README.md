@@ -71,7 +71,7 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 | `infra`                  | Root Alchemy v2 stage orchestration helpers for shared Cloudflare resources, Hyperdrive, Neon Postgres, and queues.                |
 | `scripts`                | Root development helpers, opensrc sync, and local environment scripts.                                                             |
 | `docs`                   | Codebase guides, architecture notes, implementation plans, and design specs.                                                       |
-| `opensrc`                | Gitignored dependency source cache for local agent context.                                                                        |
+| `opensrc`                | Legacy/manual gitignored dependency source location; normal sync uses the global `opensrc` cache.                                  |
 
 ## Common Commands
 
@@ -88,8 +88,8 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 | `pnpm alchemy:doctor`              | Checks the selected Alchemy stage, local env file, Node version, and audited Alchemy package version before cloud-backed local dev.                  |
 | `pnpm alchemy:state-audit`         | Reads Alchemy state for a stage and reports native Neon, AI Gateway, legacy migration, and tenant-route policy drift.                                |
 | `pnpm --filter app e2e`            | Runs Playwright E2E tests for the web app. Use explicit app/API stage URLs as needed.                                                                |
-| `pnpm --filter domain db:generate` | Generates package-local Drizzle SQL for domain schema changes.                                                                                       |
-| `pnpm --filter domain db:migrate`  | Applies package-local domain migrations outside the Alchemy stage workflow.                                                                          |
+| `pnpm --filter domain db:generate` | Generates package-local Drizzle SQL for domain schema changes, ignoring the known historical migration graph conflicts.                              |
+| `pnpm --filter domain db:migrate`  | Applies package-local domain migrations outside the Alchemy stage workflow, ignoring the known historical migration graph conflicts.                 |
 | `pnpm alchemy dev`                 | Runs the Alchemy CLI directly; for local cloud-backed runs, include `CEIRD_CLOUDFLARE=1` and `--env-file .env.local`.                                |
 | `pnpm alchemy deploy`              | Deploys the root Alchemy stack; local deploys use `CEIRD_CLOUDFLARE=1` and an env file.                                                              |
 
@@ -180,7 +180,7 @@ also exist in `apps/domain/drizzle`.
   integration boundaries.
 - Keep shared DTOs and branded IDs in the relevant `*-core` package.
 - Use the app hotkey layer for new keyboard-accessible UI actions.
-- Use local dependency source under `opensrc/` when package behavior is unclear.
-- Do not commit files from `opensrc/`.
+- Use local dependency source from `${OPENSRC_HOME:-~/.opensrc}` when package behavior is unclear.
+- Do not commit fetched dependency sources; repo-local `opensrc/` remains gitignored for legacy/manual overrides.
 - When a task is tied to a Linear issue, use the Linear issue title as the pull
   request title, including the issue key when present.

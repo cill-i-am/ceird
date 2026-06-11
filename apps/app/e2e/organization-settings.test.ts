@@ -129,3 +129,64 @@ test("an organization admin can update the organization name from account settin
     updatedOrganizationName
   );
 });
+
+test("an organization admin can manage job labels from account settings", async ({
+  page,
+}) => {
+  test.setTimeout(ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS);
+
+  const labelName = `Access issue ${randomUUID().slice(0, 4)}`;
+  const updatedLabelName = `Waiting on parts ${randomUUID().slice(0, 4)}`;
+
+  await signUpAndCreateOrganization(page, {
+    emailPrefix: "org-labels",
+    organizationName: "Acme Field Ops",
+    ownerName: "Settings Owner",
+  });
+
+  await openSettingsFromAccountMenu(page);
+  await expect(
+    page.getByRole("heading", { name: "Organization settings" })
+  ).toBeVisible();
+  await expect(page.getByText("No labels yet.")).toBeVisible();
+
+  await page.getByLabel("New label name").fill(labelName);
+  await Promise.all([
+    waitForLabelMutation(page, "POST"),
+    page.getByRole("button", { name: "Create label" }).click(),
+  ]);
+  await expect(page.getByRole("status")).toContainText("Label created.");
+  await expect(page.getByText(labelName, { exact: true })).toBeVisible();
+
+  await page
+    .getByRole("button", { name: `Label actions for ${labelName}` })
+    .click();
+  await page.getByRole("menuitem", { name: "Edit label" }).click();
+  await page.getByLabel("Label name", { exact: true }).fill(updatedLabelName);
+  await Promise.all([
+    waitForLabelMutation(page, "PATCH"),
+    page.getByRole("button", { name: "Save label changes" }).click(),
+  ]);
+  await expect(page.getByRole("status")).toContainText("Label updated.");
+  await expect(page.getByText(updatedLabelName, { exact: true })).toBeVisible();
+
+  await page
+    .getByRole("button", { name: `Label actions for ${updatedLabelName}` })
+    .click();
+  await Promise.all([
+    waitForLabelMutation(page, "DELETE"),
+    page.getByRole("menuitem", { name: "Archive label" }).click(),
+  ]);
+  await expect(page.getByRole("status")).toContainText("Label archived.");
+  await expect(page.getByText(updatedLabelName, { exact: true })).toBeHidden();
+  await expect(page.getByText("No labels yet.")).toBeVisible();
+});
+
+function waitForLabelMutation(page: Page, method: "DELETE" | "PATCH" | "POST") {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === method &&
+      /^\/labels(?:\/[^/]+)?$/.test(new URL(response.url()).pathname) &&
+      response.status() < 400
+  );
+}

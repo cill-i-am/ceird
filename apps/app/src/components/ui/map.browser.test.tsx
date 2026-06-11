@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Effect } from "effect";
-import type MapLibreGL from "maplibre-gl";
+import type * as MapLibreGL from "maplibre-gl";
 
 import { ShortcutHelpOverlay } from "#/hotkeys/shortcut-help-overlay";
 

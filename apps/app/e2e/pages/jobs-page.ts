@@ -237,6 +237,12 @@ export class JobDetailSheet {
     await chooseCommandOption(this.page, optionLabel);
     await expect(this.visitDuration).toContainText(optionLabel);
   }
+
+  async createAndAssignLabel(labelName: string) {
+    await this.root.getByRole("button", { name: "Add label" }).click();
+    await this.page.getByPlaceholder("Search labels").fill(labelName);
+    await chooseCommandOption(this.page, `Create new label: "${labelName}"`);
+  }
 }
 
 async function chooseCommandOption(page: Page, optionLabel: string) {

@@ -19,10 +19,12 @@
     "ajv",
     "ajv-formats",
     "cloudflare",
+    "eslint",
     "opensrc",
     "portless",
     "tsx",
     "vite",
     "workerd"
-  ]
+  ],
+  "ignoreBinaries": ["tar"]
 }

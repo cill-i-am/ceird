@@ -7409,20 +7409,25 @@ async function withEnvironment(
   nextEnvironment: Record<string, string>,
   run: (provider: ConfigProvider.ConfigProvider) => Promise<void>
 ) {
-  const previousEnvironment = { ...process.env };
+  const managedKeys = [
+    "AUTH_APP_ORIGIN",
+    "AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED",
+    "AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE",
+    "AUTH_RATE_LIMIT_ENABLED",
+    "BETTER_AUTH_BASE_URL",
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_SECRETS",
+    "CEIRD_LOCAL_DEV",
+    "DATABASE_URL",
+    "MCP_RESOURCE_URL",
+    "NODE_ENV",
+    "OAUTH_ISSUER_URL",
+  ] as const;
+  const previousEnvironment = snapshotEnv(managedKeys);
 
-  delete process.env.AUTH_APP_ORIGIN;
-  delete process.env.AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED;
-  delete process.env.AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE;
-  delete process.env.AUTH_RATE_LIMIT_ENABLED;
-  delete process.env.BETTER_AUTH_BASE_URL;
-  delete process.env.BETTER_AUTH_SECRET;
-  delete process.env.BETTER_AUTH_SECRETS;
-  delete process.env.CEIRD_LOCAL_DEV;
-  delete process.env.DATABASE_URL;
-  delete process.env.MCP_RESOURCE_URL;
-  delete process.env.NODE_ENV;
-  delete process.env.OAUTH_ISSUER_URL;
+  for (const key of managedKeys) {
+    Reflect.deleteProperty(process.env, key);
+  }
 
   Object.assign(process.env, nextEnvironment);
   const provider = ConfigProvider.fromEnv({ env: nextEnvironment });
@@ -7430,7 +7435,23 @@ async function withEnvironment(
   try {
     await run(provider);
   } finally {
-    process.env = previousEnvironment;
+    restoreEnv(previousEnvironment);
+  }
+}
+
+function snapshotEnv<const Keys extends readonly string[]>(keys: Keys) {
+  return Object.fromEntries(
+    keys.map((key) => [key, process.env[key]])
+  ) as Record<Keys[number], string | undefined>;
+}
+
+function restoreEnv(previous: Record<string, string | undefined>) {
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) {
+      Reflect.deleteProperty(process.env, key);
+    } else {
+      process.env[key] = value;
+    }
   }
 }
 

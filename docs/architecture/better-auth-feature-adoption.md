@@ -1,8 +1,8 @@
 # Better Auth Feature Adoption
 
-Audited on 2026-06-06 from the Better Auth v1.6 docs, local Better Auth 1.6.11
-source under `opensrc/`, and the current Ceird auth, organization, settings,
-API, and MCP code.
+Audited on 2026-06-06 from the Better Auth v1.6 docs, local Better Auth 1.6.16
+source under `${OPENSRC_HOME:-~/.opensrc}`, and the current Ceird auth,
+organization, settings, API, and MCP code.
 
 ## Goal
 
@@ -35,8 +35,8 @@ short because plugin work is easiest to keep safe when the same boundary checks
 happen every time.
 
 1. Check the current Better Auth docs and the local package source listed in
-   `opensrc/sources.json`. If docs and source disagree, trust local source for
-   implementation behavior and record the docs gap.
+   `${OPENSRC_HOME:-~/.opensrc}/sources.json`. If docs and source disagree,
+   trust local source for implementation behavior and record the docs gap.
 2. Identify server plugin config, runtime environment variables, and secret
    material before editing code.
 3. Identify app client plugin config and user-facing methods before changing UI.

@@ -121,7 +121,7 @@ OAuth Provider:
 - The OAuth Provider docs show resource-server JWT verification and the
   `mcpHandler` helper from `@better-auth/oauth-provider`, which is the helper
   Ceird already uses.
-- The local source for `@better-auth/oauth-provider@1.6.11` confirms that
+- The local source for `@better-auth/oauth-provider@1.6.16` confirms that
   `mcpHandler` verifies bearer tokens through `verifyAccessToken` and emits
   OAuth protected-resource challenges.
 
@@ -200,6 +200,6 @@ Keep these adjacent backlog items separate:
 - Better Auth Device Authorization docs:
   https://better-auth.com/docs/plugins/device-authorization
 - Local Better Auth source:
-  `opensrc/repos/github.com/better-auth/better-auth/packages/oauth-provider/src/mcp.ts`
+  `${OPENSRC_HOME:-~/.opensrc}/repos/github.com/better-auth/better-auth/packages/oauth-provider/src/mcp.ts`
 - Local standalone MCP plugin source:
-  `opensrc/repos/github.com/better-auth/better-auth/packages/better-auth/src/plugins/mcp/index.ts`
+  `${OPENSRC_HOME:-~/.opensrc}/repos/github.com/better-auth/better-auth/packages/better-auth/src/plugins/mcp/index.ts`

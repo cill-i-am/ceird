@@ -11,12 +11,12 @@
     "test": "vitest run --globals"
   },
   "dependencies": {
-    "effect": "4.0.0-beta.78"
+    "effect": "4.0.0-beta.79"
   },
   "devDependencies": {
-    "@effect/vitest": "4.0.0-beta.78",
-    "@types/node": "^25.6.0",
-    "typescript": "5.9.2",
+    "@effect/vitest": "4.0.0-beta.79",
+    "@types/node": "^25.9.3",
+    "typescript": "6.0.3",
     "vitest": "^4.1.8"
   }
 }

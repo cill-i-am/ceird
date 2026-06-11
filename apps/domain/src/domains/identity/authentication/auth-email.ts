@@ -16,7 +16,6 @@ import {
   PasswordResetEmailRequestError,
 } from "./auth-email-errors.js";
 import { AuthEmailTransport } from "./auth-email-transport.js";
-import type { TransportMessage } from "./auth-email-transport.js";
 
 export { AuthEmailTransport } from "./auth-email-transport.js";
 export type { TransportMessage } from "./auth-email-transport.js";

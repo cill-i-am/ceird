@@ -104,12 +104,12 @@ environment setup script copies `.env.local` from an explicit
 `LOCAL_ENV_SOURCE` first, then from the primary Git worktree associated with the
 linked worktree. It prepares the env file before dependency installation so
 Codex and other non-interactive setup runs fail quickly when credentials are
-missing. When the source directory or primary worktree already has an
-`opensrc/` cache, setup links that cache into the new worktree and runs
-dependency installation with `CI=true` so the root `postinstall` does not repeat
-a network-backed dependency-source refresh. If no cache exists, setup lets
-`pnpm install` run the normal `opensrc` refresh. The script does not generate
-fallback secrets; if no source env file exists, setup stops with a clear error.
+missing. Dependency source uses `opensrc`'s global cache at
+`${OPENSRC_HOME:-~/.opensrc}`. Setup does not link worktree-local `opensrc/`
+directories; it runs normal dependency installation and lets the root
+`postinstall` refresh the shared cache, which is reused by all worktrees. The
+script does not generate fallback secrets; if no source env file exists, setup
+stops with a clear error.
 
 Common local and Alchemy variables include:
 

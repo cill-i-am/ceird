@@ -5,8 +5,6 @@ import {
   mkdir,
   mkdtemp,
   readFile,
-  readlink,
-  realpath,
   rm,
   stat,
   writeFile,
@@ -31,7 +29,6 @@ test("setup copies .env.local from LOCAL_ENV_SOURCE", async (t) => {
   t.after(fixture.cleanup);
   const sourceFile = path.join(fixture.tempDir, "source.env.local");
   await writeFile(sourceFile, "AUTH_EMAIL_FROM=auth@example.com\n", "utf8");
-  await writeOpensrcCache(fixture.tempDir, "local-env-source");
 
   const result = runScript(setupScript, fixture, {
     LOCAL_ENV_SOURCE: sourceFile,
@@ -43,21 +40,15 @@ test("setup copies .env.local from LOCAL_ENV_SOURCE", async (t) => {
     "AUTH_EMAIL_FROM=auth@example.com\n"
   );
   assert.equal(await fileMode(path.join(fixture.repoDir, ".env.local")), 0o600);
-  assert.equal(
-    await readFile(path.join(fixture.repoDir, "opensrc/sources.json"), "utf8"),
-    "local-env-source\n"
-  );
-  assert.equal(
-    await realpath(await readlink(path.join(fixture.repoDir, "opensrc"))),
-    await realpath(path.join(fixture.tempDir, "opensrc"))
-  );
+  assert.match(result.stdout, /Using opensrc global cache at /);
+  assert.equal(await pathExists(path.join(fixture.repoDir, "opensrc")), false);
   assert.equal(
     await readFile(fixture.callLog, "utf8"),
     [
       "corepack enable",
       "env present before install: AUTH_EMAIL_FROM=auth@example.com",
-      "opensrc present before install: local-env-source",
-      "pnpm install --frozen-lockfile CI=true",
+      "opensrc missing before install",
+      "pnpm install --frozen-lockfile CI=",
       "",
     ].join("\n")
   );
@@ -97,7 +88,6 @@ test("setup copies .env.local from the primary git worktree", async (t) => {
     "AUTH_EMAIL_FROM=primary@example.com\n",
     "utf8"
   );
-  await writeOpensrcCache(fixture.repoDir, "primary-worktree");
   run("git", ["worktree", "add", "--detach", targetWorktree], {
     cwd: fixture.repoDir,
   });
@@ -110,14 +100,8 @@ test("setup copies .env.local from the primary git worktree", async (t) => {
     "AUTH_EMAIL_FROM=primary@example.com\n"
   );
   assert.equal(await fileMode(path.join(targetWorktree, ".env.local")), 0o600);
-  assert.equal(
-    await readFile(path.join(targetWorktree, "opensrc/sources.json"), "utf8"),
-    "primary-worktree\n"
-  );
-  assert.equal(
-    await realpath(await readlink(path.join(targetWorktree, "opensrc"))),
-    await realpath(path.join(fixture.repoDir, "opensrc"))
-  );
+  assert.match(result.stdout, /Using opensrc global cache at /);
+  assert.equal(await pathExists(path.join(targetWorktree, "opensrc")), false);
   assert.equal(
     await pathExists(path.join(fixture.repoDir, ".env.local")),
     true
@@ -148,7 +132,7 @@ test("setup allows pnpm to refresh opensrc when no cache source exists", async (
   );
 });
 
-test("setup replaces a partial opensrc directory with a cache link", async (t) => {
+test("setup leaves existing opensrc directories alone because opensrc uses a global cache", async (t) => {
   const fixture = await createFixture();
   t.after(fixture.cleanup);
   const sourceDir = path.join(fixture.tempDir, "source");
@@ -158,7 +142,6 @@ test("setup replaces a partial opensrc directory with a cache link", async (t) =
     "AUTH_EMAIL_FROM=source@example.com\n",
     "utf8"
   );
-  await writeOpensrcCache(sourceDir, "source-cache");
   await mkdir(path.join(fixture.repoDir, "opensrc"), { recursive: true });
   await writeFile(
     path.join(fixture.repoDir, "opensrc/partial.txt"),
@@ -172,12 +155,8 @@ test("setup replaces a partial opensrc directory with a cache link", async (t) =
 
   assert.equal(result.status, 0, result.stderr);
   assert.equal(
-    await realpath(await readlink(path.join(fixture.repoDir, "opensrc"))),
-    await realpath(path.join(sourceDir, "opensrc"))
-  );
-  assert.equal(
-    await readFile(path.join(fixture.repoDir, "opensrc/sources.json"), "utf8"),
-    "source-cache\n"
+    await readFile(path.join(fixture.repoDir, "opensrc/partial.txt"), "utf8"),
+    "left by interrupted setup\n"
   );
 });
 
@@ -235,7 +214,6 @@ test("setup preserves .env.local before installing dependencies", async (t) => {
     "AUTH_EMAIL_FROM=existing@example.com\n",
     "utf8"
   );
-  await writeOpensrcCache(fixture.repoDir, "existing-cache");
 
   const result = runScript(setupScript, fixture);
 
@@ -245,8 +223,8 @@ test("setup preserves .env.local before installing dependencies", async (t) => {
     [
       "corepack enable",
       "env present before install: AUTH_EMAIL_FROM=existing@example.com",
-      "opensrc present before install: existing-cache",
-      "pnpm install --frozen-lockfile CI=true",
+      "opensrc missing before install",
+      "pnpm install --frozen-lockfile CI=",
       "",
     ].join("\n")
   );
@@ -366,17 +344,6 @@ function run(command, args, options) {
       ...options.env,
     },
   });
-}
-
-async function writeOpensrcCache(rootDir, label) {
-  const opensrcDir = path.join(rootDir, "opensrc");
-  await mkdir(path.join(opensrcDir, "repos/example"), { recursive: true });
-  await writeFile(path.join(opensrcDir, "sources.json"), `${label}\n`, "utf8");
-  await writeFile(
-    path.join(opensrcDir, "repos/example/source.ts"),
-    `export const source = ${JSON.stringify(label)};\n`,
-    "utf8"
-  );
 }
 
 async function writeExecutable(filePath, content) {
