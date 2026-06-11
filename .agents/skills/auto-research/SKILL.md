@@ -148,8 +148,6 @@ If the automation tool is unavailable, explain that the environment cannot creat
 If the goal names another skill, use it normally inside the loop:
 
 - `$impeccable critique` or `$impeccable audit` can supply UX findings and severity gates.
-- `$systematic-debugging` can guide repeated failure reduction.
-- `$verification-before-completion` applies before claiming the run succeeded.
 
 Do not spawn subagents unless the user explicitly asked for parallel agents or delegation.
 
