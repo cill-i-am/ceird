@@ -1,0 +1,26 @@
+{
+  "id": "subagent-execution-review-loop",
+  "title": "Subagents are bounded, explicit-effort helpers under controller verification",
+  "prompt": "A worker needs help splitting investigation, implementation, and review work across subagents without losing accountability.",
+  "expectedSkills": ["subagent-execution"],
+  "artifacts": [
+    {
+      "path": ".agents/skills/subagent-execution/SKILL.md",
+      "mustContain": [
+        "reasoning_effort",
+        "spec-compliance review",
+        "Linear issue key/title",
+        "read-only",
+        "Subagents do not inherit the controller's context",
+        "Verify materially"
+      ]
+    },
+    {
+      "path": "AGENTS.md",
+      "mustContain": [
+        "When spawning Codex sub-agents, set `reasoning_effort` explicitly",
+        "Use `medium` for spec compliance review"
+      ]
+    }
+  ]
+}

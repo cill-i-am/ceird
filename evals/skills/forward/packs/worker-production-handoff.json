@@ -1,0 +1,26 @@
+{
+  "id": "worker-production-handoff",
+  "title": "Worker plans one issue through production-ready handoff",
+  "prompt": "Pick up TSK-205 and describe the end-to-end worker plan through implementation, review, PR, CI watch, and Linear evidence.",
+  "skills": ["worker", "production-ready", "subagent-execution"],
+  "fixturePaths": [
+    "evals/skills/forward/fixtures/mock-linear-issue.md",
+    "evals/skills/forward/fixtures/mock-repo-state.md"
+  ],
+  "rubricPath": "evals/skills/forward/rubrics/linear-agent-workflow.json",
+  "rubricCriteria": [
+    "source-of-truth",
+    "worker-boundary",
+    "review-evidence",
+    "ci-loop",
+    "output-clarity"
+  ],
+  "expectedOutputSections": [
+    "Scope restatement",
+    "Implementation plan",
+    "Subagent/review plan",
+    "Verification plan",
+    "PR and Linear evidence",
+    "Stop conditions"
+  ]
+}

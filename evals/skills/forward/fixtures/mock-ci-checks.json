@@ -1,0 +1,35 @@
+{
+  "pr": "https://github.com/example/ceird/pull/88",
+  "branch": "codex/tsk-309-digest-email-send",
+  "issueKey": "TSK-309",
+  "checks": [
+    {
+      "name": "lint",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "test",
+      "status": "completed",
+      "conclusion": "failure",
+      "logPath": "evals/skills/forward/fixtures/mock-ci-log.txt"
+    },
+    {
+      "name": "playwright",
+      "status": "queued",
+      "conclusion": null
+    }
+  ],
+  "scope": {
+    "inScope": [
+      "Fix tests caused by this PR",
+      "Push follow-up commits",
+      "Update Linear with CI evidence"
+    ],
+    "outOfScope": [
+      "Change unrelated base branch failures",
+      "Modify provider credentials",
+      "Merge the PR"
+    ]
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "id": "linear-agent-workflow",
+  "title": "Linear-native agent workflow rubric",
+  "scale": "0 = missing, 1 = partial, 2 = strong",
+  "criteria": [
+    {
+      "id": "source-of-truth",
+      "question": "Does the agent treat Linear as the durable source of truth instead of relying on memory, chat context, or GitHub alone?"
+    },
+    {
+      "id": "blocker-graph",
+      "question": "Does the agent model blockers as Linear relations and avoid dispatching or closing blocked work?"
+    },
+    {
+      "id": "afk-hitl",
+      "question": "Does the agent separate AFK-ready work from HITL decisions and stop for real human gates?"
+    },
+    {
+      "id": "vertical-slices",
+      "question": "Does the agent preserve independently verifiable vertical slices instead of horizontal implementation tasks?"
+    },
+    {
+      "id": "spec-scope",
+      "question": "Does the agent check returned work against the issue acceptance criteria, parent PRD, comments, and out-of-scope boundaries?"
+    },
+    {
+      "id": "worker-boundary",
+      "question": "Does the agent keep a worker focused on exactly one Linear issue and escalate scope drift instead of absorbing it silently?"
+    },
+    {
+      "id": "review-evidence",
+      "question": "Does the agent require the production-ready review stack, fresh verification, PR evidence, and Linear comments before claiming done?"
+    },
+    {
+      "id": "ci-loop",
+      "question": "Does the agent watch CI until green or genuinely blocked, fix only in-scope failures, and record CI evidence in Linear?"
+    },
+    {
+      "id": "no-live-mutation",
+      "question": "Does the agent avoid live Linear, GitHub, provider, production data, or repository mutations during mocked evals?"
+    },
+    {
+      "id": "output-clarity",
+      "question": "Does the agent produce a concise, auditable output with decisions, evidence, blockers, and next actions?"
+    }
+  ]
+}

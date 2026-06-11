@@ -1,0 +1,59 @@
+{
+  "project": {
+    "key": "PROJ-42",
+    "title": "Weekly Admin Activity Digest",
+    "state": "in-progress",
+    "parentPrdUpdatedAt": "2026-06-10T09:00:00Z"
+  },
+  "issues": [
+    {
+      "key": "TSK-101",
+      "title": "TSK-101 Add workspace digest opt-out setting",
+      "state": "done",
+      "classification": "AFK",
+      "blocks": ["TSK-103"],
+      "evidence": "PR merged, tests green"
+    },
+    {
+      "key": "TSK-102",
+      "title": "TSK-102 Approve digest email layout",
+      "state": "needs-info",
+      "classification": "HITL",
+      "blocks": ["TSK-104"],
+      "evidence": "Awaiting design approval"
+    },
+    {
+      "key": "TSK-103",
+      "title": "TSK-103 Aggregate weekly digest activity",
+      "state": "ready-for-agent",
+      "classification": "AFK",
+      "blockedBy": ["TSK-101"],
+      "acceptanceCriteria": [
+        "Aggregation filters by workspace",
+        "Resolved threads and label changes are included",
+        "Unit tests cover opt-out filtering"
+      ]
+    },
+    {
+      "key": "TSK-104",
+      "title": "TSK-104 Send weekly digest email",
+      "state": "blocked",
+      "classification": "AFK",
+      "blockedBy": ["TSK-102", "TSK-103"],
+      "acceptanceCriteria": [
+        "Uses existing email delivery path",
+        "Records delivery evidence",
+        "Does not send to opted-out workspaces"
+      ]
+    }
+  ],
+  "prs": [
+    {
+      "url": "https://github.com/example/ceird/pull/77",
+      "issueKey": "TSK-103",
+      "head": "codex/tsk-103-digest-aggregation",
+      "ci": "green",
+      "workerEvidence": "Ran production-ready, but did not mention parent PRD update after dispatch"
+    }
+  ]
+}

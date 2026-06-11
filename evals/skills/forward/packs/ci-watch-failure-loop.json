@@ -1,0 +1,26 @@
+{
+  "id": "ci-watch-failure-loop",
+  "title": "CI watcher fixes in-scope regression and keeps watching",
+  "prompt": "A PR for TSK-309 has one failing test check and one queued Playwright check. Decide what to inspect, what can be fixed, when to push, and how to update Linear.",
+  "skills": ["ci-watch", "systematic-debugging"],
+  "fixturePaths": [
+    "evals/skills/forward/fixtures/mock-ci-checks.json",
+    "evals/skills/forward/fixtures/mock-ci-log.txt"
+  ],
+  "rubricPath": "evals/skills/forward/rubrics/linear-agent-workflow.json",
+  "rubricCriteria": [
+    "source-of-truth",
+    "ci-loop",
+    "spec-scope",
+    "no-live-mutation",
+    "output-clarity"
+  ],
+  "expectedOutputSections": [
+    "Decision",
+    "Failure analysis",
+    "Allowed fix scope",
+    "Verification plan",
+    "Linear update",
+    "Stop conditions"
+  ]
+}

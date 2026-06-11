@@ -1,0 +1,37 @@
+{
+  "id": "production-ready-review-stack",
+  "title": "Production-ready runs spec, review, verification, PR, CI, and Linear evidence gates",
+  "prompt": "Before handing off a Linear issue PR, make sure the work is production ready and all required evidence is recorded.",
+  "expectedSkills": [
+    "production-ready",
+    "backend-review",
+    "frontend-review",
+    "auth-context-review",
+    "ci-watch"
+  ],
+  "artifacts": [
+    {
+      "path": ".agents/skills/production-ready/SKILL.md",
+      "mustContain": [
+        ".codex/hooks/stop_review_prompt.mjs",
+        "backend-review",
+        "frontend-review",
+        "auth-context-review",
+        "review-swarm",
+        "simplify",
+        "Fresh Verification",
+        "CI Watch",
+        "Linear update status"
+      ]
+    },
+    {
+      "path": ".codex/hooks/stop_review_prompt.mjs",
+      "mustContain": ["backend-review", "frontend-review"],
+      "mustNotContain": [
+        "ceird-backend-review",
+        "ceird-frontend-review",
+        "ceird-auth-context-review"
+      ]
+    }
+  ]
+}

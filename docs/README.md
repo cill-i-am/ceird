@@ -25,6 +25,8 @@ describe how the major systems fit together; `superpowers/specs` and
 - [Local Development And Infrastructure](architecture/local-development-and-infra.md)
   explains Alchemy stages, local environment setup, the root Alchemy stack, and
   production infrastructure.
+- [Agent Workflow](agents/README.md) explains the Linear-native PRD, issue,
+  orchestration, worker, review, and CI-watch workflow used by project skills.
 - [Planned Features](planned-features/README.md) tracks locked product and
   design decisions before implementation starts.
 

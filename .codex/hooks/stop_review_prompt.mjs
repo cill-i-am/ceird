@@ -128,7 +128,7 @@ function isReviewInfra(file) {
 }
 
 function isSharedCore(file) {
-  return /^packages\/(identity-core|jobs-core|labels-core|sites-core)\//.test(
+  return /^packages\/(agents-core|comments-core|domain-core|identity-core|jobs-core|labels-core|proximity-core|sites-core|worker-observability)\//.test(
     file
   );
 }
@@ -137,7 +137,11 @@ function isBackendFile(file) {
   return (
     file === "alchemy.run.ts" ||
     file === "tsconfig.infra.json" ||
+    file.startsWith("apps/agent/") ||
     file.startsWith("apps/api/") ||
+    file.startsWith("apps/domain/") ||
+    file.startsWith("apps/mcp/") ||
+    file.startsWith("apps/sync/") ||
     file.startsWith("infra/") ||
     isSharedCore(file)
   );
@@ -233,7 +237,7 @@ function buildMessage(scope, backendFiles, frontendFiles) {
   if (backendFiles.length > 0) {
     sections.push(
       [
-        "Backend/API review required: load `.agents/skills/ceird-backend-review/SKILL.md` (skill `ceird-backend-review`).",
+        "Backend/API review required: load `.agents/skills/backend-review/SKILL.md` (skill `backend-review`).",
         summarize(backendFiles),
       ].join("\n")
     );
@@ -242,7 +246,7 @@ function buildMessage(scope, backendFiles, frontendFiles) {
   if (frontendFiles.length > 0) {
     sections.push(
       [
-        "Frontend/app review required: load `.agents/skills/ceird-frontend-review/SKILL.md` (skill `ceird-frontend-review`).",
+        "Frontend/app review required: load `.agents/skills/frontend-review/SKILL.md` (skill `frontend-review`).",
         summarize(frontendFiles),
       ].join("\n")
     );

@@ -1,0 +1,30 @@
+{
+  "id": "orchestrator-spec-gate",
+  "title": "Orchestrator dispatches workers and gates work against Linear",
+  "prompt": "Coordinate a Linear project by sending ready issues to workers, then check returned PRs against the project spec.",
+  "expectedSkills": ["orchestrator", "reconcile-project", "worker"],
+  "artifacts": [
+    {
+      "path": ".agents/skills/orchestrator/SKILL.md",
+      "mustContain": [
+        "The orchestrator coordinates work",
+        "reconcile-project",
+        "ready-for-agent",
+        "Spec Gate",
+        "parent PRD/Project intent",
+        "production-ready",
+        "CI is green"
+      ],
+      "mustNotContain": ["The orchestrator implements"]
+    },
+    {
+      "path": "docs/agents/execution-policy.md",
+      "mustContain": [
+        "The orchestrator owns a Linear Project execution loop",
+        "inspect worker PRs",
+        "parent PRD",
+        "Run `reconcile-project`"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "to-prd-product-idea",
+  "title": "Planner turns a rough idea into a Linear-native PRD",
+  "prompt": "Turn the mock product idea into a Linear Project/PRD. Do not create implementation issues yet.",
+  "skills": ["to-prd", "grill-with-docs"],
+  "fixturePaths": ["evals/skills/forward/fixtures/product-idea.md"],
+  "rubricPath": "evals/skills/forward/rubrics/linear-agent-workflow.json",
+  "rubricCriteria": [
+    "source-of-truth",
+    "afk-hitl",
+    "vertical-slices",
+    "no-live-mutation",
+    "output-clarity"
+  ],
+  "expectedOutputSections": [
+    "PRD",
+    "Implementation decisions",
+    "Verification expectations",
+    "Open questions / HITL",
+    "Next step"
+  ]
+}

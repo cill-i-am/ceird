@@ -11,6 +11,8 @@
     "check-types": "pnpm -r --if-present check-types && pnpm run check-types:infra",
     "check-types:infra": "tsc --noEmit -p tsconfig.infra.json",
     "dev": "node scripts/alchemy-dev.mjs",
+    "eval:skills": "node scripts/run-skill-evals.mjs",
+    "eval:skills:forward": "node scripts/run-skill-evals.mjs --forward-prompts",
     "fix": "ultracite fix .",
     "format": "oxfmt --check .",
     "format:write": "oxfmt --write .",

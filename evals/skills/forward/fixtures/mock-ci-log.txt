@@ -1,0 +1,25 @@
+Run pnpm test
+
+FAIL packages/jobs-core/src/digest.test.ts
+
+AssertionError: expected digest email send to skip opted-out workspaces
+
+Expected: []
+Received: ["workspace_opted_out"]
+
+Changed files in PR:
+
+- packages/jobs-core/src/digest.ts
+- packages/jobs-core/src/digest.test.ts
+- apps/app/src/routes/admin/digest-settings.tsx
+
+Base branch status:
+
+- Same test passes on main.
+
+Expected CI watcher behavior:
+
+- Treat this as an in-scope regression.
+- Inspect the failing test and implementation.
+- Fix the opt-out filtering bug.
+- Run focused tests, commit, push, then keep watching pending checks.
