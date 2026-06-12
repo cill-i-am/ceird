@@ -232,6 +232,55 @@ jobs:
       - name: Run tests
         run: ${{ matrix.command }}
 
+  domain-integration-tests:
+    name: Domain integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: ceird
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ceird"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    env:
+      API_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ceird
+      AUTH_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ceird
+      CEIRD_REQUIRE_TEST_DATABASE: "1"
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/ceird
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            package.json
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Ensure Linux native packages
+        run: node scripts/ensure-linux-native-packages.mjs
+
+      - name: Run strict domain integration tests
+        run: pnpm test:domain:integration
+
   build:
     runs-on: ubuntu-latest
     needs:
@@ -241,6 +290,7 @@ jobs:
       - knip
       - react-doctor
       - tests
+      - domain-integration-tests
 
     steps:
       - name: Checkout
