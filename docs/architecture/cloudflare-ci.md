@@ -112,6 +112,11 @@ Cloudflare app/API/Agent URLs. A final cleanup job destroys the same `CI_STAGE`
 with the same hostname overrides. The cleanup job runs with `always()` so
 failed health checks or failed E2E shards still attempt to remove the temporary
 Cloudflare, Hyperdrive, Queue, Worker route, and Neon branch resources.
+Before calling `alchemy destroy`, the cleanup job detaches the known CI Worker
+custom domains serially through the Cloudflare API. Alchemy remains responsible
+for deleting the stage resources, but the pre-detach avoids transient
+Cloudflare failures when several Worker custom domains are removed concurrently
+as part of Worker deletion.
 
 ## GitHub Secrets And Variables
 
