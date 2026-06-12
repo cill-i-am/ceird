@@ -636,7 +636,22 @@ jobs:
           ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS: ${{ secrets.ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS }}
 
       - name: Destroy cloud E2E
-        run: pnpm alchemy destroy --stage "$CI_STAGE" --yes
+        run: |
+          set -euo pipefail
+
+          for attempt in 1 2 3; do
+            if pnpm alchemy destroy --stage "$CI_STAGE" --yes; then
+              exit 0
+            fi
+
+            if [[ "$attempt" == "3" ]]; then
+              echo "Alchemy destroy failed after $attempt attempts"
+              exit 1
+            fi
+
+            echo "Alchemy destroy failed on attempt $attempt; retrying after Cloudflare propagation settles"
+            sleep $((attempt * 10))
+          done
         env:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
           AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
