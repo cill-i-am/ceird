@@ -333,3 +333,8 @@ pnpm run check-types:infra
 When changing a package contract, test both the package and the consuming app or
 API path. Shared packages define boundaries; consumers prove those boundaries
 still compose.
+
+Shared core packages that own cross-runtime DTO and domain primitives should
+prefer `noUncheckedIndexedAccess` once their local assumptions are guarded.
+Use explicit element, tuple, and optional-value checks at package boundaries
+rather than non-null assertions or broad casts.

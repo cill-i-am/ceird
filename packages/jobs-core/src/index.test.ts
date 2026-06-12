@@ -22,6 +22,7 @@ import {
   JobCommentBodySchema,
   JobCommentSchema,
   JobDetailResponseSchema,
+  IsoDateString,
   JobListQuerySchema,
   JobMemberOptionsResponseSchema,
   JobOptionsResponseSchema,
@@ -300,6 +301,15 @@ describe("jobs-core", () => {
   });
 
   it("decodes activity and visit contracts", () => {
+    expect(Schema.decodeUnknownSync(IsoDateString)("2026-05-20")).toBe(
+      "2026-05-20"
+    );
+    expect(() => Schema.decodeUnknownSync(IsoDateString)("2026-02-30")).toThrow(
+      /ISO-8601 date/
+    );
+    expect(() => Schema.decodeUnknownSync(IsoDateString)("2026-05-aa")).toThrow(
+      /ISO-8601 date/
+    );
     expect(
       Schema.decodeUnknownSync(JobActivityJobCreatedPayloadSchema)({
         eventType: "job_created",
