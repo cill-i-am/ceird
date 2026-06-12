@@ -13,6 +13,11 @@ import type {
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { Effect } from "effect";
 
+import {
+  createAllPagesPaginationState,
+  ensureAllPagesCursorProgress,
+  ensureAllPagesLimit,
+} from "#/features/api/all-pages-pagination";
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiClient } from "#/features/api/app-api-client";
 
@@ -84,14 +89,17 @@ async function listCurrentBrowserJobs(
   );
 }
 
-async function listAllCurrentBrowserJobs(
+export async function listAllCurrentBrowserJobs(
   query: JobListQuery = {}
 ): Promise<JobListResponse> {
   const items: JobListItem[] = [];
   const { cursor: initialCursor, ...staticQuery } = query;
+  const pagination = createAllPagesPaginationState("Job", initialCursor);
   let cursor = initialCursor;
 
   while (true) {
+    ensureAllPagesLimit(pagination);
+
     // Cursor pagination must await each page before requesting its next cursor.
     // react-doctor-disable-next-line
     const page = await listCurrentBrowserJobs(
@@ -107,6 +115,7 @@ async function listAllCurrentBrowserJobs(
       };
     }
 
+    ensureAllPagesCursorProgress(pagination, page.nextCursor);
     cursor = page.nextCursor;
   }
 }

@@ -11,6 +11,11 @@ import type {
   WorkItemIdType,
 } from "@ceird/jobs-core";
 
+import {
+  createAllPagesPaginationState,
+  ensureAllPagesCursorProgress,
+  ensureAllPagesLimit,
+} from "#/features/api/all-pages-pagination";
 import { runAppApiClient } from "#/features/api/app-api-client";
 import { readServerAppApiRequestStrict } from "#/features/api/app-api-server-ssr";
 
@@ -32,9 +37,12 @@ export async function listAllCurrentServerJobsDirect(
   const request = await readServerAppApiRequestStrict();
   const items: JobListItem[] = [];
   const { cursor: initialCursor, ...staticQuery } = query;
+  const pagination = createAllPagesPaginationState("Job", initialCursor);
   let cursor = initialCursor;
 
   while (true) {
+    ensureAllPagesLimit(pagination);
+
     const pageQuery = cursor ? { ...staticQuery, cursor } : staticQuery;
     // Cursor pagination must await each page before requesting its next cursor.
     // react-doctor-disable-next-line
@@ -56,6 +64,7 @@ export async function listAllCurrentServerJobsDirect(
       };
     }
 
+    ensureAllPagesCursorProgress(pagination, page.nextCursor);
     cursor = page.nextCursor;
   }
 }

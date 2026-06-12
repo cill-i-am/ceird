@@ -10,6 +10,11 @@ import type {
   SiteOption,
 } from "@ceird/sites-core";
 
+import {
+  createAllPagesPaginationState,
+  ensureAllPagesCursorProgress,
+  ensureAllPagesLimit,
+} from "#/features/api/all-pages-pagination";
 import { runAppApiClient } from "#/features/api/app-api-client";
 import { AppApiRequestError } from "#/features/api/app-api-errors";
 import { readConfiguredServerApiOrigin } from "#/lib/api-origin.server";
@@ -17,8 +22,6 @@ import {
   normalizeServerApiCookieHeader,
   readServerApiForwardedHeaders,
 } from "#/lib/server-api-forwarded-headers";
-
-const MAX_ALL_SITE_PAGES = 1000;
 
 export interface ServerAppApiRequest {
   readonly cookie: string;
@@ -82,17 +85,11 @@ export async function listAllCurrentServerSitesDirect(
   const items: SiteOption[] = [];
   const { cursor: initialCursor, limit, ...queryWithoutCursor } = query;
   const staticQuery = { limit: limit ?? 100, ...queryWithoutCursor };
-  const seenCursors = new Set<string>();
+  const pagination = createAllPagesPaginationState("Site", initialCursor);
   let cursor = initialCursor;
-  let pageCount = 0;
-
-  if (cursor !== undefined) {
-    seenCursors.add(cursor);
-  }
 
   while (true) {
-    pageCount += 1;
-    ensureSitePageLimit(pageCount);
+    ensureAllPagesLimit(pagination);
 
     const pageQuery =
       cursor === undefined ? staticQuery : { ...staticQuery, cursor };
@@ -114,7 +111,7 @@ export async function listAllCurrentServerSitesDirect(
       };
     }
 
-    ensureSiteCursorProgress(page.nextCursor, seenCursors);
+    ensureAllPagesCursorProgress(pagination, page.nextCursor);
     cursor = page.nextCursor;
   }
 }
@@ -125,9 +122,12 @@ export async function listAllCurrentServerJobsDirect(
   const items: JobListItem[] = [];
   const request = await readServerAppApiRequestStrict();
   const { cursor: initialCursor, ...staticQuery } = query;
+  const pagination = createAllPagesPaginationState("Job", initialCursor);
   let cursor = initialCursor;
 
   while (true) {
+    ensureAllPagesLimit(pagination);
+
     const pageQuery = cursor ? { ...staticQuery, cursor } : staticQuery;
     const page = await runAppApiClient(
       request,
@@ -147,6 +147,7 @@ export async function listAllCurrentServerJobsDirect(
       };
     }
 
+    ensureAllPagesCursorProgress(pagination, page.nextCursor);
     cursor = page.nextCursor;
   }
 }
@@ -161,25 +162,4 @@ export async function listCurrentServerJobsDirect(
       query,
     })
   );
-}
-
-function ensureSitePageLimit(pageCount: number) {
-  if (pageCount > MAX_ALL_SITE_PAGES) {
-    throw new AppApiRequestError({
-      message: "Site pagination exceeded the maximum page count.",
-    });
-  }
-}
-
-function ensureSiteCursorProgress(
-  nextCursor: NonNullable<SiteListResponse["nextCursor"]>,
-  seenCursors: Set<string>
-) {
-  if (seenCursors.has(nextCursor)) {
-    throw new AppApiRequestError({
-      message: "Site pagination returned a repeated cursor.",
-    });
-  }
-
-  seenCursors.add(nextCursor);
 }
