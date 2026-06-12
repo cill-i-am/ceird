@@ -9,6 +9,7 @@ import { OpenApi } from "effect/unstable/httpapi";
 import {
   AddJobCommentInputSchema,
   AddJobVisitInputSchema,
+  AssignJobLabelInputSchema,
   AttachJobCollaboratorInputSchema,
   CommentId,
   CreateJobInputSchema,
@@ -146,6 +147,27 @@ describe("jobs-core", () => {
     ).toThrow(/[Uu]nexpected/);
     expect(() =>
       Schema.decodeUnknownSync(PatchJobInputSchema)({
+        removedField: "PO-4471",
+      })
+    ).toThrow(/[Uu]nexpected/);
+    expect(() =>
+      Schema.decodeUnknownSync(TransitionJobInputSchema)({
+        blockedReason: "Waiting for parts",
+        removedField: "PO-4471",
+        status: "blocked",
+      })
+    ).toThrow(/[Uu]nexpected/);
+    expect(() =>
+      Schema.decodeUnknownSync(AddJobVisitInputSchema)({
+        durationMinutes: 60,
+        note: "Replaced sensor.",
+        removedField: "PO-4471",
+        visitDate: "2026-05-20",
+      })
+    ).toThrow(/[Uu]nexpected/);
+    expect(() =>
+      Schema.decodeUnknownSync(AssignJobLabelInputSchema)({
+        labelId: "11111111-1111-4111-8111-111111111111",
         removedField: "PO-4471",
       })
     ).toThrow(/[Uu]nexpected/);
@@ -293,15 +315,22 @@ describe("jobs-core", () => {
     });
     expect(
       Schema.decodeUnknownSync(AddJobVisitInputSchema)({
-        durationMinutes: 30,
+        durationMinutes: 60,
         note: "  Replaced sensor.  ",
         visitDate: "2026-05-20",
       })
     ).toStrictEqual({
-      durationMinutes: 30,
+      durationMinutes: 60,
       note: "Replaced sensor.",
       visitDate: "2026-05-20",
     });
+    expect(() =>
+      Schema.decodeUnknownSync(AddJobVisitInputSchema)({
+        durationMinutes: 30,
+        note: "Replaced sensor.",
+        visitDate: "2026-05-20",
+      })
+    ).toThrow(/whole-hour increments/);
   });
 
   it("decodes list and options contracts", () => {

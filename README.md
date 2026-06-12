@@ -55,23 +55,27 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 
 ## Workspace Map
 
-| Path                     | Purpose                                                                                                                            |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/app`               | TanStack Start React application, routes, authenticated shell, feature UI, hotkeys, and Playwright E2E tests.                      |
-| `apps/api`               | Public HTTP adapter Worker that keeps root/health routes and forwards domain traffic through the private `DOMAIN` service binding. |
-| `apps/agent`             | Public Cloudflare Agents SDK Worker that hosts org/user/thread-scoped `CeirdAgent` Durable Objects.                                |
-| `apps/domain`            | Private Ceird domain Worker that owns product services, persistence, authorization, action execution, audit, auth, and migrations. |
-| `apps/mcp`               | Standalone MCP adapter Worker that forwards MCP traffic through the same private `DOMAIN` service binding.                         |
-| `apps/sync`              | Public Electric SQL sync Worker plus Cloudflare Container runtime for domain-layer shape replication.                              |
-| `packages/agents-core`   | Shared agent thread IDs, action contracts, instance-name helpers, and connect-token schemas.                                       |
-| `packages/identity-core` | Shared organization and membership schemas, role helpers, and decoders.                                                            |
-| `packages/jobs-core`     | Shared jobs schemas, DTOs, job-owned IDs, job assignment endpoints, and typed job errors.                                          |
-| `packages/sites-core`    | Shared site IDs, schemas, DTOs, API contract groups, and typed site errors.                                                        |
-| `packages/labels-core`   | Shared organization label IDs, schemas, DTOs, API contract, normalization helpers, and typed label errors.                         |
-| `infra`                  | Root Alchemy v2 stage orchestration helpers for shared Cloudflare resources, Hyperdrive, Neon Postgres, and queues.                |
-| `scripts`                | Root development helpers, opensrc sync, and local environment scripts.                                                             |
-| `docs`                   | Codebase guides, architecture notes, implementation plans, and design specs.                                                       |
-| `opensrc`                | Legacy/manual gitignored dependency source location; normal sync uses the global `opensrc` cache.                                  |
+| Path                            | Purpose                                                                                                                            |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/app`                      | TanStack Start React application, routes, authenticated shell, feature UI, hotkeys, and Playwright E2E tests.                      |
+| `apps/api`                      | Public HTTP adapter Worker that keeps root/health routes and forwards domain traffic through the private `DOMAIN` service binding. |
+| `apps/agent`                    | Public Cloudflare Agents SDK Worker that hosts org/user/thread-scoped `CeirdAgent` Durable Objects.                                |
+| `apps/domain`                   | Private Ceird domain Worker that owns product services, persistence, authorization, action execution, audit, auth, and migrations. |
+| `apps/mcp`                      | Standalone MCP adapter Worker that forwards MCP traffic through the same private `DOMAIN` service binding.                         |
+| `apps/sync`                     | Public Electric SQL sync Worker plus Cloudflare Container runtime for domain-layer shape replication.                              |
+| `packages/agents-core`          | Shared agent thread IDs, action contracts, instance-name helpers, and connect-token schemas.                                       |
+| `packages/comments-core`        | Shared comment IDs and DTO schemas used by job and site comments.                                                                  |
+| `packages/domain-core`          | Shared private Domain Worker service-binding contract and client helpers.                                                          |
+| `packages/identity-core`        | Shared organization and membership schemas, role helpers, and decoders.                                                            |
+| `packages/jobs-core`            | Shared jobs schemas, DTOs, job-owned IDs, job assignment endpoints, and typed job errors.                                          |
+| `packages/labels-core`          | Shared organization label IDs, schemas, DTOs, API contract, normalization helpers, and typed label errors.                         |
+| `packages/proximity-core`       | Shared route-aware origin, route summary, route display-line, metadata, limit, and typed proximity error contracts.                |
+| `packages/sites-core`           | Shared site IDs, schemas, DTOs, API contract groups, and typed site errors.                                                        |
+| `packages/worker-observability` | Shared Worker request analytics, Analytics Engine datapoint shaping, sampling, and telemetry failure isolation.                    |
+| `infra`                         | Root Alchemy v2 stage orchestration helpers for shared Cloudflare resources, Hyperdrive, Neon Postgres, and queues.                |
+| `scripts`                       | Root development helpers, opensrc sync, and local environment scripts.                                                             |
+| `docs`                          | Codebase guides, architecture notes, implementation plans, and design specs.                                                       |
+| `opensrc`                       | Legacy/manual gitignored dependency source location; normal sync uses the global `opensrc` cache.                                  |
 
 ## Common Commands
 
