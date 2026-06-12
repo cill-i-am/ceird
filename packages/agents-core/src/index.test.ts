@@ -174,6 +174,22 @@ describe("@ceird/agents-core", () => {
     expect(runtimeExports.AGENT_EXECUTABLE_ACTION_MANIFEST).toBe(
       publicExports.AGENT_EXECUTABLE_ACTION_MANIFEST
     );
+    expect(runtimeExports.AgentThreadId).toBe(publicExports.AgentThreadId);
+    expect(runtimeExports.AgentInstanceName).toBe(
+      publicExports.AgentInstanceName
+    );
+    expect(runtimeExports.AgentThreadSchema).toBe(
+      publicExports.AgentThreadSchema
+    );
+    expect(runtimeExports.signAgentConnectToken).toBe(
+      publicExports.signAgentConnectToken
+    );
+    expect(runtimeExports.verifyAgentConnectToken).toBe(
+      publicExports.verifyAgentConnectToken
+    );
+    expect(runtimeExports.AGENT_STORAGE_OPERATIONS).toBe(
+      publicExports.AGENT_STORAGE_OPERATIONS
+    );
     expect(runtimeExports.getAgentActionDefinition("ceird.jobs.create")).toBe(
       publicExports.getAgentActionDefinition("ceird.jobs.create")
     );

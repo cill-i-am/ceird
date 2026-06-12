@@ -187,6 +187,30 @@ schemas remain in `@ceird/sites-core` to avoid package cycles. Keep provider
 clients, cache policy, quota accounting, SQL repositories, authorization, and UI
 state outside this package.
 
+## `@ceird/worker-observability`
+
+Path: `packages/worker-observability`
+
+Exports shared Cloudflare Worker request telemetry helpers used by `apps/api`,
+`apps/domain`, `apps/mcp`, `apps/sync`, and `apps/agent`:
+
+- `WorkerObservability`, the Effect service consumed by Worker runtime
+  adapters
+- `makeWorkerObservabilityLive` for binding an environment-backed service
+  layer
+- `writeWorkerRequestAnalytics` and
+  `makeWorkerRequestAnalyticsDataPoint` for direct Analytics Engine writes and
+  testable datapoint shaping
+- bounded sample-rate parsing, deterministic sampling, aggregate-safe path
+  normalization, status-class bucketing, and duration normalization
+- telemetry failure isolation so Analytics Engine write failures are request
+  data loss only, not user-visible Worker failures
+
+This package owns runtime-neutral Worker request analytics behavior. Keep
+app-specific request logging, auth/security audit events, domain activity
+events, Cloudflare resource declarations, and Worker entrypoints in their
+owning apps or root `infra`.
+
 ## `@ceird/labels-core`
 
 Path: `packages/labels-core`
@@ -223,22 +247,27 @@ apps/domain
   -> @ceird/sites-core
   -> @ceird/labels-core
   -> @ceird/proximity-core
+  -> @ceird/worker-observability
 
 apps/agent
   -> @ceird/agents-core/runtime
+  -> @ceird/worker-observability
   -> apps/domain through the private service binding
 
 apps/api
   -> @ceird/agents-core
   -> @ceird/domain-core
+  -> @ceird/worker-observability
   -> apps/domain through the private service binding
 
 apps/mcp
   -> @ceird/domain-core
+  -> @ceird/worker-observability
   -> apps/domain through the private service binding
 
 apps/sync
   -> @ceird/domain-core
+  -> @ceird/worker-observability
   -> apps/domain through the private service binding
   -> Electric SQL through the ElectricSql Durable Object/container
 
@@ -270,6 +299,9 @@ packages/comments-core
 
 packages/labels-core
   -> @ceird/identity-core
+
+packages/worker-observability
+  -> effect
 ```
 
 Core packages should not depend on `apps/*`.
@@ -293,6 +325,8 @@ pnpm --filter @ceird/domain-core test
 pnpm --filter @ceird/jobs-core test
 pnpm --filter @ceird/sites-core test
 pnpm --filter @ceird/labels-core test
+pnpm --filter @ceird/proximity-core test
+pnpm --filter @ceird/worker-observability test
 pnpm run check-types:infra
 ```
 

@@ -195,8 +195,12 @@ jobs:
             command: pnpm --filter @ceird/jobs-core test
           - name: labels-core
             command: pnpm --filter @ceird/labels-core test
+          - name: proximity-core
+            command: pnpm --filter @ceird/proximity-core test
           - name: sites-core
             command: pnpm --filter @ceird/sites-core test
+          - name: worker-observability
+            command: pnpm --filter @ceird/worker-observability test
           - name: infra
             command: pnpm run test:infra
           - name: scripts

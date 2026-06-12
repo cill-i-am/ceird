@@ -1,8 +1,3 @@
-import { OrganizationId, UserId } from "@ceird/identity-core";
-import { Schema } from "effect";
-
-import { ExecutableAgentActionNameSchema } from "./action-definitions.js";
-
 export {
   AGENT_ACTION_DEFINITIONS,
   AGENT_ACTION_MANIFEST_SCHEMA,
@@ -58,396 +53,59 @@ export type {
   AgentProximityOriginContextFrame,
   AgentProximityOriginContextId as AgentProximityOriginContextIdType,
 } from "./proximity-context.js";
-
-const ISO_DATE_TIME_UTC_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
-
-function isIsoDateTimeString(value: string): boolean {
-  return (
-    ISO_DATE_TIME_UTC_PATTERN.test(value) && !Number.isNaN(Date.parse(value))
-  );
-}
-
-export const IsoDateTimeString = Schema.String.pipe(
-  Schema.refine((value): value is string => isIsoDateTimeString(value), {
-    message: "Expected an ISO-8601 UTC datetime string",
-  }),
-  Schema.annotate({
-    description: "ISO-8601 UTC datetime string",
-  })
-);
-export type IsoDateTimeString = Schema.Schema.Type<typeof IsoDateTimeString>;
-
-export const AgentThreadId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("@ceird/agents-core/AgentThreadId")
-);
-export type AgentThreadId = Schema.Schema.Type<typeof AgentThreadId>;
-
-export const AgentActionRunId = Schema.String.check(Schema.isUUID()).pipe(
-  Schema.brand("@ceird/agents-core/AgentActionRunId")
-);
-export type AgentActionRunId = Schema.Schema.Type<typeof AgentActionRunId>;
-
-export const AGENT_THREAD_STATUSES = ["active", "archived"] as const;
-export const AgentThreadStatus = Schema.Literals(AGENT_THREAD_STATUSES);
-export type AgentThreadStatus = Schema.Schema.Type<typeof AgentThreadStatus>;
-
-export const AGENT_ACTION_RUN_STATUSES = [
-  "running",
-  "succeeded",
-  "failed",
-] as const;
-export const AgentActionRunStatus = Schema.Literals(AGENT_ACTION_RUN_STATUSES);
-export type AgentActionRunStatus = Schema.Schema.Type<
-  typeof AgentActionRunStatus
->;
-
-export const AgentInstanceName = Schema.String.pipe(
-  Schema.check(Schema.isPattern(/^org:[^:]+:user:[^:]+:thread:[0-9a-f-]{36}$/)),
-  Schema.brand("@ceird/agents-core/AgentInstanceName")
-);
-export type AgentInstanceName = Schema.Schema.Type<typeof AgentInstanceName>;
-
-export const AgentThreadSchema = Schema.Struct({
-  agentInstanceName: AgentInstanceName,
-  createdAt: IsoDateTimeString,
-  id: AgentThreadId,
-  lastMessageAt: Schema.NullOr(IsoDateTimeString),
-  status: AgentThreadStatus,
-  title: Schema.String,
-  updatedAt: IsoDateTimeString,
-});
-export type AgentThread = Schema.Schema.Type<typeof AgentThreadSchema>;
-
-export const AGENT_THREAD_LIST_DEFAULT_LIMIT = 50;
-export const AGENT_THREAD_LIST_MAX_LIMIT = 100;
-
-export const AgentThreadListQuerySchema = Schema.Struct({
-  limit: Schema.optional(
-    Schema.NumberFromString.pipe(
-      Schema.check(
-        Schema.isInt(),
-        Schema.isGreaterThan(0),
-        Schema.isLessThanOrEqualTo(AGENT_THREAD_LIST_MAX_LIMIT)
-      )
-    )
-  ),
-});
-export type AgentThreadListQuery = Schema.Schema.Type<
-  typeof AgentThreadListQuerySchema
->;
-
-export const CreateAgentThreadInputSchema = Schema.Struct({
-  title: Schema.optional(
-    Schema.Trim.pipe(
-      Schema.check(Schema.isMinLength(1), Schema.isMaxLength(120))
-    )
-  ),
-});
-export type CreateAgentThreadInput = Schema.Schema.Type<
-  typeof CreateAgentThreadInputSchema
->;
-
-export const AgentThreadListResponseSchema = Schema.Struct({
-  items: Schema.Array(AgentThreadSchema),
-});
-export type AgentThreadListResponse = Schema.Schema.Type<
-  typeof AgentThreadListResponseSchema
->;
-
-export const AgentThreadResponseSchema = Schema.Struct({
-  item: AgentThreadSchema,
-});
-export type AgentThreadResponse = Schema.Schema.Type<
-  typeof AgentThreadResponseSchema
->;
-
-export const AgentCurrentLocationAccessResponseSchema = Schema.Struct({
-  allowed: Schema.Literal(true),
-});
-export type AgentCurrentLocationAccessResponse = Schema.Schema.Type<
-  typeof AgentCurrentLocationAccessResponseSchema
->;
-
-export const AgentConnectAuthorizationSchema = Schema.Struct({
-  agentInstanceName: AgentInstanceName,
-  token: Schema.String,
-});
-export type AgentConnectAuthorization = Schema.Schema.Type<
-  typeof AgentConnectAuthorizationSchema
->;
-
-export const AgentActionOperationId = Schema.String.pipe(
-  Schema.check(Schema.isPattern(/^[a-zA-Z0-9_.:-]{8,160}$/)),
-  Schema.brand("@ceird/agents-core/AgentActionOperationId")
-);
-export type AgentActionOperationId = Schema.Schema.Type<
-  typeof AgentActionOperationId
->;
-
-export const RunAgentActionInputSchema = Schema.Struct({
-  input: Schema.Unknown,
-  name: ExecutableAgentActionNameSchema,
-  operationId: AgentActionOperationId,
-  threadId: AgentThreadId,
-});
-export type RunAgentActionInput = Schema.Schema.Type<
-  typeof RunAgentActionInputSchema
->;
-
-export const RunAgentActionResponseSchema = Schema.Struct({
-  actionRunId: AgentActionRunId,
-  replayed: Schema.Boolean,
-  result: Schema.Unknown,
-});
-export type RunAgentActionResponse = Schema.Schema.Type<
-  typeof RunAgentActionResponseSchema
->;
-
-export const AGENT_STORAGE_OPERATIONS = [
-  "thread.list",
-  "thread.create",
-  "thread.archive",
-  "thread.authorizeConnect",
-  "thread.currentLocationAccess",
-  "thread.touchActivity",
-  "action.manifest",
-  "action.run",
-  "action.execute",
-] as const;
-export const AgentStorageOperation = Schema.Literals(AGENT_STORAGE_OPERATIONS);
-export type AgentStorageOperation = Schema.Schema.Type<
-  typeof AgentStorageOperation
->;
-
-export const AGENT_ACTIONS_PATH = "/agent/actions" as const;
-export const AGENT_INTERNAL_PATH_PREFIX = "/agent/internal" as const;
-export const AGENT_INTERNAL_ACTIONS_PATH =
-  `${AGENT_INTERNAL_PATH_PREFIX}/actions` as const;
-export const AGENT_INTERNAL_THREAD_ACTIVITY_PATH =
-  `${AGENT_INTERNAL_PATH_PREFIX}/threads/:threadId/activity` as const;
-export const AGENT_INTERNAL_CURRENT_LOCATION_ACCESS_PATH =
-  `${AGENT_INTERNAL_PATH_PREFIX}/threads/:threadId/current-location-access` as const;
-
-export function makeAgentInternalThreadActivityPath(
-  threadId: AgentThreadId
-): string {
-  return `${AGENT_INTERNAL_PATH_PREFIX}/threads/${threadId}/activity`;
-}
-
-export function makeAgentInternalCurrentLocationAccessPath(
-  threadId: AgentThreadId
-): string {
-  return `${AGENT_INTERNAL_PATH_PREFIX}/threads/${threadId}/current-location-access`;
-}
-
-export function isAgentInternalPath(pathname: string): boolean {
-  return pathname.startsWith(`${AGENT_INTERNAL_PATH_PREFIX}/`);
-}
-
-export function buildAgentInstanceName(input: {
-  readonly organizationId: OrganizationId;
-  readonly threadId: AgentThreadId;
-  readonly userId: UserId;
-}): AgentInstanceName {
-  const raw = `org:${encodeURIComponent(input.organizationId)}:user:${encodeURIComponent(
-    input.userId
-  )}:thread:${input.threadId}`;
-
-  return Schema.decodeUnknownSync(AgentInstanceName)(raw);
-}
-
-export interface ParsedAgentInstanceName {
-  readonly organizationId: OrganizationId;
-  readonly threadId: AgentThreadId;
-  readonly userId: UserId;
-}
-
-export function parseAgentInstanceName(
-  value: AgentInstanceName
-): ParsedAgentInstanceName {
-  const match = /^org:([^:]+):user:([^:]+):thread:([0-9a-f-]{36})$/.exec(value);
-
-  if (!match) {
-    throw new Error(`Invalid agent instance name: ${value}`);
-  }
-  const [, rawOrganizationId, rawUserId, rawThreadId] = match;
-
-  if (
-    rawOrganizationId === undefined ||
-    rawUserId === undefined ||
-    rawThreadId === undefined
-  ) {
-    throw new Error(`Invalid agent instance name: ${value}`);
-  }
-
-  return {
-    organizationId: Schema.decodeUnknownSync(OrganizationId)(
-      decodeURIComponent(rawOrganizationId)
-    ),
-    threadId: Schema.decodeUnknownSync(AgentThreadId)(rawThreadId),
-    userId: Schema.decodeUnknownSync(UserId)(decodeURIComponent(rawUserId)),
-  };
-}
-
-const AGENT_CONNECT_TOKEN_VERSION = "v1";
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder();
-const hmacKeyCache = new Map<string, Promise<CryptoKey>>();
-
-const AgentConnectTokenPayloadSchema = Schema.Struct({
-  agentInstanceName: AgentInstanceName,
-  exp: Schema.Number,
-});
-
-export interface SignAgentConnectTokenInput {
-  readonly agentInstanceName: AgentInstanceName;
-  readonly now?: Date | undefined;
-  readonly secret: string;
-  readonly ttlSeconds: number;
-}
-
-export interface VerifyAgentConnectTokenInput {
-  readonly now?: Date | undefined;
-  readonly secret: string;
-  readonly token: string;
-}
-
-export class AgentConnectTokenInvalidError extends Error {
-  override readonly name = "AgentConnectTokenInvalidError";
-}
-
-export async function signAgentConnectToken(
-  input: SignAgentConnectTokenInput
-): Promise<string> {
-  const now = input.now ?? new Date();
-  const payload = {
-    agentInstanceName: input.agentInstanceName,
-    exp: Math.floor(now.getTime() / 1000) + input.ttlSeconds,
-  };
-  const encodedPayload = base64UrlEncode(
-    textEncoder.encode(JSON.stringify(payload))
-  );
-  const signature = await signAgentConnectTokenPayload(
-    input.secret,
-    encodedPayload
-  );
-
-  return `${AGENT_CONNECT_TOKEN_VERSION}.${encodedPayload}.${signature}`;
-}
-
-export async function verifyAgentConnectToken(
-  input: VerifyAgentConnectTokenInput
-): Promise<AgentInstanceName> {
-  const [version, encodedPayload, signature, ...extraParts] =
-    input.token.split(".");
-
-  if (
-    version !== AGENT_CONNECT_TOKEN_VERSION ||
-    encodedPayload === undefined ||
-    signature === undefined ||
-    extraParts.length > 0
-  ) {
-    throw new AgentConnectTokenInvalidError("Invalid agent token shape");
-  }
-
-  const expectedSignature = await signAgentConnectTokenPayload(
-    input.secret,
-    encodedPayload
-  );
-
-  if (!timingSafeEqual(signature, expectedSignature)) {
-    throw new AgentConnectTokenInvalidError("Invalid agent token signature");
-  }
-
-  const payload = decodeAgentConnectTokenPayload(encodedPayload);
-  const now = Math.floor((input.now ?? new Date()).getTime() / 1000);
-
-  if (payload.exp < now) {
-    throw new AgentConnectTokenInvalidError("Agent token expired");
-  }
-
-  return payload.agentInstanceName;
-}
-
-function decodeAgentConnectTokenPayload(encodedPayload: string) {
-  try {
-    return Schema.decodeUnknownSync(AgentConnectTokenPayloadSchema)(
-      JSON.parse(textDecoder.decode(base64UrlDecode(encodedPayload)))
-    );
-  } catch {
-    throw new AgentConnectTokenInvalidError("Invalid agent token payload");
-  }
-}
-
-async function signAgentConnectTokenPayload(
-  secret: string,
-  data: string
-): Promise<string> {
-  const key = await getHmacKey(secret);
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    textEncoder.encode(data)
-  );
-
-  return base64UrlEncode(new Uint8Array(signature));
-}
-
-function getHmacKey(secret: string): Promise<CryptoKey> {
-  const cached = hmacKeyCache.get(secret);
-
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const imported = crypto.subtle.importKey(
-    "raw",
-    textEncoder.encode(secret),
-    { hash: "SHA-256", name: "HMAC" },
-    false,
-    ["sign"]
-  );
-  hmacKeyCache.set(secret, imported);
-
-  return imported;
-}
-
-function base64UrlEncode(bytes: Uint8Array): string {
-  let binary = "";
-
-  for (const byte of bytes) {
-    binary += String.fromCodePoint(byte);
-  }
-
-  return btoa(binary)
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/u, "");
-}
-
-function base64UrlDecode(value: string): Uint8Array {
-  const padded = value.padEnd(
-    value.length + ((4 - (value.length % 4)) % 4),
-    "="
-  );
-  const binary = atob(padded.replaceAll("-", "+").replaceAll("_", "/"));
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.codePointAt(index) ?? 0;
-  }
-
-  return bytes;
-}
-
-export function timingSafeEqual(left: string, right: string): boolean {
-  let difference = Number(left.length !== right.length);
-  const length = Math.max(left.length, right.length);
-
-  for (let index = 0; index < length; index += 1) {
-    difference += Number(left.codePointAt(index) !== right.codePointAt(index));
-  }
-
-  return difference === 0;
-}
+export {
+  AGENT_ACTIONS_PATH,
+  AGENT_ACTION_RUN_STATUSES,
+  AGENT_INTERNAL_ACTIONS_PATH,
+  AGENT_INTERNAL_CURRENT_LOCATION_ACCESS_PATH,
+  AGENT_INTERNAL_PATH_PREFIX,
+  AGENT_INTERNAL_THREAD_ACTIVITY_PATH,
+  AGENT_STORAGE_OPERATIONS,
+  AGENT_THREAD_LIST_DEFAULT_LIMIT,
+  AGENT_THREAD_LIST_MAX_LIMIT,
+  AGENT_THREAD_STATUSES,
+  AgentActionOperationId,
+  AgentActionRunId,
+  AgentActionRunStatus,
+  AgentConnectAuthorizationSchema,
+  AgentConnectTokenInvalidError,
+  AgentCurrentLocationAccessResponseSchema,
+  AgentInstanceName,
+  AgentStorageOperation,
+  AgentThreadId,
+  AgentThreadListQuerySchema,
+  AgentThreadListResponseSchema,
+  AgentThreadResponseSchema,
+  AgentThreadSchema,
+  AgentThreadStatus,
+  CreateAgentThreadInputSchema,
+  IsoDateTimeString,
+  PreparedAgentSessionSchema,
+  PrepareAgentSessionInputSchema,
+  RunAgentActionInputSchema,
+  RunAgentActionResponseSchema,
+  buildAgentInstanceName,
+  isAgentInternalPath,
+  makeAgentInternalCurrentLocationAccessPath,
+  makeAgentInternalThreadActivityPath,
+  parseAgentInstanceName,
+  signAgentConnectToken,
+  timingSafeEqual,
+  verifyAgentConnectToken,
+} from "./shared.js";
+export type {
+  AgentConnectAuthorization,
+  AgentCurrentLocationAccessResponse,
+  AgentThread,
+  AgentThreadListQuery,
+  AgentThreadListResponse,
+  AgentThreadResponse,
+  CreateAgentThreadInput,
+  ParsedAgentInstanceName,
+  PreparedAgentSession,
+  PrepareAgentSessionInput,
+  RunAgentActionInput,
+  RunAgentActionResponse,
+  SignAgentConnectTokenInput,
+  VerifyAgentConnectTokenInput,
+} from "./shared.js";

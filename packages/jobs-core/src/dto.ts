@@ -46,7 +46,10 @@ import {
 } from "./ids.js";
 
 const JobVisitDurationMinutesSchema = Schema.Int.pipe(
-  Schema.check(Schema.isGreaterThan(0))
+  Schema.check(Schema.isGreaterThan(0)),
+  Schema.refine((value): value is number => value % 60 === 0, {
+    message: "Visit duration must be entered in whole-hour increments",
+  })
 );
 const NonEmptyTrimmedString = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1))
@@ -503,6 +506,8 @@ export type PatchJobResponse = Schema.Schema.Type<
 export const TransitionJobInputSchema = Schema.Struct({
   status: JobStatusSchema,
   blockedReason: Schema.optional(JobBlockedReasonSchema),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 export type TransitionJobInput = Schema.Schema.Type<
   typeof TransitionJobInputSchema
@@ -576,6 +581,8 @@ export const AddJobVisitInputSchema = Schema.Struct({
   visitDate: IsoDateString,
   note: JobVisitNoteSchema,
   durationMinutes: JobVisitDurationMinutesSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 export type AddJobVisitInput = Schema.Schema.Type<
   typeof AddJobVisitInputSchema
@@ -588,6 +595,8 @@ export type AddJobVisitResponse = Schema.Schema.Type<
 
 export const AssignJobLabelInputSchema = Schema.Struct({
   labelId: LabelId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 export type AssignJobLabelInput = Schema.Schema.Type<
   typeof AssignJobLabelInputSchema

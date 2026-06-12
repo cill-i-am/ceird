@@ -4,14 +4,17 @@
 infrastructure lives in `../infra` with the Alchemy stack entrypoint at
 `../alchemy.run.ts`.
 
-| Workspace       | Purpose                                                                                 |
-| --------------- | --------------------------------------------------------------------------------------- |
-| `comments-core` | Shared comment IDs and DTO schemas used by job and site comments.                       |
-| `domain-core`   | Shared private Domain Worker service-binding contract and client helpers.               |
-| `identity-core` | Shared organization IDs, role schemas, organization DTO schemas, and decoders.          |
-| `jobs-core`     | Shared job-owned IDs, domain schemas, DTOs, Effect HTTP API contract, and typed errors. |
-| `sites-core`    | Shared site IDs, schemas, DTOs, API groups, and typed public errors.                    |
-| `labels-core`   | Shared organization label IDs, schemas, DTOs, API group, and typed public errors.       |
+| Workspace              | Purpose                                                                                 |
+| ---------------------- | --------------------------------------------------------------------------------------- |
+| `comments-core`        | Shared comment IDs and DTO schemas used by job and site comments.                       |
+| `domain-core`          | Shared private Domain Worker service-binding contract and client helpers.               |
+| `identity-core`        | Shared organization IDs, role schemas, organization DTO schemas, and decoders.          |
+| `jobs-core`            | Shared job-owned IDs, domain schemas, DTOs, Effect HTTP API contract, and typed errors. |
+| `sites-core`           | Shared site IDs, schemas, DTOs, API groups, and typed public errors.                    |
+| `labels-core`          | Shared organization label IDs, schemas, DTOs, API group, and typed public errors.       |
+| `proximity-core`       | Shared route-aware origin, routing, and proximity DTOs plus typed proximity errors.     |
+| `agents-core`          | Shared agent thread IDs, action contracts, instance helpers, and runtime-safe schemas.  |
+| `worker-observability` | Shared Cloudflare Worker request analytics, sampling, and telemetry service helpers.    |
 
 Package contracts are documented in
 [../docs/architecture/packages.md](../docs/architecture/packages.md).
@@ -20,10 +23,14 @@ Run focused package checks with filters:
 
 ```bash
 pnpm --filter @ceird/identity-core test
+pnpm --filter @ceird/agents-core test
+pnpm --filter @ceird/comments-core test
 pnpm --filter @ceird/domain-core test
 pnpm --filter @ceird/jobs-core test
 pnpm --filter @ceird/sites-core test
 pnpm --filter @ceird/labels-core test
+pnpm --filter @ceird/proximity-core test
+pnpm --filter @ceird/worker-observability test
 pnpm run check-types:infra
 ```
 
