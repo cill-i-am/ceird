@@ -161,6 +161,10 @@ test failure rather than a skip. The helper keeps the configured database name
 as its admin connection instead of assuming a `/postgres` database, which keeps
 Neon stage URLs such as the `ceird` database usable for creating the isolated
 test databases.
+The Build workflow also runs this strict command in a dedicated
+`domain-integration-tests` job backed by a GitHub Actions Postgres service.
+The final `build` job depends on that job, so Build cannot pass if the
+database-backed domain integration suite skips or fails.
 
 The Worker does not run migrations. During deploy, the native Neon branch
 resource depends on `Drizzle.Schema`, then applies SQL files from

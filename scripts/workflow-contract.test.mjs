@@ -768,6 +768,14 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   const ciDeployJob = getWorkflowJob(buildWorkflow, "cloud-e2e-deploy");
   const ciE2eJob = getWorkflowJob(buildWorkflow, "cloud-e2e");
   const ciDestroyJob = getWorkflowJob(buildWorkflow, "cloud-e2e-destroy");
+  const domainIntegrationJob = getWorkflowJob(
+    buildWorkflow,
+    "domain-integration-tests"
+  );
+  const workflowWithoutDomainIntegration = buildWorkflow.replace(
+    domainIntegrationJob,
+    ""
+  );
   const ciAuditStep = getWorkflowStep(ciDeployJob, "Audit CI Alchemy state");
   const ciDatabaseExportStep = getWorkflowStep(
     ciE2eJob,
@@ -794,14 +802,25 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   assert.match(playwrightConfig, /PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER/);
   assert.doesNotMatch(playwrightConfig, /PLAYWRIGHT_USE_EXTERNAL_SERVER/);
   assert.doesNotMatch(
-    buildWorkflow,
+    workflowWithoutDomainIntegration,
     /services:\n\s+postgres:|postgres:16|pnpm --filter (?:api|domain) db:migrate/
   );
+  assert.match(domainIntegrationJob, /services:\n {6}postgres:/);
+  assert.match(domainIntegrationJob, /image: postgres:17/);
+  assert.match(domainIntegrationJob, /CEIRD_REQUIRE_TEST_DATABASE: "1"/);
+  assert.match(domainIntegrationJob, /API_TEST_DATABASE_URL:/);
+  assert.match(domainIntegrationJob, /AUTH_TEST_DATABASE_URL:/);
+  assert.match(domainIntegrationJob, /TEST_DATABASE_URL:/);
+  assert.match(domainIntegrationJob, /run: pnpm test:domain:integration/);
   assert.doesNotMatch(
     buildWorkflow,
     /e2e:\n(?: {4}.*\n)* {4}environment: main/
   );
   assert.match(ciDeployJob, /needs:\n(?: {6}.*\n)* {6}- build/);
+  assert.match(
+    getWorkflowJob(buildWorkflow, "build"),
+    /needs:\n(?: {6}.*\n)* {6}- domain-integration-tests/
+  );
   assert.match(ciE2eJob, /needs:\n(?: {6}.*\n)* {6}- cloud-e2e-deploy/);
   assert.match(
     ciDestroyJob,

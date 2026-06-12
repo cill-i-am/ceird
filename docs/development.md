@@ -138,6 +138,12 @@ Pass extra Vitest filters after a second `--`:
 pnpm test:domain:integration -- --stage codex-my-task -- -t organization
 ```
 
+CI's Build workflow includes a separate required domain integration job that
+starts a Postgres service and runs the same strict command. The ordinary
+`pnpm --filter domain test` matrix entry is still allowed to skip
+database-backed cases when no database URL is configured; the strict CI job is
+the gate that proves those cases ran against Postgres.
+
 Run Playwright E2E tests against an Alchemy stage:
 
 ```bash
