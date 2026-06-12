@@ -8,6 +8,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 
+import { readCloudflareAccountId } from "./cloudflare-environment.ts";
+
 export interface TenantWorkerRoutePayloadInput {
   readonly pattern: string;
   readonly scriptName: string | undefined;
@@ -477,18 +479,18 @@ export const TenantWorkerRouteProvider = () =>
     )
   );
 
-function makeCloudflareTenantRoutingClient() {
-  return Effect.gen(function* () {
-    const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;
-    const credentialsEffect = yield* Cloudflare.Credentials;
-    const credentials = yield* credentialsEffect;
+const makeCloudflareTenantRoutingClient = Effect.fn(
+  "CloudflareTenantRoutingClient.make"
+)(function* () {
+  const accountId = yield* readCloudflareAccountId();
+  const credentialsEffect = yield* Cloudflare.Credentials;
+  const credentials = yield* credentialsEffect;
 
-    return {
-      accountId,
-      credentials: credentials as CloudflareApiCredentials,
-    };
-  });
-}
+  return {
+    accountId,
+    credentials: credentials as CloudflareApiCredentials,
+  };
+});
 
 type CloudflareTenantRoutingClient = Effect.Success<
   ReturnType<typeof makeCloudflareTenantRoutingClient>
