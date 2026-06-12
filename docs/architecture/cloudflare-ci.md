@@ -129,10 +129,9 @@ Secrets:
 
 - `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`
 - `AUTH_EMAIL_FROM`
-- `CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID`
-- `CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY`
 - `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_API_KEY`
+- `CLOUDFLARE_EMAIL`
 - `GOOGLE_MAPS_API_KEY`
 - `GOOGLE_MAPS_ROUTES_API_KEY` (optional dedicated Routes key; falls back to `GOOGLE_MAPS_API_KEY`)
 - `NEON_API_KEY`
@@ -157,7 +156,8 @@ Secrets:
 - `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`
 - `AUTH_EMAIL_FROM`
 - `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_API_KEY`
+- `CLOUDFLARE_EMAIL`
 - `GOOGLE_MAPS_API_KEY`
 - `GOOGLE_MAPS_ROUTES_API_KEY` (optional dedicated Routes key; falls back to `GOOGLE_MAPS_API_KEY`)
 - `NEON_API_KEY`
@@ -209,21 +209,26 @@ wildcard-DNS drift while allowing the known legacy Drizzle tombstone until it
 has been inspected and intentionally removed. The audit treats `pr-<number>` and
 `ci-<run-number>-<attempt>` stages as shallow sync probes: they must deploy the
 sync Worker and authorization path, but they may omit the Electric Container and
-R2 runtime storage because preview environments do not hold production Electric
-runtime credentials. Production `main`, and any ordinary audited non-preview
-stage that opts into tenant routing, must provision the full stage-scoped bucket
-and Electric Container. During full Electric deploys, Alchemy passes the R2
-credentials plus the stage database URL and Electric source secret into the Sync
-Worker as secrets, and the `ElectricSql` Durable Object supplies them to the
-container when it starts. Plain
+R2 runtime storage. Production `main`, and any ordinary audited non-preview
+stage that opts into tenant routing, must provision the full stage-scoped
+bucket, a bucket-scoped Cloudflare account API token, and the Electric
+Container. During full Electric deploys, Alchemy passes the R2 credentials plus
+the stage database URL and Electric source secret into the Sync Worker as
+secrets, and the `ElectricSql` Durable Object supplies them to the container
+when it starts. Plain
 `PostgresBranch.connectionUri` state is reported as a low-severity finding, not
 a CI blocker, because Alchemy may still expose that value for some provider
 shapes.
 
-`CLOUDFLARE_API_TOKEN` must be able to read and update the Cloudflare state
-store, reconcile AI Gateway, deploy Workers, manage custom domains, queues,
-Hyperdrive, and bind Cloudflare Email Service to the domain Worker. Alchemy's
-CI guide specifically calls out that
+All deploy and cleanup environments use `CLOUDFLARE_API_KEY` plus
+`CLOUDFLARE_EMAIL`, not `CLOUDFLARE_API_TOKEN`, because the app stack owns
+account API-token lifecycle for the stage-scoped Electric R2 token. Alchemy's
+environment auth prefers `CLOUDFLARE_API_TOKEN` when both token and key
+credentials are present, so do not store `CLOUDFLARE_API_TOKEN` in GitHub
+environments. The key credentials must be able to read and update the
+Cloudflare state store, reconcile AI Gateway, deploy Workers, manage custom
+domains, queues, Hyperdrive, and bind Cloudflare Email Service to the domain
+Worker. Alchemy's CI guide specifically calls out that
 `Cloudflare.state()` needs Cloudflare Secrets Store Read/Write in CI because
 Alchemy reads the state-store token back through an ephemeral edge-preview
 Worker with a secret binding.
@@ -350,19 +355,14 @@ v2.alchemy.run. Older local patches for beta.28 and
 ESM-safe CLI imports and Cloudflare observability support.
 
 `alchemy.github.run.ts` is the credentials-as-code stack for GitHub Actions. It
-creates an account-owned Cloudflare deploy token, writes it to the repository
-environments `main`, `preview-deploy`, and `preview-cleanup` as
-`CLOUDFLARE_API_TOKEN`, writes the state-store JSON from
-`CEIRD_ALCHEMY_STATE_STORE_CREDENTIALS` to the matching environment secret
-`ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`, writes `CLOUDFLARE_ACCOUNT_ID`
-as an environment secret, creates a bucket-scoped production Electric R2 runtime
-token for `ceird-main-electric-storage`, writes
-`CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID` and
-`CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY` to the `main` environment only, and
-manages the non-secret repository variables `CEIRD_CLOUDFLARE_ZONE_ID` and
-`CEIRD_ZONE_NAME`. Reconcile that stack only with a bootstrap Cloudflare token
-that can manage account API tokens and a GitHub token that can write repository
-and environment Actions secrets/variables.
+writes the state-store JSON from `CEIRD_ALCHEMY_STATE_STORE_CREDENTIALS` to the
+matching environment secret `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`,
+writes `CLOUDFLARE_ACCOUNT_ID` as an environment secret, and manages the
+non-secret repository variables `CEIRD_CLOUDFLARE_ZONE_ID` and
+`CEIRD_ZONE_NAME`. Manage `CLOUDFLARE_API_KEY` and `CLOUDFLARE_EMAIL` manually
+in each deploy environment because the global key cannot be minted by a scoped
+token. Reconcile the credentials stack with a GitHub token that can write
+repository and environment Actions secrets/variables.
 
 ## Alchemy Docs Notes
 

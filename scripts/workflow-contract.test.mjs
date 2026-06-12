@@ -51,17 +51,6 @@ function assertContainsInOrder(text, orderedSnippets) {
   }
 }
 
-function assertElectricStorageCredentialsEnv(text) {
-  assert.match(
-    text,
-    /CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID \}\}/
-  );
-  assert.match(
-    text,
-    /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
-  );
-}
-
 function assertNoElectricStorageCredentialsEnv(text) {
   assert.doesNotMatch(
     text,
@@ -70,6 +59,18 @@ function assertNoElectricStorageCredentialsEnv(text) {
   assert.doesNotMatch(
     text,
     /CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY: \$\{\{ secrets\.CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY \}\}/
+  );
+}
+
+function assertCloudflareGlobalKeyCredentials(text) {
+  assert.match(
+    text,
+    /CLOUDFLARE_API_KEY: \$\{\{ secrets\.CLOUDFLARE_API_KEY \}\}/
+  );
+  assert.match(text, /CLOUDFLARE_EMAIL: \$\{\{ secrets\.CLOUDFLARE_EMAIL \}\}/);
+  assert.doesNotMatch(
+    text,
+    /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/
   );
 }
 
@@ -309,7 +310,7 @@ test("Alchemy dev wrapper keeps local development to one command", async () => {
       defaultProfile: "ceird-env",
       envFileValues: {
         CLOUDFLARE_ACCOUNT_ID: "account-id",
-        CLOUDFLARE_API_TOKEN: "token",
+        GOOGLE_MAPS_API_KEY: "google-maps-key",
         NEON_API_KEY: "neon-key",
       },
       nodeVersion: "v24.16.0",
@@ -319,7 +320,7 @@ test("Alchemy dev wrapper keeps local development to one command", async () => {
       ALCHEMY_PROFILE: "ceird-env",
       CEIRD_CLOUDFLARE: "1",
       CLOUDFLARE_ACCOUNT_ID: "account-id",
-      CLOUDFLARE_API_TOKEN: "token",
+      GOOGLE_MAPS_API_KEY: "google-maps-key",
       NEON_API_KEY: "neon-key",
     }
   );
@@ -499,7 +500,8 @@ test("main deploy workflow uses current Alchemy command order explicitly", () =>
   );
   assert.doesNotMatch(deployWorkflow, /pnpm alchemy cloudflare bootstrap/);
   assert.match(deployWorkflow, /run: pnpm alchemy deploy --stage main --yes\b/);
-  assertElectricStorageCredentialsEnv(deployWorkflow);
+  assertCloudflareGlobalKeyCredentials(deployWorkflow);
+  assertNoElectricStorageCredentialsEnv(deployWorkflow);
   assert.match(
     deployWorkflow,
     /pnpm alchemy:state-audit --stage main --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
@@ -533,15 +535,15 @@ test("Codex environment actions use the Alchemy-native workflow", () => {
   );
   assert.match(
     codexEnvironment,
-    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy plan --env-file \.env\.local --stage codex-alchemy-v2-native-migration"/
+    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy plan --profile ceird-env --env-file \.env\.local --stage codex-alchemy-v2-native-migration"/
   );
   assert.match(
     codexEnvironment,
-    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --env-file \.env\.local --stage codex-alchemy-v2-native-migration"/
+    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --profile ceird-env --env-file \.env\.local --stage codex-alchemy-v2-native-migration"/
   );
   assert.match(
     codexEnvironment,
-    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy logs --env-file \.env\.local --stage codex-alchemy-v2-native-migration"/
+    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy logs --profile ceird-env --env-file \.env\.local --stage codex-alchemy-v2-native-migration"/
   );
   assert.match(codexEnvironment, /command = "pnpm test"/);
   assert.match(codexEnvironment, /command = "pnpm --filter api test"/);
@@ -561,11 +563,11 @@ test("Codex Alchemy inspection actions load local environment secrets", () => {
 
   assert.match(
     codexEnvironment,
-    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --env-file \.env\.local --stage codex-alchemy-v2-native-migration"/
+    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --profile ceird-env --env-file \.env\.local --stage codex-alchemy-v2-native-migration"/
   );
   assert.match(
     codexEnvironment,
-    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy logs --env-file \.env\.local --stage codex-alchemy-v2-native-migration"/
+    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy logs --profile ceird-env --env-file \.env\.local --stage codex-alchemy-v2-native-migration"/
   );
 });
 
@@ -578,7 +580,7 @@ test("Codex environment exposes the parent-stage Alchemy plan preflight", () => 
   assert.match(codexEnvironment, /name = "Plan parent Alchemy stage"/);
   assert.match(
     codexEnvironment,
-    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy plan --env-file \.env\.local --stage main"/
+    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy plan --profile ceird-env --env-file \.env\.local --stage main"/
   );
 });
 
@@ -591,7 +593,7 @@ test("Codex environment exposes the parent-stage Alchemy state inspection", () =
   assert.match(codexEnvironment, /name = "Inspect parent Alchemy state"/);
   assert.match(
     codexEnvironment,
-    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --env-file \.env\.local --stage main"/
+    /command = "CEIRD_CLOUDFLARE=1 pnpm alchemy state tree --profile ceird-env --env-file \.env\.local --stage main"/
   );
 });
 
@@ -715,7 +717,10 @@ test("local Alchemy docs explain the parent Neon stage precondition", () => {
   assert.match(readme, /parent `main` stage/);
   assert.match(developmentGuide, /parent `main` stage/);
   assert.match(localInfraGuide, /Non-parent stages require the parent stage/);
-  assert.match(dataLayerGuide, /deploy --env-file \.env\.local --stage main/);
+  assert.match(
+    dataLayerGuide,
+    /deploy --profile ceird-env --env-file \.env\.local --stage main/
+  );
 });
 
 test("manual Drizzle commands are documented as package-local fallbacks", () => {
@@ -889,6 +894,10 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   assertNoElectricStorageCredentialsEnv(ciAuditStep);
   assertNoElectricStorageCredentialsEnv(ciDatabaseExportStep);
   assertNoElectricStorageCredentialsEnv(ciDestroyJob);
+  assertCloudflareGlobalKeyCredentials(ciDeployJob);
+  assertCloudflareGlobalKeyCredentials(ciAuditStep);
+  assertCloudflareGlobalKeyCredentials(ciDatabaseExportStep);
+  assertCloudflareGlobalKeyCredentials(ciDestroyJob);
   assert.match(
     buildWorkflow,
     /\[\[ ! "\$CI_STAGE" =~ \^ci-\[0-9\]\+-\[0-9\]\+\$ \]\]/
@@ -932,7 +941,7 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   );
   assert.match(
     cloudflareCiGuide,
-    /preview environments do not hold production Electric\s+runtime credentials/
+    /they may omit the Electric Container and\s+R2 runtime storage/
   );
   assert.match(
     developmentGuide,
@@ -1108,6 +1117,9 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assertNoElectricStorageCredentialsEnv(previewDeployJob);
   assertNoElectricStorageCredentialsEnv(previewAuditStep);
   assertNoElectricStorageCredentialsEnv(previewDatabaseExportStep);
+  assertCloudflareGlobalKeyCredentials(previewDeployJob);
+  assertCloudflareGlobalKeyCredentials(previewAuditStep);
+  assertCloudflareGlobalKeyCredentials(previewDatabaseExportStep);
   assert.match(previewWorkflow, /pnpm --filter app e2e/);
 });
 
@@ -1134,6 +1146,9 @@ test("preview workflow destroys PR stages from the default branch on close", () 
     previewWorkflow,
     /pnpm alchemy destroy --stage "\$PREVIEW_STAGE" --yes/
   );
+  assertCloudflareGlobalKeyCredentials(previewCleanupJob);
+  assert.match(previewCleanupJob, /"x-auth-email": email/);
+  assert.match(previewCleanupJob, /"x-auth-key": apiKey/);
   assert.doesNotMatch(previewWorkflow, /CEIRD_APP_HOSTNAME: app\.ceird\.app/);
   assert.doesNotMatch(previewWorkflow, /CEIRD_API_HOSTNAME: api\.ceird\.app/);
 });

@@ -78,7 +78,8 @@ jobs:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
           AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
@@ -89,7 +90,8 @@ jobs:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
           AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
@@ -103,7 +105,8 @@ jobs:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
           AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
@@ -372,7 +375,8 @@ jobs:
           AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
           AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
@@ -386,7 +390,8 @@ jobs:
           const stage = process.env.PREVIEW_STAGE;
           const zoneName = process.env.CEIRD_ZONE_NAME;
           const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-          const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+          const apiKey = process.env.CLOUDFLARE_API_KEY;
+          const email = process.env.CLOUDFLARE_EMAIL;
 
           if (!/^pr-[0-9]+$/.test(stage ?? "")) {
             throw new Error(`Refusing to delete tenant route for unexpected preview stage: ${stage}`);
@@ -397,8 +402,11 @@ jobs:
           if (!accountId) {
             throw new Error("CLOUDFLARE_ACCOUNT_ID is required for preview tenant route cleanup");
           }
-          if (!apiToken) {
-            throw new Error("CLOUDFLARE_API_TOKEN is required for preview tenant route cleanup");
+          if (!apiKey) {
+            throw new Error("CLOUDFLARE_API_KEY is required for preview tenant route cleanup");
+          }
+          if (!email) {
+            throw new Error("CLOUDFLARE_EMAIL is required for preview tenant route cleanup");
           }
 
           const apiBaseUrl = "https://api.cloudflare.com/client/v4";
@@ -408,8 +416,9 @@ jobs:
             const response = await fetch(`${apiBaseUrl}${path}`, {
               ...init,
               headers: {
-                authorization: `Bearer ${apiToken}`,
                 "content-type": "application/json",
+                "x-auth-email": email,
+                "x-auth-key": apiKey,
                 ...(init.headers ?? {}),
               },
             });
@@ -467,4 +476,5 @@ jobs:
           NODE
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}

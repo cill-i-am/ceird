@@ -10,9 +10,9 @@ From the repo root:
 
 ```bash
 pnpm dev -- --stage codex-my-task
-CEIRD_CLOUDFLARE=1 pnpm alchemy dev --env-file .env.local --stage codex-my-task
-CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage codex-my-task
-CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --env-file .env.local --stage codex-my-task
+CEIRD_CLOUDFLARE=1 pnpm alchemy dev --profile ceird-env --env-file .env.local --stage codex-my-task
+CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --profile ceird-env --env-file .env.local --stage codex-my-task
+CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --profile ceird-env --env-file .env.local --stage codex-my-task
 pnpm run check-types:infra
 pnpm run test:infra
 ```

@@ -65,15 +65,15 @@ branches from its shared project. If a worktree stage reports a missing
 `PostgresProject` reference, plan or deploy `main` first:
 
 ```bash
-CEIRD_CLOUDFLARE=1 pnpm alchemy plan --env-file .env.local --stage main
-CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
+CEIRD_CLOUDFLARE=1 pnpm alchemy plan --profile ceird-env --env-file .env.local --stage main
+CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --profile ceird-env --env-file .env.local --stage main
 ```
 
 Use the Alchemy CLI directly when you need a non-dev reconciliation:
 
 ```bash
-CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage codex-my-task
-CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --env-file .env.local --stage codex-my-task
+CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --profile ceird-env --env-file .env.local --stage codex-my-task
+CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --profile ceird-env --env-file .env.local --stage codex-my-task
 ```
 
 Destroy is intentionally explicit because it deletes cloud resources for that
@@ -255,8 +255,9 @@ High-signal runtime variables:
 Infrastructure deployment variables are documented in
 [Local Development And Infrastructure](architecture/local-development-and-infra.md).
 Local Alchemy provider auth uses `pnpm alchemy login`; CI supplies
-`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and preview state-store
-credentials as GitHub secrets.
+`CLOUDFLARE_ACCOUNT_ID`, Cloudflare credentials, and state-store credentials as
+GitHub secrets. All deploy and cleanup jobs use `CLOUDFLARE_API_KEY` plus
+`CLOUDFLARE_EMAIL`; do not also store `CLOUDFLARE_API_TOKEN`.
 
 When running an individual domain database integration file against a specific
 database, set `API_TEST_DATABASE_URL`:
@@ -271,9 +272,9 @@ Infrastructure deployment is owned by the root Alchemy stack. The root `infra`
 directory keeps typecheck and unit-test coverage for the stack helpers:
 
 ```bash
-CEIRD_CLOUDFLARE=1 pnpm alchemy dev --env-file .env.local --stage codex-my-task
-CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage codex-my-task
-CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --env-file .env.local --stage codex-my-task
+CEIRD_CLOUDFLARE=1 pnpm alchemy dev --profile ceird-env --env-file .env.local --stage codex-my-task
+CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --profile ceird-env --env-file .env.local --stage codex-my-task
+CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --profile ceird-env --env-file .env.local --stage codex-my-task
 pnpm run check-types:infra
 pnpm run test:infra
 ```

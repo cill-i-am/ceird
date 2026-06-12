@@ -5,7 +5,6 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import type { Input, InputProps } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Array from "effect/Array";
-import type * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
@@ -32,11 +31,7 @@ import {
 } from "./cloudflare-tenant-routing.ts";
 import type { NeonPostgresResources } from "./neon.ts";
 import type { InfraStageConfig } from "./stages.ts";
-import {
-  makeAlchemyStageIdentity,
-  makeInfraConfigSourceError,
-  resourceName,
-} from "./stages.ts";
+import { makeAlchemyStageIdentity, resourceName } from "./stages.ts";
 
 export interface CloudflareStackInput {
   readonly config: InfraStageConfig;
@@ -275,15 +270,12 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
       : undefined;
   let electricStorageCredentials: ElectricStorageCredentialValues | undefined;
 
-  if (electricStorageProvisioned && localDev) {
-    electricStorageCredentials = yield* makeLocalElectricStorageCredentials({
+  if (electricStorageProvisioned) {
+    electricStorageCredentials = yield* makeElectricStorageCredentials({
       accountId: cloudflareAccountId,
       bucketName: electricStorageBucketName,
       config: input.config,
     });
-  } else if (electricStorageProvisioned) {
-    electricStorageCredentials =
-      yield* readConfiguredElectricStorageCredentials(input.config);
   }
   const localOrigins = makeLocalWorkerOrigins({
     stage: input.config.stage,
@@ -629,7 +621,7 @@ function makeElectricContainerConfig(input: {
   });
 }
 
-function makeLocalElectricStorageCredentials(input: {
+function makeElectricStorageCredentials(input: {
   readonly accountId: string;
   readonly bucketName: string;
   readonly config: InfraStageConfig;
@@ -666,32 +658,12 @@ function makeLocalElectricStorageCredentials(input: {
 export function shouldProvisionElectricStorage(input: {
   readonly config: Pick<
     InfraStageConfig,
-    | "appName"
-    | "electricStorageAccessKeyId"
-    | "electricStorageSecretAccessKey"
-    | "neonParentStage"
-    | "stage"
+    "appName" | "neonParentStage" | "stage"
   >;
   readonly localDev: boolean;
 }) {
   if (input.localDev) {
     return Effect.succeed(true);
-  }
-
-  const hasAccessKey = input.config.electricStorageAccessKeyId !== undefined;
-  const hasSecretKey =
-    input.config.electricStorageSecretAccessKey !== undefined;
-
-  if (hasAccessKey && hasSecretKey) {
-    return Effect.succeed(true);
-  }
-
-  if (hasAccessKey !== hasSecretKey) {
-    return Effect.fail(
-      makeInfraConfigSourceError(
-        "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY must be configured together"
-      )
-    );
   }
 
   const identity = makeAlchemyStageIdentity({
@@ -704,11 +676,7 @@ export function shouldProvisionElectricStorage(input: {
     return Effect.succeed(false);
   }
 
-  return Effect.fail(
-    makeInfraConfigSourceError(
-      "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
-    )
-  );
+  return Effect.succeed(true);
 }
 
 export function shouldProvisionElectricContainer(input: {
@@ -723,24 +691,4 @@ export function shouldProvisionElectricContainer(input: {
   return (
     input.localDev === false && input.electricStorageCredentials !== undefined
   );
-}
-
-function readConfiguredElectricStorageCredentials(
-  config: InfraStageConfig
-): Effect.Effect<ElectricStorageCredentialValues, Config.ConfigError> {
-  if (
-    config.electricStorageAccessKeyId === undefined ||
-    config.electricStorageSecretAccessKey === undefined
-  ) {
-    return Effect.fail(
-      makeInfraConfigSourceError(
-        "CEIRD_ELECTRIC_STORAGE_ACCESS_KEY_ID and CEIRD_ELECTRIC_STORAGE_SECRET_ACCESS_KEY are required outside local Alchemy dev"
-      )
-    );
-  }
-
-  return Effect.succeed({
-    accessKeyId: Redacted.value(config.electricStorageAccessKeyId),
-    secretAccessKey: Redacted.value(config.electricStorageSecretAccessKey),
-  });
 }
