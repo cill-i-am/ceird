@@ -9,6 +9,10 @@ onlyBuiltDependencies:
   - lefthook
   - lightningcss
 
+overrides:
+  esbuild: 0.28.1
+  fast-uri: 3.1.2
+
 packageExtensions:
   drizzle-kit@>=1.0.0-rc.1:
     dependencies:
