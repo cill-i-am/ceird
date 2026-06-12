@@ -1,11 +1,29 @@
 ---
 name: orchestrator
-description: Run a Linear Project execution loop by dispatching worker Codex sessions for unblocked issues, checking their PRs against the Linear spec, reconciling drift, and updating Linear. Use when asked to coordinate a project, fan out issues, manage blockers, or keep a Linear project moving.
+description: Run a Linear Project execution loop by creating user-visible Codex worker threads for unblocked issues, checking their PRs against the Linear spec, reconciling drift, and updating Linear. Use when asked to coordinate a project, fan out issues, manage blockers, or keep a Linear project moving.
 ---
 
 # Orchestrator
 
 The orchestrator coordinates work. It does not implement by default.
+
+## Worker Thread Dispatch
+
+When the user asks to orchestrate a Linear Project, treat that as an explicit
+request to create user-visible Codex worker threads for dispatchable Linear
+issues unless the user says to use internal subagents instead.
+
+Prefer `create_thread` for issue workers. Create one new Codex thread per
+Linear issue, with a worktree environment and explicit reasoning effort. Each
+thread should own exactly one issue and report progress through Linear and the
+thread itself.
+
+If `create_thread` is not in the active tool list, search for the thread tool
+before considering a fallback. Do not silently substitute internal subagents for
+issue workers because the thread tool was not loaded yet.
+
+Use multi-agent subagents only for read-only reviews, bounded side
+investigations, or when the user explicitly asks for subagents.
 
 ## Read First
 
@@ -16,7 +34,7 @@ The orchestrator coordinates work. It does not implement by default.
 - parent Linear Initiative/Project/PRD and child issues
 
 Use the Linear skill/app for Linear reads and writes. Use Codex thread tools
-when available to create or steer worker sessions.
+when available to create or steer user-visible worker threads.
 
 ## Loop
 
@@ -28,11 +46,13 @@ when available to create or steer worker sessions.
 4. **Pick dispatchable issues.** Prefer unblocked `ready-for-agent` AFK issues
    that maximize downstream unblocking. Skip HITL issues until the human
    decision is captured.
-5. **Spawn workers.** One issue per worker session. Include the Linear issue,
-   parent PRD/Project, blockers, relevant comments, branch naming convention,
-   and instruction to use the `worker` skill. Set reasoning effort explicitly.
+5. **Spawn workers.** Use `create_thread` by default. Create one user-visible
+   Codex thread per dispatchable Linear issue, with a worktree environment and
+   explicit reasoning effort. Include the Linear issue, parent PRD/Project,
+   blockers, relevant comments, branch naming convention, and instruction to use
+   the `worker` skill.
 6. **Track status.** Move assigned issues to `in-progress` and comment with the
-   worker thread/session, branch expectation, and dispatch time.
+   worker thread, branch expectation, and dispatch time.
 7. **Review returns.** For each worker report or PR, run the acceptance gates
    below before moving Linear forward.
 
@@ -67,7 +87,7 @@ Escalate to read-only `review-swarm`, `backend-review`, `frontend-review`, or
 
 ## Feedback
 
-If a gate fails, send targeted feedback to the worker session or Linear issue.
+If a gate fails, send targeted feedback to the worker thread or Linear issue.
 Do not rewrite the code yourself unless the user explicitly changes your role.
 
 ## Done

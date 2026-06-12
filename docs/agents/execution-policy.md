@@ -11,12 +11,26 @@ not implement product code. It should use `to-prd`, `to-issues`, `triage`, and
 ## Orchestrator
 
 The orchestrator owns a Linear Project execution loop. It reads the Project and
-issue graph, dispatches worker sessions for unblocked `ready-for-agent` issues,
-tracks blockers, reviews evidence, and moves Linear state forward.
+issue graph, dispatches user-visible Codex worker threads for unblocked
+`ready-for-agent` issues, tracks blockers, reviews evidence, and moves Linear
+state forward.
+
+When the user asks to orchestrate a Linear Project, treat that as an explicit
+request to create user-visible Codex worker threads for dispatchable Linear
+issues unless the user says to use internal subagents instead. Prefer
+`create_thread` for issue workers. Create one new Codex thread per Linear issue,
+with a worktree environment and explicit reasoning effort.
+
+If `create_thread` is not in the active tool list, search for the thread tool
+before considering a fallback. Do not silently substitute internal subagents for
+issue workers because the thread tool was not loaded yet.
+
+Use multi-agent subagents only for read-only reviews, bounded side
+investigations, or when the user explicitly asks for subagents.
 
 The orchestrator should not implement by default. It should inspect worker PRs
 against the Linear issue and parent PRD, escalate review based on risk, and send
-targeted feedback back to worker sessions when spec or quality gates fail.
+targeted feedback back to worker threads when spec or quality gates fail.
 
 Run `reconcile-project` at the start of each loop and whenever Linear, PR, or CI
 state may have changed outside the current thread.
