@@ -96,6 +96,7 @@ export function CommandSelect({
       onOpenChange,
       value,
     });
+  const listboxId = React.useId();
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -104,6 +105,9 @@ export function CommandSelect({
         render={
           <CommandSelectTrigger
             aria-describedby={ariaDescribedBy}
+            aria-controls={open ? listboxId : undefined}
+            aria-expanded={open}
+            aria-haspopup="listbox"
             aria-invalid={ariaInvalid}
             aria-label={ariaLabel}
             className={className}
@@ -124,6 +128,7 @@ export function CommandSelect({
           onOpenChange={setOpen}
           onValueChange={onValueChange}
           searchable={searchable}
+          listboxId={listboxId}
           searchPlaceholder={searchPlaceholder}
           selectedValue={selectedOption?.value}
           showGroupHeadings={showGroupHeadings}
@@ -176,6 +181,7 @@ function DrawerCommandSelect({
       onOpenChange,
       value,
     });
+  const listboxId = React.useId();
 
   return (
     <CommandSelectDrawerRoot
@@ -187,6 +193,9 @@ function DrawerCommandSelect({
         <CommandSelectTrigger
           ref={triggerRef}
           aria-describedby={ariaDescribedBy}
+          aria-controls={open ? listboxId : undefined}
+          aria-expanded={open}
+          aria-haspopup="listbox"
           aria-invalid={ariaInvalid}
           aria-label={ariaLabel}
           className={className}
@@ -211,6 +220,7 @@ function DrawerCommandSelect({
           onOpenChange={setOpen}
           onValueChange={onValueChange}
           searchable={searchable}
+          listboxId={listboxId}
           searchPlaceholder={searchPlaceholder}
           selectedValue={selectedOption?.value}
           showGroupHeadings={showGroupHeadings}
@@ -300,6 +310,7 @@ function CommandSelectTrigger({
 function CommandSelectOptions({
   className,
   emptyText,
+  listboxId,
   listClassName,
   onOpenChange,
   onValueChange,
@@ -311,6 +322,7 @@ function CommandSelectOptions({
 }: {
   readonly className?: string;
   readonly emptyText: string;
+  readonly listboxId: string;
   readonly listClassName?: string;
   readonly onOpenChange: (open: boolean) => void;
   readonly onValueChange: (value: string) => void;
@@ -325,6 +337,7 @@ function CommandSelectOptions({
       <StaticCommandSelectOptions
         className={className}
         emptyText={emptyText}
+        listboxId={listboxId}
         listClassName={listClassName}
         onOpenChange={onOpenChange}
         onValueChange={onValueChange}
@@ -338,7 +351,7 @@ function CommandSelectOptions({
   return (
     <Command className={className}>
       <CommandInput placeholder={searchPlaceholder} />
-      <CommandList className={listClassName}>
+      <CommandList className={listClassName} id={listboxId}>
         <CommandEmpty>{emptyText}</CommandEmpty>
         {visibleGroups.map((group, groupIndex) => (
           <React.Fragment key={group.label}>
@@ -402,6 +415,7 @@ function CommandSelectOptions({
 function StaticCommandSelectOptions({
   className,
   emptyText,
+  listboxId,
   listClassName,
   onOpenChange,
   onValueChange,
@@ -411,6 +425,7 @@ function StaticCommandSelectOptions({
 }: {
   readonly className?: string;
   readonly emptyText: string;
+  readonly listboxId: string;
   readonly listClassName?: string;
   readonly onOpenChange: (open: boolean) => void;
   readonly onValueChange: (value: string) => void;
@@ -418,6 +433,90 @@ function StaticCommandSelectOptions({
   readonly showGroupHeadings: boolean;
   readonly visibleGroups: readonly CommandSelectGroup[];
 }) {
+  const options = React.useMemo(
+    () => visibleGroups.flatMap((group) => group.options),
+    [visibleGroups]
+  );
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex((option) => option.value === selectedValue)
+  );
+  const optionRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
+
+  React.useEffect(() => {
+    optionRefs.current[selectedIndex]?.focus();
+  }, [selectedIndex]);
+
+  const selectOption = React.useCallback(
+    (option: CommandSelectOption) => {
+      onValueChange(option.value);
+      onOpenChange(false);
+    },
+    [onOpenChange, onValueChange]
+  );
+  const focusOptionAt = React.useCallback(
+    (nextIndex: number) => {
+      const optionCount = options.length;
+
+      if (optionCount === 0) {
+        return;
+      }
+
+      const wrappedIndex = (nextIndex + optionCount) % optionCount;
+      optionRefs.current[wrappedIndex]?.focus();
+    },
+    [options.length]
+  );
+  const handleKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const activeIndex = optionRefs.current.indexOf(
+        document.activeElement as HTMLButtonElement | null
+      );
+      const currentIndex = activeIndex === -1 ? selectedIndex : activeIndex;
+
+      switch (event.key) {
+        case "ArrowDown": {
+          event.preventDefault();
+          focusOptionAt(currentIndex + 1);
+          break;
+        }
+        case "ArrowUp": {
+          event.preventDefault();
+          focusOptionAt(currentIndex - 1);
+          break;
+        }
+        case "Home": {
+          event.preventDefault();
+          focusOptionAt(0);
+          break;
+        }
+        case "End": {
+          event.preventDefault();
+          focusOptionAt(options.length - 1);
+          break;
+        }
+        case "Enter":
+        case " ": {
+          event.preventDefault();
+          const option = options[currentIndex] ?? options[0];
+          if (option) {
+            selectOption(option);
+          }
+          break;
+        }
+        case "Escape": {
+          event.preventDefault();
+          onOpenChange(false);
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+    },
+    [focusOptionAt, onOpenChange, options, selectOption, selectedIndex]
+  );
+
   if (visibleGroups.length === 0) {
     return (
       <div
@@ -431,6 +530,8 @@ function StaticCommandSelectOptions({
     );
   }
 
+  let optionIndex = 0;
+
   return (
     <div className={cn("rounded-xl bg-popover", className)}>
       <div
@@ -439,6 +540,9 @@ function StaticCommandSelectOptions({
           "no-scrollbar max-h-72 overflow-x-hidden overflow-y-auto p-2 outline-none",
           listClassName
         )}
+        id={listboxId}
+        onKeyDown={handleKeyDown}
+        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Intentional custom listbox: tests cover name, state, roving focus, keyboard selection, and pointer parity.
         role="listbox"
       >
         {visibleGroups.map((group, groupIndex) => (
@@ -451,6 +555,8 @@ function StaticCommandSelectOptions({
             <div className="flex flex-col gap-1">
               {group.options.map((option) => {
                 const isSelected = option.value === selectedValue;
+                const currentOptionIndex = optionIndex;
+                optionIndex += 1;
 
                 return (
                   <button
@@ -461,17 +567,22 @@ function StaticCommandSelectOptions({
                         : option.label
                     }
                     aria-selected={isSelected}
+                    id={`${listboxId}-option-${currentOptionIndex}`}
                     className={cn(
                       "flex w-full cursor-default items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium outline-hidden transition-colors select-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30",
                       isSelected
                         ? "bg-muted text-foreground"
                         : "text-foreground"
                     )}
+                    ref={(element) => {
+                      optionRefs.current[currentOptionIndex] = element;
+                    }}
+                    // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Intentional custom listbox option: tests cover name, selected state, keyboard selection, and pointer parity.
                     role="option"
+                    tabIndex={currentOptionIndex === selectedIndex ? 0 : -1}
                     type="button"
                     onClick={() => {
-                      onValueChange(option.value);
-                      onOpenChange(false);
+                      selectOption(option);
                     }}
                   >
                     {option.icon ? (

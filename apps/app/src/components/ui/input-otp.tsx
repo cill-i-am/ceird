@@ -72,9 +72,9 @@ function InputOTPSlot({
 function InputOTPSeparator({ ...props }: React.ComponentProps<"div">) {
   return (
     <div
+      aria-hidden="true"
       data-slot="input-otp-separator"
       className="flex items-center [&_svg:not([class*='size-'])]:size-4"
-      role="separator"
       {...props}
     >
       <HugeiconsIcon icon={MinusSignIcon} strokeWidth={2} />
