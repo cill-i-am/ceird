@@ -902,6 +902,12 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
     buildWorkflow,
     /\[\[ ! "\$CI_STAGE" =~ \^ci-\[0-9\]\+-\[0-9\]\+\$ \]\]/
   );
+  assertContainsInOrder(ciDestroyJob, [
+    "name: Restore Alchemy state store credentials",
+    "name: Detach CI Worker domains",
+    "name: Destroy cloud E2E",
+  ]);
+  assert.match(ciDestroyJob, /node scripts\/detach-ci-worker-domains\.mjs/);
   assert.doesNotMatch(ciDeployJob, /pnpm --filter app e2e/);
   assert.match(ciE2eJob, /strategy:\n {6}fail-fast: false/);
   for (const shard of ["1/3", "2/3", "3/3"]) {
@@ -931,6 +937,10 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   assert.match(developmentGuide, /PLAYWRIGHT_USE_PACKAGE_LOCAL_SERVER=1/);
   assert.match(cloudflareCiGuide, /ephemeral CI deploy stage/);
   assert.match(cloudflareCiGuide, /first-level hostnames/);
+  assert.match(
+    cloudflareCiGuide,
+    /detaches the known CI Worker\s+custom domains/
+  );
   assert.doesNotMatch(
     cloudflareCiGuide,
     /Build` workflow's Playwright E2E job selects the `main` environment/
