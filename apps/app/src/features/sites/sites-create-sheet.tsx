@@ -314,9 +314,9 @@ function SitesCreateSheetLoadingContent() {
       className="flex min-h-0 flex-1 flex-col"
       data-testid="sites-create-sheet-loading"
     >
-      <span className="sr-only" role="status">
+      <output className="sr-only" aria-live="polite">
         Loading site form.
-      </span>
+      </output>
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-5 py-5 sm:px-6">
         <SiteCreateFieldSkeleton labelWidth="w-20" inputWidth="w-full" />
         <SiteCreateFieldSkeleton labelWidth="w-16" inputWidth="w-4/5" />

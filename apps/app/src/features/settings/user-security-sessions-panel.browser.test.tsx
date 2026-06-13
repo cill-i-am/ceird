@@ -113,9 +113,7 @@ describe("user security sessions panel", () => {
 
     render(<UserSecuritySessionsPanel />);
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Loading active sessions"
-    );
+    expect(screen.getByText("Loading active sessions…")).toBeInTheDocument();
 
     listResult.resolve({
       data: [currentSession],

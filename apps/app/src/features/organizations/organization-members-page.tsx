@@ -828,9 +828,9 @@ export function OrganizationMembersPage({
       />
 
       {successMessage ? (
-        <p role="status" className="text-sm text-muted-foreground">
+        <output aria-live="polite" className="text-sm text-muted-foreground">
           {successMessage}
-        </p>
+        </output>
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,0.72fr)]">
@@ -1093,9 +1093,12 @@ function CurrentMembersSection({
           </Alert>
         ) : null}
         {memberActionSuccessMessage ? (
-          <p role="status" className="mb-4 text-sm text-muted-foreground">
+          <output
+            aria-live="polite"
+            className="mb-4 text-sm text-muted-foreground"
+          >
             {memberActionSuccessMessage}
-          </p>
+          </output>
         ) : null}
         {displayState.kind === "empty" ? (
           <Empty className="min-h-64 rounded-[calc(var(--radius)*3)] bg-background/78 supports-[backdrop-filter]:bg-background/68">
@@ -1138,7 +1141,8 @@ function CurrentMembersSection({
 
 function CurrentMembersSkeletonList() {
   return (
-    <div aria-label="Loading members" role="status">
+    <div aria-busy="true" aria-label="Loading members" aria-live="polite">
+      <output className="sr-only">Loading members</output>
       <AppRowList
         aria-hidden="true"
         className="pointer-events-none"
@@ -1241,9 +1245,9 @@ function PendingInvitationsSection({
         </Alert>
       ) : null}
       {invitationActionSuccessMessage ? (
-        <p role="status" className="text-sm text-muted-foreground">
+        <output aria-live="polite" className="text-sm text-muted-foreground">
           {invitationActionSuccessMessage}
-        </p>
+        </output>
       ) : null}
       {invitations.length > 0 ? (
         <AppRowList aria-label="Pending invitations">

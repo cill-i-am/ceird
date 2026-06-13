@@ -252,7 +252,7 @@ describe("email verification banner", () => {
         "Another verification email has been requested."
       );
 
-      expect(successMessage).toHaveAttribute("role", "status");
+      expect(successMessage).toHaveAttribute("aria-live", "polite");
       expect(
         screen.getByRole("alert", { name: "Email verification reminder" })
       ).toBeInTheDocument();

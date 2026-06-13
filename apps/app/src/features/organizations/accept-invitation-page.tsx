@@ -589,10 +589,12 @@ function AcceptInvitationCardBody({
 function InvitationLoadingState() {
   return (
     <div
+      aria-busy="true"
       aria-label="Checking workspace details"
-      role="status"
+      aria-live="polite"
       className="flex flex-col gap-4 rounded-2xl border border-border/60 bg-muted/25 p-4"
     >
+      <output className="sr-only">Checking workspace details</output>
       <Skeleton className="h-4 w-40 rounded-full" />
       <div className="grid gap-3 sm:grid-cols-2">
         <Skeleton className="h-14 rounded-xl" />

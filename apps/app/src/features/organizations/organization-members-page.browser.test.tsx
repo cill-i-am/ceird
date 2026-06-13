@@ -509,9 +509,7 @@ describe("organization members page", () => {
       />
     );
 
-    expect(
-      screen.getByRole("status", { name: "Loading members" })
-    ).toBeVisible();
+    expect(screen.getByText("Loading members")).toBeInTheDocument();
     expect(screen.queryByText("Fallback Person")).not.toBeInTheDocument();
     expect(screen.queryByText("fallback@example.com")).not.toBeInTheDocument();
     expect(

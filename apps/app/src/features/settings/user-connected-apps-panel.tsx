@@ -413,8 +413,8 @@ function ConnectedAppTime({
 
 function ConnectedAppsSkeletonList() {
   return (
-    <div className="flex flex-col gap-3" role="status">
-      <span className="sr-only">Loading connected apps&hellip;</span>
+    <div className="flex flex-col gap-3" aria-busy="true" aria-live="polite">
+      <output className="sr-only">Loading connected apps&hellip;</output>
       <Skeleton className="h-16 rounded-[calc(var(--radius)*2)]" />
       <div className="overflow-hidden rounded-[calc(var(--radius)*2)] border border-border/60">
         <Skeleton className="h-24 rounded-none border-b border-border/60" />

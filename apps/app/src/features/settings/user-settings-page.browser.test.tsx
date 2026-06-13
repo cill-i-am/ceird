@@ -985,9 +985,7 @@ describe("user settings page", () => {
         password: "current-password",
       });
     });
-    expect(
-      screen.getByRole("img", { name: "Authenticator app QR code" })
-    ).toBeVisible();
+    expect(screen.getByTitle("Authenticator app QR code")).toBeVisible();
     expect(screen.getByText(/otpauth:\/\/totp\/Ceird/)).toBeVisible();
     expect(screen.getByLabelText("Authenticator code")).toHaveAttribute(
       "autocomplete",
