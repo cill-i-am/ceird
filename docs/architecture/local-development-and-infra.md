@@ -114,10 +114,11 @@ directories; it runs normal dependency installation and lets the root
 script does not generate fallback secrets; if no source env file exists, setup
 stops with a clear error.
 
-Dependency audit remediations that must constrain transitive versions live in
-`pnpm-workspace.yaml` as root pnpm `overrides`, next to the repository's
-`patchedDependencies` policy. Keep those overrides narrow and remove them when
-the owning direct dependency can safely supply the audited version itself.
+Prefer direct dependency upgrades for dependency audit remediations. When a
+direct upgrade cannot make a vulnerable transitive edge resolve to a patched
+version, keep a narrow owner-specific pnpm `override` in `pnpm-workspace.yaml`
+next to the repository's `patchedDependencies` policy. Remove those overrides
+when the owning direct dependency can safely supply the audited version itself.
 
 Common local and Alchemy variables include:
 

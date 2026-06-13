@@ -1,5 +1,5 @@
 diff --git a/dist/index.js b/dist/index.js
-index c3aa4e7..0d890ec 100644
+index aa3ddf1..5f8ff0d 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -11,9 +11,15 @@ import { genericObservability } from "./observability/index.js";
@@ -18,4 +18,4 @@ index c3aa4e7..0d890ec 100644
 +}
  //#region src/index.ts
  let _Symbol$dispose;
- /**
+ function isClosedWebSocketSendError(error) {
