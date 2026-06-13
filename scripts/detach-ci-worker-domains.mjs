@@ -4,6 +4,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 
 const ciStagePattern = /^ci-[0-9]+-[0-9]+$/;
+const previewStagePattern = /^pr-[0-9]+$/;
 const serviceHostnameEnv = [
   ["app", "CEIRD_APP_HOSTNAME"],
   ["api", "CEIRD_API_HOSTNAME"],
@@ -11,6 +12,7 @@ const serviceHostnameEnv = [
   ["mcp", "CEIRD_MCP_HOSTNAME"],
   ["sync", "CEIRD_SYNC_HOSTNAME"],
 ];
+const workerServices = ["app", "api", "agent", "mcp", "sync"];
 
 function requiredEnv(env, name) {
   const value = env[name];
@@ -77,6 +79,33 @@ export function collectCiWorkerHostnames(env = process.env) {
     }
     return hostname;
   });
+}
+
+export function collectPreviewWorkerHostnames(env = process.env) {
+  const stage = requiredEnv(env, "PREVIEW_STAGE");
+  const zoneName = requiredEnv(env, "CEIRD_ZONE_NAME");
+  if (!previewStagePattern.test(stage)) {
+    throw new Error(
+      `Refusing to detach preview Worker domains for stage ${stage}`
+    );
+  }
+
+  return workerServices.map((service) => `${service}.${stage}.${zoneName}`);
+}
+
+export function collectWorkerHostnames(env = process.env) {
+  if (typeof env.CI_STAGE === "string" && env.CI_STAGE.trim() !== "") {
+    return collectCiWorkerHostnames(env);
+  }
+
+  if (
+    typeof env.PREVIEW_STAGE === "string" &&
+    env.PREVIEW_STAGE.trim() !== ""
+  ) {
+    return collectPreviewWorkerHostnames(env);
+  }
+
+  throw new Error("CI_STAGE or PREVIEW_STAGE is required");
 }
 
 export function readCloudflareCredentials(env = process.env) {
@@ -183,7 +212,7 @@ export async function detachCiWorkerDomains({
   stdout = process.stdout,
 } = {}) {
   const resolvedCredentials = credentials ?? readCloudflareCredentials();
-  const resolvedHostnames = hostnames ?? collectCiWorkerHostnames();
+  const resolvedHostnames = hostnames ?? collectWorkerHostnames();
 
   for (const hostname of resolvedHostnames) {
     const domains = await listWorkerDomainsForHostname(

@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   collectCiWorkerHostnames,
+  collectPreviewWorkerHostnames,
+  collectWorkerHostnames,
   detachCiWorkerDomains,
   readCloudflareCredentials,
 } from "./detach-ci-worker-domains.mjs";
@@ -33,6 +35,38 @@ test("collects expected first-level CI Worker hostnames", () => {
   ]);
 });
 
+test("collects expected preview Worker hostnames", () => {
+  assert.deepEqual(
+    collectPreviewWorkerHostnames({
+      CEIRD_ZONE_NAME: "ceird.app",
+      PREVIEW_STAGE: "pr-123",
+    }),
+    [
+      "app.pr-123.ceird.app",
+      "api.pr-123.ceird.app",
+      "agent.pr-123.ceird.app",
+      "mcp.pr-123.ceird.app",
+      "sync.pr-123.ceird.app",
+    ]
+  );
+});
+
+test("chooses preview Worker hostnames when PREVIEW_STAGE is set", () => {
+  assert.deepEqual(
+    collectWorkerHostnames({
+      CEIRD_ZONE_NAME: "ceird.app",
+      PREVIEW_STAGE: "pr-123",
+    }),
+    [
+      "app.pr-123.ceird.app",
+      "api.pr-123.ceird.app",
+      "agent.pr-123.ceird.app",
+      "mcp.pr-123.ceird.app",
+      "sync.pr-123.ceird.app",
+    ]
+  );
+});
+
 test("rejects hostnames that do not match the CI stage", () => {
   assert.throws(
     () =>
@@ -41,6 +75,17 @@ test("rejects hostnames that do not match the CI stage", () => {
         CEIRD_APP_HOSTNAME: "app.pr-123.ceird.app",
       }),
     /CEIRD_APP_HOSTNAME must be app-ci-123-1\.ceird\.app/
+  );
+});
+
+test("rejects unexpected preview stages", () => {
+  assert.throws(
+    () =>
+      collectPreviewWorkerHostnames({
+        CEIRD_ZONE_NAME: "ceird.app",
+        PREVIEW_STAGE: "main",
+      }),
+    /Refusing to detach preview Worker domains for stage main/
   );
 });
 
