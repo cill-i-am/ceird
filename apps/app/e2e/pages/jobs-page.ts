@@ -50,6 +50,13 @@ export class JobsPage {
     return this.page.getByRole("link", { name: new RegExp(title) });
   }
 
+  createdJobNotice(title: string): Locator {
+    return this.page
+      .locator("[data-slot='alert']")
+      .filter({ hasText: title })
+      .filter({ hasText: "Job added to the queue." });
+  }
+
   async openJob(title: string) {
     await this.page.getByRole("link", { name: new RegExp(title) }).click();
   }

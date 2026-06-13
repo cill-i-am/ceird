@@ -94,7 +94,7 @@ test.describe("jobs flow", () => {
     await createSheet.submit.click();
 
     await jobsPage.expectLoaded();
-    await expect(page.getByRole("status")).toContainText(jobTitle);
+    await expect(jobsPage.createdJobNotice(jobTitle)).toBeVisible();
     await expect(jobsPage.jobCard(jobTitle)).toBeVisible();
 
     await jobsPage.openJob(jobTitle);
