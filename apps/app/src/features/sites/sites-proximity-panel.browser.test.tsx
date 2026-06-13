@@ -595,7 +595,7 @@ describe("sites proximity panel", () => {
     await user.click(screen.getByRole("button", { name: /near me/i }));
     await screen.findByText("Current location unavailable");
     await user.click(
-      within(screen.getByRole("status")).getByRole("button", {
+      within(getProximityStatusPanel()).getByRole("button", {
         name: "Change origin",
       })
     );
@@ -604,7 +604,7 @@ describe("sites proximity panel", () => {
       "Dublin"
     );
     await user.click(
-      await screen.findByRole("option", { name: /Dublin Port/ })
+      await screen.findByRole("button", { name: /Dublin Port/ })
     );
     await user.click(
       screen.getByRole("button", { name: "Use selected origin" })
@@ -650,7 +650,7 @@ describe("sites proximity panel", () => {
     );
     await screen.findByText("Current location unavailable");
     await user.click(
-      within(screen.getByRole("status")).getByRole("button", {
+      within(getProximityStatusPanel()).getByRole("button", {
         name: "Change origin",
       })
     );
@@ -659,7 +659,7 @@ describe("sites proximity panel", () => {
       "Dublin"
     );
     await user.click(
-      await screen.findByRole("option", { name: /Dublin Port/ })
+      await screen.findByRole("button", { name: /Dublin Port/ })
     );
     await user.click(
       screen.getByRole("button", { name: "Use selected origin" })
@@ -727,7 +727,7 @@ describe("sites proximity panel", () => {
     await user.click(screen.getByRole("button", { name: /near me/i }));
     await screen.findByText("Current location unavailable");
     await user.click(
-      within(screen.getByRole("status")).getByRole("button", {
+      within(getProximityStatusPanel()).getByRole("button", {
         name: "Change origin",
       })
     );
@@ -791,7 +791,7 @@ describe("sites proximity panel", () => {
     await user.click(screen.getByRole("button", { name: /near me/i }));
     await screen.findByText("Current location unavailable");
     await user.click(
-      within(screen.getByRole("status")).getByRole("button", {
+      within(getProximityStatusPanel()).getByRole("button", {
         name: "Change origin",
       })
     );
@@ -799,7 +799,7 @@ describe("sites proximity panel", () => {
       "Search address, Eircode or place"
     );
     await user.type(originInput, "Dublin");
-    await screen.findByRole("option", { name: /Dublin Port/ });
+    await screen.findByRole("button", { name: /Dublin Port/ });
     await user.type(originInput, "x");
 
     await waitFor(() => {
@@ -808,11 +808,20 @@ describe("sites proximity panel", () => {
       );
     });
     expect(
-      screen.queryByRole("option", { name: /Dublin Port/ })
+      screen.queryByRole("button", { name: /Dublin Port/ })
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/internal\.example/i)).not.toBeInTheDocument();
   });
 });
+
+function getProximityStatusPanel() {
+  const panelTitle = screen.getByText("Current location unavailable");
+  const panel = panelTitle.closest("[aria-live='polite']");
+
+  expect(panel).not.toBeNull();
+
+  return panel as HTMLElement;
+}
 
 type SitesProximityPanelComponent =
   React.ComponentType<SitesProximityPanelProps>;

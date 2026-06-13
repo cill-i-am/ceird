@@ -392,12 +392,9 @@ function AgentChatBody({
 function AgentLoadingState() {
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-10">
-      <div
-        className="flex items-center gap-3 text-sm text-muted-foreground"
-        role="status"
-      >
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
         <AgentIcon icon={Clock03Icon} strokeWidth={2} />
-        <span>Preparing workspace context</span>
+        <output aria-live="polite">Preparing workspace context</output>
       </div>
     </div>
   );
@@ -738,7 +735,7 @@ function ConversationMeta({
       <div className="flex items-center gap-2">
         <span>{actions.length} registered actions</span>
         {busy ? (
-          <Badge variant="secondary" role="status">
+          <Badge variant="secondary" render={<output aria-live="polite" />}>
             Working
           </Badge>
         ) : null}

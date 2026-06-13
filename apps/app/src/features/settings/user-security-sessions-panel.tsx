@@ -270,11 +270,8 @@ function SessionBulkActions({
   }
 
   return (
-    <div
-      className="flex flex-wrap items-center gap-2"
-      role="group"
-      aria-label="Confirm revoking other sessions"
-    >
+    <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0">
+      <legend className="sr-only">Confirm revoking other sessions</legend>
       <Button
         type="button"
         variant="ghost"
@@ -303,7 +300,7 @@ function SessionBulkActions({
         />
         Revoke other sessions
       </Button>
-    </div>
+    </fieldset>
   );
 }
 
@@ -440,8 +437,8 @@ function SessionTime({
 
 function SessionSkeletonList() {
   return (
-    <div className="flex flex-col gap-3" role="status">
-      <span className="sr-only">Loading active sessions&hellip;</span>
+    <div className="flex flex-col gap-3" aria-busy="true" aria-live="polite">
+      <output className="sr-only">Loading active sessions&hellip;</output>
       <Skeleton className="h-16 rounded-[calc(var(--radius)*2)]" />
       <div className="overflow-hidden rounded-[calc(var(--radius)*2)] border border-border/60">
         <Skeleton className="h-20 rounded-none border-b border-border/60" />

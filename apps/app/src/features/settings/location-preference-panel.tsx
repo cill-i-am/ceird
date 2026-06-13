@@ -102,7 +102,7 @@ export function LocationPreferencePanel({
             </h3>
             <Badge
               variant={enabled && !unavailable ? "secondary" : "outline"}
-              role="status"
+              render={<output aria-live="polite" />}
             >
               {statusLabel}
             </Badge>
@@ -113,9 +113,12 @@ export function LocationPreferencePanel({
             not stored in this preference.
           </p>
           {message ? (
-            <p className="text-sm text-muted-foreground" role="status">
+            <output
+              aria-live="polite"
+              className="text-sm text-muted-foreground"
+            >
               {message}
-            </p>
+            </output>
           ) : null}
         </div>
 

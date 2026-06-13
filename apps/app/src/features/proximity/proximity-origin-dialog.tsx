@@ -67,45 +67,45 @@ export function ProximityOriginDialog({
           />
         </InputGroup>
 
-        <div
+        <ul
           aria-label="Origin suggestions"
-          role="listbox"
-          className="grid max-h-72 gap-1 overflow-y-auto"
+          className="m-0 grid max-h-72 list-none gap-1 overflow-y-auto p-0"
         >
           {suggestions.length === 0 ? (
-            <p className="rounded-lg border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
+            <li className="rounded-lg border border-dashed bg-muted/20 px-3 py-4 text-sm text-muted-foreground">
               Search and select a result before running Near me.
-            </p>
+            </li>
           ) : null}
           {suggestions.map((suggestion) => {
             const selected = suggestion.placeId === selectedSuggestion?.placeId;
 
             return (
-              <button
-                aria-selected={selected}
-                className={cn(
-                  "flex min-w-0 flex-col rounded-lg border px-3 py-2 text-left text-sm transition-colors outline-none hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30",
-                  selected
-                    ? "border-primary bg-primary/5 text-foreground"
-                    : "border-border bg-background text-foreground"
-                )}
-                key={suggestion.placeId}
-                role="option"
-                type="button"
-                onClick={() => onSuggestionSelect(suggestion)}
-              >
-                <span className="truncate font-medium">
-                  {suggestion.displayText}
-                </span>
-                {suggestion.secondaryText ? (
-                  <span className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {suggestion.secondaryText}
+              <li key={suggestion.placeId}>
+                <button
+                  aria-label={formatOriginSuggestionLabel(suggestion)}
+                  aria-pressed={selected}
+                  className={cn(
+                    "flex w-full min-w-0 flex-col rounded-lg border px-3 py-2 text-left text-sm transition-colors outline-none hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30",
+                    selected
+                      ? "border-primary bg-primary/5 text-foreground"
+                      : "border-border bg-background text-foreground"
+                  )}
+                  type="button"
+                  onClick={() => onSuggestionSelect(suggestion)}
+                >
+                  <span className="truncate font-medium">
+                    {suggestion.displayText}
                   </span>
-                ) : null}
-              </button>
+                  {suggestion.secondaryText ? (
+                    <span className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {suggestion.secondaryText}
+                    </span>
+                  ) : null}
+                </button>
+              </li>
             );
           })}
-        </div>
+        </ul>
 
         {error ? (
           <p
@@ -133,4 +133,10 @@ export function ProximityOriginDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function formatOriginSuggestionLabel(suggestion: ProximityOriginSuggestion) {
+  return suggestion.secondaryText
+    ? `${suggestion.displayText}, ${suggestion.secondaryText}`
+    : suggestion.displayText;
 }

@@ -923,9 +923,12 @@ function JobsDetailSheetContent({
             </Field>
           </FieldGroup>
           {siteAssignmentMessage ? (
-            <p role="status" className="text-sm text-muted-foreground">
+            <output
+              aria-live="polite"
+              className="text-sm text-muted-foreground"
+            >
               {siteAssignmentMessage}
-            </p>
+            </output>
           ) : null}
           {canEditJob ? (
             <div className="flex">

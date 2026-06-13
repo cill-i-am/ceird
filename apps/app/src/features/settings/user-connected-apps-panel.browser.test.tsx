@@ -51,9 +51,7 @@ describe("user connected apps panel", () => {
 
     render(<UserConnectedAppsPanel />);
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Loading connected apps"
-    );
+    expect(screen.getByText("Loading connected apps…")).toBeInTheDocument();
 
     listResult.resolve({ grants: [externalMcpGrant] });
 
