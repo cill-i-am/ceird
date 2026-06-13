@@ -1937,6 +1937,53 @@ describe("createAuthentication()", () => {
     expect(JSON.stringify(reservationKeys)).not.toContain("example.com");
   }, 10_000);
 
+  it("reserves password reset delivery limits from URL-encoded form bodies", async () => {
+    let delegated = false;
+    const reservationKeys: string[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withAuthenticationAbuseRateLimitGuard(
+      () => {
+        delegated = true;
+        return Promise.resolve(Response.json({ delegated: true }));
+      },
+      makeRateLimitReservationSequenceDatabase(
+        [{ count: 1 }, { count: 1 }],
+        reservationKeys
+      ),
+      config
+    );
+
+    const response = await handler(
+      new Request("http://127.0.0.1:3000/api/auth/request-password-reset", {
+        body: new URLSearchParams({
+          email: " Person+Form@Example.COM ",
+          redirectTo: "http://127.0.0.1:4173/reset-password",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "x-forwarded-for": "127.0.0.1",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({ delegated: true });
+    expect(response.status).toBe(200);
+    expect(delegated).toBeTruthy();
+    expect(reservationKeys).toStrictEqual([
+      "ceird-auth-abuse:127.0.0.1|/request-password-reset",
+      expect.stringMatching(
+        /^ceird-auth-abuse:target-email:[a-f0-9]{64}\|\/request-password-reset$/
+      ),
+    ]);
+    expect(JSON.stringify(reservationKeys)).not.toContain("Person+Form");
+    expect(JSON.stringify(reservationKeys)).not.toContain("example.com");
+  }, 10_000);
+
   it("rejects password reset bursts by target email without delegating to Better Auth", async () => {
     let delegated = false;
     const reservationKeys: string[] = [];

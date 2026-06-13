@@ -1420,9 +1420,27 @@ These are the important current rules we are following.
 ### Backend
 
 - `apps/domain/src/domains/identity/authentication/auth.ts`
-  Creates and mounts Better Auth, applies auth CORS, preserves `/api/auth`
-  prefixing, and delegates password reset and verification delivery through
+  Creates and mounts Better Auth, composes the auth boundary wrappers, applies
+  auth CORS, preserves `/api/auth` prefixing, and delegates password reset,
+  verification, email-change, and organization invitation delivery through
   `AuthEmailSender`.
+- `apps/domain/src/domains/identity/authentication/auth-boundary-utils.ts`
+  Owns shared auth-boundary request-body parsing, request path normalization,
+  session-result types, active-secret resolution, and redaction helpers used by
+  the auth wrappers.
+- `apps/domain/src/domains/identity/authentication/auth-rate-limits.ts`
+  Owns Better Auth rate-limit storage observation, atomic pre-handler abuse
+  reservations, fail-open/fail-closed policy, stable rate-limit responses, and
+  rate-limit telemetry.
+- `apps/domain/src/domains/identity/authentication/auth-oauth-policy.ts`
+  Owns OAuth client-management endpoint blocking, dynamic client registration
+  policy, refresh-token live-consent checks, OAuth security audit capture, and
+  organization security audit capture around Better Auth organization hooks and
+  endpoints.
+- `apps/domain/src/domains/identity/authentication/auth-authorization-guards.ts`
+  Owns pre-Better Auth authorization guards for verified-email requirements,
+  administrative organization endpoint access, unsupported trusted-device
+  requests, and Better Auth session-cookie extraction used by focused tests.
 - `apps/domain/src/domains/identity/authentication/config.ts`
   Defines auth scope, base URL behavior, trusted origins, and rate limits.
 - `apps/domain/src/domains/identity/authentication/auth-email-config.ts`
