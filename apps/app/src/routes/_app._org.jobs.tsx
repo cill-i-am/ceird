@@ -7,7 +7,13 @@ import {
 import { JobsRouteContent } from "#/features/jobs/jobs-route-content";
 import { shouldEnableJobsListHotkeys } from "#/features/jobs/jobs-route-hotkeys";
 import { loadJobsRouteData } from "#/features/jobs/jobs-route-loader";
-import { decodeJobsSearch } from "#/features/jobs/jobs-search";
+import {
+  decodeJobsSearch,
+  filtersToJobsSearch,
+  getJobsRouteLoaderDeps,
+  jobsSearchToFilters,
+  toJobsListQuery,
+} from "#/features/jobs/jobs-search";
 
 export const Route = createFileRoute("/_app/_org/jobs")({
   staticData: {
@@ -18,7 +24,9 @@ export const Route = createFileRoute("/_app/_org/jobs")({
   },
   codeSplitGroupings: [["loader", "component"]],
   validateSearch: decodeJobsSearch,
-  loader: ({ context }) => loadJobsRouteData(context),
+  loaderDeps: ({ search }) => getJobsRouteLoaderDeps(search),
+  loader: ({ context, deps }) =>
+    loadJobsRouteData(context, toJobsListQuery(deps)),
   component: JobsRoute,
 });
 
@@ -27,6 +35,7 @@ function JobsRoute() {
   const {
     dataPlaneSeeds,
     list,
+    listScope,
     options,
     routeProximityLocationEnabled,
     viewer,
@@ -48,6 +57,7 @@ function JobsRoute() {
       dataPlaneSeeds={dataPlaneSeeds}
       listHotkeysEnabled={listHotkeysEnabled}
       list={list}
+      listFilters={jobsSearchToFilters(search)}
       onViewModeChange={(viewMode) => {
         navigate({
           search: (current) => ({
@@ -57,6 +67,16 @@ function JobsRoute() {
         });
       }}
       nearMeEnabled={search.near ?? false}
+      onListFiltersChange={(filters) => {
+        navigate({
+          replace: true,
+          search: (current) => ({
+            ...current,
+            ...filtersToJobsSearch(filters),
+            cursor: undefined,
+          }),
+        });
+      }}
       onNearMeChange={(near) => {
         navigate({
           search: (current) => ({
@@ -79,6 +99,7 @@ function JobsRoute() {
         });
       }}
       options={options}
+      listScope={listScope}
       queryClient={queryClient}
       routeLimit={search.routeLimit ?? 10}
       routeProximityLocationEnabled={routeProximityLocationEnabled}

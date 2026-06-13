@@ -842,11 +842,17 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           clauses.push(sql`filter_labels.archived_at is null`);
         }
 
-        if (query.status !== undefined) {
+        if (query.status === "active") {
+          clauses.push(
+            sql`work_items.status not in ${sql.in(TERMINAL_JOB_STATUSES)}`
+          );
+        } else if (query.status !== undefined && query.status !== "all") {
           clauses.push(sql`work_items.status = ${query.status}`);
         }
 
-        if (query.assigneeId !== undefined) {
+        if (query.assigneeId === "unassigned") {
+          clauses.push(sql`work_items.assignee_id is null`);
+        } else if (query.assigneeId !== undefined) {
           clauses.push(sql`work_items.assignee_id = ${query.assigneeId}`);
         }
 
@@ -860,6 +866,20 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
 
         if (query.siteId !== undefined) {
           clauses.push(sql`work_items.site_id = ${query.siteId}`);
+        }
+
+        if (query.query !== undefined) {
+          const queryPattern = `%${query.query}%`;
+          clauses.push(sql`(
+            work_items.title ilike ${queryPattern}
+            or work_items.kind::text ilike ${queryPattern}
+            or sites.name ilike ${queryPattern}
+            or sites.display_location ilike ${queryPattern}
+            or sites.eircode ilike ${queryPattern}
+            or contacts.name ilike ${queryPattern}
+            or contacts.email ilike ${queryPattern}
+            or contacts.phone ilike ${queryPattern}
+          )`);
         }
 
         if (resolvedAccess.visibility === "external") {
@@ -914,6 +934,12 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
             work_items.created_by_user_id,
             work_items.organization_id
           from work_items
+          left join sites
+            on sites.id = work_items.site_id
+            and sites.organization_id = work_items.organization_id
+          left join contacts
+            on contacts.id = work_items.contact_id
+            and contacts.organization_id = work_items.organization_id
           ${labelFilterJoin}
           where ${sql.and(clauses)}
           order by work_items.updated_at desc, work_items.id desc

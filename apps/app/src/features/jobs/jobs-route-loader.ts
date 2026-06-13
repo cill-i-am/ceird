@@ -1,10 +1,15 @@
-import type { JobListResponse, JobOptionsResponse } from "@ceird/jobs-core";
+import type {
+  JobListQuery,
+  JobListResponse,
+  JobOptionsResponse,
+} from "@ceird/jobs-core";
 import type { QueryClient } from "@tanstack/query-core";
 
 import { applyDataPlaneSeed } from "#/data-plane/bootstrap";
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import {
   EMPTY_JOBS_OPTIONS,
+  createJobsListScope,
   createJobOptionsSeed,
   createJobsListSeed,
   loadCurrentJobsOptionsForViewer,
@@ -12,7 +17,7 @@ import {
 import {
   getCurrentServerExternalJobOptions,
   getCurrentServerJobOptions,
-  listAllCurrentServerJobs,
+  listCurrentServerJobs,
 } from "#/features/jobs/jobs-server";
 import {
   canUseInternalJobOptions,
@@ -33,12 +38,16 @@ interface JobsRouteOrganizationAccess extends OrganizationProductRouteContext {
 }
 
 export async function loadJobsRouteData(
-  organizationAccess: JobsRouteOrganizationAccess
+  organizationAccess: JobsRouteOrganizationAccess,
+  query: JobListQuery = {}
 ) {
+  const listScope = createJobsListScope(query);
+
   if (organizationAccess.activeOrganizationSync.required) {
     return {
       dataPlaneSeeds: [],
       list: EMPTY_JOBS_LIST,
+      listScope,
       options: EMPTY_JOBS_OPTIONS,
       routeProximityLocationEnabled: false,
       viewer: {
@@ -56,7 +65,7 @@ export async function loadJobsRouteData(
   const listRequestStartedAt = Date.now();
   const routeProximityLocationPreferencePromise =
     loadRouteProximityLocationPreferenceEnabled();
-  const listPromise = listAllCurrentServerJobs({});
+  const listPromise = listCurrentServerJobs(listScope.query);
   let optionsRequestStartedAt = Date.now();
   let optionsPromise: Promise<JobOptionsResponse> | undefined;
 
@@ -85,7 +94,12 @@ export async function loadJobsRouteData(
     userId: viewer.userId,
   });
 
-  const jobsSeed = createJobsListSeed(scope, list, listRequestStartedAt);
+  const jobsSeed = createJobsListSeed(
+    scope,
+    list,
+    listScope,
+    listRequestStartedAt
+  );
   const jobOptionsSeed = createJobOptionsSeed(
     scope,
     options,
@@ -108,6 +122,7 @@ export async function loadJobsRouteData(
         ...list,
         items: seededItems,
       },
+      listScope,
       options: seededOptions?.options ?? options,
       routeProximityLocationEnabled,
       viewer,
@@ -117,6 +132,7 @@ export async function loadJobsRouteData(
   return {
     dataPlaneSeeds: [jobsSeed, jobOptionsSeed],
     list,
+    listScope,
     options,
     routeProximityLocationEnabled,
     viewer,

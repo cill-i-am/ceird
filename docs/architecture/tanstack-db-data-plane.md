@@ -38,9 +38,11 @@ components that require tenant-wide data. `entity-detail` covers one parent
 entity such as a job detail or a site's comments. `sync-backed` records the
 subscription source and the coverage it provides, so future Electric-backed
 collections can be explicit about whether they cover tenant, page, filter, or
-entity scopes. Current unmigrated route lists keep their eager
-`complete-tenant` behavior until the follow-up paging issues replace those
-first-paint reads.
+entity scopes. The jobs route primary list now uses a `paged-query` contract
+whose query key includes cursor, limit, filters, text search, and the stable
+updated-desc sort order. Current unmigrated route lists, such as sites and home
+summary inputs, keep their eager `complete-tenant` behavior until their
+follow-up paging issues replace those first-paint reads.
 
 ## Start Bootstrap
 

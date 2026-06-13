@@ -11,7 +11,9 @@ import type { SiteIdType, SiteOption } from "@ceird/sites-core";
 import {
   defaultJobsListFilters,
   filterVisibleJobs,
+  mergeJobListItems,
   toJobListItem,
+  upsertJobListItem,
   upsertJobOptionSite,
 } from "./jobs-state";
 
@@ -101,7 +103,61 @@ describe("jobs state", () => {
       addedSite,
     ]);
   });
+
+  it("patches visible jobs without requiring an all-tenant reload", () => {
+    const first = createJobListItem({
+      id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
+      title: "Inspect boiler",
+      updatedAt: "2026-04-23T12:00:00.000Z",
+    });
+    const second = createJobListItem({
+      id: "22222222-2222-4222-8222-222222222222" as WorkItemIdType,
+      title: "Replace pump",
+      updatedAt: "2026-04-23T11:00:00.000Z",
+    });
+    const updatedSecond = {
+      ...second,
+      title: "Replace circulation pump",
+      updatedAt: "2026-04-23T13:00:00.000Z",
+    };
+    const created = createJobListItem({
+      id: "33333333-3333-4333-8333-333333333333" as WorkItemIdType,
+      title: "Service heat pump",
+      updatedAt: "2026-04-23T14:00:00.000Z",
+    });
+
+    expect(upsertJobListItem([first, second], updatedSecond)).toStrictEqual([
+      toJobListItem(updatedSecond),
+      first,
+    ]);
+    expect(mergeJobListItems([first], [second, created])).toStrictEqual([
+      first,
+      second,
+      created,
+    ]);
+  });
 });
+
+function createJobListItem({
+  id,
+  title,
+  updatedAt,
+}: {
+  readonly id: WorkItemIdType;
+  readonly title: string;
+  readonly updatedAt: string;
+}): JobListItem {
+  return {
+    createdAt: "2026-04-23T10:00:00.000Z",
+    id,
+    kind: "job",
+    labels: [],
+    priority: "none",
+    status: "new",
+    title,
+    updatedAt,
+  };
+}
 
 function createSiteOption({
   id,
