@@ -12,12 +12,15 @@ import type {
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { Effect } from "effect";
 
+import {
+  createAllPagesPaginationState,
+  ensureAllPagesCursorProgress,
+  ensureAllPagesLimit,
+} from "#/features/api/all-pages-pagination";
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiClient } from "#/features/api/app-api-client";
-import { AppApiRequestError } from "#/features/api/app-api-errors";
 
 const importAppApiServerSsr = () => import("./app-api-server-ssr");
-const MAX_ALL_SITE_PAGES = 1000;
 
 const getCurrentServerLabelsIsomorphic = createIsomorphicFn()
   .server(async () => {
@@ -77,23 +80,17 @@ async function listCurrentBrowserSites(
   );
 }
 
-async function listAllCurrentBrowserSites(
+export async function listAllCurrentBrowserSites(
   query: SiteListQuery = {}
 ): Promise<SiteListResponse> {
   const items: SiteOption[] = [];
   const { cursor: initialCursor, limit, ...queryWithoutCursor } = query;
   const staticQuery = { limit: limit ?? 100, ...queryWithoutCursor };
-  const seenCursors = new Set<string>();
+  const pagination = createAllPagesPaginationState("Site", initialCursor);
   let cursor = initialCursor;
-  let pageCount = 0;
-
-  if (cursor !== undefined) {
-    seenCursors.add(cursor);
-  }
 
   while (true) {
-    pageCount += 1;
-    ensureSitePageLimit(pageCount);
+    ensureAllPagesLimit(pagination);
 
     // Cursor pagination must await each page before requesting its next cursor.
     // react-doctor-disable-next-line
@@ -110,7 +107,7 @@ async function listAllCurrentBrowserSites(
       };
     }
 
-    ensureSiteCursorProgress(page.nextCursor, seenCursors);
+    ensureAllPagesCursorProgress(pagination, page.nextCursor);
     cursor = page.nextCursor;
   }
 }
@@ -125,14 +122,17 @@ async function listCurrentBrowserJobs(
   );
 }
 
-async function listAllCurrentBrowserJobs(
+export async function listAllCurrentBrowserJobs(
   query: JobListQuery = {}
 ): Promise<JobListResponse> {
   const items: JobListItem[] = [];
   const { cursor: initialCursor, ...staticQuery } = query;
+  const pagination = createAllPagesPaginationState("Job", initialCursor);
   let cursor = initialCursor;
 
   while (true) {
+    ensureAllPagesLimit(pagination);
+
     // Cursor pagination must await each page before requesting its next cursor.
     // react-doctor-disable-next-line
     const page = await listCurrentBrowserJobs(
@@ -148,6 +148,7 @@ async function listAllCurrentBrowserJobs(
       };
     }
 
+    ensureAllPagesCursorProgress(pagination, page.nextCursor);
     cursor = page.nextCursor;
   }
 }
@@ -178,25 +179,4 @@ export function listCurrentServerJobs(
   query: JobListQuery = {}
 ): Promise<JobListResponse> {
   return listCurrentServerJobsIsomorphic(query);
-}
-
-function ensureSitePageLimit(pageCount: number) {
-  if (pageCount > MAX_ALL_SITE_PAGES) {
-    throw new AppApiRequestError({
-      message: "Site pagination exceeded the maximum page count.",
-    });
-  }
-}
-
-function ensureSiteCursorProgress(
-  nextCursor: NonNullable<SiteListResponse["nextCursor"]>,
-  seenCursors: Set<string>
-) {
-  if (seenCursors.has(nextCursor)) {
-    throw new AppApiRequestError({
-      message: "Site pagination returned a repeated cursor.",
-    });
-  }
-
-  seenCursors.add(nextCursor);
 }

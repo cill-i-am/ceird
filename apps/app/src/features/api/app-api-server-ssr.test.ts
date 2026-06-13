@@ -394,6 +394,50 @@ describe("shared app api server helpers", () => {
     expect(secondUrl.searchParams.get("cursor")).toBe("cursor-one");
   }, 1000);
 
+  it("rejects repeated cursors while reading every jobs page", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json(firstJobsPage))
+      .mockResolvedValueOnce(Response.json({ items: [], nextCursor }));
+
+    await expect(listAllCurrentServerJobs({ siteId })).rejects.toMatchObject({
+      message: "Job pagination returned a repeated cursor.",
+    });
+  }, 1000);
+
+  it("rejects jobs pagination after the documented max page count", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((input) => {
+        const cursor =
+          input instanceof URL
+            ? input.searchParams.get("cursor")
+            : new URL(String(input)).searchParams.get("cursor");
+
+        return Promise.resolve(
+          Response.json({
+            items: [],
+            nextCursor: `cursor-${cursor ?? "initial"}`,
+          })
+        );
+      });
+
+    await expect(listAllCurrentServerJobs({ siteId })).rejects.toMatchObject({
+      message: "Job pagination exceeded the maximum page count.",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1000);
+  }, 30_000);
+
   it("does not fetch jobs without the current auth cookie", async () => {
     mockedGetRequestHeader.mockReturnValue(undefined);
     process.env.API_ORIGIN = "https://api.example.com";
