@@ -148,8 +148,13 @@ Variables:
 - `NEON_ORG_ID` (optional)
 
 The `main` environment is used by `.github/workflows/deploy-main.yml` only after
-the `Build` workflow has succeeded on `main`, or during an explicit manual main
-deploy. The `Build` workflow's cloud E2E path uses `preview-deploy` with an
+the `Build` workflow has succeeded on `main`. Automatic deploys are triggered by
+that successful `Build` workflow run. Manual deploys first run a non-environment
+preflight that verifies the selected commit SHA has a completed successful
+`Build` workflow run for `event=push` on branch `main`; missing, pending,
+failed, cancelled, skipped, stale, or different-SHA Build runs fail closed
+before the deploy job can enter the `main` environment or restore provider
+credentials. The `Build` workflow's cloud E2E path uses `preview-deploy` with an
 ephemeral `ci-<run-number>-<attempt>` stage, so the main deployment environment
 is not exposed to pull-request code or reused for temporary validation
 environments.
@@ -321,10 +326,13 @@ when browsers send multiple stage-prefixed cookies under the same apex.
 `.github/workflows/deploy-main.yml` deploys on:
 
 - successful `Build` workflow runs on `main`
-- manual `workflow_dispatch`
+- manual `workflow_dispatch` after the selected SHA has a completed successful
+  `Build` run on `main`
 
 The workflow:
 
+- verifies manual deploy SHAs in a non-environment preflight before provider
+  credentials or Alchemy deploy steps are reachable
 - installs dependencies with pnpm
 - type-checks the app, API, domain, MCP, and root infra helpers
 - restores Alchemy Cloudflare state-store credentials through the shared helper
@@ -356,6 +364,22 @@ for direct migration connections and provider control-plane checks. The parent
 stage defaults `CEIRD_HYPERDRIVE_NAME` to `ceird-production-postgres` to adopt
 the existing Cloudflare Hyperdrive config; override it only for a fresh
 provider name or a deliberate replacement.
+
+Manual production deploy operators should:
+
+1. Choose the exact commit intended for production from the `main` branch.
+2. In GitHub Actions, confirm the `Build` workflow run for that exact SHA,
+   branch `main`, and event `push` is completed successfully.
+3. Open the `Deploy Main` workflow, select the same ref/SHA, and optionally set
+   `validate_only` to `true` for a dry-run gate check that does not enter the
+   production environment.
+4. Run the workflow with `validate_only` left `false` only after the dry-run or
+   Build status confirms the SHA is deployable.
+
+The manual preflight always checks the latest matching Build run for the
+selected SHA. It does not implement break-glass; any failed or absent Build
+result requires rerunning or fixing `Build` before production deploy can
+proceed.
 
 The root infra helpers track the current Alchemy v2 beta line documented by
 v2.alchemy.run. Older local patches for beta.28 and
