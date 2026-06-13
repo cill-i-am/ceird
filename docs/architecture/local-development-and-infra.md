@@ -114,6 +114,12 @@ directories; it runs normal dependency installation and lets the root
 script does not generate fallback secrets; if no source env file exists, setup
 stops with a clear error.
 
+Prefer direct dependency upgrades for dependency audit remediations. When a
+direct upgrade cannot make a vulnerable transitive edge resolve to a patched
+version, keep a narrow owner-specific pnpm `override` in `pnpm-workspace.yaml`
+next to the repository's `patchedDependencies` policy. Remove those overrides
+when the owning direct dependency can safely supply the audited version itself.
+
 Common local and Alchemy variables include:
 
 | Variable                                            | Purpose                                                                                                          |
