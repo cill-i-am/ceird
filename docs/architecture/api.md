@@ -251,7 +251,59 @@ manual location resolution.
 Read tools are available to the model by default. Write and destructive tools
 are exposed only when `AGENT_MUTATION_TOOLS_ENABLED=true`, and those tools still
 require the confirmation-capable chat client to approve the action outside the
-model prompt.
+model prompt. Alchemy stage configuration does not set that flag by default;
+absence of the flag is the normal production, preview, and local-dev posture.
+
+### Agent Mutation Approval Readiness
+
+The shared public manifest intentionally includes read, write, destructive, and
+planned action metadata so the app can render labels, summaries, targets, and
+risk treatment without exposing input schemas or private execution internals.
+The Agent Worker toolset is narrower than the manifest:
+
+- planned actions are never model-callable;
+- read executable actions are model-callable by default;
+- write and destructive executable actions are model-callable only when the
+  selected Agent Worker runtime has `AGENT_MUTATION_TOOLS_ENABLED=true`;
+- every model-callable write or destructive tool must be created with
+  `needsApproval: true`.
+
+Approval happens before domain action-run creation. The browser chat client
+records the approve or reject decision with the conversation through the AI chat
+approval response, and the Agent Worker only calls `POST /agent/internal/actions`
+after the approved tool execution begins. The domain action-run ledger therefore
+does not store an approval id. It stores the execution attempt itself:
+`thread_id`, `action_name`, `operation_id`, sanitized input hash/size, status,
+write-action result, and error category. Rejections before tool execution leave
+no domain action-run row.
+
+Enable mutation tools only for a named stage after an operator confirms the
+target stage, credentials, and rollback owner. The safe enablement path is:
+
+1. Keep the root/default Alchemy config unchanged.
+2. Add an explicit stage-scoped opt-in by passing `enableMutationTools: true` to
+   the Agent Worker resource for the selected stage, or apply an equivalent
+   temporary Agent Worker env override for that stage only.
+3. Run a non-mutating plan or inspect the Worker env diff first.
+4. Run provider-mutating Alchemy deploy/dev commands only after explicit human
+   confirmation of the target stage and credentials.
+
+Stage verification should prove both sides of the gate:
+
+1. With the flag absent, inspect Agent Worker configuration and verify only read
+   executable tools are available to model turns.
+2. With the flag set to exactly `true` in the chosen stage, verify a
+   write/destructive prompt renders the app approval card from manifest metadata
+   and cannot execute until the user approves.
+3. Approve one low-risk write in the test stage and confirm the domain
+   `agent_action_runs` row appears only after approval. Reject a second pending
+   approval and confirm no domain action-run row is created for that rejection.
+4. Confirm planned manifest actions still do not appear as Agent Worker tools.
+
+Rollback is removing the stage-specific flag or opt-in and reconciling only the
+chosen stage. New model turns then rebuild the toolset without write/destructive
+tools. Existing completed or failed action-run ledger rows are retained for
+audit and idempotent replay semantics; no database migration is required.
 
 Route-aware proximity is exposed as read-only POST computations because requests
 carry structured origin and filter payloads but do not mutate product state:

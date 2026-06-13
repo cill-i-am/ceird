@@ -363,14 +363,16 @@ type AgentWorkerStackRuntimeConfigEnv = Required<
     | "ALCHEMY_STAGE"
     | "AGENT_AI_GATEWAY_ID"
     | "AGENT_INTERNAL_SECRET"
-    | "AGENT_MUTATION_TOOLS_ENABLED"
     | "AUTH_APP_ORIGIN"
     | "AUTH_TRUSTED_ORIGINS"
     | "CEIRD_WORKER_ANALYTICS_SAMPLE_RATE"
     | "NODE_ENV"
   >
 > &
-  Pick<AgentWorkerConfigEnv, "CEIRD_LOCAL_DEV">;
+  Pick<
+    AgentWorkerConfigEnv,
+    "AGENT_MUTATION_TOOLS_ENABLED" | "CEIRD_LOCAL_DEV"
+  >;
 type SyncWorkerStackRuntimeConfigEnv = Required<
   Pick<
     SyncWorkerConfigEnv,
@@ -623,13 +625,21 @@ describe("Cloudflare stack", () => {
     expect(agentEnv).toStrictEqual({
       AGENT_AI_GATEWAY_ID: "ceird-main-agent-ai",
       AGENT_INTERNAL_SECRET: agentInternalSecret,
-      AGENT_MUTATION_TOOLS_ENABLED: "true",
       AUTH_APP_ORIGIN: "https://app.example.com",
       AUTH_TRUSTED_ORIGINS:
         "https://app.example.com,https://*--main.example.com",
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
       NODE_ENV: "production",
     });
+    expect(agentEnv).not.toHaveProperty("AGENT_MUTATION_TOOLS_ENABLED");
+    expect(
+      makeAgentWorkerConfiguredEnv({
+        aiGatewayId: "ceird-main-agent-ai",
+        agentInternalSecret,
+        config: configWithoutCloudflareBootstrapSecrets,
+        enableMutationTools: true,
+      }).AGENT_MUTATION_TOOLS_ENABLED
+    ).toBe("true");
     expect(appEnv).toStrictEqual({
       AGENT_ORIGIN: "https://agent.example.com",
       API_ORIGIN: "https://api.example.com",
@@ -759,6 +769,7 @@ describe("Cloudflare stack", () => {
       "https://app.pr-123.example.com",
       "https://*--pr-123.example.com",
     ]);
+    expect(agentEnv).not.toHaveProperty("AGENT_MUTATION_TOOLS_ENABLED");
   });
 
   it("creates no-script bypass routes for preview system hosts", () => {
@@ -1578,7 +1589,6 @@ describe("Cloudflare stack", () => {
     expect(agentWorkerProps.env).toMatchObject({
       AGENT_AI_GATEWAY_ID: aiGateway.gatewayId,
       AGENT_INTERNAL_SECRET: expect.any(Object),
-      AGENT_MUTATION_TOOLS_ENABLED: "true",
       AUTH_APP_ORIGIN:
         "https://app.codex-portless-local-origins.ceird.localhost",
       AUTH_TRUSTED_ORIGINS:
@@ -1587,6 +1597,9 @@ describe("Cloudflare stack", () => {
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
       NODE_ENV: "production",
     });
+    expect(agentWorkerProps.env).not.toHaveProperty(
+      "AGENT_MUTATION_TOOLS_ENABLED"
+    );
     expect(agentWorkerProps.env.AI).toBe(aiGateway);
     expect(agentWorkerProps.env.DOMAIN).toBe(domain);
     expect(agentWorkerProps.env.CeirdAgent).toMatchObject({
@@ -1703,7 +1716,6 @@ describe("Cloudflare stack", () => {
       env: {
         AGENT_AI_GATEWAY_ID: aiGateway.gatewayId,
         AGENT_INTERNAL_SECRET: agentInternalSecret,
-        AGENT_MUTATION_TOOLS_ENABLED: "true",
         AUTH_APP_ORIGIN: "https://app.example.com",
         AUTH_TRUSTED_ORIGINS:
           "https://app.example.com,https://*--main.example.com",
@@ -1713,6 +1725,9 @@ describe("Cloudflare stack", () => {
       name: "ceird-main-agent",
       url: false,
     });
+    expect(agentWorkerProps.env).not.toHaveProperty(
+      "AGENT_MUTATION_TOOLS_ENABLED"
+    );
     expect(agentWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
     expect(agentWorkerProps.observability).toMatchObject({
       enabled: true,

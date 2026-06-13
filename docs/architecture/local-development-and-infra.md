@@ -151,7 +151,7 @@ Common local and Alchemy variables include:
 | `AGENT_AI_GATEWAY_ID`                               | Alchemy-managed Cloudflare AI Gateway ID used by the Agent Worker model provider.                                |
 | `AGENT_ORIGIN`                                      | Server-side app Agent Worker origin.                                                                             |
 | `VITE_AGENT_ORIGIN`                                 | Browser-exposed Agent Worker origin used by the global chat client.                                              |
-| `AGENT_MUTATION_TOOLS_ENABLED`                      | Enables write/destructive Agent tools when a confirmation-capable client is present.                             |
+| `AGENT_MUTATION_TOOLS_ENABLED`                      | Optional exact `true` opt-in for selected stages; omitted by default.                                            |
 | `SYNC_ORIGIN`                                       | Server-side app sync Worker origin.                                                                              |
 | `VITE_SYNC_ORIGIN`                                  | Browser-exposed sync Worker origin reserved for Electric/TanStack DB clients.                                    |
 | `VITE_AUTH_CAPTCHA_ENABLED`                         | Browser flag mirroring `AUTH_CAPTCHA_ENABLED` for selected auth forms.                                           |

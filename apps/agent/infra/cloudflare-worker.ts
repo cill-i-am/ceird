@@ -61,7 +61,7 @@ export interface AgentWorkerStageConfig {
 export interface AgentWorkerConfiguredEnv {
   readonly AGENT_AI_GATEWAY_ID: string;
   readonly AGENT_INTERNAL_SECRET: Redacted.Redacted<string>;
-  readonly AGENT_MUTATION_TOOLS_ENABLED: "true";
+  readonly AGENT_MUTATION_TOOLS_ENABLED?: "true" | undefined;
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_TRUSTED_ORIGINS: string;
   readonly CEIRD_LOCAL_DEV?: "true" | undefined;
@@ -104,6 +104,7 @@ export function makeAgentWorkerConfiguredEnv(input: {
   readonly aiGatewayId: Input<string>;
   readonly agentInternalSecret: Input<Redacted.Redacted<string>>;
   readonly config: AgentWorkerStageConfig;
+  readonly enableMutationTools?: boolean | undefined;
   readonly localDev?: boolean | undefined;
   readonly localAppOrigin?: string | undefined;
 }) {
@@ -123,7 +124,9 @@ export function makeAgentWorkerConfiguredEnv(input: {
   return {
     AGENT_AI_GATEWAY_ID: input.aiGatewayId,
     AGENT_INTERNAL_SECRET: input.agentInternalSecret,
-    AGENT_MUTATION_TOOLS_ENABLED: "true",
+    ...(input.enableMutationTools === true
+      ? { AGENT_MUTATION_TOOLS_ENABLED: "true" as const }
+      : {}),
     AUTH_APP_ORIGIN: authAppOrigin,
     AUTH_TRUSTED_ORIGINS: authTrustedOrigins,
     ...(input.localDev === true
@@ -144,6 +147,7 @@ export function makeAgentWorkerEnv(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly config: AgentWorkerStageConfig;
   readonly domain: DomainWorkerResource;
+  readonly enableMutationTools?: boolean | undefined;
   readonly localDev?: boolean | undefined;
   readonly localAppOrigin?: string | undefined;
 }) {
@@ -158,6 +162,7 @@ export function makeAgentWorkerEnv(input: {
       aiGatewayId: input.aiGateway.gatewayId,
       agentInternalSecret: input.agentInternalSecret,
       config: input.config,
+      enableMutationTools: input.enableMutationTools,
       localDev: input.localDev,
       localAppOrigin: input.localAppOrigin,
     }),
@@ -170,6 +175,7 @@ export function makeAgentWorkerProps(input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly config: AgentWorkerStageConfig;
   readonly domain: DomainWorkerResource;
+  readonly enableMutationTools?: boolean | undefined;
   readonly hostname: string;
   readonly localDev?: boolean | undefined;
   readonly localAppOrigin?: string | undefined;
@@ -185,6 +191,7 @@ export function makeAgentWorkerProps(input: {
       analytics: input.analytics,
       config: input.config,
       domain: input.domain,
+      enableMutationTools: input.enableMutationTools,
       localDev: input.localDev,
       localAppOrigin: input.localAppOrigin,
     }),
@@ -200,6 +207,7 @@ export const makeAgentWorker = Effect.fn("AgentWorker.make")(function* (input: {
   readonly analytics: Cloudflare.AnalyticsEngineDataset;
   readonly config: AgentWorkerStageConfig;
   readonly domain: DomainWorkerResource;
+  readonly enableMutationTools?: boolean | undefined;
   readonly hostname: string;
   readonly localDev?: boolean | undefined;
   readonly localAppOrigin?: string | undefined;

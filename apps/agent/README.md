@@ -12,5 +12,9 @@ The Domain Worker remains the owner of organizations, threads, authorization,
 Postgres records, and the idempotent action ledger.
 
 Read tools are exposed to the model by default. Write and destructive tools are
-gated behind `AGENT_MUTATION_TOOLS_ENABLED=true` and still require the client
-chat surface to approve the action outside the model prompt.
+absent unless the selected Agent Worker runtime explicitly sets
+`AGENT_MUTATION_TOOLS_ENABLED=true`. The normal Alchemy configuration omits that
+flag for local, preview, and production stages. Even when enabled for a chosen
+stage, write and destructive tools still require the client chat surface to
+approve the action outside the model prompt before the Domain Worker receives an
+action execution request.

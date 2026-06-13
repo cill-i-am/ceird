@@ -1223,6 +1223,13 @@ describe("global agent chat", () => {
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     expect(within(drawer).getByText("Approval required")).toBeVisible();
+    expect(within(drawer).getByText("Delete label")).toBeVisible();
+    expect(
+      within(drawer).getByText("Delete an organization label.")
+    ).toBeVisible();
+    expect(
+      within(drawer).getByText("Destructive action against label.")
+    ).toBeVisible();
     expect(within(drawer).getByText(/review before ceird acts/i)).toBeVisible();
 
     await user.click(within(drawer).getByRole("button", { name: /approve/i }));

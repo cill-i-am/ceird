@@ -62,6 +62,27 @@ describe("Ceird Agent tools", () => {
     );
   });
 
+  it.each([undefined, "false", "TRUE", " true "])(
+    "keeps mutation tools absent unless the env flag is exactly true (%s)",
+    (flagValue) => {
+      const tools = createCeirdTools(
+        makeEnv(
+          flagValue === undefined
+            ? {}
+            : { AGENT_MUTATION_TOOLS_ENABLED: flagValue }
+        ),
+        agentInstanceName
+      );
+      const mutationModelNames = AGENT_EXECUTABLE_ACTIONS.filter(
+        (action) => action.kind === "write" || action.kind === "destructive"
+      ).map((action) => action.modelName);
+
+      expect(Object.keys(tools)).not.toEqual(
+        expect.arrayContaining(mutationModelNames)
+      );
+    }
+  );
+
   it("exposes every executable action model name when mutations are enabled", () => {
     const expectedExecutableModelNames = AGENT_EXECUTABLE_ACTIONS.map(
       (action) => action.modelName
@@ -143,24 +164,31 @@ describe("Ceird Agent tools", () => {
     );
   });
 
-  it("marks non-read executable actions as approval-gated tools", () => {
+  it("marks every executable write and destructive action as approval-gated", () => {
     const tools = createCeirdTools(
       makeEnv({ AGENT_MUTATION_TOOLS_ENABLED: "true" }),
       agentInstanceName
     );
-    const approvalGatedActions = AGENT_EXECUTABLE_ACTIONS.filter(
-      (action) => action.confirmationPolicy !== "none"
+    const writeOrDestructiveActions = AGENT_EXECUTABLE_ACTIONS.filter(
+      (action) => action.kind === "write" || action.kind === "destructive"
     );
 
-    expect(approvalGatedActions.length).toBeGreaterThan(0);
+    expect(writeOrDestructiveActions.length).toBeGreaterThan(0);
 
-    for (const action of approvalGatedActions) {
+    for (const action of writeOrDestructiveActions) {
       expect(
         (tools[action.modelName] as { readonly needsApproval?: unknown })
           .needsApproval
       ).toBe(true);
     }
 
+    expect(
+      AGENT_EXECUTABLE_ACTIONS.filter((action) => action.kind === "read").every(
+        (action) =>
+          (tools[action.modelName] as { readonly needsApproval?: unknown })
+            .needsApproval === undefined
+      )
+    ).toBe(true);
     expect(
       (tools.listLabels as { readonly needsApproval?: unknown }).needsApproval
     ).toBeUndefined();
