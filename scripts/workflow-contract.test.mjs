@@ -481,7 +481,15 @@ test("main deploy workflow uses current Alchemy command order explicitly", () =>
     path.join(repoRoot, ".github/workflows/deploy-main.yml"),
     "utf8"
   );
+  const cloudflareCiGuide = readFileSync(
+    path.join(repoRoot, "docs/architecture/cloudflare-ci.md"),
+    "utf8"
+  );
+  const manualGateJob = getWorkflowJob(deployWorkflow, "manual-build-gate");
+  const deployJob = getWorkflowJob(deployWorkflow, "deploy");
 
+  assert.match(deployWorkflow, /validate_only:/);
+  assert.match(deployWorkflow, /actions:\s+read/);
   assert.match(deployWorkflow, /CEIRD_CLOUDFLARE:\s+"1"/);
   assert.match(deployWorkflow, /CEIRD_APP_HOSTNAME:\s+app\.ceird\.app/);
   assert.match(deployWorkflow, /CEIRD_API_HOSTNAME:\s+api\.ceird\.app/);
@@ -506,7 +514,24 @@ test("main deploy workflow uses current Alchemy command order explicitly", () =>
     deployWorkflow,
     /pnpm alchemy:state-audit --stage main --json --tenant-routing-required --allow-finding legacy_drizzle_migrations_state/
   );
+  assert.match(manualGateJob, /if: github\.event_name == 'workflow_dispatch'/);
+  assert.match(
+    manualGateJob,
+    /actions\/workflows\/build\.yml\/runs\?head_sha=\$\{DEPLOY_SHA\}&event=push&branch=main&per_page=10/
+  );
+  assert.match(manualGateJob, /select\(\.head_sha == \$deploy_sha\)/);
+  assert.match(manualGateJob, /select\(\.event == "push"\)/);
+  assert.match(manualGateJob, /select\(\.head_branch == "main"\)/);
+  assert.match(
+    manualGateJob,
+    /\[\[ "\$run_status" != "completed" \|\| "\$run_conclusion" != "success" \]\]/
+  );
+  assert.match(deployJob, /needs:\n {6}- manual-build-gate/);
+  assert.match(deployJob, /needs\.manual-build-gate\.result == 'success'/);
+  assert.match(deployJob, /inputs\.validate_only != true/);
   assertContainsInOrder(deployWorkflow, [
+    "manual-build-gate:",
+    "deploy:",
     "name: Build",
     "name: Restore Alchemy state store credentials",
     "name: Deploy",
@@ -516,6 +541,12 @@ test("main deploy workflow uses current Alchemy command order explicitly", () =>
   assert.doesNotMatch(deployWorkflow, /pnpm --filter domain check-types\b/);
   assert.doesNotMatch(deployWorkflow, /pnpm --filter mcp check-types\b/);
   assert.doesNotMatch(deployWorkflow, /pnpm --filter .* test\b/);
+  assert.match(
+    cloudflareCiGuide,
+    /completed successful\s+`Build` workflow run for `event=push` on branch `main`/
+  );
+  assert.match(cloudflareCiGuide, /`validate_only` to `true`/);
+  assert.match(cloudflareCiGuide, /does not implement break-glass/);
 });
 
 test("Codex environment actions use the Alchemy-native workflow", () => {
