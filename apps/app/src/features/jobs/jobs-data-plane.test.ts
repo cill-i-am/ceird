@@ -2,6 +2,7 @@ import type { OrganizationId } from "@ceird/identity-core";
 import type { JobListItem, JobListResponse } from "@ceird/jobs-core";
 import { QueryClient } from "@tanstack/react-query";
 
+import { COMPLETE_TENANT_COLLECTION } from "#/data-plane/collection-contract";
 import { createDataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { getDataPlaneSessionKey } from "#/data-plane/session";
@@ -56,7 +57,7 @@ describe("jobs data plane", () => {
 
     expect(createJobsListSeed(scope, response, 1000)).toMatchObject({
       collection: "jobs",
-      completeness: "complete",
+      completeness: COMPLETE_TENANT_COLLECTION,
       data: [job],
       queryKey: jobsCollectionKey(scope),
       requestStartedAt: 1000,

@@ -17,8 +17,11 @@ import {
   seedQueryCollectionInitialData,
 } from "#/data-plane/bootstrap";
 import {
+  COMPLETE_TENANT_COLLECTION,
   createQueryCollectionFromContract,
   defineQueryCollectionContract,
+  entityDetailCollectionCompleteness,
+  filteredQueryCollectionCompleteness,
 } from "#/data-plane/collection-contract";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
@@ -110,7 +113,7 @@ export function createSitesListSeed(
 ): DataPlaneSeed<readonly SiteOption[]> {
   return createDataPlaneSeed({
     collection: "sites",
-    completeness: "complete",
+    completeness: COMPLETE_TENANT_COLLECTION,
     data: response.items,
     queryKey: sitesCollectionKey(scope),
     requestStartedAt,
@@ -125,7 +128,10 @@ export function createSiteCommentsSeed(
 ): DataPlaneSeed<readonly SiteComment[]> {
   return createDataPlaneSeed({
     collection: "site-comments",
-    completeness: "complete",
+    completeness: entityDetailCollectionCompleteness({
+      entityId: siteId,
+      entityType: "site",
+    }),
     data: sortSiteComments(response.comments),
     queryKey: siteCommentsCollectionKey(scope, siteId),
     requestStartedAt,
@@ -423,7 +429,7 @@ function createSitesCollection({
     queryClient,
     defineQueryCollectionContract({
       collection: "sites",
-      completeness: "complete",
+      completeness: COMPLETE_TENANT_COLLECTION,
       getKey: (site: SiteOption) => site.id,
       gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
       id: sitesCollectionId(scope),
@@ -471,7 +477,10 @@ function createSiteRelatedJobsCollection({
     queryClient,
     defineQueryCollectionContract({
       collection: "site-related-jobs",
-      completeness: "partial",
+      completeness: filteredQueryCollectionCompleteness({
+        filters: [{ field: "siteId", operator: "eq", value: siteId }],
+        queryName: "site-related-jobs",
+      }),
       getKey: (job: JobListItem) => job.id,
       gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
       id: siteRelatedJobsCollectionId(scope, siteId),
@@ -523,7 +532,10 @@ function createSiteCommentsCollection({
     queryClient,
     defineQueryCollectionContract({
       collection: "site-comments",
-      completeness: "complete",
+      completeness: entityDetailCollectionCompleteness({
+        entityId: siteId,
+        entityType: "site",
+      }),
       getKey: (comment: SiteComment) => comment.id,
       gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
       id: siteCommentsCollectionId(scope, siteId),

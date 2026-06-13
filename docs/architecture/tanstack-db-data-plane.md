@@ -31,6 +31,17 @@ from Start loaders. Future ElectricSQL integration should keep these contracts
 and swap the sync implementation behind them rather than moving state back into
 route views.
 
+Completeness is a discriminated contract, not a boolean. `complete-tenant`
+means the data covers the active organization scope. `paged-query` and
+`filtered-query` describe bounded query results that must not feed selectors or
+components that require tenant-wide data. `entity-detail` covers one parent
+entity such as a job detail or a site's comments. `sync-backed` records the
+subscription source and the coverage it provides, so future Electric-backed
+collections can be explicit about whether they cover tenant, page, filter, or
+entity scopes. Current unmigrated route lists keep their eager
+`complete-tenant` behavior until the follow-up paging issues replace those
+first-paint reads.
+
 ## Start Bootstrap
 
 Route loaders create seed envelopes with `createDataPlaneSeed(...)` helpers and

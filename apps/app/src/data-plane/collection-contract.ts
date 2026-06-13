@@ -17,7 +17,113 @@ export const DATA_PLANE_COLLECTION_NAMES = [
 export type DataPlaneCollectionName =
   (typeof DATA_PLANE_COLLECTION_NAMES)[number];
 
-type DataPlaneCollectionCompleteness = "complete" | "partial";
+export type DataPlaneCollectionFilterValue =
+  | boolean
+  | number
+  | string
+  | readonly (boolean | number | string)[];
+
+export interface DataPlaneCollectionFilterScope {
+  readonly field: string;
+  readonly operator?: "custom" | "eq" | "in" | "range" | "search";
+  readonly value?: DataPlaneCollectionFilterValue | undefined;
+}
+
+export interface DataPlaneCompleteTenantCompleteness {
+  readonly mode: "complete-tenant";
+}
+
+export interface DataPlanePagedQueryCompleteness {
+  readonly mode: "paged-query";
+  readonly filters?: readonly DataPlaneCollectionFilterScope[] | undefined;
+  readonly page: {
+    readonly cursor?: string | undefined;
+    readonly hasNextPage?: boolean | undefined;
+    readonly limit?: number | undefined;
+    readonly type: "cursor";
+  };
+  readonly queryName: string;
+}
+
+export interface DataPlaneFilteredQueryCompleteness {
+  readonly mode: "filtered-query";
+  readonly filters: readonly DataPlaneCollectionFilterScope[];
+  readonly queryName: string;
+}
+
+export interface DataPlaneEntityDetailCompleteness {
+  readonly entityId: number | string;
+  readonly entityType: string;
+  readonly mode: "entity-detail";
+}
+
+export type DataPlaneSyncBackedCoverage =
+  | DataPlaneCompleteTenantCompleteness
+  | DataPlaneEntityDetailCompleteness
+  | DataPlaneFilteredQueryCompleteness
+  | DataPlanePagedQueryCompleteness;
+
+export interface DataPlaneSyncBackedCompleteness {
+  readonly covers: DataPlaneSyncBackedCoverage;
+  readonly mode: "sync-backed";
+  readonly source: "electric" | "query-subscription";
+  readonly subscriptionName: string;
+}
+
+export type DataPlaneCollectionCompleteness =
+  | DataPlaneCompleteTenantCompleteness
+  | DataPlaneEntityDetailCompleteness
+  | DataPlaneFilteredQueryCompleteness
+  | DataPlanePagedQueryCompleteness
+  | DataPlaneSyncBackedCompleteness;
+
+export const COMPLETE_TENANT_COLLECTION = {
+  mode: "complete-tenant",
+} as const satisfies DataPlaneCompleteTenantCompleteness;
+
+export function pagedQueryCollectionCompleteness(
+  completeness: Omit<DataPlanePagedQueryCompleteness, "mode">
+): DataPlanePagedQueryCompleteness {
+  return { ...completeness, mode: "paged-query" };
+}
+
+export function filteredQueryCollectionCompleteness(
+  completeness: Omit<DataPlaneFilteredQueryCompleteness, "mode">
+): DataPlaneFilteredQueryCompleteness {
+  return { ...completeness, mode: "filtered-query" };
+}
+
+export function entityDetailCollectionCompleteness(
+  completeness: Omit<DataPlaneEntityDetailCompleteness, "mode">
+): DataPlaneEntityDetailCompleteness {
+  return { ...completeness, mode: "entity-detail" };
+}
+
+export function syncBackedCollectionCompleteness(
+  completeness: Omit<DataPlaneSyncBackedCompleteness, "mode">
+): DataPlaneSyncBackedCompleteness {
+  return { ...completeness, mode: "sync-backed" };
+}
+
+export function isCompleteTenantCollection(
+  completeness: DataPlaneCollectionCompleteness
+): completeness is DataPlaneCompleteTenantCompleteness {
+  return completeness.mode === "complete-tenant";
+}
+
+export function assertCompleteTenantCollection(
+  completeness: DataPlaneCollectionCompleteness,
+  context = "Collection"
+): asserts completeness is DataPlaneCompleteTenantCompleteness {
+  if (isCompleteTenantCollection(completeness)) {
+    return;
+  }
+
+  throw new Error(
+    `${context} requires complete tenant data; received ${completeness.mode}`
+  );
+}
+
 type DataPlaneCollectionSyncMode = "eager" | "on-demand";
 type DataPlaneInferSchemaOutput<Schema extends StandardSchemaV1> =
   Schema extends StandardSchemaV1

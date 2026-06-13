@@ -1,15 +1,16 @@
 import type { QueryClient, QueryKey } from "@tanstack/query-core";
 
-import type { DataPlaneCollectionName } from "./collection-contract";
-
-type DataPlaneSeedCompleteness = "complete" | "partial";
+import type {
+  DataPlaneCollectionCompleteness,
+  DataPlaneCollectionName,
+} from "./collection-contract";
 
 export interface DataPlaneSeed<
   Data,
   Collection extends string = DataPlaneCollectionName,
 > {
   readonly collection: Collection;
-  readonly completeness: DataPlaneSeedCompleteness;
+  readonly completeness: DataPlaneCollectionCompleteness;
   readonly data: Data;
   readonly queryKey: QueryKey;
   readonly requestStartedAt?: number | undefined;

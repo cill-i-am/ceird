@@ -7,6 +7,7 @@ import type {
 } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/react-query";
 
+import { COMPLETE_TENANT_COLLECTION } from "#/data-plane/collection-contract";
 import { createDataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { getDataPlaneSessionKey } from "#/data-plane/session";
@@ -90,7 +91,7 @@ describe("sites data plane", () => {
 
     expect(createSitesListSeed(scope, sitesResponse, 1000)).toMatchObject({
       collection: "sites",
-      completeness: "complete",
+      completeness: COMPLETE_TENANT_COLLECTION,
       data: [site],
       queryKey: sitesCollectionKey(scope),
       requestStartedAt: 1000,
@@ -99,7 +100,11 @@ describe("sites data plane", () => {
       createSiteCommentsSeed(scope, site.id, commentsResponse, 2000)
     ).toMatchObject({
       collection: "site-comments",
-      completeness: "complete",
+      completeness: {
+        entityId: site.id,
+        entityType: "site",
+        mode: "entity-detail",
+      },
       data: [comment],
       queryKey: siteCommentsCollectionKey(scope, site.id),
       requestStartedAt: 2000,

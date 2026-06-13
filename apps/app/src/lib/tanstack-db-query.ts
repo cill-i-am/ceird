@@ -5,6 +5,7 @@ import {
   seedQueryCollectionInitialData,
 } from "#/data-plane/bootstrap";
 import type { DataPlaneSeed } from "#/data-plane/bootstrap";
+import { COMPLETE_TENANT_COLLECTION } from "#/data-plane/collection-contract";
 
 export { seedQueryCollectionInitialData };
 
@@ -20,7 +21,7 @@ export function seedRouteQueryData<Data>(
 ): Data {
   return applyDataPlaneSeed<Data, string>(queryClient, {
     collection: String(queryKey[0] ?? "unknown"),
-    completeness: "complete",
+    completeness: COMPLETE_TENANT_COLLECTION,
     data,
     queryKey,
     requestStartedAt: options.requestStartedAt,

@@ -23,8 +23,10 @@ import {
 } from "#/data-plane/bootstrap";
 import type { DataPlaneSeed } from "#/data-plane/bootstrap";
 import {
+  COMPLETE_TENANT_COLLECTION,
   createQueryCollectionFromContract,
   defineQueryCollectionContract,
+  entityDetailCollectionCompleteness,
 } from "#/data-plane/collection-contract";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
@@ -160,7 +162,7 @@ export function createJobsListSeed(
 ): DataPlaneSeed<readonly JobListItem[]> {
   return createDataPlaneSeed({
     collection: "jobs",
-    completeness: "complete",
+    completeness: COMPLETE_TENANT_COLLECTION,
     data: response.items,
     queryKey: jobsCollectionKey(scope),
     requestStartedAt,
@@ -174,7 +176,7 @@ export function createJobOptionsSeed(
 ): DataPlaneSeed<readonly JobOptionsCollectionItem[]> {
   return createDataPlaneSeed({
     collection: "job-options",
-    completeness: "complete",
+    completeness: COMPLETE_TENANT_COLLECTION,
     data: [toJobOptionsCollectionItem(response)],
     queryKey: jobOptionsCollectionKey(scope),
     requestStartedAt,
@@ -549,7 +551,7 @@ function createJobsCollection({
     queryClient,
     defineQueryCollectionContract({
       collection: "jobs",
-      completeness: "complete",
+      completeness: COMPLETE_TENANT_COLLECTION,
       getKey: (job: JobListItem) => job.id,
       gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
       id: jobsCollectionId(scope),
@@ -601,7 +603,7 @@ function createJobOptionsCollection({
     queryClient,
     defineQueryCollectionContract({
       collection: "job-options",
-      completeness: "complete",
+      completeness: COMPLETE_TENANT_COLLECTION,
       getKey: (item: JobOptionsCollectionItem) => item.id,
       gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
       id: jobOptionsCollectionId(scope),
@@ -651,7 +653,10 @@ function createJobDetailCollection({
     queryClient,
     defineQueryCollectionContract({
       collection: "job-details",
-      completeness: "complete",
+      completeness: entityDetailCollectionCompleteness({
+        entityId: initialDetail.job.id,
+        entityType: "job",
+      }),
       getKey: (item: JobDetailCollectionItem) => item.id,
       gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
       id: jobDetailCollectionId(scope, initialDetail.job.id),
@@ -701,7 +706,10 @@ function createJobCollaboratorsCollection({
     queryClient,
     defineQueryCollectionContract({
       collection: "job-collaborators",
-      completeness: "complete",
+      completeness: entityDetailCollectionCompleteness({
+        entityId: workItemId,
+        entityType: "job",
+      }),
       getKey: (collaborator: JobCollaborator) => collaborator.id,
       gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
       id: jobCollaboratorsCollectionId(scope, workItemId),

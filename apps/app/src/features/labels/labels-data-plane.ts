@@ -5,6 +5,7 @@ import { Schema } from "effect";
 
 import { seedQueryCollectionInitialData } from "#/data-plane/bootstrap";
 import {
+  COMPLETE_TENANT_COLLECTION,
   createQueryCollectionFromContract,
   defineQueryCollectionContract,
 } from "#/data-plane/collection-contract";
@@ -116,7 +117,7 @@ function createLabelsCollection({
     queryClient,
     defineQueryCollectionContract({
       collection: "labels",
-      completeness: "complete",
+      completeness: COMPLETE_TENANT_COLLECTION,
       getKey: (label: Label) => label.id,
       gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
       id: labelsCollectionId(scope),

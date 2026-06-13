@@ -5,13 +5,14 @@ import {
   applyDataPlaneSeeds,
   createDataPlaneSeed,
 } from "./bootstrap";
+import { COMPLETE_TENANT_COLLECTION } from "./collection-contract";
 
 describe("data-plane bootstrap seeds", () => {
   it("seeds query data into the shared query client", () => {
     const queryClient = new QueryClient();
     const seed = createDataPlaneSeed({
       collection: "jobs",
-      completeness: "complete",
+      completeness: COMPLETE_TENANT_COLLECTION,
       data: [{ id: "job_123" }],
       queryKey: ["jobs", "organization", "org_123"],
       requestStartedAt: 1000,
@@ -36,7 +37,7 @@ describe("data-plane bootstrap seeds", () => {
       queryClient,
       createDataPlaneSeed({
         collection: "jobs",
-        completeness: "complete",
+        completeness: COMPLETE_TENANT_COLLECTION,
         data: [{ id: "stale-loader" }],
         queryKey,
         requestStartedAt: 1000,
@@ -52,13 +53,13 @@ describe("data-plane bootstrap seeds", () => {
     const seeds = [
       createDataPlaneSeed({
         collection: "jobs",
-        completeness: "complete",
+        completeness: COMPLETE_TENANT_COLLECTION,
         data: [{ id: "job_123" }],
         queryKey: ["jobs"],
       }),
       createDataPlaneSeed({
         collection: "sites",
-        completeness: "complete",
+        completeness: COMPLETE_TENANT_COLLECTION,
         data: [{ id: "site_123" }],
         queryKey: ["sites"],
       }),
