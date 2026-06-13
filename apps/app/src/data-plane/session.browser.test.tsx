@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { createDataPlaneSeed } from "./bootstrap";
+import { COMPLETE_TENANT_COLLECTION } from "./collection-contract";
 import { createOrganizationDataScope } from "./query-scope";
 import {
   DataPlaneProvider,
@@ -88,7 +89,7 @@ describe("data-plane session", () => {
           seeds={[
             createDataPlaneSeed({
               collection: "jobs",
-              completeness: "complete",
+              completeness: COMPLETE_TENANT_COLLECTION,
               data: [{ id: "stale-loader" }],
               queryKey,
               requestStartedAt: 1000,

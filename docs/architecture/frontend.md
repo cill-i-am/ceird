@@ -391,6 +391,16 @@ Collections use shared Effect schemas through `Schema.toStandardSchemaV1(...)`
 at the collection boundary, then call the typed Effect HTTP client for server
 reads and writes. Components subscribe with the shared
 `useHydratedCollectionItems(...)` adapter for simple whole-collection reads.
+Every seed envelope and collection contract also declares a page-aware
+completeness mode from `data-plane/collection-contract.ts`. `complete-tenant`
+means the collection covers the active organization scope and can support
+tenant-wide derivations. `paged-query`, `filtered-query`, `entity-detail`, and
+`sync-backed` are intentionally not interchangeable with tenant-complete data;
+helpers such as `assertCompleteTenantCollection(...)` fail closed when a
+component or selector requires complete organization data. Existing unmigrated
+jobs, sites, labels, and options collections stay available as eager
+`complete-tenant` collections until their route slices move to bounded paging
+or explicit sync-backed coverage.
 The adapter starts the client collection subscription early enough for disabled
 Query Collections to support explicit `refetch()`, but its server and hydration
 snapshots keep using loader DTOs so TanStack DB state does not render during
