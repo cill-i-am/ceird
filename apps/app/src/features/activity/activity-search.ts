@@ -91,7 +91,19 @@ function isIsoDateString(value: string): boolean {
     return false;
   }
 
-  const [year, month, day] = value.split("-").map(Number);
+  const segments = value.split("-");
+  const year = Number(segments[0]);
+  const month = Number(segments[1]);
+  const day = Number(segments[2]);
+  if (
+    segments.length !== 3 ||
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
+    return false;
+  }
+
   const date = new Date(Date.UTC(year, month - 1, day));
 
   return (

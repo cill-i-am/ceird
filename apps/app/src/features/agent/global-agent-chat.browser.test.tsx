@@ -76,6 +76,16 @@ const originSummary = {
   mode: "current_location",
 } as const;
 
+function firstFixtureItem<T>(items: readonly T[], label: string): T {
+  const [item] = items;
+
+  if (item === undefined) {
+    throw new Error(`Expected ${label} fixture to include an item`);
+  }
+
+  return item;
+}
+
 const mappedSite = {
   addressLine1: "1 Custom House Quay",
   county: "Dublin",
@@ -141,7 +151,7 @@ const nearbySiteResponse: SiteProximityResponse = {
 };
 
 const jobRoutePreviewResponse: JobRoutePreviewResponse = {
-  job: nearbyJobResponse.rows[0].job,
+  job: firstFixtureItem(nearbyJobResponse.rows, "nearby jobs").job,
   origin: originSummary,
   routeLine: {
     coordinates: [

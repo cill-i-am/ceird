@@ -54,7 +54,13 @@ export function createDataPlaneMutationJournal({
       throw new Error(`Unknown data-plane mutation journal entry: ${id}`);
     }
 
-    const updated = update(entries[index]);
+    const existingEntry = entries[index];
+
+    if (existingEntry === undefined) {
+      throw new Error(`Unknown data-plane mutation journal entry: ${id}`);
+    }
+
+    const updated = update(existingEntry);
     entries[index] = updated;
     return updated;
   };

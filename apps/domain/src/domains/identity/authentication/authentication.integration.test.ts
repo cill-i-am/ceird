@@ -2760,6 +2760,9 @@ describe("authentication integration", () => {
       /^password-reset\/[0-9a-f]{64}$/
     );
     expect(resetUrl).toBeDefined();
+    if (resetUrl === undefined) {
+      throw new Error("Expected password reset email to include a reset URL");
+    }
     const parsedResetUrl = new URL(resetUrl);
     expect(parsedResetUrl.origin).toBe("http://127.0.0.1:3000");
     expect(parsedResetUrl.pathname).toMatch(/^\/api\/auth\/reset-password\/.+/);

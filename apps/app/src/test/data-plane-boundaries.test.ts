@@ -89,10 +89,9 @@ describe("data-plane architecture boundaries", () => {
       role: "owner",
       userId: "user_123",
     });
-    const roots = PRODUCT_COLLECTION_ROOTS.map((root) => [
-      root,
-      organizationDataQueryKey(root, scope).join(":"),
-    ]);
+    const roots = PRODUCT_COLLECTION_ROOTS.map(
+      (root) => [root, organizationDataQueryKey(root, scope).join(":")] as const
+    );
 
     for (const [leftRoot, leftKey] of roots) {
       for (const [rightRoot, rightKey] of roots) {

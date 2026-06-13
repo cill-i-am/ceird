@@ -436,14 +436,20 @@ describe("nav main", () => {
       "true"
     );
 
+    const [workItem, membersItem] = items;
+
+    if (workItem === undefined || membersItem === undefined) {
+      throw new Error("Expected navigation fixture to include two items");
+    }
+
     rerender(
       <NavMain
         items={[
           {
-            ...items[0],
+            ...workItem,
             title: "Work",
           },
-          items[1],
+          membersItem,
         ]}
       />
     );

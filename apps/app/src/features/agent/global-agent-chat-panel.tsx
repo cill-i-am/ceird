@@ -1358,8 +1358,15 @@ function createFallbackUuid() {
     }
   }
 
-  bytes[6] = (bytes[6] % 16) + 64;
-  bytes[8] = (bytes[8] % 64) + 128;
+  const versionByte = bytes.at(6);
+  const variantByte = bytes.at(8);
+
+  if (versionByte === undefined || variantByte === undefined) {
+    throw new Error("Expected UUID byte buffer to contain 16 bytes");
+  }
+
+  bytes[6] = (versionByte % 16) + 64;
+  bytes[8] = (variantByte % 64) + 128;
 
   const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0"));
 

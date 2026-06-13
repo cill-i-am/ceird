@@ -32,6 +32,8 @@ const SitesCoverageMapCanvas = React.lazy(async () => {
   return { default: module.SitesCoverageMapCanvas };
 });
 
+const DEFAULT_STATIC_FALLBACK_MARKER_POSITION = [50, 50] as const;
+
 interface SitesCoverageMapProps {
   readonly sites: readonly SiteOption[];
 }
@@ -313,7 +315,7 @@ function SitesMapViewport({
             const position =
               STATIC_FALLBACK_MARKER_POSITIONS[
                 index % STATIC_FALLBACK_MARKER_POSITIONS.length
-              ];
+              ] ?? DEFAULT_STATIC_FALLBACK_MARKER_POSITION;
 
             return (
               <div

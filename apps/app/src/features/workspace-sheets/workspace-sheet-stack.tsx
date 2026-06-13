@@ -144,6 +144,10 @@ function renderWorkspaceSheetEntries({
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
 
+    if (entry === undefined) {
+      continue;
+    }
+
     nestedSheet = (
       <WorkspaceSheetEntry
         canCreate={canCreate}

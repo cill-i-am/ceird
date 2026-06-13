@@ -506,9 +506,21 @@ describe("organization switcher", () => {
     expect(mockedSetActiveOrganization).toHaveBeenCalledWith("org_beta");
     expect(mockedRouterInvalidate).toHaveBeenCalledWith({ sync: true });
     expect(mockedRadioCancel).toHaveBeenCalledOnce();
-    expect(
-      mockedSetActiveOrganization.mock.invocationCallOrder[0]
-    ).toBeLessThan(mockedRouterInvalidate.mock.invocationCallOrder[0]);
+    const [setActiveOrganizationCallOrder] =
+      mockedSetActiveOrganization.mock.invocationCallOrder;
+    const [routerInvalidateCallOrder] =
+      mockedRouterInvalidate.mock.invocationCallOrder;
+
+    if (
+      setActiveOrganizationCallOrder === undefined ||
+      routerInvalidateCallOrder === undefined
+    ) {
+      throw new Error("Expected organization activation before router refresh");
+    }
+
+    expect(setActiveOrganizationCallOrder).toBeLessThan(
+      routerInvalidateCallOrder
+    );
     expect(
       screen.queryByText(/couldn't switch organizations/i)
     ).not.toBeInTheDocument();
@@ -679,7 +691,13 @@ describe("organization switcher", () => {
     ];
 
     const user = userEvent.setup();
-    renderSwitcher(organizations[0], organizations);
+    const [activeOrganization] = organizations;
+
+    if (activeOrganization === undefined) {
+      throw new Error("Expected organization fixture to include an item");
+    }
+
+    renderSwitcher(activeOrganization, organizations);
 
     expect(mockedListOrganizations).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /acme field ops/i }));

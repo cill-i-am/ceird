@@ -249,6 +249,13 @@ Domain API access is contract-based:
 - `features/jobs/jobs-server-ssr.ts` reads request headers, forwards cookies and
   proxy headers, and calls the API from the server runtime.
 
+The app TypeScript scope enables `noUncheckedIndexedAccess`. Route loaders,
+server functions, data-plane helpers, and collection code should treat indexed
+lookups as optional until they have an explicit guard or a schema/client
+boundary has decoded the value. Prefer small narrowing helpers or early returns
+for fixture arrays, query-key parts, URL/search segments, and collection rows
+instead of non-null assertions or broad casts.
+
 The frontend has two deliberately separate API lanes.
 
 The app/auth lane owns shell identity and organization context. TanStack Start
