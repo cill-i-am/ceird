@@ -36,6 +36,18 @@ function setViewportWidth(width: number) {
   window.dispatchEvent(new Event("resize"));
 }
 
+async function expectCommandSelectClosed(
+  triggerName: string | RegExp
+): Promise<void> {
+  expect(screen.getByRole("button", { name: triggerName })).toHaveAttribute(
+    "aria-expanded",
+    "false"
+  );
+  await waitFor(() => {
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+}
+
 describe("command select", () => {
   it(
     "renders option shortcuts through ShortcutHint",
@@ -223,7 +235,7 @@ describe("command select", () => {
       await user.keyboard("{Enter}");
 
       expect(onValueChange).toHaveBeenCalledWith("admin");
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      await expectCommandSelectClosed("Role");
     }
   );
 
@@ -260,7 +272,7 @@ describe("command select", () => {
       await user.click(screen.getByRole("option", { name: "Admin" }));
 
       expect(onValueChange).toHaveBeenCalledWith("admin");
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      await expectCommandSelectClosed("Member");
     }
   );
 
