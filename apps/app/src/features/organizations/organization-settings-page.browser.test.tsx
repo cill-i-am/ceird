@@ -74,9 +74,9 @@ describe("organization settings form", () => {
     await waitFor(() => expect(saveButton).toBeEnabled());
     await user.click(saveButton);
 
-    await expect(screen.findByRole("status")).resolves.toHaveTextContent(
-      "Organization updated."
-    );
+    await expect(
+      screen.findByText("Organization updated.")
+    ).resolves.toHaveTextContent("Organization updated.");
     expect(mockedUpdateOrganization).toHaveBeenCalledWith({
       data: {
         name: "Northwind Field Ops",

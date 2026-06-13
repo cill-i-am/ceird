@@ -508,9 +508,12 @@ export function OrganizationSettingsPage({
             </form.Subscribe>
 
             {successMessage ? (
-              <p role="status" className="text-sm text-muted-foreground">
+              <output
+                aria-live="polite"
+                className="text-sm text-muted-foreground"
+              >
                 {successMessage}
-              </p>
+              </output>
             ) : null}
 
             <form.Subscribe
@@ -578,9 +581,12 @@ export function OrganizationSettingsPage({
               <FieldError id={labelErrorId}>{labelError}</FieldError>
             ) : null}
             {labelStatus ? (
-              <p role="status" className="text-sm text-muted-foreground">
+              <output
+                aria-live="polite"
+                className="text-sm text-muted-foreground"
+              >
                 {labelStatus}
-              </p>
+              </output>
             ) : null}
 
             <div className="overflow-hidden rounded-lg border border-border/60">

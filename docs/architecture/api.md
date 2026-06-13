@@ -576,6 +576,7 @@ live in `apps/domain/src/domains/jobs/http.ts`.
 | `GET`    | `/jobs/options`                                   | `getJobOptions`               |
 | `GET`    | `/jobs/member-options`                            | `getJobMemberOptions`         |
 | `GET`    | `/jobs/external-member-options`                   | `getJobExternalMemberOptions` |
+| `GET`    | `/jobs/external-options`                          | `getExternalJobOptions`       |
 | `GET`    | `/home/dashboard-summary`                         | `getHomeDashboardSummary`     |
 | `POST`   | `/jobs`                                           | `createJob`                   |
 | `GET`    | `/activity`                                       | `listOrganizationActivity`    |
@@ -596,6 +597,10 @@ live in `apps/domain/src/domains/jobs/http.ts`.
 authenticated organization home route. It returns exact job, site, and member
 counts plus at most five active job rows and five active-site rows, so the home
 route does not load every job, site, or member option to build first paint.
+
+`GET /jobs/external-options` is external-only. It returns `JobOptionsResponse`
+with `members: []` and derives labels, contacts, and sites only from jobs
+visible through the current collaborator's grants.
 
 ## Labels Domain
 

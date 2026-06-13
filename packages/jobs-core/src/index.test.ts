@@ -446,29 +446,36 @@ describe("jobs-core", () => {
     const spec = OpenApi.fromApi(JobsApi);
 
     expect(JobsApiGroup.identifier).toBe("jobs");
-    expect(spec.paths["/jobs"]?.get?.operationId).toBe("jobs.listJobs");
-    expect(spec.paths["/jobs"]?.post?.operationId).toBe("jobs.createJob");
-    expect(spec.paths["/home/dashboard-summary"]?.get?.operationId).toBe(
-      "jobs.getHomeDashboardSummary"
-    );
-    expect(spec.paths["/jobs/proximity"]?.post?.operationId).toBe(
-      "jobs.rankNearbyJobs"
-    );
-    expect(spec.paths["/jobs/{workItemId}"]?.get?.operationId).toBe(
-      "jobs.getJobDetail"
-    );
-    expect(
-      spec.paths["/jobs/{workItemId}/route-preview"]?.post?.operationId
-    ).toBe("jobs.getJobRoutePreview");
-    expect(spec.paths["/jobs/{workItemId}/comments"]?.post?.operationId).toBe(
-      "jobs.addJobComment"
-    );
-    expect(spec.paths["/jobs/{workItemId}/labels"]?.post?.operationId).toBe(
-      "jobs.assignJobLabel"
-    );
-    expect(
-      spec.paths["/jobs/{workItemId}/collaborators"]?.post?.operationId
-    ).toBe("jobs.attachJobCollaborator");
+    expect(spec.paths).toMatchObject({
+      "/home/dashboard-summary": {
+        get: { operationId: "jobs.getHomeDashboardSummary" },
+      },
+      "/jobs": {
+        get: { operationId: "jobs.listJobs" },
+        post: { operationId: "jobs.createJob" },
+      },
+      "/jobs/external-options": {
+        get: { operationId: "jobs.getExternalJobOptions" },
+      },
+      "/jobs/proximity": {
+        post: { operationId: "jobs.rankNearbyJobs" },
+      },
+      "/jobs/{workItemId}": {
+        get: { operationId: "jobs.getJobDetail" },
+      },
+      "/jobs/{workItemId}/collaborators": {
+        post: { operationId: "jobs.attachJobCollaborator" },
+      },
+      "/jobs/{workItemId}/comments": {
+        post: { operationId: "jobs.addJobComment" },
+      },
+      "/jobs/{workItemId}/labels": {
+        post: { operationId: "jobs.assignJobLabel" },
+      },
+      "/jobs/{workItemId}/route-preview": {
+        post: { operationId: "jobs.getJobRoutePreview" },
+      },
+    });
   });
 
   it("exports the closed job enums and branded ids", () => {

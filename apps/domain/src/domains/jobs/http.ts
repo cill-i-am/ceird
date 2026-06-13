@@ -24,6 +24,11 @@ const JobsHandlersLive = HttpApiBuilder.group(AppApi, "jobs", (handlers) =>
       .handle("getJobOptions", () =>
         jobsService.getOptions().pipe(observeJobsOperation("getJobOptions"))
       )
+      .handle("getExternalJobOptions", () =>
+        jobsService
+          .getExternalOptions()
+          .pipe(observeJobsOperation("getExternalJobOptions"))
+      )
       .handle("getJobMemberOptions", () =>
         jobsService
           .getMemberOptions()

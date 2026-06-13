@@ -360,6 +360,7 @@ function SiteLocationSearchField({
           <Input
             id={`${idPrefix}-location`}
             value={draft.locationInput}
+            // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Intentional autocomplete combobox: tests cover name, expanded state, active descendant, keyboard selection, dismissal, and pointer parity.
             role="combobox"
             aria-activedescendant={
               activeSuggestion === undefined
@@ -413,6 +414,7 @@ function SiteLocationSearchField({
           {visibleSuggestions.length > 0 ? (
             <div
               id={listboxId}
+              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Intentional autocomplete listbox: tests cover the input-owned popup, active option state, keyboard selection, and pointer parity.
               role="listbox"
               className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
             >
@@ -421,7 +423,9 @@ function SiteLocationSearchField({
                   key={suggestion.placeId}
                   id={`${listboxId}-${index}`}
                   type="button"
+                  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Intentional autocomplete option: tests cover accessible names, selected state, keyboard selection, and pointer parity.
                   role="option"
+                  aria-label={formatSiteLocationSuggestionLabel(suggestion)}
                   aria-selected={index === activeSuggestionIndex}
                   className={cn(
                     "flex w-full items-start gap-2 rounded-sm px-2.5 py-2 text-left text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground",
@@ -463,6 +467,12 @@ function SiteLocationSearchField({
   );
 }
 
+function formatSiteLocationSuggestionLabel(suggestion: SiteLocationSuggestion) {
+  return suggestion.secondaryText
+    ? `${suggestion.displayText}, ${suggestion.secondaryText}`
+    : suggestion.displayText;
+}
+
 function SiteLocationStatus({
   inputLength,
   searchFailed,
@@ -476,8 +486,7 @@ function SiteLocationStatus({
 }) {
   if (selected) {
     return (
-      <p
-        role="status"
+      <output
         aria-live="polite"
         className="flex items-center gap-1.5 text-xs font-medium text-emerald-700"
       >
@@ -487,33 +496,28 @@ function SiteLocationStatus({
           className="size-3.5"
         />
         Google location
-      </p>
+      </output>
     );
   }
 
   if (waiting) {
     return (
-      <p
-        role="status"
-        aria-live="polite"
-        className="text-xs text-muted-foreground"
-      >
+      <output aria-live="polite" className="text-xs text-muted-foreground">
         Searching…
-      </p>
+      </output>
     );
   }
 
   if (searchFailed && inputLength >= LOCATION_AUTOCOMPLETE_MIN_LENGTH) {
     return (
-      <p role="status" aria-live="polite" className="text-xs text-amber-700">
+      <output aria-live="polite" className="text-xs text-amber-700">
         Location lookup unavailable. Save as unverified location.
-      </p>
+      </output>
     );
   }
 
   return (
-    <p
-      role="status"
+    <output
       aria-live="polite"
       className={cn(
         "text-xs",
@@ -523,7 +527,7 @@ function SiteLocationStatus({
       )}
     >
       {inputLength === 0 ? "No location" : "Unverified location"}
-    </p>
+    </output>
   );
 }
 

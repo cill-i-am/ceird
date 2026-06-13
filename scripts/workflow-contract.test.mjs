@@ -1175,6 +1175,24 @@ test("preview workflow destroys PR stages from the default branch on close", () 
     previewWorkflow,
     /pnpm alchemy destroy --stage "\$PREVIEW_STAGE" --yes/
   );
+  assertContainsInOrder(previewCleanupJob, [
+    "name: Restore Alchemy state store credentials",
+    "name: Detach preview Worker domains",
+    "name: Destroy preview",
+    "name: Delete preview tenant route fallback",
+  ]);
+  assert.match(
+    previewCleanupJob,
+    /node scripts\/detach-ci-worker-domains\.mjs/
+  );
+  assert.match(
+    previewCleanupJob,
+    /for attempt in 1 2 3; do[\s\S]*pnpm alchemy destroy --stage "\$PREVIEW_STAGE" --yes/
+  );
+  assert.match(
+    previewCleanupJob,
+    /retrying after Cloudflare propagation settles/
+  );
   assertCloudflareGlobalKeyCredentials(previewCleanupJob);
   assert.match(previewCleanupJob, /"x-auth-email": email/);
   assert.match(previewCleanupJob, /"x-auth-key": apiKey/);

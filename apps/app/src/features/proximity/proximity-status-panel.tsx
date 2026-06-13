@@ -33,9 +33,11 @@ export function ProximityStatusPanel({
   if (state.kind === "loading") {
     return (
       <div
-        role="status"
+        aria-busy="true"
+        aria-live="polite"
         className="grid gap-2 rounded-lg border bg-muted/20 p-3"
       >
+        <output className="sr-only">{state.title}</output>
         <div className="h-4 w-40 animate-pulse rounded bg-muted" />
         <div className="h-3 w-64 max-w-full animate-pulse rounded bg-muted" />
       </div>
@@ -49,7 +51,7 @@ export function ProximityStatusPanel({
 
   return (
     <Alert
-      role="status"
+      liveRegion="polite"
       variant={state.kind === "empty" ? "default" : "warning"}
       className="items-start"
     >

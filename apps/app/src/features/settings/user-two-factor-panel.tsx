@@ -800,12 +800,12 @@ function EnrollmentVerificationForm({
       onSubmit={onSubmit}
     >
       <div className="grid gap-4 md:grid-cols-[minmax(0,12rem)_minmax(0,1fr)] md:items-start">
-        <div
-          role="img"
-          aria-label="Authenticator app QR code"
-          className="flex aspect-square w-48 max-w-full items-center justify-center rounded-[calc(var(--radius)*2)] border border-border/60 bg-white p-3 text-black"
-        >
-          <QRCode value={totpURI} size={168} />
+        <div className="flex aspect-square w-48 max-w-full items-center justify-center rounded-[calc(var(--radius)*2)] border border-border/60 bg-white p-3 text-black">
+          <QRCode
+            value={totpURI}
+            size={168}
+            title="Authenticator app QR code"
+          />
         </div>
 
         <div className="flex min-w-0 flex-col gap-3">
@@ -937,9 +937,9 @@ function BackupCodesReview({
           Copy codes
         </Button>
         {copyMessage ? (
-          <p className="text-sm text-muted-foreground" role="status">
+          <output aria-live="polite" className="text-sm text-muted-foreground">
             {copyMessage}
-          </p>
+          </output>
         ) : null}
       </div>
 
@@ -1101,9 +1101,9 @@ function EnabledManagement({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground" role="status">
+      <output aria-live="polite" className="text-sm text-muted-foreground">
         Authenticator app verification is active for this account.
-      </p>
+      </output>
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"

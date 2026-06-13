@@ -28,6 +28,7 @@ import type {
   JobExternalMemberOptionsResponse,
   JobMemberOptionsResponse,
   JobListQuery,
+  JobOptionsResponse,
   JobProximityInput,
   JobProximityFilters,
   JobProximityResponse,
@@ -159,6 +160,22 @@ export class JobsService extends Context.Service<JobsService>()(
           return {
             members,
           } satisfies JobMemberOptionsResponse;
+        }
+      );
+
+      const getExternalOptions = Effect.fn("JobsService.getExternalOptions")(
+        function* () {
+          const actor = yield* loadActor();
+          yield* ensureCanViewScopedExternalJobsData(actor, authorization);
+
+          const scopedOptions = yield* jobsRepository
+            .listExternalScopedOptions(actor.organizationId, actor.userId)
+            .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+
+          return {
+            ...scopedOptions,
+            members: [],
+          } satisfies JobOptionsResponse;
         }
       );
 
@@ -1001,6 +1018,7 @@ export class JobsService extends Context.Service<JobsService>()(
         assignLabel,
         create,
         getDetail,
+        getExternalOptions,
         getJobRoutePreview,
         getExternalMemberOptions,
         getHomeDashboardSummary,
@@ -1034,6 +1052,11 @@ export class JobsService extends Context.Service<JobsService>()(
   static readonly getOptions = (
     ...args: Parameters<Context.Service.Shape<typeof JobsService>["getOptions"]>
   ) => JobsService.use((service) => service.getOptions(...args));
+  static readonly getExternalOptions = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsService>["getExternalOptions"]
+    >
+  ) => JobsService.use((service) => service.getExternalOptions(...args));
   static readonly list = (
     ...args: Parameters<Context.Service.Shape<typeof JobsService>["list"]>
   ) => JobsService.use((service) => service.list(...args));
@@ -1251,6 +1274,26 @@ function ensureCanViewOrganizationJobsData(
       new JobAccessDeniedError({
         message:
           "External collaborators cannot view organization-wide jobs data",
+      })
+    );
+  });
+}
+
+function ensureCanViewScopedExternalJobsData(
+  actor: OrganizationActor,
+  authorization: JobsAuthorizationService
+) {
+  return Effect.gen(function* () {
+    yield* authorization.ensureCanView(actor);
+
+    if (isExternalOrganizationRole(actor.role)) {
+      return;
+    }
+
+    return yield* Effect.fail(
+      new JobAccessDeniedError({
+        message:
+          "Scoped external job options are only available to external collaborators",
       })
     );
   });

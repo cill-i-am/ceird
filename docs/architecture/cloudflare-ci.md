@@ -294,11 +294,14 @@ to reconcile and destroy the same stage concurrently.
 
 When a same-repository PR closes, the cleanup job checks out the repository
 default branch instead of closed PR code, verifies the stage name matches
-`pr-[0-9]+`, restores the state-store credentials, and destroys the preview
-stage through the unblocked `preview-cleanup` environment. The same workflow
-also has a manual `workflow_dispatch` cleanup path: provide the numeric PR
-number to destroy `pr-<number>` from default-branch code if the closed-PR
-cleanup was cancelled or failed. A scheduled stale-preview cleanup is
+`pr-[0-9]+`, restores the state-store credentials, detaches the known preview
+Worker custom domains serially, and destroys the preview stage through the
+unblocked `preview-cleanup` environment. The destroy step retries after
+Cloudflare propagation delays so a transient Worker custom-domain deletion
+failure does not leave later resources, including the Neon branch, behind. The
+same workflow also has a manual `workflow_dispatch` cleanup path: provide the
+numeric PR number to destroy `pr-<number>` from default-branch code if the
+closed-PR cleanup was cancelled or failed. A scheduled stale-preview cleanup is
 intentionally not part of the first workflow; closed-PR cleanup plus manual
 cleanup is the source of truth for now.
 

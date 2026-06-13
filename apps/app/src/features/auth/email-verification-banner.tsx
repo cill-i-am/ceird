@@ -118,20 +118,20 @@ export function EmailVerificationBanner({
           }
         />
         {state.successText ? (
-          <p
+          <output
+            aria-live="polite"
             className="[overflow-wrap:anywhere] text-muted-foreground"
-            role="status"
           >
             {state.successText}
-          </p>
+          </output>
         ) : null}
         {state.errorText ? (
-          <p
+          <output
+            aria-live="polite"
             className="[overflow-wrap:anywhere] text-destructive"
-            role="status"
           >
             {state.errorText}
-          </p>
+          </output>
         ) : null}
         <Button
           className="w-full sm:w-auto"

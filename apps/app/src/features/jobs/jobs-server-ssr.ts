@@ -103,6 +103,16 @@ export async function getCurrentServerJobOptionsDirect(): Promise<JobOptionsResp
   );
 }
 
+export async function getCurrentServerExternalJobOptionsDirect(): Promise<JobOptionsResponse> {
+  const request = await readServerAppApiRequestStrict();
+
+  return await runAppApiClient(
+    request,
+    "JobsServer.getExternalJobOptions",
+    (client) => client.jobs.getExternalJobOptions()
+  );
+}
+
 export async function getCurrentServerJobMemberOptionsDirect(): Promise<JobMemberOptionsResponse> {
   const request = await readServerAppApiRequestStrict();
 

@@ -1,4 +1,4 @@
-import type { JobListResponse } from "@ceird/jobs-core";
+import type { JobListResponse, JobOptionsResponse } from "@ceird/jobs-core";
 import type { QueryClient } from "@tanstack/query-core";
 
 import { applyDataPlaneSeed } from "#/data-plane/bootstrap";
@@ -10,6 +10,7 @@ import {
   loadCurrentJobsOptionsForViewer,
 } from "#/features/jobs/jobs-data-plane";
 import {
+  getCurrentServerExternalJobOptions,
   getCurrentServerJobOptions,
   listAllCurrentServerJobs,
 } from "#/features/jobs/jobs-server";
@@ -57,17 +58,25 @@ export async function loadJobsRouteData(
     loadRouteProximityLocationPreferenceEnabled();
   const listPromise = listAllCurrentServerJobs({});
   let optionsRequestStartedAt = Date.now();
-  let optionsPromise = canUseInternalJobOptions(viewer)
-    ? getCurrentServerJobOptions()
-    : undefined;
-  const list = await listPromise;
+  let optionsPromise: Promise<JobOptionsResponse> | undefined;
 
-  if (!optionsPromise) {
-    optionsRequestStartedAt = Date.now();
-    optionsPromise = loadCurrentJobsOptionsForViewer(viewer, list);
+  if (canUseInternalJobOptions(viewer)) {
+    optionsPromise = getCurrentServerJobOptions();
+  } else if (viewer.role === "external") {
+    optionsPromise = getCurrentServerExternalJobOptions();
   }
 
-  const options = await optionsPromise;
+  let list: JobListResponse;
+  let options: JobOptionsResponse;
+
+  if (optionsPromise) {
+    [list, options] = await Promise.all([listPromise, optionsPromise]);
+  } else {
+    list = await listPromise;
+    optionsRequestStartedAt = Date.now();
+    options = await loadCurrentJobsOptionsForViewer(viewer);
+  }
+
   const routeProximityLocationEnabled =
     await routeProximityLocationPreferencePromise;
   const scope = createOrganizationDataScope({

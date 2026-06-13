@@ -57,6 +57,14 @@ const getCurrentServerJobOptionsIsomorphic = createIsomorphicFn()
   })
   .client(() => getCurrentBrowserJobOptions());
 
+const getCurrentServerExternalJobOptionsIsomorphic = createIsomorphicFn()
+  .server(async () => {
+    const { getCurrentServerExternalJobOptionsDirect } =
+      await importJobsServerSsr();
+    return await getCurrentServerExternalJobOptionsDirect();
+  })
+  .client(() => getCurrentBrowserExternalJobOptions());
+
 const getCurrentServerJobMemberOptionsIsomorphic = createIsomorphicFn()
   .server(async () => {
     const { getCurrentServerJobMemberOptionsDirect } =
@@ -155,6 +163,13 @@ async function getCurrentBrowserJobOptions(): Promise<JobOptionsResponse> {
   );
 }
 
+async function getCurrentBrowserExternalJobOptions(): Promise<JobOptionsResponse> {
+  return await runBrowserAppApiClient(
+    "JobsClient.getExternalJobOptions",
+    (client) => client.jobs.getExternalJobOptions()
+  );
+}
+
 async function getCurrentBrowserJobMemberOptions(): Promise<JobMemberOptionsResponse> {
   return await runBrowserAppApiClient(
     "JobsClient.getJobMemberOptions",
@@ -196,6 +211,10 @@ export function getCurrentServerJobDetail(
 
 export function getCurrentServerJobOptions(): Promise<JobOptionsResponse> {
   return getCurrentServerJobOptionsIsomorphic();
+}
+
+export function getCurrentServerExternalJobOptions(): Promise<JobOptionsResponse> {
+  return getCurrentServerExternalJobOptionsIsomorphic();
 }
 
 export function getCurrentServerJobMemberOptions(): Promise<JobMemberOptionsResponse> {

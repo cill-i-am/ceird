@@ -485,7 +485,7 @@ export function JobsPage({
 
       {notice ? (
         <Alert
-          role="status"
+          liveRegion="polite"
           variant="success"
           className="animate-in py-2 pr-24 duration-150 fade-in-0 slide-in-from-top-1 motion-reduce:animate-none"
         >
