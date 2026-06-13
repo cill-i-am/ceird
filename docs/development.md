@@ -245,7 +245,7 @@ High-signal runtime variables:
 | `AUTH_RATE_LIMIT_ENABLED`                  | domain              | Enables or disables Better Auth database-backed rate limits.                                         |
 | `AGENT_ACTION_RUN_STALE_AFTER_SECONDS`     | domain              | Timeout before abandoned Agent action runs can be failed.                                            |
 | `AGENT_INTERNAL_SECRET`                    | domain, agent       | Internal shared secret for domain-owned Agent action calls.                                          |
-| `AGENT_MUTATION_TOOLS_ENABLED`             | agent               | Enables write/destructive Agent tools behind client confirmation.                                    |
+| `AGENT_MUTATION_TOOLS_ENABLED`             | agent               | Optional exact `true` opt-in for selected stages; omitted by default.                                |
 | `API_ORIGIN`                               | app                 | Server-side API origin.                                                                              |
 | `VITE_API_ORIGIN`                          | app                 | Browser-exposed API origin.                                                                          |
 | `PLAYWRIGHT_BASE_URL`                      | E2E                 | Existing Alchemy app stage URL for Playwright tests.                                                 |
