@@ -347,12 +347,16 @@ describe("jobs-core", () => {
   it("decodes list and options contracts", () => {
     expect(
       Schema.decodeUnknownSync(JobListQuerySchema)({
+        assigneeId: "unassigned",
         limit: "25",
-        status: "new",
+        query: "  boiler  ",
+        status: "active",
       })
     ).toStrictEqual({
+      assigneeId: "unassigned",
       limit: 25,
-      status: "new",
+      query: "boiler",
+      status: "active",
     });
     expect(() =>
       Schema.decodeUnknownSync(JobListQuerySchema)({

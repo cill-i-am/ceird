@@ -52,7 +52,7 @@ export class JobsPage {
 
   createdJobNotice(title: string): Locator {
     return this.page
-      .locator("[data-slot='alert']")
+      .locator("[data-slot='alert'][aria-live='polite']")
       .filter({ hasText: title })
       .filter({ hasText: "Job added to the queue." });
   }

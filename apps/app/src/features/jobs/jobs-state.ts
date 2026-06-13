@@ -46,10 +46,12 @@ import {
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 
 import type {
+  JobsListScope,
   JobOptionsCollectionState,
   JobsCollectionState,
 } from "./jobs-data-plane";
 import {
+  createJobsListScope,
   jobOptionsFromCollectionState,
   jobsFromCollectionState,
   loadCurrentJobsOptionsForViewer,
@@ -99,6 +101,7 @@ interface JobsStateStore {
   readonly fallbackJobsRef: React.MutableRefObject<readonly JobListItem[]>;
   readonly fallbackOptionsRef: React.MutableRefObject<JobOptionsResponse>;
   readonly jobOrderRef: React.MutableRefObject<readonly JobListItem["id"][]>;
+  readonly listScopeRef: React.MutableRefObject<JobsListScope>;
   readonly jobOptions: JobOptionsCollectionState;
   readonly jobs: JobsCollectionState;
   readonly labels: LabelsCollectionState;
@@ -138,6 +141,9 @@ interface JobsStateContextValue {
   readonly nextCursor?: JobListCursorType | undefined;
   readonly notice: JobsNotice | null;
   readonly refreshJobsList: () => Promise<
+    Exit.Exit<JobListResponse, AppApiError>
+  >;
+  readonly loadNextJobsPage: () => Promise<
     Exit.Exit<JobListResponse, AppApiError>
   >;
   readonly replaceJobsListState: (
@@ -194,6 +200,7 @@ export function JobsStateProvider({
   activeOrganizationId,
   children,
   list,
+  listScope = createJobsListScope(),
   options,
   queryClient: providedQueryClient,
   viewer,
@@ -201,6 +208,7 @@ export function JobsStateProvider({
   readonly activeOrganizationId: OrganizationId;
   readonly children: React.ReactNode;
   readonly list: JobListResponse;
+  readonly listScope?: JobsListScope | undefined;
   readonly options: JobOptionsResponse;
   readonly queryClient?: QueryClient | undefined;
   readonly viewer: JobsViewer;
@@ -217,6 +225,7 @@ export function JobsStateProvider({
       viewer,
       queryClient,
       list.items,
+      listScope,
       options,
       dataPlaneSession
     )
@@ -232,7 +241,8 @@ export function JobsStateProvider({
 
   React.useEffect(() => {
     organizationIdRef.current = activeOrganizationId;
-  }, [activeOrganizationId, organizationIdRef]);
+    store.listScopeRef.current = listScope;
+  }, [activeOrganizationId, listScope, organizationIdRef, store]);
 
   const replaceJobsListState = React.useCallback(
     async (organizationId: OrganizationId, response: JobListResponse) => {
@@ -274,10 +284,12 @@ export function JobsStateProvider({
 
   const refreshJobsList = React.useCallback(() => {
     const expectedOrganizationId = organizationIdRef.current;
+    const { query } = store.listScopeRef.current;
+
     return executeDataPlaneCommandAction(
       {
         affectedCollections: ["jobs"],
-        execute: () => Effect.runPromiseExit(listAllBrowserJobs()),
+        execute: () => Effect.runPromiseExit(listCurrentBrowserJobs(query)),
         name: "jobs.refresh-list",
         optimistic: "none",
         reconcile: async (response) => {
@@ -291,7 +303,47 @@ export function JobsStateProvider({
       undefined,
       { journal: store.mutationJournal }
     );
-  }, [organizationIdRef, replaceJobsListState, store.mutationJournal]);
+  }, [organizationIdRef, replaceJobsListState, store]);
+
+  const loadNextJobsPage = React.useCallback(() => {
+    const cursor = nextCursor;
+    const expectedOrganizationId = organizationIdRef.current;
+
+    if (cursor === undefined) {
+      return Promise.resolve(
+        Exit.succeed({
+          items: [],
+          nextCursor: undefined,
+        } satisfies JobListResponse)
+      );
+    }
+
+    const query = {
+      ...store.listScopeRef.current.query,
+      cursor,
+    } satisfies JobListQuery;
+
+    return executeDataPlaneCommandAction(
+      {
+        affectedCollections: ["jobs"],
+        execute: () => Effect.runPromiseExit(listCurrentBrowserJobs(query)),
+        name: "jobs.load-next-page",
+        optimistic: "none",
+        reconcile: async (response) => {
+          if (organizationIdRef.current !== expectedOrganizationId) {
+            return;
+          }
+
+          await replaceJobsListState(expectedOrganizationId, {
+            items: mergeJobListItems(jobsFromCollection(store), response.items),
+            nextCursor: response.nextCursor,
+          });
+        },
+      },
+      undefined,
+      { journal: store.mutationJournal }
+    );
+  }, [nextCursor, organizationIdRef, replaceJobsListState, store]);
 
   const createJob = React.useCallback(
     (input: CreateJobInput) => {
@@ -372,6 +424,20 @@ export function JobsStateProvider({
 
   const upsertJobsListItem = React.useCallback(
     async (job: JobListItemSource) => {
+      const expectedOrganizationId = organizationIdRef.current;
+      const listExit = await Effect.runPromiseExit(
+        listCurrentBrowserJobs(store.listScopeRef.current.query)
+      );
+
+      if (organizationIdRef.current !== expectedOrganizationId) {
+        return;
+      }
+
+      if (Exit.isSuccess(listExit)) {
+        await replaceJobsListState(expectedOrganizationId, listExit.value);
+        return;
+      }
+
       await replaceJobs(
         store,
         upsertJobListItem(jobsFromCollection(store), job)
@@ -381,7 +447,7 @@ export function JobsStateProvider({
         type: "replace-list-state",
       });
     },
-    [nextCursor, store]
+    [nextCursor, organizationIdRef, replaceJobsListState, store]
   );
 
   const upsertJobOptionLabel = React.useCallback(
@@ -402,6 +468,7 @@ export function JobsStateProvider({
       clearNotice,
       createJob,
       createJobResult,
+      loadNextJobsPage,
       nextCursor,
       notice,
       refreshJobsList,
@@ -417,6 +484,7 @@ export function JobsStateProvider({
       clearNotice,
       createJob,
       createJobResult,
+      loadNextJobsPage,
       nextCursor,
       notice,
       refreshJobsList,
@@ -475,6 +543,10 @@ export function useJobsNotice() {
 
 export function useRefreshJobsListMutation() {
   return useJobsStateContext().refreshJobsList;
+}
+
+export function useLoadNextJobsPageMutation() {
+  return useJobsStateContext().loadNextJobsPage;
 }
 
 export function useCreateJobMutation() {
@@ -557,6 +629,7 @@ function makeJobsStateStore(
   viewer: JobsViewer,
   queryClient: QueryClient,
   jobs: readonly JobListItem[],
+  listScope: JobsListScope,
   options: JobOptionsResponse,
   dataPlaneSession: ReturnType<typeof useOptionalDataPlaneSession>
 ): JobsStateStore {
@@ -575,6 +648,7 @@ function makeJobsStateStore(
     });
   const collectionState = getOrCreateJobsCollectionState({
     initialJobs: jobs,
+    listScope,
     queryClient,
     scope: queryScope,
     session: dataPlaneSession,
@@ -599,6 +673,9 @@ function makeJobsStateStore(
     fallbackOptionsRef,
     jobOrderRef: {
       current: jobs.map((job) => job.id),
+    },
+    listScopeRef: {
+      current: listScope,
     },
     jobOptions: jobOptionsState,
     jobs: collectionState,
@@ -807,32 +884,10 @@ async function runTrackedJobsCommand<Input, Success>(
   return exit;
 }
 
-function listAllBrowserJobs() {
-  return runBrowserAppApiRequest("JobsBrowser.listAllJobs", (client) => {
-    const loadPage = (cursor: JobListQuery["cursor"]) =>
-      client.jobs.listJobs({
-        query: cursor ? { cursor } : {},
-      });
-
-    const loadRemainingPages = (
-      cursor: JobListQuery["cursor"],
-      items: readonly JobListItem[]
-    ): Effect.Effect<JobListResponse, unknown> =>
-      loadPage(cursor).pipe(
-        Effect.flatMap((page) => {
-          const nextItems = [...items, ...page.items];
-
-          return page.nextCursor === undefined
-            ? Effect.succeed({
-                items: nextItems,
-                nextCursor: undefined,
-              } satisfies JobListResponse)
-            : loadRemainingPages(page.nextCursor, nextItems);
-        })
-      );
-
-    return loadRemainingPages(undefined, []);
-  });
+function listCurrentBrowserJobs(query: JobListQuery) {
+  return runBrowserAppApiRequest("JobsBrowser.listJobs", (client) =>
+    client.jobs.listJobs({ query })
+  );
 }
 
 function getBrowserJobOptions() {
@@ -865,7 +920,9 @@ async function refreshJobsListOrUpsertState({
   ) => Promise<void>;
   readonly store: JobsStateStore;
 }) {
-  const listExit = await Effect.runPromiseExit(listAllBrowserJobs());
+  const listExit = await Effect.runPromiseExit(
+    listCurrentBrowserJobs(store.listScopeRef.current.query)
+  );
 
   if (organizationIdRef.current !== expectedOrganizationId) {
     return;
@@ -1073,11 +1130,28 @@ export function toJobListItem(job: JobListItemSource): JobListItem {
   };
 }
 
-function upsertJobListItem(
+export function upsertJobListItem(
   items: readonly JobListItem[],
   job: JobListItemSource
 ) {
   return [toJobListItem(job), ...items.filter((item) => item.id !== job.id)];
+}
+
+export function mergeJobListItems(
+  currentItems: readonly JobListItem[],
+  nextItems: readonly JobListItem[]
+) {
+  const mergedById = new Map<JobListItem["id"], JobListItem>();
+
+  for (const item of currentItems) {
+    mergedById.set(item.id, item);
+  }
+
+  for (const item of nextItems) {
+    mergedById.set(item.id, item);
+  }
+
+  return [...mergedById.values()];
 }
 
 function failureFromCause<Failure>(cause: Cause.Cause<Failure>): unknown {

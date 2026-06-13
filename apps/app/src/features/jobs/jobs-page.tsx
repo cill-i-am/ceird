@@ -1,5 +1,6 @@
 "use client";
 import type {
+  JobListCursorType,
   JobListItem,
   JobPriority,
   JobStatus,
@@ -99,6 +100,7 @@ import {
   defaultJobsListFilters,
   filterVisibleJobs,
   isJobsAssigneeFilterEqual,
+  useLoadNextJobsPageMutation,
   useJobsListState,
   useJobsLookup,
   useJobsNotice,
@@ -235,8 +237,10 @@ function jobsFiltersReducer(
 // Route-level page coordinates filters, URL state, command actions, and layout.
 // react-doctor-disable-next-line
 export function JobsPage({
+  filters: controlledFilters,
   listHotkeysEnabled = true,
   nearMeEnabled: controlledNearMeEnabled,
+  onFiltersChange,
   onNearMeChange,
   onRouteLimitChange,
   onViewModeChange,
@@ -246,7 +250,9 @@ export function JobsPage({
   viewer,
 }: {
   readonly listHotkeysEnabled?: boolean;
+  readonly filters?: JobsListFilters | undefined;
   readonly nearMeEnabled?: boolean | undefined;
+  readonly onFiltersChange?: (filters: JobsListFilters) => void;
   readonly onNearMeChange?: (value: boolean) => void;
   readonly onRouteLimitChange?: (value: ProximityLimit) => void;
   readonly onViewModeChange?: (value: JobsViewMode) => void;
@@ -270,8 +276,9 @@ export function JobsPage({
   );
   const [filters, dispatchFilters] = React.useReducer(
     jobsFiltersReducer,
-    defaultJobsListFilters
+    controlledFilters ?? defaultJobsListFilters
   );
+  const visibleFilters = controlledFilters ?? filters;
   const jobsListState = useJobsListState();
   const [notice, clearNotice] = useJobsNotice();
   const options = useJobsOptions();
@@ -279,17 +286,18 @@ export function JobsPage({
   const jobs = React.useMemo(
     () =>
       filterVisibleJobs({
-        filters,
+        filters: visibleFilters,
         items: jobsListState.items,
         lookup,
       }),
-    [filters, jobsListState.items, lookup]
+    [visibleFilters, jobsListState.items, lookup]
   );
   const statusCounts = React.useMemo(
     () => buildJobStatusCounts(jobsListState.items),
     [jobsListState.items]
   );
   const refreshJobs = useRefreshJobsListMutation();
+  const loadNextJobsPage = useLoadNextJobsPageMutation();
   const navigate = useNavigate({ from: "/jobs" });
   const canCreateJobs = hasJobsElevatedAccess(viewer.role);
   const canUseInternalOptions = canUseInternalJobOptions(viewer);
@@ -297,25 +305,58 @@ export function JobsPage({
   const [savedViewsOpen, setSavedViewsOpen] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const isMobile = useIsMobile();
-  const activeFilters = buildActiveFilterBadges(filters, lookup);
+  const activeFilters = buildActiveFilterBadges(visibleFilters, lookup);
   const hasCustomFilters = activeFilters.length > 0;
   const savedViews = React.useMemo(
     () => buildJobSavedViews(viewer.userId),
     [viewer.userId]
   );
-  const activeSavedView = findMatchingJobSavedView(filters, savedViews);
+  const activeSavedView = findMatchingJobSavedView(visibleFilters, savedViews);
+
+  const updateFilters = React.useCallback(
+    (nextFilters: JobsListFilters) => {
+      if (controlledFilters === undefined) {
+        dispatchFilters({ filters: nextFilters, type: "set" });
+      }
+
+      onFiltersChange?.(nextFilters);
+    },
+    [controlledFilters, onFiltersChange]
+  );
+  const patchFilters = React.useCallback(
+    (patch: Partial<JobsListFilters>) => {
+      updateFilters({ ...visibleFilters, ...patch });
+    },
+    [updateFilters, visibleFilters]
+  );
 
   React.useEffect(() => {
     if (canUseInternalOptions) {
       return;
     }
 
-    dispatchFilters({ type: "clear_internal_options" });
-  }, [canUseInternalOptions]);
+    if (
+      isJobsAssigneeFilterEqual(
+        visibleFilters.assigneeId,
+        defaultJobsListFilters.assigneeId
+      ) &&
+      visibleFilters.coordinatorId === defaultJobsListFilters.coordinatorId &&
+      visibleFilters.labelId === defaultJobsListFilters.labelId &&
+      visibleFilters.priority === defaultJobsListFilters.priority &&
+      visibleFilters.siteId === defaultJobsListFilters.siteId
+    ) {
+      return;
+    }
 
-  const patchFilters = React.useCallback((patch: Partial<JobsListFilters>) => {
-    dispatchFilters({ patch, type: "patch" });
-  }, []);
+    updateFilters({
+      ...visibleFilters,
+      assigneeId: defaultJobsListFilters.assigneeId,
+      coordinatorId: defaultJobsListFilters.coordinatorId,
+      labelId: defaultJobsListFilters.labelId,
+      priority: defaultJobsListFilters.priority,
+      siteId: defaultJobsListFilters.siteId,
+    });
+  }, [canUseInternalOptions, updateFilters, visibleFilters]);
 
   const setViewMode = React.useCallback(
     (nextViewMode: JobsViewMode) => {
@@ -356,8 +397,8 @@ export function JobsPage({
     requestCurrentLocation();
   }, [requestCurrentLocation, setNearMeEnabled]);
   const clearFilters = React.useCallback(() => {
-    dispatchFilters({ type: "reset" });
-  }, []);
+    updateFilters(defaultJobsListFilters);
+  }, [updateFilters]);
   const selectActiveStatus = React.useCallback(() => {
     patchFilters({ status: "active" });
   }, [patchFilters]);
@@ -377,9 +418,12 @@ export function JobsPage({
     });
   }, [navigate]);
 
-  const applySavedView = React.useCallback((savedView: JobSavedView) => {
-    dispatchFilters({ filters: savedView.filters, type: "set" });
-  }, []);
+  const applySavedView = React.useCallback(
+    (savedView: JobSavedView) => {
+      updateFilters(savedView.filters);
+    },
+    [updateFilters]
+  );
   const openJob = React.useCallback(
     (jobId: JobListItem["id"]) => {
       navigate({
@@ -394,7 +438,7 @@ export function JobsPage({
     activeSavedViewId: activeSavedView?.id,
     canCreateJobs,
     canUseInternalOptions,
-    filtersStatus: filters.status,
+    filtersStatus: visibleFilters.status,
     hasCustomFilters,
     nearMeEnabled,
     savedViews,
@@ -457,7 +501,7 @@ export function JobsPage({
       <JobsPageHeader
         activeSavedView={activeSavedView}
         capabilities={{ canCreateJobs, canUseInternalOptions }}
-        filters={filters}
+        filters={visibleFilters}
         options={options}
         presentation={{ hasCustomFilters, isMobile, savedViewsOpen }}
         proximityControl={
@@ -519,7 +563,7 @@ export function JobsPage({
         <JobsProximityPanel
           active={nearMeEnabled}
           currentLocationRequestKey={currentLocationRequestKey}
-          filters={filters}
+          filters={visibleFilters}
           limit={routeLimit}
           routeProximityLocationEnabled={routeProximityLocationEnabled}
           showToolbar={false}
@@ -534,9 +578,11 @@ export function JobsPage({
             jobs={jobs}
             lookup={lookup}
             mode={visibleViewMode}
+            nextCursor={jobsListState.nextCursor}
             totalJobs={jobsListState.items.length}
             visible
             onClearFilters={clearFilters}
+            onLoadMore={loadNextJobsPage}
             onOpenJob={openJob}
           />
         </JobsProximityPanel>
@@ -547,9 +593,11 @@ export function JobsPage({
           jobs={jobs}
           lookup={lookup}
           mode={visibleViewMode}
+          nextCursor={jobsListState.nextCursor}
           totalJobs={jobsListState.items.length}
           visible
           onClearFilters={clearFilters}
+          onLoadMore={loadNextJobsPage}
           onOpenJob={openJob}
         />
       )}
@@ -563,7 +611,9 @@ function JobsPrimaryContent({
   jobs,
   lookup,
   mode,
+  nextCursor,
   onClearFilters,
+  onLoadMore,
   onOpenJob,
   totalJobs,
   visible,
@@ -573,7 +623,9 @@ function JobsPrimaryContent({
   readonly jobs: readonly JobListItem[];
   readonly lookup: JobsLookup;
   readonly mode: JobsViewMode;
+  readonly nextCursor: JobListCursorType | undefined;
   readonly onClearFilters: () => void;
+  readonly onLoadMore: () => void;
   readonly onOpenJob: (jobId: JobListItem["id"]) => void;
   readonly totalJobs: number;
   readonly visible: boolean;
@@ -589,8 +641,10 @@ function JobsPrimaryContent({
         canCreateJobs={canCreateJobs}
         hasCustomFilters={hasCustomFilters}
         lookup={lookup}
+        nextCursor={nextCursor}
         totalJobs={totalJobs}
         onClearFilters={onClearFilters}
+        onLoadMore={onLoadMore}
         onOpenJob={onOpenJob}
       />
     );
@@ -1321,7 +1375,9 @@ function JobsListView({
   hasCustomFilters,
   jobs,
   lookup,
+  nextCursor,
   onClearFilters,
+  onLoadMore,
   onOpenJob,
   totalJobs,
 }: {
@@ -1329,7 +1385,9 @@ function JobsListView({
   readonly hasCustomFilters: boolean;
   readonly jobs: readonly JobListItem[];
   readonly lookup: JobsLookup;
+  readonly nextCursor: JobListCursorType | undefined;
   readonly onClearFilters: () => void;
+  readonly onLoadMore: () => void;
   readonly onOpenJob: (jobId: JobListItem["id"]) => void;
   readonly totalJobs: number;
 }) {
@@ -1372,6 +1430,18 @@ function JobsListView({
           />
         )}
       </div>
+      {nextCursor === undefined ? null : (
+        <div className="flex justify-center border-x border-b bg-background py-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onLoadMore}
+          >
+            Load more
+          </Button>
+        </div>
+      )}
     </section>
   );
 }

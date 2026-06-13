@@ -1,12 +1,14 @@
 import { decodeOrganizationId, decodeUserId } from "@ceird/identity-core";
 import type {
   JobDetailResponse,
+  JobListCursorType,
+  JobListQuery,
   JobListResponse,
   JobOptionsResponse,
   WorkItemIdType,
 } from "@ceird/jobs-core";
 
-type JobsListLookupMock = () => Promise<JobListResponse>;
+type JobsListLookupMock = (query?: JobListQuery) => Promise<JobListResponse>;
 type JobOptionsLookupMock = () => Promise<JobOptionsResponse>;
 type JobDetailLookupMock = () => Promise<JobDetailResponse>;
 
@@ -18,6 +20,7 @@ const {
   mockedGetCurrentServerJobOptions,
   mockedGetCurrentUserPreferences,
   mockedListAllCurrentServerJobs,
+  mockedListCurrentServerJobs,
 } = vi.hoisted(() => ({
   mockedGetCurrentServerJobDetail: vi.fn<JobDetailLookupMock>(),
   mockedGetCurrentServerExternalJobOptions: vi.fn<JobOptionsLookupMock>(),
@@ -31,6 +34,7 @@ const {
     }>
   >(),
   mockedListAllCurrentServerJobs: vi.fn<JobsListLookupMock>(),
+  mockedListCurrentServerJobs: vi.fn<JobsListLookupMock>(),
 }));
 
 vi.mock(import("#/features/jobs/jobs-server"), () => ({
@@ -38,6 +42,7 @@ vi.mock(import("#/features/jobs/jobs-server"), () => ({
   getCurrentServerExternalJobOptions: mockedGetCurrentServerExternalJobOptions,
   getCurrentServerJobOptions: mockedGetCurrentServerJobOptions,
   listAllCurrentServerJobs: mockedListAllCurrentServerJobs,
+  listCurrentServerJobs: mockedListCurrentServerJobs,
 }));
 
 vi.mock(import("#/features/settings/user-preferences-api"), () => ({
@@ -65,7 +70,7 @@ describe("jobs route loader", () => {
       sites: [],
     } satisfies JobOptionsResponse;
 
-    mockedListAllCurrentServerJobs.mockImplementation(() => {
+    mockedListCurrentServerJobs.mockImplementation(() => {
       calls.push("list:start");
       return listDeferred.promise;
     });
@@ -111,6 +116,69 @@ describe("jobs route loader", () => {
     });
   });
 
+  it("passes bounded page and filter input to the jobs list request", async () => {
+    const list = {
+      items: [],
+      nextCursor: "cursor-two" as JobListCursorType,
+    } satisfies JobListResponse;
+    const options = {
+      contacts: [],
+      labels: [],
+      members: [],
+      sites: [],
+    } satisfies JobOptionsResponse;
+
+    mockedListCurrentServerJobs.mockResolvedValue(list);
+    mockedGetCurrentServerJobOptions.mockResolvedValue(options);
+    mockedGetCurrentUserPreferences.mockResolvedValue({
+      preferences: {
+        routeProximityLocationEnabled: false,
+        updatedAt: "2026-06-06T10:00:00.000Z",
+      },
+    });
+
+    const { loadJobsRouteData } = await import("./jobs-route-loader");
+
+    await expect(
+      loadJobsRouteData(
+        {
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: "owner",
+          currentUserId: decodeUserId("user_123"),
+        },
+        {
+          assigneeId: "unassigned",
+          cursor: "cursor-one" as JobListCursorType,
+          limit: 25,
+          query: "boiler",
+          status: "active",
+        }
+      )
+    ).resolves.toMatchObject({
+      list,
+      listScope: {
+        query: {
+          assigneeId: "unassigned",
+          cursor: "cursor-one",
+          limit: 25,
+          query: "boiler",
+          status: "active",
+        },
+      },
+    });
+    expect(mockedListCurrentServerJobs).toHaveBeenCalledWith({
+      assigneeId: "unassigned",
+      cursor: "cursor-one",
+      limit: 25,
+      query: "boiler",
+      status: "active",
+    });
+  });
+
   it("loads the jobs list and scoped external options without detail fanout", async () => {
     const calls: string[] = [];
     let listResolved = false;
@@ -138,7 +206,7 @@ describe("jobs route loader", () => {
       sites: [],
     } satisfies JobOptionsResponse;
 
-    mockedListAllCurrentServerJobs.mockImplementation(() => {
+    mockedListCurrentServerJobs.mockImplementation(() => {
       calls.push("list:start");
       return listDeferred.promise;
     });
@@ -197,7 +265,7 @@ describe("jobs route loader", () => {
       sites: [],
     } satisfies JobOptionsResponse;
 
-    mockedListAllCurrentServerJobs.mockResolvedValue(list);
+    mockedListCurrentServerJobs.mockResolvedValue(list);
     mockedGetCurrentServerJobOptions.mockResolvedValue(options);
     mockedGetCurrentUserPreferences.mockRejectedValue(new Error("offline"));
 

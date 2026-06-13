@@ -598,6 +598,14 @@ authenticated organization home route. It returns exact job, site, and member
 counts plus at most five active job rows and five active-site rows, so the home
 route does not load every job, site, or member option to build first paint.
 
+`GET /jobs` is cursor-paged and accepts bounded primary-list filters including
+`limit`, `cursor`, `status`, `assigneeId`, `coordinatorId`, `priority`,
+`labelId`, `siteId`, and text `query`. `status=active` excludes terminal jobs,
+`status=all` removes the status predicate, and `assigneeId=unassigned` filters
+for jobs without an assignee. The app `/jobs` route sends its search/filter
+state through this query contract instead of loading every tenant job and
+filtering the complete array in the browser.
+
 `GET /jobs/external-options` is external-only. It returns `JobOptionsResponse`
 with `members: []` and derives labels, contacts, and sites only from jobs
 visible through the current collaborator's grants.

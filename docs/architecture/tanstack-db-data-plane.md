@@ -23,15 +23,14 @@ route components or view state files. A collection contract must declare:
 
 Current collection roots are `jobs`, `job-options`, `job-details`,
 `job-collaborators`, `sites`, `site-comments`, `site-related-jobs`, and
-`labels`. Jobs and job options still use eager complete-tenant Query
-Collections. Sites and site-related job subsets use eager bounded Query
-Collections once their feature scope is created: the Sites route collection is
-the first cursor page and site-related jobs are the first cursor page filtered
-by `siteId`. Labels are a scoped option index. Job details, collaborators, and
-site comments are lazy per-record collections that request snapshots from their
-mounted subscribers rather than from Start loaders. Future ElectricSQL
-integration should keep these contracts and swap the sync implementation behind
-them rather than moving state back into route views.
+`labels`. The jobs primary route collection and Sites route collection are
+eager bounded Query Collections for their first cursor pages. Site-related jobs
+are the first cursor page filtered by `siteId`. Job options remain an eager
+complete-tenant option collection. Labels are a scoped option index. Job
+details, collaborators, and site comments are lazy per-record collections that
+request snapshots from their mounted subscribers rather than from Start loaders.
+Future ElectricSQL integration should keep these contracts and swap the sync
+implementation behind them rather than moving state back into route views.
 
 Completeness is a discriminated contract, not a boolean. `complete-tenant`
 means the data covers the active organization scope. `paged-query` and
@@ -40,9 +39,13 @@ components that require tenant-wide data. `entity-detail` covers one parent
 entity such as a job detail or a site's comments. `sync-backed` records the
 subscription source and the coverage it provides, so future Electric-backed
 collections can be explicit about whether they cover tenant, page, filter, or
-entity scopes. Current unmigrated route lists keep their eager
-`complete-tenant` behavior until follow-up paging issues replace those
-first-paint reads.
+entity scopes. The jobs route primary list now uses a `paged-query` contract
+whose query key includes cursor, limit, filters, text search, and the stable
+updated-desc sort order. The sites route first paint uses a `paged-query`
+contract for its first cursor page. The home route uses a bounded aggregate
+summary response instead of seeding tenant-wide jobs or sites for first paint.
+Current unmigrated route lists keep their eager `complete-tenant` behavior until
+follow-up paging issues replace those first-paint reads.
 
 ## Start Bootstrap
 
