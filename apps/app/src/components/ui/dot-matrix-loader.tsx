@@ -1,12 +1,10 @@
 import type { CSSProperties } from "react";
-import { useEffect, useState } from "react";
 
 import { cn } from "#/lib/utils";
 
 import "#/components/dotmatrix-loader.css";
 
 const DOT_MATRIX_SIZE = 5;
-const DOT_MATRIX_EXIT_MS = 150;
 const DOT_MATRIX_SPEED = 1.35;
 const DOT_MATRIX_SPIRAL_ORDER = [
   0, 1, 2, 3, 4, 15, 16, 17, 18, 5, 14, 23, 24, 19, 6, 13, 22, 21, 20, 7, 12,
@@ -64,28 +62,11 @@ export function DotMatrixButtonLoader({
   readonly className?: string;
   readonly visible?: boolean;
 }) {
-  const [isPresent, setIsPresent] = useState(() => visible);
-
-  useEffect(() => {
-    if (visible) {
-      setIsPresent(true);
-      return;
-    }
-
-    const exitTimer = window.setTimeout(() => {
-      setIsPresent(false);
-    }, DOT_MATRIX_EXIT_MS);
-
-    return () => {
-      window.clearTimeout(exitTimer);
-    };
-  }, [visible]);
-
   return (
     <span
       aria-hidden="true"
       data-dot-matrix-button-loader=""
-      data-icon={isPresent ? "inline-start" : undefined}
+      data-icon="inline-start"
       data-loading-slot=""
       className={cn(
         "inline-flex h-4 shrink-0 items-center justify-center overflow-hidden transition-[width,opacity,transform] duration-150 ease-out motion-reduce:transition-none",
@@ -93,9 +74,7 @@ export function DotMatrixButtonLoader({
         className
       )}
     >
-      {isPresent ? (
-        <DotMatrixGlyph animated={visible} size={18} dotSize={2.5} />
-      ) : null}
+      <DotMatrixGlyph animated={visible} size={18} dotSize={2.5} />
     </span>
   );
 }
