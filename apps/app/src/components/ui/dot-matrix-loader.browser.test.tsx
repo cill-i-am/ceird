@@ -26,6 +26,14 @@ describe("dot Matrix loader primitives", () => {
     expect(loader).toHaveClass("w-0");
   }, 10_000);
 
+  it("keeps the decorative glyph in the clipped slot when hidden", () => {
+    const { container, rerender } = render(<DotMatrixButtonLoader visible />);
+    expect(container.querySelector(".dmx-root")).toBeInTheDocument();
+
+    rerender(<DotMatrixButtonLoader visible={false} />);
+    expect(container.querySelector(".dmx-root")).toBeInTheDocument();
+  }, 10_000);
+
   it("renders a non-button loading state with status text", () => {
     render(<DotMatrixLoadingState label="Loading invitations" />);
 
