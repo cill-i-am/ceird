@@ -187,7 +187,7 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
       ) => void;
       value?: string;
     }) => (
-      <div data-value={value} role="group">
+      <fieldset data-value={value}>
         {Array.isArray(children)
           ? children.map((child) => {
               if (!React.isValidElement(child)) {
@@ -208,7 +208,7 @@ vi.mock(import("#/components/ui/dropdown-menu"), async (importActual) => {
               );
             })
           : children}
-      </div>
+      </fieldset>
     )) as typeof actual.DropdownMenuRadioGroup,
     DropdownMenuRadioItem: (({
       children,

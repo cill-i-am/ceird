@@ -138,13 +138,13 @@ vi.mock(import("#/features/jobs/jobs-create-sheet"), async () => {
       const [title, setTitle] = React.useState("");
 
       return (
-        <div
+        <dialog
           aria-label="New job"
           data-vaul-drawer=""
           data-workspace-sheet-interactive={
             sheetLayer === "active" ? "true" : "false"
           }
-          role="dialog"
+          open
         >
           <h2>New job</h2>
           <label>
@@ -156,7 +156,7 @@ vi.mock(import("#/features/jobs/jobs-create-sheet"), async () => {
             />
           </label>
           {nestedSheet}
-        </div>
+        </dialog>
       );
     }) as typeof JobsCreateSheetModule.JobsCreateSheet,
   };
@@ -216,18 +216,18 @@ vi.mock(import("#/features/sites/sites-create-sheet"), () => {
     nestedSheet,
     sheetLayer = "active",
   }: Parameters<typeof SitesCreateSheetModule.SitesCreateSheet>[0] = {}) => (
-    <div
+    <dialog
       aria-label="New site"
       data-vaul-drawer=""
       data-workspace-sheet-interactive={
         sheetLayer === "active" ? "true" : "false"
       }
-      role="dialog"
+      open
     >
       <h2>New site</h2>
       {children}
       {nestedSheet}
-    </div>
+    </dialog>
   )) as typeof SitesCreateSheetModule.SitesCreateSheet;
 
   return {

@@ -108,8 +108,7 @@ export function DotMatrixLoadingState({
   readonly label: string;
 }) {
   return (
-    <div
-      role="status"
+    <output
       aria-label={label}
       className={cn(
         "flex min-w-0 animate-in items-center justify-center gap-3 text-sm text-muted-foreground duration-200 fade-in-0 zoom-in-95 motion-reduce:animate-none",
@@ -118,6 +117,6 @@ export function DotMatrixLoadingState({
     >
       <DotMatrixGlyph size={28} dotSize={4} />
       <span>{label}</span>
-    </div>
+    </output>
   );
 }

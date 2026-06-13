@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { CommandSelect, ResponsiveCommandSelect } from "./command-select";
@@ -145,6 +145,18 @@ describe("command select", () => {
 
       await user.click(screen.getByRole("button", { name: "Member" }));
 
+      expect(screen.getByRole("button", { name: "Member" })).toHaveAttribute(
+        "aria-expanded",
+        "true"
+      );
+      expect(
+        screen.getByRole("listbox", { name: "Suggestions" })
+      ).toHaveAttribute(
+        "id",
+        screen
+          .getByRole("button", { name: "Member" })
+          .getAttribute("aria-controls")
+      );
       expect(
         screen.queryByPlaceholderText("Pick role")
       ).not.toBeInTheDocument();
@@ -152,6 +164,103 @@ describe("command select", () => {
         "aria-selected",
         "true"
       );
+    }
+  );
+
+  it(
+    "moves focus and selects non-searchable options from the keyboard",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      const onValueChange = vi.fn<(value: string) => void>();
+
+      render(
+        <CommandSelect
+          ariaLabel="Role"
+          emptyText="No roles found"
+          groups={[
+            {
+              label: "Role",
+              options: [
+                {
+                  description: "Can manage members, settings, jobs, and sites.",
+                  label: "Admin",
+                  value: "admin",
+                },
+                {
+                  description: "For teammates working day to day.",
+                  label: "Member",
+                  value: "member",
+                },
+              ],
+            },
+          ]}
+          id="role"
+          onValueChange={onValueChange}
+          placeholder="Pick role"
+          searchable={false}
+          value="member"
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "Role" }));
+
+      const memberOption = screen.getByRole("option", {
+        name: "Member. For teammates working day to day.",
+      });
+      await waitFor(() => expect(memberOption).toHaveFocus());
+      expect(memberOption).toHaveAttribute("aria-selected", "true");
+
+      await user.keyboard("{ArrowUp}");
+
+      const adminOption = screen.getByRole("option", {
+        name: "Admin. Can manage members, settings, jobs, and sites.",
+      });
+      expect(adminOption).toHaveFocus();
+
+      await user.keyboard("{Enter}");
+
+      expect(onValueChange).toHaveBeenCalledWith("admin");
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    }
+  );
+
+  it(
+    "selects non-searchable options with pointer input",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const user = userEvent.setup();
+      const onValueChange = vi.fn<(value: string) => void>();
+
+      render(
+        <CommandSelect
+          emptyText="No roles found"
+          groups={[
+            {
+              label: "Role",
+              options: [
+                { label: "Admin", value: "admin" },
+                { label: "Member", value: "member" },
+              ],
+            },
+          ]}
+          id="role"
+          onValueChange={onValueChange}
+          placeholder="Pick role"
+          searchable={false}
+          value="member"
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "Member" }));
+      await user.click(screen.getByRole("option", { name: "Admin" }));
+
+      expect(onValueChange).toHaveBeenCalledWith("admin");
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     }
   );
 
