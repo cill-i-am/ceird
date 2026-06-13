@@ -82,12 +82,22 @@ title when it includes the issue key. Comment in Linear with:
 - branch and commits
 - review stack used
 - verification commands and results
+- initial GitHub PR comment/review-thread status
+- CI/comment watcher automation if checks or comments are pending
 - known risks or blockers
 
 ### 6. CI Watch
 
-After PR creation, run `ci-watch`. It owns pending checks, actionable CI fixes,
-follow-up commits, automation handoff, and Linear CI evidence.
+After PR creation, run `ci-watch` before the worker final report. It owns
+pending checks, GitHub PR comments/review threads, new Linear comments,
+actionable CI/comment fixes, follow-up commits, automation handoff, and Linear
+CI evidence.
+
+If CI or comments are still pending after a short inline watch, create or update
+a 2-3 minute heartbeat automation for the worker thread. The prompt must include
+the PR URL, Linear issue key, branch, head SHA, pending checks/comments,
+retry/fix budget, Linear update requirement, and stop condition. Reuse an
+existing watcher for the same PR.
 
 Do not move Linear to done until CI is green or the orchestrator explicitly
 accepts a non-CI completion path.

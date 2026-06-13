@@ -33,7 +33,7 @@
     },
     {
       "id": "ci-loop",
-      "question": "Does the agent watch CI until green or genuinely blocked, fix only in-scope failures, and record CI evidence in Linear?"
+      "question": "Does the agent watch CI and comments until green/resolved or genuinely blocked, fix only in-scope failures or feedback, and record CI/comment evidence in Linear?"
     },
     {
       "id": "no-live-mutation",

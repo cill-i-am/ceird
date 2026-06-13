@@ -40,7 +40,8 @@ state may have changed outside the current thread.
 A worker owns one Linear issue. It reads the issue, parent Project/PRD, blockers,
 and comments fresh before implementing. It creates a branch, implements the
 vertical slice, verifies the work, opens or updates a PR, runs production-ready
-checks, and records evidence back in Linear.
+checks, watches CI and PR/Linear comments until green/resolved or blocked, and
+records evidence back in Linear.
 
 Use `subagent-execution` inside the worker when bounded implementation,
 investigation, spec review, or quality review can be delegated safely.
@@ -57,17 +58,19 @@ Production readiness requires:
 - relevant review skills run based on changed files and risk
 - fresh verification commands run
 - PR created or updated
-- CI watched until green or blocked
+- CI and PR/Linear comments watched until green/resolved or blocked
 - Linear comment with evidence
 
 ## CI Watch
 
-After a PR is created, check CI inline first. If checks are pending long enough
-that the worker would otherwise wait idly, create a heartbeat or detached
-automation to continue watching the PR. The watcher may fix actionable failures
-inside the issue scope, push follow-up commits, and continue watching. It must
-stop on external/provider failures, repeated flakes, unsafe scope expansion, or
-human-blocked conditions.
+After a PR is created, check CI, GitHub PR comments/review threads/review
+decisions, and new Linear comments inline first. If checks or comments are
+pending long enough that the worker would otherwise wait idly, create or update
+a 2-3 minute heartbeat automation for the worker thread to continue watching the
+PR. The watcher may fix actionable failures or comments inside the issue scope,
+push follow-up commits, reply/update evidence, and continue watching. It must
+stop on external/provider failures, repeated flakes, unsafe scope expansion,
+human-blocked conditions, or unavailable GitHub/Linear access.
 
 `production-ready` should hand PR monitoring to `ci-watch` rather than embedding
 long polling in the worker.

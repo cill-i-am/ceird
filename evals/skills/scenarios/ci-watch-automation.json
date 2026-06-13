@@ -1,13 +1,13 @@
 {
   "id": "ci-watch-automation",
   "title": "PR CI watcher owns pending and failing checks",
-  "prompt": "A worker has opened a PR for a Linear issue. Watch CI and fix in-scope failures until it is green or genuinely blocked.",
+  "prompt": "A worker has opened a PR for a Linear issue. Watch CI and comments, fix in-scope failures or review feedback, and continue until it is green/resolved or genuinely blocked.",
   "expectedSkills": ["ci-watch", "systematic-debugging"],
   "artifacts": [
     {
       "path": ".agents/skills/ci-watch/SKILL.md",
       "mustContain": [
-        "green or genuinely blocked",
+        "green/resolved or genuinely blocked",
         "gh pr checks",
         "systematic-debugging",
         "update Linear",
@@ -19,8 +19,8 @@
     {
       "path": "docs/agents/execution-policy.md",
       "mustContain": [
-        "create a heartbeat or detached",
-        "automation to continue watching",
+        "a 2-3 minute heartbeat automation",
+        "for the worker thread to continue watching",
         "`production-ready` should hand PR monitoring to `ci-watch`"
       ]
     }
