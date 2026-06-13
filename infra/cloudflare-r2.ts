@@ -10,12 +10,23 @@ export function makeCloudflareR2BucketResourceKey(input: {
   return `com.cloudflare.edge.r2.bucket.${input.accountId}_${input.jurisdiction}_${input.bucketName}` as const;
 }
 
-export function makeCloudflareR2AllBucketsResourceScope(accountId: string) {
+export const electricStorageR2PermissionGroups = [
+  "Workers R2 Storage Bucket Item Read",
+  "Workers R2 Storage Bucket Item Write",
+] as const;
+
+export function makeElectricStorageR2TokenPolicy(input: {
+  readonly accountId: string;
+  readonly bucketName: string;
+  readonly jurisdiction: string;
+}) {
   return {
-    [`com.cloudflare.api.account.${accountId}`]: {
-      "com.cloudflare.edge.r2.bucket.*": "*",
+    effect: "allow" as const,
+    permissionGroups: [...electricStorageR2PermissionGroups],
+    resources: {
+      [makeCloudflareR2BucketResourceKey(input)]: "*",
     },
-  } as const;
+  };
 }
 
 export function makeR2SecretAccessKey(
