@@ -21,6 +21,7 @@ import {
   makeSyncWorker,
 } from "../apps/sync/infra/cloudflare-worker.ts";
 import type { ElectricContainerConfig } from "../apps/sync/infra/cloudflare-worker.ts";
+import { readCloudflareAccountId } from "./cloudflare-environment.ts";
 import {
   makeCloudflareR2BucketResourceKey,
   makeR2SecretAccessKey,
@@ -229,8 +230,7 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     input.hyperdrive.hyperdriveId
   );
 
-  const { accountId: cloudflareAccountId } =
-    yield* yield* Cloudflare.CloudflareEnvironment;
+  const cloudflareAccountId = yield* readCloudflareAccountId();
   const alchemyContext = yield* Alchemy.AlchemyContext;
   const localDev = alchemyContext.dev;
   const betterAuthSecret = yield* Alchemy.Random("BetterAuthSecret", {
