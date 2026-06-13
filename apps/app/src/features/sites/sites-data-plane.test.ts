@@ -5,9 +5,10 @@ import type {
   SiteListResponse,
   SiteOption,
 } from "@ceird/sites-core";
+import { SiteListCursor } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/react-query";
+import { Schema } from "effect";
 
-import { COMPLETE_TENANT_COLLECTION } from "#/data-plane/collection-contract";
 import { createDataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { getDataPlaneSessionKey } from "#/data-plane/session";
@@ -24,6 +25,7 @@ import {
 } from "./sites-data-plane";
 
 describe("sites data plane", () => {
+  const decodeSiteListCursor = Schema.decodeUnknownSync(SiteListCursor);
   const scope = createOrganizationDataScope({
     organizationId: "org_123" as OrganizationId,
     role: "owner",
@@ -57,6 +59,11 @@ describe("sites data plane", () => {
       "user_123",
       "role",
       "owner",
+      "page",
+      {
+        limit: 50,
+        type: "cursor",
+      },
     ]);
     expect(sitesCollectionId(scope)).toBe(
       "organization:org_123:user:user_123:role:owner:sites"
@@ -80,7 +87,7 @@ describe("sites data plane", () => {
     );
   });
 
-  it("creates complete seed envelopes for sites and comments", () => {
+  it("creates page-aware seed envelopes for sites and comments", () => {
     const sitesResponse = {
       items: [site],
       nextCursor: undefined,
@@ -91,7 +98,15 @@ describe("sites data plane", () => {
 
     expect(createSitesListSeed(scope, sitesResponse, 1000)).toMatchObject({
       collection: "sites",
-      completeness: COMPLETE_TENANT_COLLECTION,
+      completeness: {
+        mode: "paged-query",
+        page: {
+          hasNextPage: false,
+          limit: 50,
+          type: "cursor",
+        },
+        queryName: "sites-list",
+      },
       data: [site],
       queryKey: sitesCollectionKey(scope),
       requestStartedAt: 1000,
@@ -156,5 +171,24 @@ describe("sites data plane", () => {
     expect(getDataPlaneSessionKey(session.scope)).toBe(
       "organization:org_123:user:user_123:role:owner"
     );
+  });
+
+  it("marks sites pages as non-complete when another cursor exists", () => {
+    const sitesResponse = {
+      items: [site],
+      nextCursor: decodeSiteListCursor("next-sites-page"),
+    } satisfies SiteListResponse;
+
+    expect(
+      createSitesListSeed(scope, sitesResponse).completeness
+    ).toStrictEqual({
+      mode: "paged-query",
+      page: {
+        hasNextPage: true,
+        limit: 50,
+        type: "cursor",
+      },
+      queryName: "sites-list",
+    });
   });
 });

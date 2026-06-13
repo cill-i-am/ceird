@@ -1,11 +1,11 @@
 import { decodeOrganizationId, decodeUserId } from "@ceird/identity-core";
 import type { SiteListResponse } from "@ceird/sites-core";
 
-type SitesListLookupMock = () => Promise<SiteListResponse>;
+type SitesListLookupMock = (query?: unknown) => Promise<SiteListResponse>;
 
 const organizationId = decodeOrganizationId("org_123");
 
-const { mockedGetCurrentUserPreferences, mockedListAllCurrentServerSites } =
+const { mockedGetCurrentUserPreferences, mockedListCurrentServerSites } =
   vi.hoisted(() => ({
     mockedGetCurrentUserPreferences: vi.fn<
       () => Promise<{
@@ -15,11 +15,11 @@ const { mockedGetCurrentUserPreferences, mockedListAllCurrentServerSites } =
         };
       }>
     >(),
-    mockedListAllCurrentServerSites: vi.fn<SitesListLookupMock>(),
+    mockedListCurrentServerSites: vi.fn<SitesListLookupMock>(),
   }));
 
 vi.mock(import("#/features/api/app-api-server"), () => ({
-  listAllCurrentServerSites: mockedListAllCurrentServerSites,
+  listCurrentServerSites: mockedListCurrentServerSites,
 }));
 
 vi.mock(import("#/features/settings/user-preferences-api"), () => ({
@@ -37,7 +37,7 @@ describe("sites route loader", () => {
       nextCursor: undefined,
     } satisfies SiteListResponse;
 
-    mockedListAllCurrentServerSites.mockResolvedValue(sites);
+    mockedListCurrentServerSites.mockResolvedValue(sites);
     mockedGetCurrentUserPreferences.mockRejectedValue(new Error("offline"));
 
     const { loadSitesRouteData } = await import("./sites-route-loader");
@@ -53,8 +53,22 @@ describe("sites route loader", () => {
         currentUserId: decodeUserId("user_123"),
       })
     ).resolves.toMatchObject({
+      dataPlaneSeeds: [
+        {
+          completeness: {
+            mode: "paged-query",
+            page: {
+              hasNextPage: false,
+              limit: 50,
+              type: "cursor",
+            },
+            queryName: "sites-list",
+          },
+        },
+      ],
       options: { sites: [] },
       routeProximityLocationEnabled: false,
     });
+    expect(mockedListCurrentServerSites).toHaveBeenCalledWith({ limit: 50 });
   });
 });

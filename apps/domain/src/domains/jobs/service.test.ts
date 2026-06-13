@@ -6,6 +6,7 @@ import {
 } from "@ceird/identity-core";
 import {
   CreateJobInputSchema,
+  HomeDashboardSummaryResponseSchema,
   JobCollaboratorSchema,
   JobDetailResponseSchema,
   JobListItemSchema,
@@ -182,6 +183,66 @@ describe("JobsService contracts", () => {
         removedPayload: { items: [] },
       })
     ).toThrow(/[Uu]nexpected/);
+  });
+
+  it("loads bounded home dashboard summaries for internal actors", async () => {
+    const summary = Schema.decodeUnknownSync(
+      HomeDashboardSummaryResponseSchema
+    )({
+      jobs: {
+        items: [
+          {
+            assigneeName: "Taylor",
+            id: "33333333-3333-4333-8333-333333333333",
+            priority: "high",
+            siteName: "Docklands Campus",
+            status: "in_progress",
+            title: "Inspect boiler",
+            updatedAt: "2026-05-20T11:00:00.000Z",
+          },
+        ],
+        stats: {
+          activeJobs: 1,
+          blockedJobs: 0,
+          priorityWatchJobs: 1,
+          totalJobs: 2,
+          unassignedJobs: 0,
+        },
+      },
+      members: {
+        total: 2,
+      },
+      sites: {
+        items: [
+          {
+            activeJobCount: 1,
+            displayLocation: "Docklands",
+            id: "44444444-4444-4444-8444-444444444444",
+            name: "Docklands Campus",
+          },
+        ],
+        stats: {
+          mappedSites: 1,
+          totalSites: 1,
+        },
+      },
+    });
+    const calls = { summary: 0 };
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.getHomeDashboardSummary();
+      }).pipe(
+        Effect.provide(JobsService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsHomeDashboardSummaryTestLayer({ calls, summary })
+        )
+      )
+    );
+
+    expect(result).toStrictEqual(summary);
+    expect(calls.summary).toBe(1);
   });
 
   it("denies read-only external collaborators when adding comments", async () => {
@@ -979,6 +1040,69 @@ function makeJobsServiceTestLayer(options: {
         ) => {
           options.calls.withTransaction += 1;
           return effect;
+        },
+      } as unknown as ContextService<typeof JobsRepository>)
+    ),
+    Layer.succeed(
+      LabelsRepository,
+      LabelsRepository.of({} as ContextService<typeof LabelsRepository>)
+    ),
+    makeUserPreferencesRepositoryLayer(),
+    Layer.succeed(
+      RouteProximityService,
+      RouteProximityService.of(
+        {} as ContextService<typeof RouteProximityService>
+      )
+    ),
+    Layer.succeed(
+      SiteLocationProvider,
+      SiteLocationProvider.of({} as ContextService<typeof SiteLocationProvider>)
+    ),
+    Layer.succeed(
+      SitesRepository,
+      SitesRepository.of({} as ContextService<typeof SitesRepository>)
+    )
+  );
+}
+
+function makeJobsHomeDashboardSummaryTestLayer(options: {
+  readonly calls: { summary: number };
+  readonly summary: Schema.Schema.Type<
+    typeof HomeDashboardSummaryResponseSchema
+  >;
+}) {
+  return Layer.mergeAll(
+    Layer.succeed(
+      ContactsRepository,
+      ContactsRepository.of({} as ContextService<typeof ContactsRepository>)
+    ),
+    Layer.succeed(
+      CurrentOrganizationActor,
+      CurrentOrganizationActor.of({
+        get: () => Effect.succeed(internalActor),
+      })
+    ),
+    Layer.succeed(
+      HttpServerRequest.HttpServerRequest,
+      {} as HttpServerRequest.HttpServerRequest
+    ),
+    Layer.succeed(
+      JobLabelAssignmentsRepository,
+      JobLabelAssignmentsRepository.of(
+        {} as ContextService<typeof JobLabelAssignmentsRepository>
+      )
+    ),
+    JobsAuthorization.Default,
+    Layer.succeed(
+      JobsActivityRecorder,
+      JobsActivityRecorder.of({} as ContextService<typeof JobsActivityRecorder>)
+    ),
+    Layer.succeed(
+      JobsRepository,
+      JobsRepository.of({
+        getHomeDashboardSummary: () => {
+          options.calls.summary += 1;
+          return Effect.succeed(options.summary);
         },
       } as unknown as ContextService<typeof JobsRepository>)
     ),

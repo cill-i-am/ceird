@@ -3,7 +3,7 @@ import type { QueryClient } from "@tanstack/query-core";
 
 import { applyDataPlaneSeed } from "#/data-plane/bootstrap";
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
-import { listAllCurrentServerSites } from "#/features/api/app-api-server";
+import { listCurrentServerSites } from "#/features/api/app-api-server";
 import {
   assertOrganizationInternalRole,
   requireOrganizationRouteContextRole,
@@ -13,7 +13,7 @@ import { decodeOrganizationViewerUserId } from "#/features/organizations/organiz
 import type { OrganizationViewer } from "#/features/organizations/organization-viewer";
 import { loadRouteProximityLocationPreferenceEnabled } from "#/features/settings/route-proximity-location-preference";
 
-import { createSitesListSeed } from "./sites-data-plane";
+import { SITES_LIST_PAGE_LIMIT, createSitesListSeed } from "./sites-data-plane";
 
 const EMPTY_SITE_OPTIONS: SitesOptionsResponse = {
   sites: [],
@@ -47,7 +47,7 @@ export async function loadSitesRouteData(
   const sitesRequestStartedAt = Date.now();
   const routeProximityLocationPreferencePromise =
     loadRouteProximityLocationPreferenceEnabled();
-  const sites = await listAllCurrentServerSites();
+  const sites = await listCurrentServerSites({ limit: SITES_LIST_PAGE_LIMIT });
   const routeProximityLocationEnabled =
     await routeProximityLocationPreferencePromise;
   const siteOptions = {

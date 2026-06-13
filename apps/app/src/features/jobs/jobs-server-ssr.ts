@@ -4,6 +4,7 @@ import type {
   JobListItem,
   JobListQuery,
   JobListResponse,
+  HomeDashboardSummaryResponse,
   JobMemberOptionsResponse,
   JobOptionsResponse,
   OrganizationActivityListResponse,
@@ -119,6 +120,16 @@ export async function getCurrentServerJobMemberOptionsDirect(): Promise<JobMembe
     request,
     "JobsServer.getJobMemberOptions",
     (client) => client.jobs.getJobMemberOptions()
+  );
+}
+
+export async function getCurrentServerHomeDashboardSummaryDirect(): Promise<HomeDashboardSummaryResponse> {
+  const request = await readServerAppApiRequestStrict();
+
+  return await runAppApiClient(
+    request,
+    "JobsServer.getHomeDashboardSummary",
+    (client) => client.jobs.getHomeDashboardSummary()
   );
 }
 

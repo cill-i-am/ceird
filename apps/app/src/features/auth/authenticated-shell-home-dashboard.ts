@@ -1,10 +1,9 @@
 import type {
-  JobListItem,
-  JobMemberOptionsResponse,
+  HomeDashboardSummaryResponse,
   OrganizationActivityListResponse,
   WorkItemIdType,
 } from "@ceird/jobs-core";
-import type { SiteIdType, SitesOptionsResponse } from "@ceird/sites-core";
+import type { SiteIdType } from "@ceird/sites-core";
 
 import { describeJobActivity } from "#/features/activity/activity-formatting";
 import {
@@ -13,13 +12,6 @@ import {
   formatJobDateTime,
 } from "#/features/jobs/job-display";
 import { buildSiteAddressLines } from "#/features/sites/site-location";
-
-const ACTIVE_JOB_STATUSES = new Set<JobListItem["status"]>([
-  "blocked",
-  "in_progress",
-  "new",
-  "triaged",
-]);
 
 export interface AuthenticatedHomeDashboard {
   readonly activity: {
@@ -108,34 +100,12 @@ export const EMPTY_AUTHENTICATED_HOME_DASHBOARD: AuthenticatedHomeDashboard = {
 export function buildAuthenticatedHomeDashboard({
   activity,
   activityAvailable,
-  jobs,
-  jobMemberOptions,
-  sites,
+  summary,
 }: {
   readonly activity: OrganizationActivityListResponse;
   readonly activityAvailable: boolean;
-  readonly jobs: readonly JobListItem[];
-  readonly jobMemberOptions: JobMemberOptionsResponse;
-  readonly sites: SitesOptionsResponse;
+  readonly summary: HomeDashboardSummaryResponse;
 }): AuthenticatedHomeDashboard {
-  const memberById = new Map(
-    jobMemberOptions.members.map((member) => [member.id, member])
-  );
-  const siteById = new Map(sites.sites.map((site) => [site.id, site]));
-  const activeJobs = jobs.filter((job) => ACTIVE_JOB_STATUSES.has(job.status));
-  const activeJobCountBySiteId = new Map<SiteIdType, number>();
-
-  for (const job of activeJobs) {
-    if (!job.siteId) {
-      continue;
-    }
-
-    activeJobCountBySiteId.set(
-      job.siteId,
-      (activeJobCountBySiteId.get(job.siteId) ?? 0) + 1
-    );
-  }
-
   return {
     activity: {
       available: activityAvailable,
@@ -148,55 +118,32 @@ export function buildAuthenticatedHomeDashboard({
       })),
     },
     jobs: {
-      items: activeJobs.slice(0, 5).map((job) => ({
-        assigneeName: job.assigneeId
-          ? memberById.get(job.assigneeId)?.name
-          : undefined,
+      items: summary.jobs.items.map((job) => ({
+        assigneeName: job.assigneeName,
         id: job.id,
         priorityLabel: JOB_PRIORITY_LABELS[job.priority],
-        siteName: job.siteId ? siteById.get(job.siteId)?.name : undefined,
+        siteName: job.siteName,
         statusLabel: JOB_STATUS_LABELS[job.status],
         title: job.title,
         updatedAt: formatJobDateTime(job.updatedAt),
       })),
-      stats: {
-        activeJobs: activeJobs.length,
-        blockedJobs: jobs.filter((job) => job.status === "blocked").length,
-        priorityWatchJobs: jobs.filter(
-          (job) => job.priority === "urgent" || job.priority === "high"
-        ).length,
-        totalJobs: jobs.length,
-        unassignedJobs: activeJobs.filter((job) => !job.assigneeId).length,
-      },
+      stats: summary.jobs.stats,
     },
     members: {
-      total: jobMemberOptions.members.length,
+      total: summary.members.total,
     },
     sites: {
-      items: sites.sites
-        .map((site) => ({
-          activeJobCount: activeJobCountBySiteId.get(site.id) ?? 0,
-          address: buildSiteAddressLines(site).join(", "),
-          id: site.id,
-          name: site.name,
-          updatedAt:
-            site.locationResolvedAt === undefined
-              ? "Unverified location"
-              : formatJobDateTime(site.locationResolvedAt),
-        }))
-        .filter((site) => site.activeJobCount > 0)
-        .toSorted((left, right) => {
-          if (left.activeJobCount !== right.activeJobCount) {
-            return right.activeJobCount - left.activeJobCount;
-          }
-
-          return left.name.localeCompare(right.name);
-        })
-        .slice(0, 5),
-      stats: {
-        mappedSites: sites.sites.length,
-        totalSites: sites.sites.length,
-      },
+      items: summary.sites.items.map((site) => ({
+        activeJobCount: site.activeJobCount,
+        address: buildSiteAddressLines(site).join(", "),
+        id: site.id,
+        name: site.name,
+        updatedAt:
+          site.locationResolvedAt === undefined
+            ? "Unverified location"
+            : formatJobDateTime(site.locationResolvedAt),
+      })),
+      stats: summary.sites.stats,
     },
   };
 }

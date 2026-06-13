@@ -13,6 +13,7 @@ import {
   AttachJobCollaboratorInputSchema,
   CommentId,
   CreateJobInputSchema,
+  HomeDashboardSummaryResponseSchema,
   JobActivityJobCreatedPayloadSchema,
   JobCollaboratorAccessLevelSchema,
   JobCollaboratorRoleLabelSchema,
@@ -385,33 +386,100 @@ describe("jobs-core", () => {
     });
   });
 
+  it("decodes bounded home dashboard summaries", () => {
+    expect(
+      Schema.decodeUnknownSync(HomeDashboardSummaryResponseSchema)({
+        jobs: {
+          items: [
+            {
+              assigneeName: "Ciara",
+              id: "11111111-1111-4111-8111-111111111111",
+              priority: "urgent",
+              siteName: "Docklands Campus",
+              status: "blocked",
+              title: "Inspect boiler",
+              updatedAt: "2026-05-20T09:30:00.000Z",
+            },
+          ],
+          stats: {
+            activeJobs: 4,
+            blockedJobs: 1,
+            priorityWatchJobs: 2,
+            totalJobs: 7,
+            unassignedJobs: 1,
+          },
+        },
+        members: {
+          total: 3,
+        },
+        sites: {
+          items: [
+            {
+              activeJobCount: 2,
+              addressLine1: "1 North Wall Quay",
+              county: "Dublin",
+              displayLocation: "1 North Wall Quay, Dublin",
+              id: "22222222-2222-4222-8222-222222222222",
+              locationResolvedAt: "2026-05-20T08:00:00.000Z",
+              name: "Docklands Campus",
+            },
+          ],
+          stats: {
+            mappedSites: 1,
+            totalSites: 2,
+          },
+        },
+      })
+    ).toMatchObject({
+      jobs: {
+        stats: {
+          activeJobs: 4,
+        },
+      },
+      sites: {
+        items: [
+          {
+            activeJobCount: 2,
+          },
+        ],
+      },
+    });
+  });
+
   it("surfaces the job API contract", () => {
     const spec = OpenApi.fromApi(JobsApi);
 
     expect(JobsApiGroup.identifier).toBe("jobs");
-    expect(spec.paths["/jobs"]?.get?.operationId).toBe("jobs.listJobs");
-    expect(spec.paths["/jobs"]?.post?.operationId).toBe("jobs.createJob");
-    expect(spec.paths["/jobs/external-options"]?.get?.operationId).toBe(
-      "jobs.getExternalJobOptions"
-    );
-    expect(spec.paths["/jobs/proximity"]?.post?.operationId).toBe(
-      "jobs.rankNearbyJobs"
-    );
-    expect(spec.paths["/jobs/{workItemId}"]?.get?.operationId).toBe(
-      "jobs.getJobDetail"
-    );
-    expect(
-      spec.paths["/jobs/{workItemId}/route-preview"]?.post?.operationId
-    ).toBe("jobs.getJobRoutePreview");
-    expect(spec.paths["/jobs/{workItemId}/comments"]?.post?.operationId).toBe(
-      "jobs.addJobComment"
-    );
-    expect(spec.paths["/jobs/{workItemId}/labels"]?.post?.operationId).toBe(
-      "jobs.assignJobLabel"
-    );
-    expect(
-      spec.paths["/jobs/{workItemId}/collaborators"]?.post?.operationId
-    ).toBe("jobs.attachJobCollaborator");
+    expect(spec.paths).toMatchObject({
+      "/home/dashboard-summary": {
+        get: { operationId: "jobs.getHomeDashboardSummary" },
+      },
+      "/jobs": {
+        get: { operationId: "jobs.listJobs" },
+        post: { operationId: "jobs.createJob" },
+      },
+      "/jobs/external-options": {
+        get: { operationId: "jobs.getExternalJobOptions" },
+      },
+      "/jobs/proximity": {
+        post: { operationId: "jobs.rankNearbyJobs" },
+      },
+      "/jobs/{workItemId}": {
+        get: { operationId: "jobs.getJobDetail" },
+      },
+      "/jobs/{workItemId}/collaborators": {
+        post: { operationId: "jobs.attachJobCollaborator" },
+      },
+      "/jobs/{workItemId}/comments": {
+        post: { operationId: "jobs.addJobComment" },
+      },
+      "/jobs/{workItemId}/labels": {
+        post: { operationId: "jobs.assignJobLabel" },
+      },
+      "/jobs/{workItemId}/route-preview": {
+        post: { operationId: "jobs.getJobRoutePreview" },
+      },
+    });
   });
 
   it("exports the closed job enums and branded ids", () => {

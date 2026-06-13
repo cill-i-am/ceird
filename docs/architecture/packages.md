@@ -117,6 +117,8 @@ Exports the shared jobs contract:
   groupings
 - job comment DTOs extended from `@ceird/comments-core`
 - DTO schemas and inferred DTO types
+- bounded authenticated home dashboard summary DTOs for exact counts and top
+  rows without full tenant job/site hydration
 - route-aware proximity request/response DTOs for ranking filtered jobs by
   driving time, defaulting to active jobs unless an explicit status filter such
   as completed, canceled, all, or a concrete active state is supplied

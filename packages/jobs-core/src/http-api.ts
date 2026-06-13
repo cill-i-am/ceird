@@ -30,6 +30,7 @@ import {
   JobCollaboratorSchema,
   JobCollaboratorsResponseSchema,
   JobExternalMemberOptionsResponseSchema,
+  HomeDashboardSummaryResponseSchema,
   JobMemberOptionsResponseSchema,
   JobListQuerySchema,
   JobOptionsResponseSchema,
@@ -87,6 +88,12 @@ const jobsGroup = HttpApiGroup.make("jobs")
   .add(
     HttpApiEndpoint.get("getJobMemberOptions", "/jobs/member-options", {
       success: JobMemberOptionsResponseSchema,
+      error: [JobAccessDeniedError, JobStorageError],
+    })
+  )
+  .add(
+    HttpApiEndpoint.get("getHomeDashboardSummary", "/home/dashboard-summary", {
+      success: HomeDashboardSummaryResponseSchema,
       error: [JobAccessDeniedError, JobStorageError],
     })
   )

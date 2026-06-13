@@ -4,6 +4,7 @@ import type {
   JobListItem,
   JobListQuery,
   JobListResponse,
+  HomeDashboardSummaryResponse,
   JobMemberOptionsResponse,
   JobOptionsResponse,
   OrganizationActivityListResponse,
@@ -78,6 +79,14 @@ const getCurrentServerJobMemberOptionsIsomorphic = createIsomorphicFn()
     return await getCurrentServerJobMemberOptionsDirect();
   })
   .client(() => getCurrentBrowserJobMemberOptions());
+
+const getCurrentServerHomeDashboardSummaryIsomorphic = createIsomorphicFn()
+  .server(async () => {
+    const { getCurrentServerHomeDashboardSummaryDirect } =
+      await importJobsServerSsr();
+    return await getCurrentServerHomeDashboardSummaryDirect();
+  })
+  .client(() => getCurrentBrowserHomeDashboardSummary());
 
 const getCurrentServerJobExternalMemberOptionsIsomorphic = createIsomorphicFn()
   .server(async () => {
@@ -175,6 +184,13 @@ async function getCurrentBrowserJobMemberOptions(): Promise<JobMemberOptionsResp
   );
 }
 
+async function getCurrentBrowserHomeDashboardSummary(): Promise<HomeDashboardSummaryResponse> {
+  return await runBrowserAppApiClient(
+    "JobsClient.getHomeDashboardSummary",
+    (client) => client.jobs.getHomeDashboardSummary()
+  );
+}
+
 async function getCurrentBrowserJobExternalMemberOptions(): Promise<JobExternalMemberOptionsResponse> {
   return await runBrowserAppApiClient(
     "JobsClient.getJobExternalMemberOptions",
@@ -216,6 +232,10 @@ export function getCurrentServerExternalJobOptions(): Promise<JobOptionsResponse
 
 export function getCurrentServerJobMemberOptions(): Promise<JobMemberOptionsResponse> {
   return getCurrentServerJobMemberOptionsIsomorphic();
+}
+
+export function getCurrentServerHomeDashboardSummary(): Promise<HomeDashboardSummaryResponse> {
+  return getCurrentServerHomeDashboardSummaryIsomorphic();
 }
 
 export function getCurrentServerJobExternalMemberOptions(): Promise<JobExternalMemberOptionsResponse> {
