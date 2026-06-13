@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
 
 import {
@@ -23,6 +24,7 @@ import {
   isInternalOrganizationRole,
   ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES,
   ORGANIZATION_SECURITY_ACTIVITY_TARGET_TYPES,
+  OrganizationSecurityActivityQuerySchema,
   ORGANIZATION_SLUG_PATTERN,
   UserPreferencesAccessDeniedError,
   UserPreferencesApi,
@@ -242,6 +244,28 @@ describe("identity id boundaries", () => {
 });
 
 describe("organization security activity boundary", () => {
+  it("rejects malformed organization security activity date filters", () => {
+    expect(
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        fromDate: "2026-06-12",
+        toDate: "2026-06-13",
+      })
+    ).toStrictEqual({
+      fromDate: "2026-06-12",
+      toDate: "2026-06-13",
+    });
+    expect(() =>
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        fromDate: "2026-02-30",
+      })
+    ).toThrow(/ISO-8601 date/);
+    expect(() =>
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        fromDate: "2026-06-aa",
+      })
+    ).toThrow(/ISO-8601 date/);
+  }, 1000);
+
   it("decodes safe organization security activity responses", () => {
     expect(
       decodeOrganizationSecurityActivityListResponse({
