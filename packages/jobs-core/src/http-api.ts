@@ -79,6 +79,12 @@ const jobsGroup = HttpApiGroup.make("jobs")
     })
   )
   .add(
+    HttpApiEndpoint.get("getExternalJobOptions", "/jobs/external-options", {
+      success: JobOptionsResponseSchema,
+      error: [JobAccessDeniedError, JobStorageError],
+    })
+  )
+  .add(
     HttpApiEndpoint.get("getJobMemberOptions", "/jobs/member-options", {
       success: JobMemberOptionsResponseSchema,
       error: [JobAccessDeniedError, JobStorageError],

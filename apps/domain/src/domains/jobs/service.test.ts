@@ -11,9 +11,14 @@ import {
   JobListItemSchema,
   JobCommentSchema,
   JobDetailSchema,
+  JobOptionsResponseSchema,
   JobSchema,
 } from "@ceird/jobs-core";
-import type { JobCollaborator, JobProximityFilters } from "@ceird/jobs-core";
+import type {
+  JobCollaborator,
+  JobOptionsResponse,
+  JobProximityFilters,
+} from "@ceird/jobs-core";
 import {
   GooglePlaceId,
   ProximityAccessDeniedError,
@@ -61,6 +66,9 @@ const decodeJobCollaborator = Schema.decodeUnknownSync(JobCollaboratorSchema);
 const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
 const decodeJobDetail = Schema.decodeUnknownSync(JobDetailSchema);
 const decodeJobListItem = Schema.decodeUnknownSync(JobListItemSchema);
+const decodeJobOptionsResponse = Schema.decodeUnknownSync(
+  JobOptionsResponseSchema
+);
 const decodeGooglePlaceId = Schema.decodeUnknownSync(GooglePlaceId);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
@@ -224,6 +232,123 @@ describe("JobsService contracts", () => {
     expect(result.body).toBe("Can we get an update?");
     expect(calls.withTransaction).toBe(1);
     expect(calls.addComment).toBe(1);
+  });
+
+  it("returns empty scoped options for external collaborators with no accessible option data", async () => {
+    const calls: { organizationId: string; userId: string }[] = [];
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.getExternalOptions();
+      }).pipe(
+        Effect.provide(JobsService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsExternalOptionsServiceTestLayer({
+            actor: externalActor,
+            calls,
+            scopedOptions: decodeJobOptionsResponse({
+              contacts: [],
+              labels: [],
+              members: [],
+              sites: [],
+            }),
+          })
+        )
+      )
+    );
+
+    expect(result).toStrictEqual({
+      contacts: [],
+      labels: [],
+      members: [],
+      sites: [],
+    });
+    expect(calls).toStrictEqual([
+      {
+        organizationId: externalActor.organizationId,
+        userId: externalActor.userId,
+      },
+    ]);
+  });
+
+  it("keeps scoped external options partial and strips internal members", async () => {
+    const calls: { organizationId: string; userId: string }[] = [];
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.getExternalOptions();
+      }).pipe(
+        Effect.provide(JobsService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsExternalOptionsServiceTestLayer({
+            actor: externalActor,
+            calls,
+            scopedOptions: decodeJobOptionsResponse({
+              contacts: [
+                {
+                  email: "tenant-contact@example.com",
+                  id: "33333333-3333-4333-8333-333333333333",
+                  name: "Tenant Contact",
+                  phone: "+353 1 555 0100",
+                  siteIds: [],
+                },
+              ],
+              labels: [
+                {
+                  createdAt: "2026-05-20T09:00:00.000Z",
+                  id: "44444444-4444-4444-8444-444444444444",
+                  name: "Urgent",
+                  updatedAt: "2026-05-20T09:00:00.000Z",
+                },
+              ],
+              members: [
+                {
+                  id: "55555555-5555-4555-8555-555555555555",
+                  name: "Internal Member",
+                },
+              ],
+              sites: [],
+            }),
+          })
+        )
+      )
+    );
+
+    expect(result.members).toStrictEqual([]);
+    expect(result.contacts).toHaveLength(1);
+    expect(result.labels).toHaveLength(1);
+    expect(result.sites).toStrictEqual([]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("denies scoped external options to internal organization actors", async () => {
+    const calls: { organizationId: string; userId: string }[] = [];
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.getExternalOptions();
+      }).pipe(
+        Effect.provide(JobsService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsExternalOptionsServiceTestLayer({
+            actor: internalActor,
+            calls,
+            scopedOptions: decodeJobOptionsResponse({
+              contacts: [],
+              labels: [],
+              members: [],
+              sites: [],
+            }),
+          })
+        )
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    expect(calls).toStrictEqual([]);
   });
 
   it("ranks active mapped jobs by driving time and reports proximity exclusions", async () => {
@@ -854,6 +979,71 @@ function makeJobsServiceTestLayer(options: {
         ) => {
           options.calls.withTransaction += 1;
           return effect;
+        },
+      } as unknown as ContextService<typeof JobsRepository>)
+    ),
+    Layer.succeed(
+      LabelsRepository,
+      LabelsRepository.of({} as ContextService<typeof LabelsRepository>)
+    ),
+    makeUserPreferencesRepositoryLayer(),
+    Layer.succeed(
+      RouteProximityService,
+      RouteProximityService.of(
+        {} as ContextService<typeof RouteProximityService>
+      )
+    ),
+    Layer.succeed(
+      SiteLocationProvider,
+      SiteLocationProvider.of({} as ContextService<typeof SiteLocationProvider>)
+    ),
+    Layer.succeed(
+      SitesRepository,
+      SitesRepository.of({} as ContextService<typeof SitesRepository>)
+    )
+  );
+}
+
+function makeJobsExternalOptionsServiceTestLayer(options: {
+  readonly actor: OrganizationActor;
+  readonly calls: { organizationId: string; userId: string }[];
+  readonly scopedOptions: JobOptionsResponse;
+}) {
+  return Layer.mergeAll(
+    Layer.succeed(
+      ContactsRepository,
+      ContactsRepository.of({} as ContextService<typeof ContactsRepository>)
+    ),
+    Layer.succeed(
+      CurrentOrganizationActor,
+      CurrentOrganizationActor.of({
+        get: () => Effect.succeed(options.actor),
+      })
+    ),
+    Layer.succeed(
+      HttpServerRequest.HttpServerRequest,
+      {} as HttpServerRequest.HttpServerRequest
+    ),
+    Layer.succeed(
+      JobLabelAssignmentsRepository,
+      JobLabelAssignmentsRepository.of(
+        {} as ContextService<typeof JobLabelAssignmentsRepository>
+      )
+    ),
+    JobsAuthorization.Default,
+    Layer.succeed(
+      JobsActivityRecorder,
+      JobsActivityRecorder.of({} as ContextService<typeof JobsActivityRecorder>)
+    ),
+    Layer.succeed(
+      JobsRepository,
+      JobsRepository.of({
+        listExternalScopedOptions: (
+          organizationId: OrganizationActor["organizationId"],
+          userId: OrganizationActor["userId"]
+        ) => {
+          options.calls.push({ organizationId, userId });
+          return Effect.succeed(options.scopedOptions);
         },
       } as unknown as ContextService<typeof JobsRepository>)
     ),

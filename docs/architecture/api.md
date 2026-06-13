@@ -574,6 +574,7 @@ live in `apps/domain/src/domains/jobs/http.ts`.
 | -------- | ------------------------------------------------- | ----------------------------- |
 | `GET`    | `/jobs`                                           | `listJobs`                    |
 | `GET`    | `/jobs/options`                                   | `getJobOptions`               |
+| `GET`    | `/jobs/external-options`                          | `getExternalJobOptions`       |
 | `GET`    | `/jobs/member-options`                            | `getJobMemberOptions`         |
 | `GET`    | `/jobs/external-member-options`                   | `getJobExternalMemberOptions` |
 | `POST`   | `/jobs`                                           | `createJob`                   |
@@ -590,6 +591,10 @@ live in `apps/domain/src/domains/jobs/http.ts`.
 | `POST`   | `/jobs/:workItemId/collaborators`                 | `attachJobCollaborator`       |
 | `PATCH`  | `/jobs/:workItemId/collaborators/:collaboratorId` | `updateJobCollaborator`       |
 | `DELETE` | `/jobs/:workItemId/collaborators/:collaboratorId` | `detachJobCollaborator`       |
+
+`GET /jobs/external-options` is external-only. It returns `JobOptionsResponse`
+with `members: []` and derives labels, contacts, and sites only from jobs
+visible through the current collaborator's grants.
 
 ## Labels Domain
 
