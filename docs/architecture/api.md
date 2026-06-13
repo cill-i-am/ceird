@@ -763,6 +763,11 @@ action name.
 Use Effect `Config` for environment loading and Effect `Schema` for external
 payload boundaries. Plain TypeScript types are fine for internal computed
 values that never cross an untrusted boundary.
+The domain TypeScript scope enables `noUncheckedIndexedAccess`, so repository
+rows, parsed URL segments, regex groups, and disposal/result arrays must be
+narrowed before use. Keep those checks close to the boundary that proves the
+value exists, and continue using `Config`/`Schema` for runtime validation
+rather than replacing boundary decoding with ad hoc casts.
 
 ## Testing
 

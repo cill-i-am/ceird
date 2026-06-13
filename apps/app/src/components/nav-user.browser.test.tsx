@@ -315,11 +315,19 @@ describe("nav user", () => {
     renderNavUser();
 
     const trigger = screen.getByTestId("sidebar-menu-button");
-    const accountSummary = screen
-      .getAllByText("Taylor Example")[0]
-      .closest("div");
+    const [accountSummaryText] = screen.getAllByText("Taylor Example");
     const [avatar] = screen.getAllByTestId("avatar");
     const [chevron] = screen.getAllByTestId("hugeicon");
+
+    if (
+      accountSummaryText === undefined ||
+      avatar === undefined ||
+      chevron === undefined
+    ) {
+      throw new Error("Expected nav user fixture to render account controls");
+    }
+
+    const accountSummary = accountSummaryText.closest("div");
 
     expect(trigger).toHaveClass("overflow-hidden");
     expect(trigger).toHaveClass("group-data-[collapsible=icon]:p-0!");

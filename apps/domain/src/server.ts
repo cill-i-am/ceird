@@ -227,7 +227,11 @@ function throwIfDisposeFailed(
   );
 
   if (failures.length === 1) {
-    throw failures[0].reason;
+    const [failure] = failures;
+
+    if (failure !== undefined) {
+      throw failure.reason;
+    }
   }
 
   if (failures.length > 1) {

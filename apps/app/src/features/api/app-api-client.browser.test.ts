@@ -71,6 +71,18 @@ const listResponse: JobListResponse = {
   ],
 };
 
+function firstFixtureItem<T>(items: readonly T[], label: string): T {
+  const [item] = items;
+
+  if (item === undefined) {
+    throw new Error(`Expected ${label} fixture to include an item`);
+  }
+
+  return item;
+}
+
+const listResponseItem = firstFixtureItem(listResponse.items, "jobs list");
+
 const detailResponse: JobDetailResponse = {
   job: {
     id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
@@ -157,7 +169,7 @@ const jobProximityResponse: JobProximityResponse = {
   origin: originSummary,
   rows: [
     {
-      job: listResponse.items[0],
+      job: listResponseItem,
       routeSummary,
       site: createSiteResponse,
     },
@@ -165,7 +177,7 @@ const jobProximityResponse: JobProximityResponse = {
 };
 
 const jobRoutePreviewResponse: JobRoutePreviewResponse = {
-  job: listResponse.items[0],
+  job: listResponseItem,
   origin: originSummary,
   routeSummary,
   site: createSiteResponse,

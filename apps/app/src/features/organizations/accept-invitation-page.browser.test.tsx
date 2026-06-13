@@ -355,9 +355,18 @@ describe("accept invitation page", () => {
       });
     });
     expect(mockedClearAppContextClientCache).toHaveBeenCalledOnce();
-    expect(
-      mockedSetActiveOrganization.mock.invocationCallOrder[0]
-    ).toBeLessThan(mockedNavigate.mock.invocationCallOrder[0]);
+    const [setActiveOrganizationCallOrder] =
+      mockedSetActiveOrganization.mock.invocationCallOrder;
+    const [navigateCallOrder] = mockedNavigate.mock.invocationCallOrder;
+
+    if (
+      setActiveOrganizationCallOrder === undefined ||
+      navigateCallOrder === undefined
+    ) {
+      throw new Error("Expected organization activation before navigation");
+    }
+
+    expect(setActiveOrganizationCallOrder).toBeLessThan(navigateCallOrder);
   }, 10_000);
 
   it("accepts with the public preview when authenticated invitation details are temporarily unavailable", async () => {

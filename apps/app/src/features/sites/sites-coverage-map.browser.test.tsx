@@ -150,7 +150,10 @@ describe("sites coverage map", () => {
 
     const [marker] = screen.getAllByTestId("sites-map-fallback-marker");
 
-    expect(marker).toBeDefined();
+    if (marker === undefined) {
+      throw new Error("Expected static site map fallback to render a marker");
+    }
+
     expect(within(marker).getByText("1")).toBeInTheDocument();
     expect(screen.getByLabelText("Depot, 1 active job")).toBeInTheDocument();
     expect(screen.getByText("1 active job")).toBeInTheDocument();

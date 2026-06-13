@@ -250,8 +250,14 @@ function isIPv4MappedIPv6LoopbackHostname(hostname: string) {
     return false;
   }
 
-  const high = Number.parseInt(hexMappedIPv4Match.groups.high, 16);
-  const low = Number.parseInt(hexMappedIPv4Match.groups.low, 16);
+  const { high: highSegment, low: lowSegment } = hexMappedIPv4Match.groups;
+
+  if (highSegment === undefined || lowSegment === undefined) {
+    return false;
+  }
+
+  const high = Number.parseInt(highSegment, 16);
+  const low = Number.parseInt(lowSegment, 16);
 
   return (
     Number.isInteger(high) &&
