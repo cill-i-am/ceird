@@ -1,14 +1,18 @@
 import type { OrganizationId } from "@ceird/identity-core";
-import type { JobListItem, JobListResponse } from "@ceird/jobs-core";
+import type {
+  JobListCursorType,
+  JobListItem,
+  JobListResponse,
+} from "@ceird/jobs-core";
 import { QueryClient } from "@tanstack/react-query";
 
-import { COMPLETE_TENANT_COLLECTION } from "#/data-plane/collection-contract";
 import { createDataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { getDataPlaneSessionKey } from "#/data-plane/session";
 
 import {
   createJobsListSeed,
+  createJobsListScope,
   getOrCreateJobsCollectionState,
   jobsCollectionId,
   jobsCollectionKey,
@@ -43,23 +47,61 @@ describe("jobs data plane", () => {
       "user_123",
       "role",
       "owner",
+      "list",
+      "cursor",
+      "initial",
+      "limit",
+      50,
+      "status",
+      "all",
+      "assignee",
+      "all",
+      "coordinator",
+      "all",
+      "priority",
+      "all",
+      "label",
+      "all",
+      "site",
+      "all",
+      "search",
+      "",
+      "sort",
+      "updated-desc",
     ]);
     expect(jobsCollectionId(scope)).toBe(
-      "organization:org_123:user:user_123:role:owner:jobs"
+      "organization:org_123:user:user_123:role:owner:jobs:list:cursor:initial:limit:50:status:all:assignee:all:coordinator:all:priority:all:label:all:site:all:search::sort:updated-desc"
     );
   });
 
-  it("creates complete jobs seed envelopes for route loaders", () => {
+  it("creates paged-query jobs seed envelopes for route loaders", () => {
     const response = {
       items: [job],
-      nextCursor: undefined,
+      nextCursor: "cursor-two" as JobListCursorType,
     } satisfies JobListResponse;
+    const listScope = createJobsListScope({
+      limit: 25,
+      query: "boiler",
+      status: "active",
+    });
 
-    expect(createJobsListSeed(scope, response, 1000)).toMatchObject({
+    expect(createJobsListSeed(scope, response, listScope, 1000)).toMatchObject({
       collection: "jobs",
-      completeness: COMPLETE_TENANT_COLLECTION,
+      completeness: {
+        filters: [
+          { field: "status", operator: "eq", value: "active" },
+          { field: "query", operator: "search", value: "boiler" },
+        ],
+        mode: "paged-query",
+        page: {
+          hasNextPage: true,
+          limit: 25,
+          type: "cursor",
+        },
+        queryName: "jobs.list",
+      },
       data: [job],
-      queryKey: jobsCollectionKey(scope),
+      queryKey: jobsCollectionKey(scope, listScope),
       requestStartedAt: 1000,
     });
   });
@@ -75,19 +117,28 @@ describe("jobs data plane", () => {
 
     const first = getOrCreateJobsCollectionState({
       initialJobs: [job],
+      listScope: createJobsListScope({ limit: 25, status: "active" }),
       queryClient,
       scope,
       session,
     });
     const second = getOrCreateJobsCollectionState({
       initialJobs: [],
+      listScope: createJobsListScope({ limit: 25, status: "active" }),
       queryClient,
       scope,
       session,
     });
 
     expect(first).toBe(second);
-    expect(session.registry.has(jobsCollectionId(scope))).toBeTruthy();
+    expect(
+      session.registry.has(
+        jobsCollectionId(
+          scope,
+          createJobsListScope({ limit: 25, status: "active" })
+        )
+      )
+    ).toBeTruthy();
     expect(getDataPlaneSessionKey(session.scope)).toBe(
       "organization:org_123:user:user_123:role:owner"
     );

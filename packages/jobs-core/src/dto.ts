@@ -304,10 +304,15 @@ export const JobListQuerySchema = Schema.Struct({
       )
     )
   ),
-  status: Schema.optional(JobStatusSchema),
-  assigneeId: Schema.optional(UserId),
+  status: Schema.optional(Schema.Literals(["active", "all", ...JOB_STATUSES])),
+  assigneeId: Schema.optional(
+    Schema.Union([UserId, Schema.Literal("unassigned")])
+  ),
   coordinatorId: Schema.optional(UserId),
   priority: Schema.optional(JobPrioritySchema),
+  query: Schema.optional(
+    NonEmptyTrimmedString.pipe(Schema.check(Schema.isMaxLength(256)))
+  ),
   siteId: Schema.optional(SiteId),
   labelId: Schema.optional(LabelId),
 }).annotate({

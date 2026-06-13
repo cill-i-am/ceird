@@ -2,6 +2,7 @@ import type {
   JobCollaborator,
   JobDetailResponse,
   JobListItem,
+  JobListQuery,
   JobListResponse,
   JobOptionsResponse,
   WorkItemIdType,
@@ -27,7 +28,9 @@ import {
   createQueryCollectionFromContract,
   defineQueryCollectionContract,
   entityDetailCollectionCompleteness,
+  pagedQueryCollectionCompleteness,
 } from "#/data-plane/collection-contract";
+import type { DataPlaneCollectionFilterScope } from "#/data-plane/collection-contract";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
   deleteDataPlaneCollectionItem,
@@ -47,6 +50,7 @@ import {
   getCurrentServerJobDetail,
   getCurrentServerJobOptions,
   listAllCurrentServerJobs,
+  listCurrentServerJobs,
 } from "#/features/jobs/jobs-server";
 import {
   canUseInternalJobOptions,
@@ -63,6 +67,7 @@ export const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
 };
 
 const JOB_OPTIONS_COLLECTION_ITEM_ID = "job-options";
+const DEFAULT_JOBS_LIST_LIMIT = 50;
 
 type JobsCollection = ReturnType<typeof createJobsCollection>;
 type JobOptionsCollection = ReturnType<typeof createJobOptionsCollection>;
@@ -89,6 +94,7 @@ export type JobDetailCollectionItem = Schema.Schema.Type<
 
 export interface JobsCollectionState {
   readonly collection: JobsCollection;
+  readonly listScope: JobsListScope;
   readonly writeVersionRef: DataPlaneCollectionWriteVersionRef;
 }
 
@@ -107,8 +113,46 @@ export interface JobCollaboratorsCollectionState {
   readonly writeVersionRef: DataPlaneCollectionWriteVersionRef;
 }
 
-export function jobsCollectionKey(scope: OrganizationDataScope) {
-  return organizationDataQueryKey("jobs", scope);
+export interface JobsListScope {
+  readonly query: JobListQuery;
+}
+
+export function createJobsListScope(query: JobListQuery = {}): JobsListScope {
+  return {
+    query: normalizeJobsListQuery(query),
+  };
+}
+
+export function jobsCollectionKey(
+  scope: OrganizationDataScope,
+  listScope: JobsListScope = createJobsListScope()
+) {
+  const { query } = listScope;
+
+  return [
+    ...organizationDataQueryKey("jobs", scope),
+    "list",
+    "cursor",
+    query.cursor ?? "initial",
+    "limit",
+    query.limit ?? DEFAULT_JOBS_LIST_LIMIT,
+    "status",
+    query.status ?? "all",
+    "assignee",
+    query.assigneeId ?? "all",
+    "coordinator",
+    query.coordinatorId ?? "all",
+    "priority",
+    query.priority ?? "all",
+    "label",
+    query.labelId ?? "all",
+    "site",
+    query.siteId ?? "all",
+    "search",
+    query.query ?? "",
+    "sort",
+    "updated-desc",
+  ] as const;
 }
 
 function jobOptionsCollectionKey(scope: OrganizationDataScope) {
@@ -133,8 +177,24 @@ function jobCollaboratorsCollectionKey(
   ];
 }
 
-export function jobsCollectionId(scope: OrganizationDataScope) {
-  return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:jobs`;
+export function jobsCollectionId(
+  scope: OrganizationDataScope,
+  listScope: JobsListScope = createJobsListScope()
+) {
+  return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:jobs:${jobsListScopeKey(listScope)}`;
+}
+
+export function jobsListScopeKey(listScope: JobsListScope) {
+  return jobsCollectionKey(
+    {
+      organizationId: "scope" as OrganizationDataScope["organizationId"],
+      role: "member",
+      userId: "user",
+    },
+    listScope
+  )
+    .slice(7)
+    .join(":");
 }
 
 function jobOptionsCollectionId(scope: OrganizationDataScope) {
@@ -158,13 +218,14 @@ function jobCollaboratorsCollectionId(
 export function createJobsListSeed(
   scope: OrganizationDataScope,
   response: JobListResponse,
+  listScope: JobsListScope = createJobsListScope(),
   requestStartedAt?: number | undefined
 ): DataPlaneSeed<readonly JobListItem[]> {
   return createDataPlaneSeed({
     collection: "jobs",
-    completeness: COMPLETE_TENANT_COLLECTION,
+    completeness: jobsListCompleteness(listScope, response),
     data: response.items,
-    queryKey: jobsCollectionKey(scope),
+    queryKey: jobsCollectionKey(scope, listScope),
     requestStartedAt,
   });
 }
@@ -185,22 +246,26 @@ export function createJobOptionsSeed(
 
 export function getOrCreateJobsCollectionState({
   initialJobs,
+  listScope = createJobsListScope(),
   queryClient,
   scope,
   session,
 }: {
   readonly initialJobs: readonly JobListItem[];
+  readonly listScope?: JobsListScope | undefined;
   readonly queryClient: QueryClient;
   readonly scope: OrganizationDataScope;
   readonly session?: DataPlaneSession | undefined;
 }): JobsCollectionState {
-  const registryKey = jobsCollectionId(scope);
+  const registryKey = jobsCollectionId(scope, listScope);
   const existing = session?.registry.get(registryKey);
 
   if (existing) {
-    seedQueryCollectionInitialData(queryClient, jobsCollectionKey(scope), [
-      ...initialJobs,
-    ]);
+    seedQueryCollectionInitialData(
+      queryClient,
+      jobsCollectionKey(scope, listScope),
+      [...initialJobs]
+    );
     return existing as JobsCollectionState;
   }
 
@@ -211,6 +276,7 @@ export function getOrCreateJobsCollectionState({
   };
   const collection = createJobsCollection({
     initialJobs,
+    listScope,
     queryClient,
     scope,
     state,
@@ -218,6 +284,7 @@ export function getOrCreateJobsCollectionState({
   });
   const created = {
     collection,
+    listScope,
     writeVersionRef,
   } satisfies JobsCollectionState;
   state.collection = collection;
@@ -531,12 +598,14 @@ export async function loadCurrentJobsOptionsForViewer(
 
 function createJobsCollection({
   initialJobs,
+  listScope,
   queryClient,
   scope,
   state,
   writeVersionRef,
 }: {
   readonly initialJobs: readonly JobListItem[];
+  readonly listScope: JobsListScope;
   readonly queryClient: QueryClient;
   readonly scope: OrganizationDataScope;
   readonly state: {
@@ -544,20 +613,20 @@ function createJobsCollection({
   };
   readonly writeVersionRef: DataPlaneCollectionWriteVersionRef;
 }) {
-  const queryKey = jobsCollectionKey(scope);
+  const queryKey = jobsCollectionKey(scope, listScope);
   seedQueryCollectionInitialData(queryClient, queryKey, [...initialJobs]);
 
   return createQueryCollectionFromContract(
     queryClient,
     defineQueryCollectionContract({
       collection: "jobs",
-      completeness: COMPLETE_TENANT_COLLECTION,
+      completeness: jobsListCompleteness(listScope),
       getKey: (job: JobListItem) => job.id,
       gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
-      id: jobsCollectionId(scope),
+      id: jobsCollectionId(scope, listScope),
       queryFn: async () => {
         const requestWriteVersion = writeVersionRef.current;
-        const response = await listAllCurrentServerJobs({});
+        const response = await listCurrentServerJobs(listScope.query);
 
         return reconcileQueryCollectionDataAfterConcurrentWrite({
           collection: state.collection,
@@ -572,6 +641,92 @@ function createJobsCollection({
       staleTime: 30_000,
       syncMode: "eager",
     })
+  );
+}
+
+function normalizeJobsListQuery(query: JobListQuery): JobListQuery {
+  return {
+    assigneeId: query.assigneeId,
+    coordinatorId: query.coordinatorId,
+    cursor: query.cursor,
+    labelId: query.labelId,
+    limit: query.limit ?? DEFAULT_JOBS_LIST_LIMIT,
+    priority: query.priority,
+    query: query.query,
+    siteId: query.siteId,
+    status: query.status,
+  };
+}
+
+function jobsListCompleteness(
+  listScope: JobsListScope,
+  response?: JobListResponse | undefined
+) {
+  return pagedQueryCollectionCompleteness({
+    filters: jobsListFilterScopes(listScope),
+    page: {
+      cursor: listScope.query.cursor,
+      hasNextPage: response?.nextCursor !== undefined,
+      limit: listScope.query.limit ?? DEFAULT_JOBS_LIST_LIMIT,
+      type: "cursor",
+    },
+    queryName: "jobs.list",
+  });
+}
+
+function jobsListFilterScopes(
+  listScope: JobsListScope
+): readonly DataPlaneCollectionFilterScope[] {
+  const { query } = listScope;
+  const filters: DataPlaneCollectionFilterScope[] = [];
+
+  pushFilterScope(filters, "status", query.status);
+  pushFilterScope(filters, "assigneeId", query.assigneeId);
+  pushFilterScope(filters, "coordinatorId", query.coordinatorId);
+  pushFilterScope(filters, "priority", query.priority);
+  pushFilterScope(filters, "labelId", query.labelId);
+  pushFilterScope(filters, "siteId", query.siteId);
+  pushFilterScope(filters, "query", query.query, "search");
+
+  return filters;
+}
+
+function pushFilterScope(
+  filters: DataPlaneCollectionFilterScope[],
+  field: string,
+  value: unknown,
+  operator: DataPlaneCollectionFilterScope["operator"] = "eq"
+) {
+  if (
+    value === undefined ||
+    value === "all" ||
+    !isDataPlaneCollectionFilterValue(value)
+  ) {
+    return;
+  }
+
+  filters.push({ field, operator, value });
+}
+
+function isDataPlaneCollectionFilterValue(
+  value: unknown
+): value is DataPlaneCollectionFilterScope["value"] {
+  if (
+    typeof value === "boolean" ||
+    typeof value === "number" ||
+    typeof value === "string"
+  ) {
+    return true;
+  }
+
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === "boolean" ||
+        typeof item === "number" ||
+        typeof item === "string"
+    )
   );
 }
 

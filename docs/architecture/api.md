@@ -591,6 +591,14 @@ live in `apps/domain/src/domains/jobs/http.ts`.
 | `PATCH`  | `/jobs/:workItemId/collaborators/:collaboratorId` | `updateJobCollaborator`       |
 | `DELETE` | `/jobs/:workItemId/collaborators/:collaboratorId` | `detachJobCollaborator`       |
 
+`GET /jobs` is cursor-paged and accepts bounded primary-list filters including
+`limit`, `cursor`, `status`, `assigneeId`, `coordinatorId`, `priority`,
+`labelId`, `siteId`, and text `query`. `status=active` excludes terminal jobs,
+`status=all` removes the status predicate, and `assigneeId=unassigned` filters
+for jobs without an assignee. The app `/jobs` route sends its search/filter
+state through this query contract instead of loading every tenant job and
+filtering the complete array in the browser.
+
 ## Labels Domain
 
 Labels live in `apps/domain/src/domains/labels` and are exposed through
