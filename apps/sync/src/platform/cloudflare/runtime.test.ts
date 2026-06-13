@@ -1,10 +1,14 @@
 import type { SyncShapeName } from "@ceird/domain-core";
 import { SyncShapeAuthorizationSchema } from "@ceird/domain-core";
-import { describe, expect, it, vi } from "@effect/vitest";
+import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Logger, Redacted, References, Schema } from "effect";
 
 import type { SyncWorkerEnv } from "./env.js";
-import { handleSyncWorkerFetch, SyncWorkerFailure } from "./runtime.js";
+import {
+  clearSyncAuthorizationCacheForTesting,
+  handleSyncWorkerFetch,
+  SyncWorkerFailure,
+} from "./runtime.js";
 
 function captureLogs() {
   const logs: unknown[] = [];
@@ -42,20 +46,38 @@ const baseEnv = {
 } satisfies SyncWorkerEnv;
 
 function makeJobsAuthorization() {
-  return Schema.decodeUnknownSync(SyncShapeAuthorizationSchema)({
+  return makeAuthorization({
     organizationId: "org_sync",
-    params: {
-      "1": "org_sync",
-    },
     shape: "jobs",
-    scope: "organization",
     table: "work_items",
     userId: "user_sync",
+  });
+}
+
+function makeAuthorization(input: {
+  readonly organizationId: string;
+  readonly shape: "jobs" | "sites";
+  readonly table: "work_items" | "sites";
+  readonly userId: string;
+}) {
+  return Schema.decodeUnknownSync(SyncShapeAuthorizationSchema)({
+    organizationId: input.organizationId,
+    params: {
+      "1": input.organizationId,
+    },
+    shape: input.shape,
+    scope: "organization",
+    table: input.table,
+    userId: input.userId,
     where: "organization_id = $1",
   });
 }
 
 describe("Sync Worker runtime", () => {
+  beforeEach(() => {
+    clearSyncAuthorizationCacheForTesting();
+  });
+
   it("uses default domain and Electric bindings with generated request-id propagation", async () => {
     const domainRequests: Request[] = [];
     const electricRequests: Request[] = [];
@@ -256,6 +278,335 @@ describe("Sync Worker runtime", () => {
     expect(electricUrl.searchParams.get("params[1]")).toBe("org_sync");
     expect(electricUrl.searchParams.get("secret")).toBe("electric-secret");
     expect(forwardedRequests[0].headers.get("cookie")).toBeNull();
+  });
+
+  it("reuses successful same-user authorization grants for the short TTL", async () => {
+    const forwardedOrganizations: string[] = [];
+    const authorizeShape = vi.fn(() => Effect.succeed(makeJobsAuthorization()));
+    const fetchElectric = vi.fn((request: Request) =>
+      Effect.sync(() => {
+        forwardedOrganizations.push(
+          new URL(request.url).searchParams.get("params[1]") ?? ""
+        );
+
+        return Response.json([{ headers: { control: "up-to-date" } }]);
+      })
+    );
+    const dependencies = {
+      authorizeShape,
+      fetchElectric,
+      now: () => 1000,
+    };
+
+    for (const offset of ["-1", "0_0"]) {
+      const response = await handleSyncWorkerFetch(
+        new Request(
+          `https://sync.example.com/v1/shapes/jobs?offset=${offset}`,
+          {
+            headers: {
+              cookie: "ceird.session=user-a",
+              origin: "https://app.example.com",
+            },
+          }
+        ),
+        baseEnv,
+        makeExecutionContext(),
+        dependencies
+      ).pipe(Effect.runPromise);
+
+      expect(response.status).toBe(200);
+    }
+
+    expect(authorizeShape).toHaveBeenCalledTimes(1);
+    expect(fetchElectric).toHaveBeenCalledTimes(2);
+    expect(forwardedOrganizations).toStrictEqual(["org_sync", "org_sync"]);
+  });
+
+  it("isolates cached grants by auth fingerprint and organization", async () => {
+    const forwardedOrganizations: string[] = [];
+    const authorizeShape = vi
+      .fn()
+      .mockReturnValueOnce(
+        Effect.succeed(
+          makeAuthorization({
+            organizationId: "org_a",
+            shape: "jobs",
+            table: "work_items",
+            userId: "user_a",
+          })
+        )
+      )
+      .mockReturnValueOnce(
+        Effect.succeed(
+          makeAuthorization({
+            organizationId: "org_b",
+            shape: "jobs",
+            table: "work_items",
+            userId: "user_b",
+          })
+        )
+      );
+
+    for (const cookie of ["ceird.session=user-a", "ceird.session=user-b"]) {
+      const response = await handleSyncWorkerFetch(
+        new Request("https://sync.example.com/v1/shapes/jobs?offset=-1", {
+          headers: {
+            cookie,
+            origin: "https://app.example.com",
+          },
+        }),
+        baseEnv,
+        makeExecutionContext(),
+        {
+          authorizeShape,
+          fetchElectric: (request) =>
+            Effect.sync(() => {
+              forwardedOrganizations.push(
+                new URL(request.url).searchParams.get("params[1]") ?? ""
+              );
+
+              return Response.json([{ headers: { control: "up-to-date" } }]);
+            }),
+          now: () => 1000,
+        }
+      ).pipe(Effect.runPromise);
+
+      expect(response.status).toBe(200);
+    }
+
+    expect(authorizeShape).toHaveBeenCalledTimes(2);
+    expect(forwardedOrganizations).toStrictEqual(["org_a", "org_b"]);
+  });
+
+  it("isolates cached grants by shape", async () => {
+    const forwardedTables: string[] = [];
+    const authorizeShape = vi
+      .fn()
+      .mockReturnValueOnce(Effect.succeed(makeJobsAuthorization()))
+      .mockReturnValueOnce(
+        Effect.succeed(
+          makeAuthorization({
+            organizationId: "org_sync",
+            shape: "sites",
+            table: "sites",
+            userId: "user_sync",
+          })
+        )
+      );
+
+    for (const shape of ["jobs", "sites"]) {
+      const response = await handleSyncWorkerFetch(
+        new Request(`https://sync.example.com/v1/shapes/${shape}?offset=-1`, {
+          headers: {
+            cookie: "ceird.session=user-a",
+            origin: "https://app.example.com",
+          },
+        }),
+        baseEnv,
+        makeExecutionContext(),
+        {
+          authorizeShape,
+          fetchElectric: (request) =>
+            Effect.sync(() => {
+              forwardedTables.push(
+                new URL(request.url).searchParams.get("table") ?? ""
+              );
+
+              return Response.json([{ headers: { control: "up-to-date" } }]);
+            }),
+          now: () => 1000,
+        }
+      ).pipe(Effect.runPromise);
+
+      expect(response.status).toBe(200);
+    }
+
+    expect(authorizeShape).toHaveBeenCalledTimes(2);
+    expect(forwardedTables).toStrictEqual(["work_items", "sites"]);
+  });
+
+  it("falls back to live authorization after cached grants expire", async () => {
+    let nowMs = 1000;
+    const authorizeShape = vi.fn(() => Effect.succeed(makeJobsAuthorization()));
+    const requestAt = (currentNowMs: number) => {
+      nowMs = currentNowMs;
+
+      return handleSyncWorkerFetch(
+        new Request("https://sync.example.com/v1/shapes/jobs?offset=-1", {
+          headers: {
+            cookie: "ceird.session=user-a",
+            origin: "https://app.example.com",
+          },
+        }),
+        {
+          ...baseEnv,
+          SYNC_AUTHORIZATION_CACHE_TTL_SECONDS: "1",
+        },
+        makeExecutionContext(),
+        {
+          authorizeShape,
+          fetchElectric: () =>
+            Effect.succeed(
+              Response.json([{ headers: { control: "up-to-date" } }])
+            ),
+          now: () => nowMs,
+        }
+      ).pipe(Effect.runPromise);
+    };
+
+    const firstResponse = await requestAt(1000);
+    const secondResponse = await requestAt(1999);
+    const thirdResponse = await requestAt(2001);
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(thirdResponse.status).toBe(200);
+
+    expect(authorizeShape).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache requests without auth-bearing identity material", async () => {
+    const authorizeShape = vi.fn(() => Effect.succeed(makeJobsAuthorization()));
+
+    for (const _ of [0, 1]) {
+      const response = await handleSyncWorkerFetch(
+        new Request("https://sync.example.com/v1/shapes/jobs?offset=-1", {
+          headers: {
+            origin: "https://app.example.com",
+          },
+        }),
+        baseEnv,
+        makeExecutionContext(),
+        {
+          authorizeShape,
+          fetchElectric: () =>
+            Effect.succeed(
+              Response.json([{ headers: { control: "up-to-date" } }])
+            ),
+          now: () => 1000,
+        }
+      ).pipe(Effect.runPromise);
+
+      expect(response.status).toBe(200);
+    }
+
+    expect(authorizeShape).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache authorization rejections", async () => {
+    const authorizeShape = vi
+      .fn()
+      .mockReturnValueOnce(
+        Effect.fail(
+          new SyncWorkerFailure({
+            failureTag: "SyncAuthorizationRejected",
+            message: "Authentication is required",
+            status: 401,
+          })
+        )
+      )
+      .mockReturnValueOnce(Effect.succeed(makeJobsAuthorization()));
+
+    const firstResponse = await handleSyncWorkerFetch(
+      new Request("https://sync.example.com/v1/shapes/jobs?offset=-1", {
+        headers: {
+          cookie: "ceird.session=user-a",
+          origin: "https://app.example.com",
+        },
+      }),
+      baseEnv,
+      makeExecutionContext(),
+      {
+        authorizeShape,
+        fetchElectric: () => Effect.die("unexpected electric request"),
+        now: () => 1000,
+      }
+    ).pipe(Effect.runPromise);
+    const secondResponse = await handleSyncWorkerFetch(
+      new Request("https://sync.example.com/v1/shapes/jobs?offset=-1", {
+        headers: {
+          cookie: "ceird.session=user-a",
+          origin: "https://app.example.com",
+        },
+      }),
+      baseEnv,
+      makeExecutionContext(),
+      {
+        authorizeShape,
+        fetchElectric: () =>
+          Effect.succeed(
+            Response.json([{ headers: { control: "up-to-date" } }])
+          ),
+        now: () => 1001,
+      }
+    ).pipe(Effect.runPromise);
+
+    expect(firstResponse.status).toBe(401);
+    expect(secondResponse.status).toBe(200);
+    expect(authorizeShape).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache malformed domain authorization payloads", async () => {
+    const domainFetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ ok: true }))
+      .mockResolvedValueOnce(
+        Response.json({
+          organizationId: "org_sync",
+          params: {
+            "1": "org_sync",
+          },
+          shape: "jobs",
+          scope: "organization",
+          table: "work_items",
+          userId: "user_sync",
+          where: "organization_id = $1",
+        })
+      );
+    const env = {
+      ...baseEnv,
+      DOMAIN: {
+        connect: () => {
+          throw new Error("connect is not used by the sync adapter");
+        },
+        fetch: domainFetch,
+      },
+    } satisfies SyncWorkerEnv;
+    const firstResponse = await handleSyncWorkerFetch(
+      new Request("https://sync.example.com/v1/shapes/jobs?offset=-1", {
+        headers: {
+          cookie: "ceird.session=user-a",
+          origin: "https://app.example.com",
+        },
+      }),
+      env,
+      makeExecutionContext(),
+      {
+        fetchElectric: () => Effect.die("unexpected electric request"),
+        now: () => 1000,
+      }
+    ).pipe(Effect.runPromise);
+    const secondResponse = await handleSyncWorkerFetch(
+      new Request("https://sync.example.com/v1/shapes/jobs?offset=-1", {
+        headers: {
+          cookie: "ceird.session=user-a",
+          origin: "https://app.example.com",
+        },
+      }),
+      env,
+      makeExecutionContext(),
+      {
+        fetchElectric: () =>
+          Effect.succeed(
+            Response.json([{ headers: { control: "up-to-date" } }])
+          ),
+        now: () => 1001,
+      }
+    ).pipe(Effect.runPromise);
+
+    expect(firstResponse.status).toBe(502);
+    expect(secondResponse.status).toBe(200);
+    expect(domainFetch).toHaveBeenCalledTimes(2);
   });
 
   it("replaces unsafe caller request IDs before forwarding", async () => {

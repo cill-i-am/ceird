@@ -24,6 +24,7 @@ export interface SyncWorkerConfigEnv {
   readonly ELECTRIC_SQL_LOCATION_HINT?: DurableObjectLocationHint;
   readonly ELECTRIC_SOURCE_SECRET: string;
   readonly NODE_ENV?: string;
+  readonly SYNC_AUTHORIZATION_CACHE_TTL_SECONDS?: string;
 }
 
 export type SyncWorkerEnv = SyncWorkerBindingRuntimeEnv & SyncWorkerConfigEnv;
@@ -57,6 +58,7 @@ export const SyncWorkerConfigEnvSchema = Schema.Struct({
   ),
   ELECTRIC_SOURCE_SECRET: Schema.NonEmptyString,
   NODE_ENV: Schema.optional(Schema.String),
+  SYNC_AUTHORIZATION_CACHE_TTL_SECONDS: Schema.optional(Schema.String),
 });
 export type SyncWorkerConfig = Schema.Schema.Type<
   typeof SyncWorkerConfigEnvSchema
@@ -87,6 +89,8 @@ export function syncWorkerEnvConfigMap(env: SyncWorkerEnv) {
       ELECTRIC_SQL_LOCATION_HINT: env.ELECTRIC_SQL_LOCATION_HINT,
       ELECTRIC_SOURCE_SECRET: env.ELECTRIC_SOURCE_SECRET,
       NODE_ENV: env.NODE_ENV,
+      SYNC_AUTHORIZATION_CACHE_TTL_SECONDS:
+        env.SYNC_AUTHORIZATION_CACHE_TTL_SECONDS,
     }).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string"
     )
