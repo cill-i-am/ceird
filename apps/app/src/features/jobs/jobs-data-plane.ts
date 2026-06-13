@@ -511,8 +511,7 @@ export function upsertJobOptionsSite(
 }
 
 export async function loadCurrentJobsOptionsForViewer(
-  viewer: JobsViewer,
-  _existingList?: JobListResponse | undefined
+  viewer: JobsViewer
 ): Promise<JobOptionsResponse> {
   if (canUseInternalJobOptions(viewer)) {
     return await getCurrentServerJobOptions();

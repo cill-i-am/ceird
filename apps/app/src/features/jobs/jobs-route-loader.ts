@@ -74,7 +74,7 @@ export async function loadJobsRouteData(
   } else {
     list = await listPromise;
     optionsRequestStartedAt = Date.now();
-    options = await loadCurrentJobsOptionsForViewer(viewer, list);
+    options = await loadCurrentJobsOptionsForViewer(viewer);
   }
 
   const routeProximityLocationEnabled =
