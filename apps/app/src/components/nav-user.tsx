@@ -199,9 +199,12 @@ export function NavUser({
             {errorMessage ? (
               <>
                 <DropdownMenuSeparator />
-                <p className="px-3 py-1 text-xs text-destructive" role="status">
+                <output
+                  aria-live="polite"
+                  className="px-3 py-1 text-xs text-destructive"
+                >
                   {errorMessage}
-                </p>
+                </output>
               </>
             ) : null}
           </DropdownMenuContent>

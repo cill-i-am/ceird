@@ -391,6 +391,9 @@ describe("jobs-core", () => {
     expect(JobsApiGroup.identifier).toBe("jobs");
     expect(spec.paths["/jobs"]?.get?.operationId).toBe("jobs.listJobs");
     expect(spec.paths["/jobs"]?.post?.operationId).toBe("jobs.createJob");
+    expect(spec.paths["/jobs/external-options"]?.get?.operationId).toBe(
+      "jobs.getExternalJobOptions"
+    );
     expect(spec.paths["/jobs/proximity"]?.post?.operationId).toBe(
       "jobs.rankNearbyJobs"
     );

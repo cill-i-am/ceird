@@ -51,6 +51,7 @@ import type {
   JobListItem,
   JobListQuery,
   JobMemberOption,
+  JobOptionsResponse,
   JobPriority,
   JobProximityFilters,
   JobStatus,
@@ -1316,6 +1317,94 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         return rows.map(mapJobExternalMemberOptionRow);
       });
 
+      const listExternalScopedOptions = Effect.fn(
+        "JobsRepository.listExternalScopedOptions"
+      )(function* (organizationId: OrganizationId, userId: UserId) {
+        const labelsEffect = sql<LabelRow>`
+          select distinct labels.*
+          from work_item_collaborators
+          join work_items
+            on work_items.id = work_item_collaborators.work_item_id
+            and work_items.organization_id = work_item_collaborators.organization_id
+          join work_item_labels
+            on work_item_labels.work_item_id = work_items.id
+            and work_item_labels.organization_id = work_items.organization_id
+          join labels
+            on labels.id = work_item_labels.label_id
+            and labels.organization_id = work_item_labels.organization_id
+          where work_item_collaborators.organization_id = ${organizationId}
+            and work_item_collaborators.subject_type = 'user'
+            and work_item_collaborators.user_id = ${userId}
+            and labels.archived_at is null
+          order by labels.name asc, labels.id asc
+        `;
+        const sitesEffect = sql<SiteOptionRow>`
+          select distinct
+            sites.access_notes,
+            sites.address_components,
+            sites.address_line_1,
+            sites.address_line_2,
+            sites.country,
+            sites.county,
+            sites.display_location,
+            sites.eircode,
+            sites.formatted_address,
+            sites.google_place_id,
+            sites.id,
+            sites.latitude,
+            sites.location_provider,
+            sites.location_resolved_at,
+            sites.location_status,
+            sites.longitude,
+            sites.name,
+            sites.raw_location_input,
+            sites.town
+          from work_item_collaborators
+          join work_items
+            on work_items.id = work_item_collaborators.work_item_id
+            and work_items.organization_id = work_item_collaborators.organization_id
+          join sites
+            on sites.id = work_items.site_id
+            and sites.organization_id = work_items.organization_id
+          where work_item_collaborators.organization_id = ${organizationId}
+            and work_item_collaborators.subject_type = 'user'
+            and work_item_collaborators.user_id = ${userId}
+            and sites.archived_at is null
+          order by sites.name asc nulls last, sites.id asc
+        `;
+        const contactsEffect = sql<JobContactOptionRow>`
+          select distinct
+            contacts.id,
+            contacts.name,
+            contacts.email,
+            contacts.phone,
+            work_items.site_id
+          from work_item_collaborators
+          join work_items
+            on work_items.id = work_item_collaborators.work_item_id
+            and work_items.organization_id = work_item_collaborators.organization_id
+          join contacts
+            on contacts.id = work_items.contact_id
+            and contacts.organization_id = work_items.organization_id
+          where work_item_collaborators.organization_id = ${organizationId}
+            and work_item_collaborators.subject_type = 'user'
+            and work_item_collaborators.user_id = ${userId}
+            and contacts.archived_at is null
+          order by contacts.name asc, contacts.id asc, work_items.site_id asc
+        `;
+        const [labels, sites, contacts] = yield* Effect.all(
+          [labelsEffect, sitesEffect, contactsEffect],
+          { concurrency: 3 }
+        );
+
+        return {
+          contacts: mapJobContactOptions(contacts),
+          labels: labels.map(mapLabelRow),
+          members: [],
+          sites: sites.map((row) => mapSiteOptionRow(row)),
+        } satisfies JobOptionsResponse;
+      });
+
       const listCollaborators = Effect.fn("JobsRepository.listCollaborators")(
         function* (organizationId: OrganizationId, workItemId: WorkItemId) {
           yield* ensureWorkItemOrganizationMatches(organizationId, workItemId);
@@ -2004,6 +2093,7 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         listAccessibleWorkItemIdsForUser,
         listCollaborators,
         listExternalMemberOptions,
+        listExternalScopedOptions,
         listMemberOptions,
         listOrganizationActivity,
         linkSiteContact,
@@ -2081,6 +2171,12 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
     >
   ) =>
     JobsRepository.use((service) => service.listOrganizationActivity(...args));
+  static readonly listExternalScopedOptions = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["listExternalScopedOptions"]
+    >
+  ) =>
+    JobsRepository.use((service) => service.listExternalScopedOptions(...args));
   static readonly patch = (
     ...args: Parameters<Context.Service.Shape<typeof JobsRepository>["patch"]>
   ) => JobsRepository.use((service) => service.patch(...args));

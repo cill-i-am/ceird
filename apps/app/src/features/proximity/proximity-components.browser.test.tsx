@@ -80,7 +80,7 @@ describe("proximity components", () => {
     ).toBeDisabled();
     expect(screen.getByText("Dublin Port")).toBeVisible();
 
-    await user.click(screen.getByRole("option", { name: /Dublin Port/ }));
+    await user.click(screen.getByRole("button", { name: /Dublin Port/ }));
     expect(onSuggestionSelect).toHaveBeenCalledWith(suggestion);
 
     rerender(
@@ -94,6 +94,11 @@ describe("proximity components", () => {
         onQueryChange={vi.fn<(query: string) => void>()}
         onSuggestionSelect={onSuggestionSelect}
       />
+    );
+
+    expect(screen.getByRole("button", { name: /Dublin Port/ })).toHaveAttribute(
+      "aria-pressed",
+      "true"
     );
 
     await user.click(
@@ -192,7 +197,7 @@ describe("proximity components", () => {
       />
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Routes unavailable");
+    expect(screen.getByText("Routes unavailable")).toBeVisible();
     expect(screen.getByRole("button", { name: "Change origin" })).toBeVisible();
   });
 });

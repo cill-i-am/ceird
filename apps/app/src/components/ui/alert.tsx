@@ -27,14 +27,28 @@ const alertVariants = cva(
 
 function Alert({
   className,
+  liveRegion = "assertive",
+  role,
   variant,
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof alertVariants>) {
+}: React.ComponentProps<"div"> &
+  VariantProps<typeof alertVariants> & {
+    readonly liveRegion?: "assertive" | "polite" | "none";
+  }) {
+  let liveRegionProps: React.ComponentProps<"div"> = {};
+  if (role === undefined && liveRegion === "assertive") {
+    liveRegionProps = { role: "alert" };
+  } else if (role === undefined && liveRegion === "polite") {
+    liveRegionProps = { "aria-live": "polite" };
+  } else if (role !== undefined) {
+    liveRegionProps = { role };
+  }
+
   return (
     <div
       data-slot="alert"
-      role="alert"
       className={cn(alertVariants({ variant }), className)}
+      {...liveRegionProps}
       {...props}
     />
   );

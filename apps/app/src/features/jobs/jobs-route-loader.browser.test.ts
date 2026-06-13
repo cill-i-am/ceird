@@ -5,6 +5,7 @@ import type {
   JobListQuery,
   JobListResponse,
   JobOptionsResponse,
+  WorkItemIdType,
 } from "@ceird/jobs-core";
 
 type JobsListLookupMock = (query?: JobListQuery) => Promise<JobListResponse>;
@@ -15,12 +16,14 @@ const organizationId = decodeOrganizationId("org_123");
 
 const {
   mockedGetCurrentServerJobDetail,
+  mockedGetCurrentServerExternalJobOptions,
   mockedGetCurrentServerJobOptions,
   mockedGetCurrentUserPreferences,
   mockedListAllCurrentServerJobs,
   mockedListCurrentServerJobs,
 } = vi.hoisted(() => ({
   mockedGetCurrentServerJobDetail: vi.fn<JobDetailLookupMock>(),
+  mockedGetCurrentServerExternalJobOptions: vi.fn<JobOptionsLookupMock>(),
   mockedGetCurrentServerJobOptions: vi.fn<JobOptionsLookupMock>(),
   mockedGetCurrentUserPreferences: vi.fn<
     () => Promise<{
@@ -36,6 +39,7 @@ const {
 
 vi.mock(import("#/features/jobs/jobs-server"), () => ({
   getCurrentServerJobDetail: mockedGetCurrentServerJobDetail,
+  getCurrentServerExternalJobOptions: mockedGetCurrentServerExternalJobOptions,
   getCurrentServerJobOptions: mockedGetCurrentServerJobOptions,
   listAllCurrentServerJobs: mockedListAllCurrentServerJobs,
   listCurrentServerJobs: mockedListCurrentServerJobs,
@@ -173,6 +177,80 @@ describe("jobs route loader", () => {
       query: "boiler",
       status: "active",
     });
+  });
+
+  it("loads the jobs list and scoped external options without detail fanout", async () => {
+    const calls: string[] = [];
+    let listResolved = false;
+    const listDeferred = Promise.withResolvers<JobListResponse>();
+    const optionsDeferred = Promise.withResolvers<JobOptionsResponse>();
+    const list = {
+      items: [
+        {
+          createdAt: "2026-06-13T08:00:00.000Z",
+          id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
+          kind: "job",
+          labels: [],
+          priority: "none",
+          status: "new",
+          title: "Inspect boiler",
+          updatedAt: "2026-06-13T08:00:00.000Z",
+        },
+      ],
+      nextCursor: undefined,
+    } satisfies JobListResponse;
+    const options = {
+      contacts: [],
+      labels: [],
+      members: [],
+      sites: [],
+    } satisfies JobOptionsResponse;
+
+    mockedListCurrentServerJobs.mockImplementation(() => {
+      calls.push("list:start");
+      return listDeferred.promise;
+    });
+    mockedGetCurrentServerExternalJobOptions.mockImplementation(() => {
+      calls.push(`external-options:start:listResolved:${String(listResolved)}`);
+      return optionsDeferred.promise;
+    });
+    mockedGetCurrentUserPreferences.mockResolvedValue({
+      preferences: {
+        routeProximityLocationEnabled: false,
+        updatedAt: "2026-06-06T10:00:00.000Z",
+      },
+    });
+
+    const { loadJobsRouteData } = await import("./jobs-route-loader");
+    const resultPromise = loadJobsRouteData({
+      activeOrganizationId: organizationId,
+      activeOrganizationSync: {
+        required: false,
+        targetOrganizationId: organizationId,
+      },
+      currentOrganizationRole: "external",
+      currentUserId: decodeUserId("user_external"),
+    });
+
+    expect(calls).toStrictEqual([
+      "list:start",
+      "external-options:start:listResolved:false",
+    ]);
+
+    optionsDeferred.resolve(options);
+    listResolved = true;
+    listDeferred.resolve(list);
+
+    await expect(resultPromise).resolves.toMatchObject({
+      list,
+      options,
+      viewer: {
+        role: "external",
+        userId: "user_external",
+      },
+    });
+    expect(mockedGetCurrentServerJobDetail).not.toHaveBeenCalled();
+    expect(mockedGetCurrentServerJobOptions).not.toHaveBeenCalled();
   });
 
   it("keeps jobs route data available when location preference loading fails", async () => {

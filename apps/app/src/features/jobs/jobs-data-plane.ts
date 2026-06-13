@@ -48,8 +48,8 @@ import type { OrganizationDataScope } from "#/data-plane/query-scope";
 import type { DataPlaneSession } from "#/data-plane/session";
 import {
   getCurrentServerJobDetail,
+  getCurrentServerExternalJobOptions,
   getCurrentServerJobOptions,
-  listAllCurrentServerJobs,
   listCurrentServerJobs,
 } from "#/features/jobs/jobs-server";
 import {
@@ -577,8 +577,7 @@ export function upsertJobOptionsSite(
 }
 
 export async function loadCurrentJobsOptionsForViewer(
-  viewer: JobsViewer,
-  existingList?: JobListResponse | undefined
+  viewer: JobsViewer
 ): Promise<JobOptionsResponse> {
   if (canUseInternalJobOptions(viewer)) {
     return await getCurrentServerJobOptions();
@@ -588,12 +587,7 @@ export async function loadCurrentJobsOptionsForViewer(
     return EMPTY_JOBS_OPTIONS;
   }
 
-  const list = existingList ?? (await listAllCurrentServerJobs({}));
-  const details = await Promise.all(
-    list.items.map((item) => getCurrentServerJobDetail(item.id))
-  );
-
-  return deriveExternalJobsScopedOptions(details);
+  return await getCurrentServerExternalJobOptions();
 }
 
 function createJobsCollection({
@@ -902,44 +896,6 @@ export function toJobDetailCollectionItem(
   return {
     detail,
     id: detail.job.id,
-  };
-}
-
-function deriveExternalJobsScopedOptions(
-  details: readonly JobDetailResponse[]
-): JobOptionsResponse {
-  const contactsById = new Map<
-    JobOptionsResponse["contacts"][number]["id"],
-    JobOptionsResponse["contacts"][number]
-  >();
-  const labelsById = new Map<Label["id"], Label>();
-  const sitesById = new Map<SiteOption["id"], SiteOption>();
-
-  for (const detail of details) {
-    for (const label of detail.job.labels) {
-      labelsById.set(label.id, label);
-    }
-
-    if (detail.site !== undefined) {
-      sitesById.set(detail.site.id, detail.site);
-    }
-
-    if (detail.contact !== undefined) {
-      contactsById.set(detail.contact.id, {
-        email: detail.contact.email,
-        id: detail.contact.id,
-        name: detail.contact.name,
-        phone: detail.contact.phone,
-        siteIds: detail.job.siteId === undefined ? [] : [detail.job.siteId],
-      });
-    }
-  }
-
-  return {
-    contacts: [...contactsById.values()],
-    labels: [...labelsById.values()],
-    members: [],
-    sites: [...sitesById.values()],
   };
 }
 

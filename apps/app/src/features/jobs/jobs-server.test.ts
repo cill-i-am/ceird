@@ -16,6 +16,7 @@ import { APP_API_REQUEST_ERROR_TAG } from "#/features/api/app-api-errors";
 import {
   listAllCurrentServerJobsDirect as listAllCurrentServerJobs,
   getCurrentServerJobDetailDirect as getCurrentServerJobDetail,
+  getCurrentServerExternalJobOptionsDirect as getCurrentServerExternalJobOptions,
   getCurrentServerJobExternalMemberOptionsDirect as getCurrentServerJobExternalMemberOptions,
   getCurrentServerJobMemberOptionsDirect as getCurrentServerJobMemberOptions,
   getCurrentServerJobOptionsDirect as getCurrentServerJobOptions,
@@ -293,6 +294,30 @@ describe("server jobs helpers", () => {
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
     expect(String(url)).toBe("https://api.example.com/jobs/options");
+    expect(requestInit?.method).toBe("GET");
+    expect(requestInit?.headers).toMatchObject({
+      cookie: "better-auth.session_token=session-token",
+    });
+  }, 1000);
+
+  it("forwards the current auth cookie when reading scoped external job options", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({ ...optionsResponse, members: [] }));
+
+    await expect(getCurrentServerExternalJobOptions()).resolves.toStrictEqual({
+      ...optionsResponse,
+      members: [],
+    });
+
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(String(url)).toBe("https://api.example.com/jobs/external-options");
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",

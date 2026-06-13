@@ -198,6 +198,7 @@ Current job endpoints:
 
 - `GET /jobs`
 - `GET /jobs/options`
+- `GET /jobs/external-options`
 - `GET /jobs/member-options`
 - `GET /jobs/external-member-options`
 - `POST /jobs`
@@ -234,6 +235,9 @@ Current site endpoints:
 Owners and admins can manage organization-wide labels, sites, jobs, members,
 and invitations. Members can work within the operations allowed by their role
 and assignment. Job collaborators can access only the jobs they are attached to.
+External collaborator option loading uses `GET /jobs/external-options`, which
+returns `JobOptionsResponse` with `members: []` and derives labels, contacts,
+and sites only from jobs visible through that collaborator's grants.
 
 The app can mirror constraints for UX, but the domain worker is the enforcement
 point for every product operation.

@@ -769,7 +769,7 @@ describe("global agent chat", () => {
       }),
       "Docklands depot"
     );
-    await user.click(await screen.findByRole("option", { name: /docklands/i }));
+    await user.click(await screen.findByRole("button", { name: /docklands/i }));
     await user.click(
       screen.getByRole("button", { name: /use selected origin/i })
     );
@@ -838,7 +838,7 @@ describe("global agent chat", () => {
       }),
       "Docklands depot"
     );
-    await user.click(await screen.findByRole("option", { name: /docklands/i }));
+    await user.click(await screen.findByRole("button", { name: /docklands/i }));
     await user.click(
       screen.getByRole("button", { name: /use selected origin/i })
     );
