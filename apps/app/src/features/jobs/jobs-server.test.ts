@@ -1,5 +1,6 @@
 import type {
   ActivityIdType,
+  HomeDashboardSummaryResponse,
   JobExternalMemberOptionsResponse,
   JobListResponse,
   JobMemberOptionsResponse,
@@ -17,6 +18,7 @@ import {
   listAllCurrentServerJobsDirect as listAllCurrentServerJobs,
   getCurrentServerJobDetailDirect as getCurrentServerJobDetail,
   getCurrentServerJobExternalMemberOptionsDirect as getCurrentServerJobExternalMemberOptions,
+  getCurrentServerHomeDashboardSummaryDirect as getCurrentServerHomeDashboardSummary,
   getCurrentServerJobMemberOptionsDirect as getCurrentServerJobMemberOptions,
   getCurrentServerJobOptionsDirect as getCurrentServerJobOptions,
   listCurrentServerOrganizationActivityDirect as listCurrentServerOrganizationActivity,
@@ -88,6 +90,29 @@ const organizationActivityResponse: OrganizationActivityListResponse = {
       createdAt: "2026-04-23T12:00:00.000Z",
     },
   ],
+};
+
+const homeDashboardSummaryResponse: HomeDashboardSummaryResponse = {
+  jobs: {
+    items: [],
+    stats: {
+      activeJobs: 0,
+      blockedJobs: 0,
+      priorityWatchJobs: 0,
+      totalJobs: 0,
+      unassignedJobs: 0,
+    },
+  },
+  members: {
+    total: 1,
+  },
+  sites: {
+    items: [],
+    stats: {
+      mappedSites: 0,
+      totalSites: 0,
+    },
+  },
 };
 
 describe("server jobs helpers", () => {
@@ -316,6 +341,29 @@ describe("server jobs helpers", () => {
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
     expect(String(url)).toBe("https://api.example.com/jobs/member-options");
+    expect(requestInit?.method).toBe("GET");
+    expect(requestInit?.headers).toMatchObject({
+      cookie: "better-auth.session_token=session-token",
+    });
+  }, 1000);
+
+  it("forwards the current auth cookie when reading the home dashboard summary", async () => {
+    mockedGetRequestHeader.mockImplementation((name) =>
+      name === "cookie" ? "better-auth.session_token=session-token" : undefined
+    );
+    process.env.API_ORIGIN = "https://api.example.com";
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json(homeDashboardSummaryResponse));
+
+    await expect(getCurrentServerHomeDashboardSummary()).resolves.toStrictEqual(
+      homeDashboardSummaryResponse
+    );
+
+    const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
+
+    expect(String(url)).toBe("https://api.example.com/home/dashboard-summary");
     expect(requestInit?.method).toBe("GET");
     expect(requestInit?.headers).toMatchObject({
       cookie: "better-auth.session_token=session-token",

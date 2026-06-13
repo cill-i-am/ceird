@@ -43,6 +43,9 @@ describe("domain HTTP API", () => {
 
     expect(spec.paths["/jobs"]?.get?.operationId).toBe("jobs.listJobs");
     expect(spec.paths["/jobs"]?.post?.operationId).toBe("jobs.createJob");
+    expect(spec.paths["/home/dashboard-summary"]?.get?.operationId).toBe(
+      "jobs.getHomeDashboardSummary"
+    );
     expect(spec.paths["/sites"]?.get?.operationId).toBe("sites.listSites");
     expect(spec.paths["/sites"]?.post?.operationId).toBe("sites.createSite");
     expect(spec.paths["/labels"]?.get?.operationId).toBe("labels.listLabels");

@@ -23,13 +23,15 @@ route components or view state files. A collection contract must declare:
 
 Current collection roots are `jobs`, `job-options`, `job-details`,
 `job-collaborators`, `sites`, `site-comments`, `site-related-jobs`, and
-`labels`. Jobs, job options, sites, and site-related job subsets use eager Query
-Collections once their feature scope is created. Labels are a scoped option
-index. Job details, collaborators, and site comments are lazy per-record
-collections that request snapshots from their mounted subscribers rather than
-from Start loaders. Future ElectricSQL integration should keep these contracts
-and swap the sync implementation behind them rather than moving state back into
-route views.
+`labels`. Jobs and job options still use eager complete-tenant Query
+Collections. Sites and site-related job subsets use eager bounded Query
+Collections once their feature scope is created: the Sites route collection is
+the first cursor page and site-related jobs are the first cursor page filtered
+by `siteId`. Labels are a scoped option index. Job details, collaborators, and
+site comments are lazy per-record collections that request snapshots from their
+mounted subscribers rather than from Start loaders. Future ElectricSQL
+integration should keep these contracts and swap the sync implementation behind
+them rather than moving state back into route views.
 
 Completeness is a discriminated contract, not a boolean. `complete-tenant`
 means the data covers the active organization scope. `paged-query` and
@@ -39,7 +41,7 @@ entity such as a job detail or a site's comments. `sync-backed` records the
 subscription source and the coverage it provides, so future Electric-backed
 collections can be explicit about whether they cover tenant, page, filter, or
 entity scopes. Current unmigrated route lists keep their eager
-`complete-tenant` behavior until the follow-up paging issues replace those
+`complete-tenant` behavior until follow-up paging issues replace those
 first-paint reads.
 
 ## Start Bootstrap

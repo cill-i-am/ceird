@@ -4,6 +4,7 @@ import type {
   SiteComment,
   SiteCommentsResponse,
   SiteIdType,
+  SiteListCursorType,
   SiteListResponse,
   SiteOption,
 } from "@ceird/sites-core";
@@ -17,11 +18,10 @@ import {
   seedQueryCollectionInitialData,
 } from "#/data-plane/bootstrap";
 import {
-  COMPLETE_TENANT_COLLECTION,
   createQueryCollectionFromContract,
   defineQueryCollectionContract,
   entityDetailCollectionCompleteness,
-  filteredQueryCollectionCompleteness,
+  pagedQueryCollectionCompleteness,
 } from "#/data-plane/collection-contract";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
@@ -41,8 +41,8 @@ import type { OrganizationDataScope } from "#/data-plane/query-scope";
 import type { DataPlaneSession } from "#/data-plane/session";
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import {
-  listAllCurrentServerJobs,
-  listAllCurrentServerSites,
+  listCurrentServerJobs,
+  listCurrentServerSites,
 } from "#/features/api/app-api-server";
 
 type SitesCollection = ReturnType<typeof createSitesCollection>;
@@ -50,6 +50,18 @@ type SiteCommentsCollection = ReturnType<typeof createSiteCommentsCollection>;
 type SiteRelatedJobsCollection = ReturnType<
   typeof createSiteRelatedJobsCollection
 >;
+
+export const SITES_LIST_PAGE_LIMIT = 50;
+export const SITE_RELATED_JOBS_PAGE_LIMIT = 25;
+
+interface SitesListPageScope {
+  readonly cursor?: SiteListCursorType | undefined;
+  readonly limit: number;
+}
+
+const DEFAULT_SITES_LIST_PAGE_SCOPE = {
+  limit: SITES_LIST_PAGE_LIMIT,
+} satisfies SitesListPageScope;
 
 export interface SitesCollectionState {
   readonly collection: SitesCollection;
@@ -66,8 +78,19 @@ export interface SiteRelatedJobsCollectionState {
   readonly writeVersionRef: DataPlaneCollectionWriteVersionRef;
 }
 
-export function sitesCollectionKey(scope: OrganizationDataScope) {
-  return organizationDataQueryKey("sites", scope);
+export function sitesCollectionKey(
+  scope: OrganizationDataScope,
+  page: SitesListPageScope = DEFAULT_SITES_LIST_PAGE_SCOPE
+) {
+  return [
+    ...organizationDataQueryKey("sites", scope),
+    "page",
+    {
+      ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
+      limit: page.limit,
+      type: "cursor",
+    },
+  ];
 }
 
 export function siteCommentsCollectionKey(
@@ -113,7 +136,14 @@ export function createSitesListSeed(
 ): DataPlaneSeed<readonly SiteOption[]> {
   return createDataPlaneSeed({
     collection: "sites",
-    completeness: COMPLETE_TENANT_COLLECTION,
+    completeness: pagedQueryCollectionCompleteness({
+      page: {
+        hasNextPage: response.nextCursor !== undefined,
+        limit: SITES_LIST_PAGE_LIMIT,
+        type: "cursor",
+      },
+      queryName: "sites-list",
+    }),
     data: response.items,
     queryKey: sitesCollectionKey(scope),
     requestStartedAt,
@@ -429,13 +459,21 @@ function createSitesCollection({
     queryClient,
     defineQueryCollectionContract({
       collection: "sites",
-      completeness: COMPLETE_TENANT_COLLECTION,
+      completeness: pagedQueryCollectionCompleteness({
+        page: {
+          limit: SITES_LIST_PAGE_LIMIT,
+          type: "cursor",
+        },
+        queryName: "sites-list",
+      }),
       getKey: (site: SiteOption) => site.id,
       gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
       id: sitesCollectionId(scope),
       queryFn: async () => {
         const requestWriteVersion = writeVersionRef.current;
-        const response = await listAllCurrentServerSites();
+        const response = await listCurrentServerSites({
+          limit: SITES_LIST_PAGE_LIMIT,
+        });
 
         return reconcileQueryCollectionDataAfterConcurrentWrite({
           collection: state.collection,
@@ -477,8 +515,12 @@ function createSiteRelatedJobsCollection({
     queryClient,
     defineQueryCollectionContract({
       collection: "site-related-jobs",
-      completeness: filteredQueryCollectionCompleteness({
+      completeness: pagedQueryCollectionCompleteness({
         filters: [{ field: "siteId", operator: "eq", value: siteId }],
+        page: {
+          limit: SITE_RELATED_JOBS_PAGE_LIMIT,
+          type: "cursor",
+        },
         queryName: "site-related-jobs",
       }),
       getKey: (job: JobListItem) => job.id,
@@ -486,7 +528,10 @@ function createSiteRelatedJobsCollection({
       id: siteRelatedJobsCollectionId(scope, siteId),
       queryFn: async () => {
         const requestWriteVersion = writeVersionRef.current;
-        const response = await listAllCurrentServerJobs({ siteId });
+        const response = await listCurrentServerJobs({
+          limit: SITE_RELATED_JOBS_PAGE_LIMIT,
+          siteId,
+        });
 
         return reconcileQueryCollectionDataAfterConcurrentWrite({
           collection: state.collection,

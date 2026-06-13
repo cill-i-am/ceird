@@ -6,7 +6,8 @@ import { Schema } from "effect";
 import { listCurrentServerJobs } from "#/features/api/app-api-server";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
 
-const SITE_DETAIL_RELATED_JOBS_LIMIT = 25;
+import { SITE_RELATED_JOBS_PAGE_LIMIT } from "./sites-data-plane";
+
 const decodeSiteId: (siteId: unknown) => SiteIdType =
   Schema.decodeUnknownSync(SiteId);
 
@@ -33,7 +34,7 @@ export async function loadSiteDetailRouteData(
   }
 
   const relatedJobs = await listCurrentServerJobs({
-    limit: SITE_DETAIL_RELATED_JOBS_LIMIT,
+    limit: SITE_RELATED_JOBS_PAGE_LIMIT,
     siteId: decodedSiteId,
   });
 

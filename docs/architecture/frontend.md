@@ -405,9 +405,10 @@ tenant-wide derivations. `paged-query`, `filtered-query`, `entity-detail`, and
 `sync-backed` are intentionally not interchangeable with tenant-complete data;
 helpers such as `assertCompleteTenantCollection(...)` fail closed when a
 component or selector requires complete organization data. Existing unmigrated
-jobs, sites, labels, and options collections stay available as eager
-`complete-tenant` collections until their route slices move to bounded paging
-or explicit sync-backed coverage.
+jobs, labels, and option collections stay available as eager `complete-tenant`
+collections until their route slices move to bounded paging or explicit
+sync-backed coverage. The Sites route first paint is already bounded to the
+first cursor page and marks its `sites` seed as `paged-query`.
 The adapter starts the client collection subscription early enough for disabled
 Query Collections to support explicit `refetch()`, but its server and hydration
 snapshots keep using loader DTOs so TanStack DB state does not render during
@@ -421,9 +422,9 @@ an explicit SSR strategy. The current migrated slices are:
   compatibility facade for filters, create feedback, notices, and existing
   hooks.
 - `features/sites/sites-data-plane.ts` and `features/sites/sites-state.ts`,
-  where site options and site-related job subsets are eager scoped collections
-  once their feature scope is created, while site comments are lazy per-site
-  collections exposed through public reader hooks.
+  where the primary Sites route collection is a bounded cursor page,
+  site-related job subsets are bounded page/filter collections, and site
+  comments are lazy per-site collections exposed through public reader hooks.
 - `features/labels/labels-data-plane.ts`, where organization labels have a
   first-class scoped collection so job/site label commands declare and update a
   real data-plane root.

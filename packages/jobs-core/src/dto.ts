@@ -638,6 +638,77 @@ export const JobListResponseSchema = Schema.Struct({
 });
 export type JobListResponse = Schema.Schema.Type<typeof JobListResponseSchema>;
 
+const NonNegativeIntegerSchema = Schema.Number.pipe(
+  Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+);
+
+export const HomeDashboardJobStatsSchema = Schema.Struct({
+  activeJobs: NonNegativeIntegerSchema,
+  blockedJobs: NonNegativeIntegerSchema,
+  priorityWatchJobs: NonNegativeIntegerSchema,
+  totalJobs: NonNegativeIntegerSchema,
+  unassignedJobs: NonNegativeIntegerSchema,
+});
+export type HomeDashboardJobStats = Schema.Schema.Type<
+  typeof HomeDashboardJobStatsSchema
+>;
+
+export const HomeDashboardJobSummaryItemSchema = Schema.Struct({
+  assigneeName: Schema.optional(Schema.String),
+  id: WorkItemId,
+  priority: JobPrioritySchema,
+  siteName: Schema.optional(Schema.String),
+  status: JobStatusSchema,
+  title: JobTitleSchema,
+  updatedAt: IsoDateTimeString,
+});
+export type HomeDashboardJobSummaryItem = Schema.Schema.Type<
+  typeof HomeDashboardJobSummaryItemSchema
+>;
+
+export const HomeDashboardSiteStatsSchema = Schema.Struct({
+  mappedSites: NonNegativeIntegerSchema,
+  totalSites: NonNegativeIntegerSchema,
+});
+export type HomeDashboardSiteStats = Schema.Schema.Type<
+  typeof HomeDashboardSiteStatsSchema
+>;
+
+export const HomeDashboardSiteSummaryItemSchema = Schema.Struct({
+  activeJobCount: NonNegativeIntegerSchema,
+  addressLine1: Schema.optional(Schema.String),
+  addressLine2: Schema.optional(Schema.String),
+  county: Schema.optional(Schema.String),
+  displayLocation: Schema.String,
+  eircode: Schema.optional(Schema.String),
+  formattedAddress: Schema.optional(Schema.String),
+  id: SiteId,
+  locationResolvedAt: Schema.optional(IsoDateTimeString),
+  name: Schema.String,
+  rawLocationInput: Schema.optional(Schema.String),
+  town: Schema.optional(Schema.String),
+});
+export type HomeDashboardSiteSummaryItem = Schema.Schema.Type<
+  typeof HomeDashboardSiteSummaryItemSchema
+>;
+
+export const HomeDashboardSummaryResponseSchema = Schema.Struct({
+  jobs: Schema.Struct({
+    items: Schema.Array(HomeDashboardJobSummaryItemSchema),
+    stats: HomeDashboardJobStatsSchema,
+  }),
+  members: Schema.Struct({
+    total: NonNegativeIntegerSchema,
+  }),
+  sites: Schema.Struct({
+    items: Schema.Array(HomeDashboardSiteSummaryItemSchema),
+    stats: HomeDashboardSiteStatsSchema,
+  }),
+});
+export type HomeDashboardSummaryResponse = Schema.Schema.Type<
+  typeof HomeDashboardSummaryResponseSchema
+>;
+
 export const JobMemberOptionSchema = Schema.Struct({
   id: UserId,
   name: Schema.String,

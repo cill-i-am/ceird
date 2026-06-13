@@ -576,6 +576,7 @@ live in `apps/domain/src/domains/jobs/http.ts`.
 | `GET`    | `/jobs/options`                                   | `getJobOptions`               |
 | `GET`    | `/jobs/member-options`                            | `getJobMemberOptions`         |
 | `GET`    | `/jobs/external-member-options`                   | `getJobExternalMemberOptions` |
+| `GET`    | `/home/dashboard-summary`                         | `getHomeDashboardSummary`     |
 | `POST`   | `/jobs`                                           | `createJob`                   |
 | `GET`    | `/activity`                                       | `listOrganizationActivity`    |
 | `GET`    | `/jobs/:workItemId`                               | `getJobDetail`                |
@@ -590,6 +591,11 @@ live in `apps/domain/src/domains/jobs/http.ts`.
 | `POST`   | `/jobs/:workItemId/collaborators`                 | `attachJobCollaborator`       |
 | `PATCH`  | `/jobs/:workItemId/collaborators/:collaboratorId` | `updateJobCollaborator`       |
 | `DELETE` | `/jobs/:workItemId/collaborators/:collaboratorId` | `detachJobCollaborator`       |
+
+`GET /home/dashboard-summary` is a bounded aggregate response for the
+authenticated organization home route. It returns exact job, site, and member
+counts plus at most five active job rows and five active-site rows, so the home
+route does not load every job, site, or member option to build first paint.
 
 ## Labels Domain
 

@@ -1,13 +1,11 @@
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 
-import { listAllCurrentServerSites } from "#/features/api/app-api-server";
 import {
   EMPTY_AUTHENTICATED_HOME_DASHBOARD,
   buildAuthenticatedHomeDashboard,
 } from "#/features/auth/authenticated-shell-home-dashboard";
 import {
-  getCurrentServerJobMemberOptions,
-  listAllCurrentServerJobs,
+  getCurrentServerHomeDashboardSummary,
   listCurrentServerOrganizationActivity,
 } from "#/features/jobs/jobs-server";
 import { assertOrganizationInternalRouteContext } from "#/features/organizations/organization-route-access";
@@ -32,10 +30,8 @@ export async function loadOrganizationHomeDashboardRouteData(context: {
     return EMPTY_AUTHENTICATED_HOME_DASHBOARD;
   }
 
-  const [jobs, jobMemberOptions, sites, activity] = await Promise.all([
-    listAllCurrentServerJobs({}),
-    getCurrentServerJobMemberOptions(),
-    listAllCurrentServerSites(),
+  const [summary, activity] = await Promise.all([
+    getCurrentServerHomeDashboardSummary(),
     canLoadHomeActivity(context.currentOrganizationRole)
       ? listCurrentServerOrganizationActivity({ limit: 5 })
       : Promise.resolve({ items: [], nextCursor: undefined }),
@@ -44,11 +40,7 @@ export async function loadOrganizationHomeDashboardRouteData(context: {
   return buildAuthenticatedHomeDashboard({
     activity,
     activityAvailable: canLoadHomeActivity(context.currentOrganizationRole),
-    jobs: jobs.items,
-    jobMemberOptions,
-    sites: {
-      sites: sites.items,
-    },
+    summary,
   });
 }
 

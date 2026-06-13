@@ -177,6 +177,17 @@ export class JobsService extends Context.Service<JobsService>()(
         } satisfies JobExternalMemberOptionsResponse;
       });
 
+      const getHomeDashboardSummary = Effect.fn(
+        "JobsService.getHomeDashboardSummary"
+      )(function* () {
+        const actor = yield* loadActor();
+        yield* ensureCanViewOrganizationJobsData(actor, authorization);
+
+        return yield* jobsRepository
+          .getHomeDashboardSummary(actor.organizationId)
+          .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+      });
+
       const listOrganizationActivity = Effect.fn(
         "JobsService.listOrganizationActivity"
       )(function* (query: OrganizationActivityQuery) {
@@ -992,6 +1003,7 @@ export class JobsService extends Context.Service<JobsService>()(
         getDetail,
         getJobRoutePreview,
         getExternalMemberOptions,
+        getHomeDashboardSummary,
         getMemberOptions,
         getOptions,
         list,

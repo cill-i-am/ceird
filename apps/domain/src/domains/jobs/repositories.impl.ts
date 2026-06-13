@@ -2,8 +2,10 @@ import { INTERNAL_ORGANIZATION_ROLES } from "@ceird/identity-core";
 /* oxlint-disable eslint/max-classes-per-file */
 import {
   ActivityId as ActivityIdSchema,
+  ACTIVE_JOB_STATUSES,
   ContactId as ContactIdSchema,
   ContactNotFoundError,
+  HomeDashboardSummaryResponseSchema,
   IsoDateTimeString as IsoDateTimeStringSchema,
   JobActivityPayloadSchema,
   JobActivitySchema,
@@ -257,6 +259,48 @@ interface JobProximityStatsRow {
   readonly unmapped_site_count: number;
 }
 
+interface HomeDashboardJobStatsRow {
+  readonly active_jobs: number;
+  readonly blocked_jobs: number;
+  readonly priority_watch_jobs: number;
+  readonly total_jobs: number;
+  readonly unassigned_jobs: number;
+}
+
+interface HomeDashboardMemberStatsRow {
+  readonly total_members: number;
+}
+
+interface HomeDashboardSiteStatsRow {
+  readonly mapped_sites: number;
+  readonly total_sites: number;
+}
+
+interface HomeDashboardJobSummaryRow {
+  readonly assignee_name: string | null;
+  readonly id: string;
+  readonly priority: string;
+  readonly site_name: string | null;
+  readonly status: string;
+  readonly title: string;
+  readonly updated_at: Date;
+}
+
+interface HomeDashboardSiteSummaryRow {
+  readonly active_job_count: number;
+  readonly address_line_1: string | null;
+  readonly address_line_2: string | null;
+  readonly county: string | null;
+  readonly display_location: string | null;
+  readonly eircode: string | null;
+  readonly formatted_address: string | null;
+  readonly id: string;
+  readonly location_resolved_at: Date | null;
+  readonly name: string;
+  readonly raw_location_input: string | null;
+  readonly town: string | null;
+}
+
 export interface CreateJobRecordInput {
   readonly assigneeId?: UserId;
   readonly blockedReason?: string;
@@ -407,6 +451,9 @@ const decodeJobMemberOption = Schema.decodeUnknownSync(JobMemberOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserIdSchema);
 const decodeJobContactOption = Schema.decodeUnknownSync(JobContactOptionSchema);
 const decodeJobListResponse = Schema.decodeUnknownSync(JobListResponseSchema);
+const decodeHomeDashboardSummaryResponse = Schema.decodeUnknownSync(
+  HomeDashboardSummaryResponseSchema
+);
 const decodeJobVisit = Schema.decodeUnknownSync(JobVisitSchema);
 const decodeSiteId = Schema.decodeUnknownSync(SiteIdSchema);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemIdSchema);
@@ -941,6 +988,140 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           nextCursorRow === undefined ? undefined : encodeCursor(nextCursorRow);
 
         return decodeJobListResponse({ items, nextCursor });
+      });
+
+      const getHomeDashboardSummary = Effect.fn(
+        "JobsRepository.getHomeDashboardSummary"
+      )(function* (organizationId: OrganizationId) {
+        const [
+          jobStatsRows,
+          memberStatsRows,
+          siteStatsRows,
+          jobRows,
+          siteRows,
+        ] = yield* Effect.all(
+          [
+            sql<HomeDashboardJobStatsRow>`
+              select
+                count(*)::integer as total_jobs,
+                count(*) filter (
+                  where work_items.status in ${sql.in(ACTIVE_JOB_STATUSES)}
+                )::integer as active_jobs,
+                count(*) filter (
+                  where work_items.status = 'blocked'
+                )::integer as blocked_jobs,
+                count(*) filter (
+                  where work_items.priority in ('urgent', 'high')
+                )::integer as priority_watch_jobs,
+                count(*) filter (
+                  where work_items.status in ${sql.in(ACTIVE_JOB_STATUSES)}
+                    and work_items.assignee_id is null
+                )::integer as unassigned_jobs
+              from work_items
+              where work_items.organization_id = ${organizationId}
+            `,
+            sql<HomeDashboardMemberStatsRow>`
+              select count(*)::integer as total_members
+              from member
+              where member.organization_id = ${organizationId}
+                and member.role in ${sql.in(INTERNAL_ORGANIZATION_ROLES)}
+            `,
+            sql<HomeDashboardSiteStatsRow>`
+              select
+                count(*)::integer as total_sites,
+                count(*) filter (
+                  where sites.location_status in ${sql.in(
+                    USABLE_SITE_LOCATION_STATUSES
+                  )}
+                    and sites.latitude is not null
+                    and sites.longitude is not null
+                )::integer as mapped_sites
+              from sites
+              where sites.organization_id = ${organizationId}
+                and sites.archived_at is null
+            `,
+            sql<HomeDashboardJobSummaryRow>`
+              select
+                work_items.id,
+                work_items.title,
+                work_items.status,
+                work_items.priority,
+                work_items.updated_at,
+                assignee.name as assignee_name,
+                sites.name as site_name
+              from work_items
+              left join "user" as assignee
+                on assignee.id = work_items.assignee_id
+              left join sites
+                on sites.id = work_items.site_id
+                and sites.organization_id = work_items.organization_id
+                and sites.archived_at is null
+              where work_items.organization_id = ${organizationId}
+                and work_items.status in ${sql.in(ACTIVE_JOB_STATUSES)}
+              order by work_items.updated_at desc, work_items.id desc
+              limit 5
+            `,
+            sql<HomeDashboardSiteSummaryRow>`
+              with active_site_counts as (
+                select
+                  work_items.site_id,
+                  count(*)::integer as active_job_count
+                from work_items
+                where work_items.organization_id = ${organizationId}
+                  and work_items.status in ${sql.in(ACTIVE_JOB_STATUSES)}
+                  and work_items.site_id is not null
+                group by work_items.site_id
+              )
+              select
+                sites.address_line_1,
+                sites.address_line_2,
+                sites.county,
+                sites.display_location,
+                sites.eircode,
+                sites.formatted_address,
+                sites.id,
+                sites.location_resolved_at,
+                sites.name,
+                sites.raw_location_input,
+                sites.town,
+                active_site_counts.active_job_count
+              from active_site_counts
+              join sites
+                on sites.id = active_site_counts.site_id
+                and sites.organization_id = ${organizationId}
+                and sites.archived_at is null
+              order by active_site_counts.active_job_count desc, sites.name asc, sites.id asc
+              limit 5
+            `,
+          ],
+          { concurrency: 5 }
+        );
+        const [jobStats] = jobStatsRows;
+        const [memberStats] = memberStatsRows;
+        const [siteStats] = siteStatsRows;
+
+        return decodeHomeDashboardSummaryResponse({
+          jobs: {
+            items: jobRows.map(mapHomeDashboardJobSummaryRow),
+            stats: {
+              activeJobs: jobStats?.active_jobs ?? 0,
+              blockedJobs: jobStats?.blocked_jobs ?? 0,
+              priorityWatchJobs: jobStats?.priority_watch_jobs ?? 0,
+              totalJobs: jobStats?.total_jobs ?? 0,
+              unassignedJobs: jobStats?.unassigned_jobs ?? 0,
+            },
+          },
+          members: {
+            total: memberStats?.total_members ?? 0,
+          },
+          sites: {
+            items: siteRows.map(mapHomeDashboardSiteSummaryRow),
+            stats: {
+              mappedSites: siteStats?.mapped_sites ?? 0,
+              totalSites: siteStats?.total_sites ?? 0,
+            },
+          },
+        });
       });
 
       const listProximityCandidates = Effect.fn(
@@ -1973,6 +2154,7 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         findByIdForUpdate,
         findUserCollaboratorGrant,
         getDetail,
+        getHomeDashboardSummary,
         list,
         listProximityCandidates,
         listAccessibleWorkItemIdsForUser,
@@ -2025,6 +2207,12 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
       Context.Service.Shape<typeof JobsRepository>["getDetail"]
     >
   ) => JobsRepository.use((service) => service.getDetail(...args));
+  static readonly getHomeDashboardSummary = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["getHomeDashboardSummary"]
+    >
+  ) =>
+    JobsRepository.use((service) => service.getHomeDashboardSummary(...args));
   static readonly linkSiteContact = (
     ...args: Parameters<
       Context.Service.Shape<typeof JobsRepository>["linkSiteContact"]
@@ -2455,6 +2643,37 @@ function mapJobListItemRow(row: WorkItemRow, labels: readonly Label[] = []) {
     title: row.title,
     updatedAt: row.updated_at.toISOString(),
   });
+}
+
+function mapHomeDashboardJobSummaryRow(row: HomeDashboardJobSummaryRow) {
+  return {
+    assigneeName: nullableToUndefined(row.assignee_name),
+    id: row.id,
+    priority: row.priority,
+    siteName: nullableToUndefined(row.site_name),
+    status: row.status,
+    title: row.title,
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+function mapHomeDashboardSiteSummaryRow(row: HomeDashboardSiteSummaryRow) {
+  return {
+    activeJobCount: row.active_job_count,
+    addressLine1: nullableToUndefined(row.address_line_1),
+    addressLine2: nullableToUndefined(row.address_line_2),
+    county: nullableToUndefined(row.county),
+    displayLocation: row.display_location ?? "",
+    eircode: nullableToUndefined(row.eircode),
+    formattedAddress: nullableToUndefined(row.formatted_address),
+    id: row.id,
+    locationResolvedAt: nullableToUndefined(
+      row.location_resolved_at?.toISOString()
+    ),
+    name: row.name,
+    rawLocationInput: nullableToUndefined(row.raw_location_input),
+    town: nullableToUndefined(row.town),
+  };
 }
 
 function mapJobProximitySiteOptionRow(

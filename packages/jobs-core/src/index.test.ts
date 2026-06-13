@@ -13,6 +13,7 @@ import {
   AttachJobCollaboratorInputSchema,
   CommentId,
   CreateJobInputSchema,
+  HomeDashboardSummaryResponseSchema,
   JobActivityJobCreatedPayloadSchema,
   JobCollaboratorAccessLevelSchema,
   JobCollaboratorRoleLabelSchema,
@@ -381,12 +382,75 @@ describe("jobs-core", () => {
     });
   });
 
+  it("decodes bounded home dashboard summaries", () => {
+    expect(
+      Schema.decodeUnknownSync(HomeDashboardSummaryResponseSchema)({
+        jobs: {
+          items: [
+            {
+              assigneeName: "Ciara",
+              id: "11111111-1111-4111-8111-111111111111",
+              priority: "urgent",
+              siteName: "Docklands Campus",
+              status: "blocked",
+              title: "Inspect boiler",
+              updatedAt: "2026-05-20T09:30:00.000Z",
+            },
+          ],
+          stats: {
+            activeJobs: 4,
+            blockedJobs: 1,
+            priorityWatchJobs: 2,
+            totalJobs: 7,
+            unassignedJobs: 1,
+          },
+        },
+        members: {
+          total: 3,
+        },
+        sites: {
+          items: [
+            {
+              activeJobCount: 2,
+              addressLine1: "1 North Wall Quay",
+              county: "Dublin",
+              displayLocation: "1 North Wall Quay, Dublin",
+              id: "22222222-2222-4222-8222-222222222222",
+              locationResolvedAt: "2026-05-20T08:00:00.000Z",
+              name: "Docklands Campus",
+            },
+          ],
+          stats: {
+            mappedSites: 1,
+            totalSites: 2,
+          },
+        },
+      })
+    ).toMatchObject({
+      jobs: {
+        stats: {
+          activeJobs: 4,
+        },
+      },
+      sites: {
+        items: [
+          {
+            activeJobCount: 2,
+          },
+        ],
+      },
+    });
+  });
+
   it("surfaces the job API contract", () => {
     const spec = OpenApi.fromApi(JobsApi);
 
     expect(JobsApiGroup.identifier).toBe("jobs");
     expect(spec.paths["/jobs"]?.get?.operationId).toBe("jobs.listJobs");
     expect(spec.paths["/jobs"]?.post?.operationId).toBe("jobs.createJob");
+    expect(spec.paths["/home/dashboard-summary"]?.get?.operationId).toBe(
+      "jobs.getHomeDashboardSummary"
+    );
     expect(spec.paths["/jobs/proximity"]?.post?.operationId).toBe(
       "jobs.rankNearbyJobs"
     );

@@ -7,27 +7,19 @@ import { isRedirect } from "@tanstack/react-router";
 const organizationId = decodeOrganizationId("org_123");
 
 const {
-  mockedGetCurrentServerJobMemberOptions,
-  mockedListAllCurrentServerSites,
-  mockedListAllCurrentServerJobs,
+  mockedGetCurrentServerHomeDashboardSummary,
   mockedListCurrentServerOrganizationActivity,
 } = vi.hoisted(() => ({
-  mockedGetCurrentServerJobMemberOptions: vi.fn<() => Promise<unknown>>(),
-  mockedListAllCurrentServerSites: vi.fn<() => Promise<unknown>>(),
-  mockedListAllCurrentServerJobs: vi.fn<() => Promise<unknown>>(),
+  mockedGetCurrentServerHomeDashboardSummary: vi.fn<() => Promise<unknown>>(),
   mockedListCurrentServerOrganizationActivity:
     vi.fn<(query?: OrganizationActivityQuery) => Promise<unknown>>(),
 }));
 
 vi.mock("#/features/jobs/jobs-server", () => ({
-  getCurrentServerJobMemberOptions: mockedGetCurrentServerJobMemberOptions,
-  listAllCurrentServerJobs: mockedListAllCurrentServerJobs,
+  getCurrentServerHomeDashboardSummary:
+    mockedGetCurrentServerHomeDashboardSummary,
   listCurrentServerOrganizationActivity:
     mockedListCurrentServerOrganizationActivity,
-}));
-
-vi.mock("#/features/api/app-api-server", () => ({
-  listAllCurrentServerSites: mockedListAllCurrentServerSites,
 }));
 
 describe("organization home route", () => {
@@ -80,16 +72,27 @@ describe("organization home route", () => {
   }, 10_000);
 
   it("loads live dashboard data for internal organization users", async () => {
-    mockedListAllCurrentServerJobs.mockResolvedValue({
-      items: [],
-      nextCursor: undefined,
-    });
-    mockedGetCurrentServerJobMemberOptions.mockResolvedValue({
-      members: [{ id: "user_123", name: "Taylor Owner" }],
-    });
-    mockedListAllCurrentServerSites.mockResolvedValue({
-      items: [],
-      nextCursor: undefined,
+    mockedGetCurrentServerHomeDashboardSummary.mockResolvedValue({
+      jobs: {
+        items: [],
+        stats: {
+          activeJobs: 0,
+          blockedJobs: 0,
+          priorityWatchJobs: 0,
+          totalJobs: 0,
+          unassignedJobs: 0,
+        },
+      },
+      members: {
+        total: 1,
+      },
+      sites: {
+        items: [],
+        stats: {
+          mappedSites: 0,
+          totalSites: 0,
+        },
+      },
     });
     mockedListCurrentServerOrganizationActivity.mockResolvedValue({
       items: [],
@@ -123,9 +126,7 @@ describe("organization home route", () => {
         items: [],
       },
     });
-    expect(mockedListAllCurrentServerJobs).toHaveBeenCalledOnce();
-    expect(mockedGetCurrentServerJobMemberOptions).toHaveBeenCalledOnce();
-    expect(mockedListAllCurrentServerSites).toHaveBeenCalledOnce();
+    expect(mockedGetCurrentServerHomeDashboardSummary).toHaveBeenCalledOnce();
     expect(mockedListCurrentServerOrganizationActivity).toHaveBeenCalledWith({
       limit: 5,
     });
