@@ -43,6 +43,9 @@ describe("domain HTTP API", () => {
 
     expect(spec.paths["/jobs"]?.get?.operationId).toBe("jobs.listJobs");
     expect(spec.paths["/jobs"]?.post?.operationId).toBe("jobs.createJob");
+    expect(spec.paths["/jobs/external-options"]?.get?.operationId).toBe(
+      "jobs.getExternalJobOptions"
+    );
     expect(spec.paths["/sites"]?.get?.operationId).toBe("sites.listSites");
     expect(spec.paths["/sites"]?.post?.operationId).toBe("sites.createSite");
     expect(spec.paths["/labels"]?.get?.operationId).toBe("labels.listLabels");
@@ -198,6 +201,171 @@ describe("domain HTTP API", () => {
         })
       );
       expect(foreignMembershipResponse.status).toBe(403);
+    });
+  }, 30_000);
+
+  it("serves only collaborator-visible external job options", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "jobs_external_options",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const databaseUrl = testDatabase.url;
+    const canReachDatabase = await withPool(
+      databaseUrl,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping external scoped options coverage"
+      );
+    }
+
+    await applyAllMigrations(databaseUrl);
+
+    await withJobsEnvironment(databaseUrl, async () => {
+      const api = makeApiWebHandler(makeTestApiWebHandlerInput(databaseUrl));
+      cleanup.push(api.dispose);
+
+      const noSessionResponse = await api.handler(
+        makeRequest("/jobs/external-options")
+      );
+      expect(noSessionResponse.status).toBe(403);
+
+      const ownerCookieJar = new Map<string, string>();
+      const ownerEmail = `owner-${randomUUID()}@example.com`;
+      await signUpUser(api, ownerCookieJar, {
+        email: ownerEmail,
+        name: "Owner User",
+      });
+
+      await withPool(databaseUrl, async (pool) => {
+        await verifyUserEmail(pool, ownerEmail);
+      });
+
+      const ownerOrgId = await createOrganization(api, ownerCookieJar, {
+        organizationName: "Owner Organization",
+        organizationSlug: `owner-org-${randomUUID().slice(0, 8)}`,
+      });
+
+      const ownerExternalOptionsResponse = await api.handler(
+        makeRequest("/jobs/external-options", {
+          cookieJar: ownerCookieJar,
+        })
+      );
+      expect(ownerExternalOptionsResponse.status).toBe(403);
+
+      const externalCookieJar = new Map<string, string>();
+      const externalEmail = `external-${randomUUID()}@example.com`;
+      await signUpUser(api, externalCookieJar, {
+        email: externalEmail,
+        name: "External User",
+      });
+
+      const emptyExternalCookieJar = new Map<string, string>();
+      const emptyExternalEmail = `empty-external-${randomUUID()}@example.com`;
+      await signUpUser(api, emptyExternalCookieJar, {
+        email: emptyExternalEmail,
+        name: "Empty External User",
+      });
+
+      const fixture = await withPool(databaseUrl, async (pool) => {
+        const ownerUserId = await queryUserIdByEmail(pool, ownerEmail);
+        const externalUserId = await queryUserIdByEmail(pool, externalEmail);
+        const emptyExternalUserId = await queryUserIdByEmail(
+          pool,
+          emptyExternalEmail
+        );
+
+        await attachExternalMember(pool, {
+          organizationId: ownerOrgId,
+          userId: externalUserId,
+        });
+        await attachExternalMember(pool, {
+          organizationId: ownerOrgId,
+          userId: emptyExternalUserId,
+        });
+        await setActiveOrganizationForUser(pool, {
+          organizationId: ownerOrgId,
+          userId: externalUserId,
+        });
+        await setActiveOrganizationForUser(pool, {
+          organizationId: ownerOrgId,
+          userId: emptyExternalUserId,
+        });
+
+        return await seedExternalJobOptionsFixture(pool, {
+          externalUserId,
+          organizationId: ownerOrgId,
+          ownerUserId,
+        });
+      });
+
+      const emptyExternalOptionsResponse = await api.handler(
+        makeRequest("/jobs/external-options", {
+          cookieJar: emptyExternalCookieJar,
+        })
+      );
+      expect(emptyExternalOptionsResponse.status).toBe(200);
+      await expect(emptyExternalOptionsResponse.json()).resolves.toStrictEqual({
+        contacts: [],
+        labels: [],
+        members: [],
+        sites: [],
+      });
+
+      const externalOrganizationOptionsResponse = await api.handler(
+        makeRequest("/jobs/options", {
+          cookieJar: externalCookieJar,
+        })
+      );
+      expect(externalOrganizationOptionsResponse.status).toBe(403);
+
+      const externalOptionsResponse = await api.handler(
+        makeRequest("/jobs/external-options", {
+          cookieJar: externalCookieJar,
+        })
+      );
+      expect(externalOptionsResponse.status).toBe(200);
+      const externalOptions = await externalOptionsResponse.json();
+
+      expect(externalOptions).toMatchObject({
+        contacts: [
+          {
+            email: "visible-contact@example.com",
+            id: fixture.visibleContactId,
+            name: "Visible Contact",
+            phone: "+353 1 555 0199",
+            siteIds: [fixture.visibleSiteId],
+          },
+        ],
+        labels: [
+          {
+            id: fixture.visibleLabelId,
+            name: "Visible Label",
+          },
+        ],
+        members: [],
+        sites: [
+          {
+            id: fixture.visibleSiteId,
+            labels: [],
+            name: "Visible Site",
+          },
+        ],
+      });
+      expect(JSON.stringify(externalOptions)).not.toContain(
+        fixture.hiddenSiteId
+      );
+      expect(JSON.stringify(externalOptions)).not.toContain(
+        fixture.hiddenContactId
+      );
+      expect(JSON.stringify(externalOptions)).not.toContain(
+        fixture.hiddenLabelId
+      );
     });
   }, 30_000);
 
@@ -456,6 +624,321 @@ async function querySessionIdByUserId(pool: Pool, userId: string) {
   }
 
   return sessionId;
+}
+
+async function attachExternalMember(
+  pool: Pool,
+  input: {
+    readonly organizationId: string;
+    readonly userId: string;
+  }
+) {
+  await pool.query(
+    `insert into member (id, organization_id, user_id, role, created_at)
+     values ($1, $2, $3, 'external', now())`,
+    [randomUUID(), input.organizationId, input.userId]
+  );
+}
+
+async function setActiveOrganizationForUser(
+  pool: Pool,
+  input: {
+    readonly organizationId: string;
+    readonly userId: string;
+  }
+) {
+  const sessionId = await querySessionIdByUserId(pool, input.userId);
+
+  await pool.query(
+    `update session set active_organization_id = $1 where id = $2`,
+    [input.organizationId, sessionId]
+  );
+}
+
+async function seedExternalJobOptionsFixture(
+  pool: Pool,
+  input: {
+    readonly externalUserId: string;
+    readonly organizationId: string;
+    readonly ownerUserId: string;
+  }
+) {
+  const visibleSiteId = randomUUID();
+  const hiddenSiteId = randomUUID();
+  const visibleContactId = randomUUID();
+  const hiddenContactId = randomUUID();
+  const visibleLabelId = randomUUID();
+  const hiddenLabelId = randomUUID();
+  const visibleJobId = randomUUID();
+  const partialJobId = randomUUID();
+  const hiddenJobId = randomUUID();
+
+  await seedSite(pool, {
+    id: visibleSiteId,
+    name: "Visible Site",
+    organizationId: input.organizationId,
+  });
+  await seedSite(pool, {
+    id: hiddenSiteId,
+    name: "Hidden Site",
+    organizationId: input.organizationId,
+  });
+  await seedContact(pool, {
+    email: "visible-contact@example.com",
+    id: visibleContactId,
+    name: "Visible Contact",
+    organizationId: input.organizationId,
+    phone: "+353 1 555 0199",
+  });
+  await seedContact(pool, {
+    email: "hidden-contact@example.com",
+    id: hiddenContactId,
+    name: "Hidden Contact",
+    organizationId: input.organizationId,
+    phone: "+353 1 555 0100",
+  });
+  await seedLabel(pool, {
+    id: visibleLabelId,
+    name: "Visible Label",
+    organizationId: input.organizationId,
+  });
+  await seedLabel(pool, {
+    id: hiddenLabelId,
+    name: "Hidden Label",
+    organizationId: input.organizationId,
+  });
+  await seedWorkItem(pool, {
+    contactId: visibleContactId,
+    id: visibleJobId,
+    organizationId: input.organizationId,
+    ownerUserId: input.ownerUserId,
+    siteId: visibleSiteId,
+    title: "Visible boiler job",
+  });
+  await seedWorkItem(pool, {
+    id: partialJobId,
+    organizationId: input.organizationId,
+    ownerUserId: input.ownerUserId,
+    title: "Visible partial job",
+  });
+  await seedWorkItem(pool, {
+    contactId: hiddenContactId,
+    id: hiddenJobId,
+    organizationId: input.organizationId,
+    ownerUserId: input.ownerUserId,
+    siteId: hiddenSiteId,
+    title: "Hidden tenant job",
+  });
+  await seedWorkItemLabel(pool, {
+    labelId: visibleLabelId,
+    organizationId: input.organizationId,
+    workItemId: visibleJobId,
+  });
+  await seedWorkItemLabel(pool, {
+    labelId: hiddenLabelId,
+    organizationId: input.organizationId,
+    workItemId: hiddenJobId,
+  });
+  await seedWorkItemCollaborator(pool, {
+    createdByUserId: input.ownerUserId,
+    organizationId: input.organizationId,
+    userId: input.externalUserId,
+    workItemId: visibleJobId,
+  });
+  await seedWorkItemCollaborator(pool, {
+    createdByUserId: input.ownerUserId,
+    organizationId: input.organizationId,
+    userId: input.externalUserId,
+    workItemId: partialJobId,
+  });
+
+  return {
+    hiddenContactId,
+    hiddenLabelId,
+    hiddenSiteId,
+    visibleContactId,
+    visibleLabelId,
+    visibleSiteId,
+  };
+}
+
+async function seedSite(
+  pool: Pool,
+  input: {
+    readonly id: string;
+    readonly name: string;
+    readonly organizationId: string;
+  }
+) {
+  await pool.query(
+    `insert into sites (
+       id,
+       organization_id,
+       name,
+       raw_location_input,
+       display_location,
+       location_status,
+       created_at,
+       updated_at
+     )
+     values ($1, $2, $3, $3, $3, 'unverified', now(), now())`,
+    [input.id, input.organizationId, input.name]
+  );
+}
+
+async function seedContact(
+  pool: Pool,
+  input: {
+    readonly email: string;
+    readonly id: string;
+    readonly name: string;
+    readonly organizationId: string;
+    readonly phone: string;
+  }
+) {
+  await pool.query(
+    `insert into contacts (
+       id,
+       organization_id,
+       name,
+       email,
+       phone,
+       created_at,
+       updated_at
+     )
+     values ($1, $2, $3, $4, $5, now(), now())`,
+    [input.id, input.organizationId, input.name, input.email, input.phone]
+  );
+}
+
+async function seedLabel(
+  pool: Pool,
+  input: {
+    readonly id: string;
+    readonly name: string;
+    readonly organizationId: string;
+  }
+) {
+  await pool.query(
+    `insert into labels (
+       id,
+       organization_id,
+       name,
+       normalized_name,
+       created_at,
+       updated_at
+     )
+     values ($1, $2, $3, lower($3), now(), now())`,
+    [input.id, input.organizationId, input.name]
+  );
+}
+
+async function seedWorkItem(
+  pool: Pool,
+  input: {
+    readonly contactId?: string;
+    readonly id: string;
+    readonly organizationId: string;
+    readonly ownerUserId: string;
+    readonly siteId?: string;
+    readonly title: string;
+  }
+) {
+  await pool.query(
+    `insert into work_items (
+       id,
+       organization_id,
+       kind,
+       title,
+       status,
+       priority,
+       site_id,
+       contact_id,
+       blocked_reason,
+       completed_at,
+       completed_by_user_id,
+       created_at,
+       updated_at,
+       created_by_user_id
+     )
+     values (
+       $1,
+       $2,
+       'job',
+       $3,
+       'new',
+       'none',
+       $4,
+       $5,
+       null,
+       null,
+       null,
+       now(),
+       now(),
+       $6
+     )`,
+    [
+      input.id,
+      input.organizationId,
+      input.title,
+      input.siteId ?? null,
+      input.contactId ?? null,
+      input.ownerUserId,
+    ]
+  );
+}
+
+async function seedWorkItemLabel(
+  pool: Pool,
+  input: {
+    readonly labelId: string;
+    readonly organizationId: string;
+    readonly workItemId: string;
+  }
+) {
+  await pool.query(
+    `insert into work_item_labels (
+       work_item_id,
+       label_id,
+       organization_id,
+       created_at
+     )
+     values ($1, $2, $3, now())`,
+    [input.workItemId, input.labelId, input.organizationId]
+  );
+}
+
+async function seedWorkItemCollaborator(
+  pool: Pool,
+  input: {
+    readonly createdByUserId: string;
+    readonly organizationId: string;
+    readonly userId: string;
+    readonly workItemId: string;
+  }
+) {
+  await pool.query(
+    `insert into work_item_collaborators (
+       id,
+       organization_id,
+       work_item_id,
+       subject_type,
+       user_id,
+       role_label,
+       access_level,
+       created_by_user_id,
+       created_at,
+       updated_at
+     )
+     values ($1, $2, $3, 'user', $4, 'External viewer', 'read', $5, now(), now())`,
+    [
+      randomUUID(),
+      input.organizationId,
+      input.workItemId,
+      input.userId,
+      input.createdByUserId,
+    ]
+  );
 }
 
 async function withJobsEnvironment<Result>(

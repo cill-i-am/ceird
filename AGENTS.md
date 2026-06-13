@@ -6,6 +6,12 @@ This is a greenfield project and has not been released.
 
 - Do not optimize for backward compatibility.
 - Do not preserve workarounds unless they still make clear architectural sense.
+- Delete unused code, stale parameters, compatibility shims, and defensive
+  indirection as soon as their purpose disappears.
+- Do not keep no-op compatibility shapes just to reduce call-site churn; code is
+  cheap, and the current source should say exactly what it means.
+- Prefer direct, explicit changes over unnecessary workaround or defensive
+  postures.
 - Prefer clean, sweeping refactors over incremental patching when that improves the codebase.
 - It is fine to reshape APIs, folder structure, and internal architecture when needed.
 - Keep the code simple and readable.
