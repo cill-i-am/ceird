@@ -1461,6 +1461,15 @@ describe("Cloudflare stack", () => {
       "GOBIN=/out /usr/local/go/bin/go install ."
     );
     expect(electricContainerDockerfile).toContain("TIGRISFS_VERSION");
+    expect(electricContainerDockerfile).toContain(
+      "ln -sf /proc/mounts /etc/mtab"
+    );
+    expect(electricContainerDockerfile).toContain(
+      "echo 'electric:x:65532:' >> /etc/group"
+    );
+    expect(electricContainerDockerfile).toContain(
+      "echo 'electric:x:65532:65532:Electric Runtime:/home/electric:/usr/sbin/nologin' >> /etc/passwd"
+    );
     expect(electricContainerDockerfile).not.toContain("curl");
     expect(electricContainerDockerfile).not.toContain(
       "github.com/tigrisdata/tigrisfs/releases/download"

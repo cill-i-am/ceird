@@ -81,10 +81,81 @@ function readR2StorageConfig(): R2StorageConfig {
   };
 }
 
+function readSensitiveLogValues() {
+  return [
+    process.env.AWS_ACCESS_KEY_ID,
+    process.env.AWS_SECRET_ACCESS_KEY,
+    process.env.DATABASE_URL,
+    process.env.ELECTRIC_SECRET,
+  ]
+    .map((value) => value?.trim())
+    .filter((value): value is string => value !== undefined && value.length > 0)
+    .toSorted((left, right) => right.length - left.length);
+}
+
+function redactContainerLogLine(
+  line: string,
+  sensitiveValues: readonly string[]
+) {
+  let redacted = line
+    .replaceAll(
+      /AWS_ACCESS_KEY_ID\s*=\s*\S+/g,
+      "AWS_ACCESS_KEY_ID = [redacted]"
+    )
+    .replaceAll(
+      /AWS_SECRET_ACCESS_KEY\s*=\s*\S+/g,
+      "AWS_SECRET_ACCESS_KEY = [redacted]"
+    );
+
+  for (const value of sensitiveValues) {
+    redacted = redacted.replaceAll(value, "[redacted]");
+  }
+
+  return redacted;
+}
+
+function forwardRedactedProcessOutput(
+  child: ChildProcess,
+  sensitiveValues: readonly string[]
+) {
+  forwardRedactedReadable(child.stdout, process.stdout, sensitiveValues);
+  forwardRedactedReadable(child.stderr, process.stderr, sensitiveValues);
+}
+
+function forwardRedactedReadable(
+  input: NodeJS.ReadableStream | null,
+  output: NodeJS.WritableStream,
+  sensitiveValues: readonly string[]
+) {
+  if (input === null) {
+    return;
+  }
+
+  input.setEncoding("utf8");
+
+  let pending = "";
+  input.on("data", (chunk) => {
+    pending += String(chunk);
+    const lines = pending.split(/\r?\n/);
+    pending = lines.pop() ?? "";
+
+    for (const line of lines) {
+      output.write(`${redactContainerLogLine(line, sensitiveValues)}\n`);
+    }
+  });
+  input.on("end", () => {
+    if (pending.length > 0) {
+      output.write(redactContainerLogLine(pending, sensitiveValues));
+      pending = "";
+    }
+  });
+}
+
 async function startR2StorageMount(config: R2StorageConfig) {
   await mkdir(config.mountDir, { recursive: true });
 
   const endpoint = `https://${config.accountId}.r2.cloudflarestorage.com`;
+  const sensitiveLogValues = readSensitiveLogValues();
   const child = spawn(
     "/usr/local/bin/tigrisfs",
     ["--endpoint", endpoint, "-f", config.bucketName, config.mountDir],
@@ -94,10 +165,11 @@ async function startR2StorageMount(config: R2StorageConfig) {
         AWS_ACCESS_KEY_ID: config.accessKeyId,
         AWS_SECRET_ACCESS_KEY: config.secretAccessKey,
       },
-      stdio: "inherit",
+      stdio: ["ignore", "pipe", "pipe"],
     }
   );
 
+  forwardRedactedProcessOutput(child, sensitiveLogValues);
   await waitForR2StorageMount(child, config);
   return child;
 }
@@ -393,8 +465,9 @@ const runContainer = Effect.tryPromise({
 
           electric = spawn(electricEntrypoint, electricArgs, {
             env: process.env,
-            stdio: "inherit",
+            stdio: ["ignore", "pipe", "pipe"],
           });
+          forwardRedactedProcessOutput(electric, readSensitiveLogValues());
           electric.once("exit", onElectricExit);
           electric.once("error", onElectricError);
         } catch (error) {
