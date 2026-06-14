@@ -202,19 +202,17 @@ the Containers API validates against a cloud Durable Object namespace, while
 Alchemy local Workers expose workerd-only Durable Object namespaces. If local
 code calls the Electric endpoints without a deployed sync origin, the
 `ElectricSql` Durable Object returns an explicit unavailable response instead
-of pretending sync is active. Deployed non-preview stages create a
-stage-scoped, bucket-scoped Cloudflare account API token for Electric R2
-storage inside the app Alchemy stack. Alchemy derives the R2 S3 access key from
-the token id and the S3 secret key from the SHA-256 hash of the token value, then
-passes those values, the Neon branch URL, and the generated Electric source
-secret into the Sync Worker as secrets. The `ElectricSql` Durable Object
-supplies them to the Cloudflare Container as startup environment variables when
-it starts Electric. Pull-request previews and push-to-main cloud E2E stages skip
-the Cloudflare Container and R2 runtime storage; they reconcile the sync Worker
-and authorization path, then use a shallow unauthorized-shape probe until full
-Electric preview coverage is added. Production and ordinary non-preview
-deployed stages require the Cloudflare credential running the app stack to be
-able to create and delete account API tokens for the stage Electric R2 bucket.
+of pretending sync is active. Deployed stages, including pull-request previews
+and push-to-main cloud E2E stages, create a stage-scoped, bucket-scoped
+Cloudflare account API token for Electric R2 storage inside the app Alchemy
+stack. Alchemy derives the R2 S3 access key from the token id and the S3 secret
+key from the SHA-256 hash of the token value, then passes those values, the Neon
+branch URL, and the generated Electric source secret into the Sync Worker as
+secrets. The `ElectricSql` Durable Object supplies them to the Cloudflare
+Container as startup environment variables when it starts Electric. Production,
+preview, ephemeral CI, and ordinary deployed stages require the Cloudflare
+credential running the app stack to be able to create and delete account API
+tokens for the stage Electric R2 bucket.
 
 There is no separate local Docker service in the default workflow. Local
 cloud-backed stages exercise the app, API, domain, Agent, MCP, sync Worker, R2,
@@ -245,10 +243,10 @@ The stack provisions:
 - native Alchemy Cloudflare R2 bucket for Electric shape storage; local dev
   stages mint their own bucket-scoped token but skip the Cloudflare Container
   application because the cloud Containers API cannot attach to local workerd
-  Durable Object namespaces, while CI/deployed stages consume Electric R2
-  credentials from GitHub environment secrets managed by the separate
-  credential stack; the Sync Worker injects runtime container secrets through
-  Durable Object container startup environment variables in deployed stages
+  Durable Object namespaces, while deployed stages mint their own
+  stage-scoped, bucket-scoped Electric R2 token during stack reconciliation; the
+  Sync Worker injects runtime container secrets through Durable Object
+  container startup environment variables in deployed stages
 - private Cloudflare domain Worker declared in
   `apps/domain/infra/cloudflare-worker.ts` and executed from
   `apps/domain/src/worker.ts`
@@ -526,14 +524,17 @@ is masked before it is exported to the Playwright step and is still omitted from
 root stack outputs. Preview Playwright targets the reconciled Agent Worker with
 `PLAYWRIGHT_AGENT_URL` and exposes `PLAYWRIGHT_SYNC_URL` for sync-aware tests.
 After deploy, CI waits for the app, API, Agent, and Sync preview `/health`
-endpoints, an unauthenticated Sync authorization probe that should return `401`,
-and an API auth-session probe that forwards through the private domain Worker
-before starting Playwright. This avoids transient route, domain, TLS, or service
-binding propagation failures on freshly created preview hostnames. The domain Worker
-disables auth rate limiting by default only for `pr-<number>` stages so repeated
-E2E runs against the persistent preview database do not accumulate lockout
-counters; set `AUTH_RATE_LIMIT_ENABLED=true` explicitly if a preview needs to
-exercise production rate-limit behavior.
+endpoints and an API auth-session probe that forwards through the private
+domain Worker, then runs `scripts/run-deployed-sync-canary.mjs` against
+`PLAYWRIGHT_SYNC_URL` before starting Playwright. The canary signs up a
+throwaway user, verifies that user in the stage database, creates and activates
+a stage-local organization, and requests the authenticated `jobs` Electric
+shape. This avoids transient route, domain, TLS, service binding, container
+startup, R2 mount, or Electric shape-serving failures on freshly created preview
+hostnames. The domain Worker disables auth rate limiting by default only for
+`pr-<number>` stages so repeated E2E runs against the persistent preview
+database do not accumulate lockout counters; set `AUTH_RATE_LIMIT_ENABLED=true`
+explicitly if a preview needs to exercise production rate-limit behavior.
 
 Fork pull requests do not run the secret-bearing preview jobs. They continue to
 run the non-deploying build, lint, format, and typecheck jobs without

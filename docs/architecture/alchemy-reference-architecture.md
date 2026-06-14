@@ -84,11 +84,11 @@ stages that have stage-appropriate runtime storage credentials. Local
 the Cloudflare Containers API validates attachment against a cloud Durable
 Object namespace. Keep local dev on the Sync Worker path and let `ElectricSql`
 fail explicitly with `electric_container_unavailable` if a local shape request
-reaches the container bridge. Production and ordinary full-sync cloud stages
-must provision the Sync Worker, `ElectricSql` Durable Object, Cloudflare
-Container, R2 bucket, and Neon branch together. Pull-request previews and
-ephemeral CI stages intentionally run the shallow sync authorization probe until
-they have per-stage Electric runtime credentials.
+reaches the container bridge. All non-local deployed stages, including
+production, pull-request previews, and ephemeral CI stages, must provision the
+Sync Worker, `ElectricSql` Durable Object, Cloudflare Container, R2 bucket,
+stage Neon branch, and generated per-stage Electric runtime credentials
+together.
 
 The private domain Worker is the only Worker with Smart Placement enabled. It
 owns Hyperdrive/database access, so it is the only current Worker where

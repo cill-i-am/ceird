@@ -817,7 +817,7 @@ describe("Cloudflare stack", () => {
     ).toBe(false);
   });
 
-  it("provisions Electric storage for local and ordinary stages but skips preview probes", () => {
+  it("provisions Electric storage for local, preview, ephemeral CI, and ordinary stages", () => {
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({
@@ -841,7 +841,7 @@ describe("Cloudflare stack", () => {
           localDev: false,
         })
       )
-    ).toBe(false);
+    ).toBe(true);
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({
@@ -852,7 +852,7 @@ describe("Cloudflare stack", () => {
           localDev: false,
         })
       )
-    ).toBe(false);
+    ).toBe(true);
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({

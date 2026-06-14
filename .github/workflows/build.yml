@@ -401,6 +401,21 @@ jobs:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
 
+      - name: Export Playwright database URL
+        run: |
+          set -euo pipefail
+          pnpm --silent alchemy state get ceird "$CI_STAGE" PostgresBranch --stage "$CI_STAGE" \
+            | node scripts/export-playwright-database-url.mjs
+        env:
+          AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
+          AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
+
       - name: Wait for CI deploy health
         run: |
           set -euo pipefail
@@ -517,42 +532,17 @@ jobs:
             done
           }
 
-          wait_for_sync_authorization() {
-            local label="Sync domain authorization"
-
-            for attempt in {1..120}; do
-              local status
-
-              status=$(curl --silent --show-error --max-time 10 \
-                -o /dev/null \
-                -w '%{http_code}' \
-                -H "origin: $PLAYWRIGHT_BASE_URL" \
-                "$PLAYWRIGHT_SYNC_URL/v1/shapes/jobs?offset=-1" || true)
-
-              if [[ "$status" == "401" ]]; then
-                echo "$label is healthy"
-                return 0
-              fi
-
-              if [[ "$attempt" == "120" ]]; then
-                echo "$label did not become healthy; expected 401 and got $status"
-                return 1
-              fi
-
-              echo "$label check attempt $attempt returned $status; waiting for sync/domain binding propagation"
-              sleep 5
-            done
-          }
-
           wait_for_health "$PLAYWRIGHT_API_URL/health" "API"
           wait_for_health "$PLAYWRIGHT_API_URL/api/auth/get-session" "API domain forwarding"
           wait_for_auth_domain_forwarding
           wait_for_health "$PLAYWRIGHT_AGENT_URL/health" "Agent"
           wait_for_health "$PLAYWRIGHT_BASE_URL/health" "App"
           wait_for_health "$PLAYWRIGHT_SYNC_URL/health" "Sync"
-          wait_for_sync_authorization
           wait_for_health "$PLAYWRIGHT_TENANT_URL/health" "Tenant app"
           wait_for_app_authenticated_navigation
+
+      - name: Run deployed sync canary
+        run: node scripts/run-deployed-sync-canary.mjs
 
   cloud-e2e:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

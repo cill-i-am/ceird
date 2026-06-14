@@ -196,19 +196,18 @@ provisions a stage-scoped R2 bucket for Electric storage. In local
 storage path is ready, but it does not create the Cloudflare Container
 application. Alchemy local Workers run in workerd with local Durable Object
 namespaces, and the cloud Containers API can only attach a container to a cloud
-Durable Object namespace. In deployed non-preview stages, the app stack creates
-a bucket-scoped Cloudflare account API token for the stage Electric R2 bucket.
-Production therefore provisions the Electric Container and stage-scoped R2
-bucket without GitHub-provided Electric storage secrets, but the Cloudflare
-credential running the app stack must be able to manage account API tokens.
-Pull-request previews and ephemeral push-to-main cloud E2E stages deploy the
-public sync Worker and Durable Object authorization path, but skip the
-Cloudflare Container and R2 runtime storage. During full Electric
-reconciliation, the app stack passes the R2 credentials, stage Neon connection
-URL, and generated Electric source secret into the Sync Worker as secrets. The
-`ElectricSql` Durable Object passes those values to the Cloudflare Container as
-startup environment variables, so the Containers application configuration does
-not need account-secret references. `ElectricSql` must remain
+Durable Object namespace. In deployed stages, including pull-request previews
+and ephemeral push-to-main cloud E2E stages, the app stack creates a
+bucket-scoped Cloudflare account API token for the stage Electric R2 bucket.
+Production, preview, and ephemeral CI therefore provision the Electric
+Container and stage-scoped R2 bucket without GitHub-provided Electric storage
+secrets, but the Cloudflare credential running the app stack must be able to
+manage account API tokens. During full Electric reconciliation, the app stack
+passes the R2 credentials, stage Neon connection URL, and generated Electric
+source secret into the Sync Worker as secrets. The `ElectricSql` Durable Object
+passes those values to the Cloudflare Container as startup environment
+variables, so the Containers application configuration does not need
+account-secret references. `ElectricSql` must remain
 an exported `cloudflare:workers` `DurableObject` subclass whose class name
 matches the Alchemy container `className`; Cloudflare validates that class as
 the container-enabled Durable Object when the Containers application is
@@ -262,15 +261,15 @@ malformed payloads, unknown shapes, and domain/service errors are never cached;
 expired or absent grants call the domain Worker live and keep fail-closed
 behavior. Active membership invalidation is intentionally out of scope for v1,
 so revocation exposure is bounded by the short TTL.
-Pull-request previews can temporarily deploy the sync Worker without the
-Electric Container because preview environments intentionally avoid
-account-token lifecycle and full container startup. Ephemeral push-to-main cloud
-E2E uses the same shallow sync authorization probe. Local Alchemy dev also runs
-without the Cloudflare Container application; its local `ElectricSql` Durable
-Object fails explicitly with `electric_container_unavailable` if a shape request
-reaches the container bridge. Production provisions the full Worker, Durable
-Object, Container, R2, and Neon path. Add full preview container coverage before
-requiring the full Electric Container path in preview or ephemeral CI.
+Pull-request previews and ephemeral push-to-main cloud E2E now provision the
+full Worker, Durable Object, Container, R2, and Neon path. Their deploy
+workflows run an authenticated sync canary through `PLAYWRIGHT_SYNC_URL` after
+reading the stage database URL from Alchemy state: the canary verifies a
+throwaway user, creates and activates a stage-local organization, then requests
+the `jobs` shape through Electric. Local Alchemy dev still runs without the
+Cloudflare Container application; its local `ElectricSql` Durable Object fails
+explicitly with `electric_container_unavailable` if a shape request reaches the
+container bridge.
 
 The deployed sync path is ready for Electric/TanStack DB clients, but the app's
 existing route-scoped TanStack DB collections remain query-backed in this
