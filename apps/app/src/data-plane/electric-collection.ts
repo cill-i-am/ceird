@@ -576,21 +576,39 @@ function createElectricCollectionHealth<
 
 interface ElectricCollectionHealthObservable {
   readonly status: string;
+  readonly on?:
+    | ((
+        event: "status:change",
+        callback: (event: { readonly status: string }) => void
+      ) => () => void)
+    | undefined;
   readonly onFirstReady?: ((callback: () => void) => void) | undefined;
 }
 
-function connectElectricCollectionHealth(
+export function connectElectricCollectionHealth(
   collection: ElectricCollectionHealthObservable,
   health: DataPlaneCollectionHealth
 ) {
+  const markReadyWhenReady = (status: string) => {
+    if (status === "ready") {
+      health.markReady();
+    }
+  };
+  const unsubscribe = collection.on?.("status:change", (event) => {
+    markReadyWhenReady(event.status);
+  });
+
   if (collection.status === "ready") {
     health.markReady();
-    return;
   }
 
-  collection.onFirstReady?.(() => {
-    health.markReady();
-  });
+  if (unsubscribe === undefined) {
+    collection.onFirstReady?.(() => {
+      health.markReady();
+    });
+  }
+
+  return unsubscribe ?? (() => null);
 }
 
 function isBrowserRuntime() {

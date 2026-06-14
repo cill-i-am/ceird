@@ -6,6 +6,7 @@ import { syncBackedCollectionCompleteness } from "./collection-contract";
 import {
   assertSafeElectricShapeOptions,
   assertSupportedElectricSyncMode,
+  connectElectricCollectionHealth,
   createElectricCollectionFromContract,
   createElectricShapeOptions,
   defineElectricCollectionContract,
@@ -146,6 +147,38 @@ describe("Ceird Electric collection factory", () => {
         source: "electric",
         status: "connecting",
         subscriptionName: "labels",
+      })
+    );
+  });
+
+  it("records initial readiness latency through the factory collection status bridge", () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+    const now = vi
+      .fn<() => number>()
+      .mockReturnValueOnce(1000)
+      .mockReturnValueOnce(24_000)
+      .mockReturnValue(24_000);
+    const result = createElectricCollectionFromContract(testContract, {
+      runtime: {
+        fetch: makeTestFetch(new Response("ok")),
+        isBrowser: true,
+        now,
+      },
+    });
+
+    expect(result.status).toBe("enabled");
+    if (result.status !== "enabled") {
+      throw new Error("Expected Electric collection to be enabled");
+    }
+
+    result.collection._lifecycle.setStatus("loading");
+    result.collection._lifecycle.markReady();
+
+    expect(result.health.current).toStrictEqual(
+      expect.objectContaining({
+        initialReadyLatencyMs: 23_000,
+        lastStatusChangeAtMs: 24_000,
+        status: "ready",
       })
     );
   });
@@ -449,6 +482,51 @@ describe("Ceird Electric collection factory", () => {
       })
     );
   });
+
+  it("marks recovered Electric collection status as ready after a retry succeeds", async () => {
+    const now = vi
+      .fn<() => number>()
+      .mockReturnValueOnce(1000)
+      .mockReturnValueOnce(2000)
+      .mockReturnValueOnce(3000)
+      .mockReturnValue(3000);
+    const { health } = createElectricCollectionFromContract(testContract, {
+      runtime: {
+        isBrowser: false,
+        now,
+      },
+    });
+    const collection = makeTestHealthObservable("loading");
+    const unsubscribe = connectElectricCollectionHealth(collection, health);
+    const shapeOptions = createElectricShapeOptions(testContract, {
+      onSyncError: (error) => {
+        health.markUnavailable(error);
+      },
+      shapeUrl: "https://sync.codex.ceird.localhost/v1/shapes/labels",
+    });
+
+    await shapeOptions.onError?.({
+      message: "temporary upstream source_secret=s3cr3t",
+      status: 503,
+    } as Error & { readonly status: number });
+    collection.emitStatusChange("ready");
+
+    expect(health.current).toStrictEqual(
+      expect.objectContaining({
+        initialReadyLatencyMs: 2000,
+        lastError: {
+          kind: "server",
+          message: "Sync origin is unavailable with status 503.",
+          retryable: true,
+          status: 503,
+        },
+        recoveryAttempts: 1,
+        status: "ready",
+      })
+    );
+
+    unsubscribe();
+  });
 });
 
 function makeTestFetch(response: Response) {
@@ -460,4 +538,33 @@ function makeTestFetch(response: Response) {
       preconnect: vi.fn<typeof fetch.preconnect>(),
     }
   ) satisfies typeof fetch;
+}
+
+function makeTestHealthObservable(initialStatus: string) {
+  const listeners = new Set<(event: { readonly status: string }) => void>();
+  let status = initialStatus;
+
+  return {
+    emitStatusChange(nextStatus: string) {
+      status = nextStatus;
+      for (const listener of listeners) {
+        listener({ status });
+      }
+    },
+    get status() {
+      return status;
+    },
+    on(
+      event: "status:change",
+      callback: (event: { readonly status: string }) => void
+    ) {
+      if (event !== "status:change") {
+        throw new Error(`Unsupported test collection event: ${event}`);
+      }
+      listeners.add(callback);
+      return () => {
+        listeners.delete(callback);
+      };
+    },
+  };
 }
