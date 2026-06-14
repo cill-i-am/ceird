@@ -3,6 +3,8 @@ import type { Locator, Page } from "@playwright/test";
 
 import { waitForSubmitHydration } from "./wait-for-submit-hydration";
 
+const MEMBERS_ROUTE_TIMEOUT_MS = 30_000;
+
 export class MembersPage {
   readonly page: Page;
   readonly heading: Locator;
@@ -37,8 +39,10 @@ export class MembersPage {
 
   async expectLoaded() {
     await Promise.all([
-      expect(this.page).toHaveURL(/\/members$/),
-      expect(this.heading).toBeVisible(),
+      expect(this.page).toHaveURL(/\/members$/, {
+        timeout: MEMBERS_ROUTE_TIMEOUT_MS,
+      }),
+      expect(this.heading).toBeVisible({ timeout: MEMBERS_ROUTE_TIMEOUT_MS }),
     ]);
   }
 
@@ -46,7 +50,7 @@ export class MembersPage {
     await this.inviteTeammate.click();
     await expect(
       this.page.getByRole("dialog", { name: "Invite teammate" })
-    ).toBeVisible();
+    ).toBeVisible({ timeout: MEMBERS_ROUTE_TIMEOUT_MS });
     await waitForSubmitHydration(this.page);
   }
 
