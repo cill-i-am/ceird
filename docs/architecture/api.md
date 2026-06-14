@@ -103,6 +103,10 @@ reference id, and scopes. Removing a connected app through the identity API
 therefore blocks future MCP requests immediately, even while an issued access
 token has time remaining. Consent-check storage failures fail closed and emit
 sanitized warning telemetry.
+The ordinary MCP consent, session, and membership lookups use the domain
+`DomainDrizzle` service. They still fail closed on storage or runtime-layer
+failures and do not change OAuth scopes, consent policy, or bearer-token
+validation.
 The standalone MCP Worker remains a forwarding adapter so generated/action UI,
 Agents SDK Workers, and bot surfaces can call the same domain surface.
 
@@ -136,6 +140,10 @@ The domain Worker owns the durable product side of agents:
 | `POST` | `/agent/internal/threads/:threadId/activity`                | Touch `lastMessageAt` from trusted Agent chat traffic.                                           |
 | `POST` | `/agent/internal/threads/:threadId/current-location-access` | Validate that the thread owner can use current-location proximity origins.                       |
 | `POST` | `/agent/internal/actions`                                   | Execute a domain-owned action for the Agent.                                                     |
+
+Straightforward agent thread create/list/find/archive/touch and active-thread
+actor resolution use `DomainDrizzle`. The current-thread prepare query remains
+raw because it is protected by a transaction-scoped advisory lock.
 
 Public agent chat traffic goes to:
 

@@ -68,6 +68,9 @@ Use `DomainDrizzle` when:
 - queries are ordinary CRUD, joins, upserts, bounded pagination, or explicit
   projections
 - Drizzle `sql` fragments are enough for a small SQL-specific expression
+- agent thread list/find/archive/touch/actor-resolution reads and ordinary MCP
+  session, membership, and connected-app consent checks need Effect-native
+  schema-backed access
 
 Current low-risk `DomainDrizzle` migrations include organization label CRUD and
 active-label reads, user preference get/upsert paths, current organization actor
@@ -80,6 +83,10 @@ cursor/search behavior, query-plan sensitivity, or review clarity make raw SQL
 the better representation. Repository services should map
 `EffectDrizzleQueryError`, Drizzle transaction rollback failures, and `SqlError`
 into their typed storage-error surface instead of leaking unknown failures.
+The agent current-thread prepare path remains raw because it uses a
+transaction-scoped advisory lock. The agent action-run ledger also remains raw
+so idempotent insert-or-replay, stale recovery, and terminal-race behavior stay
+reviewed as one SQL slice.
 
 ## Cloudflare Neon Postgres And Hyperdrive
 

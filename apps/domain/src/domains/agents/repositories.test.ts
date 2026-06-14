@@ -8,7 +8,7 @@ import { OrganizationId, UserId } from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 
-import { AppEffectSqlRuntimeLive } from "../../platform/database/database.js";
+import { AppDatabaseRuntimeLive } from "../../platform/database/database.js";
 import {
   applyAllMigrations,
   canConnect,
@@ -283,7 +283,7 @@ async function runAgentEffect<Value, Error, Requirements>(
       effect.pipe(
         Effect.provide(AgentThreadsRepository.Default),
         Effect.provide(AgentActionRunsRepository.Default),
-        Effect.provide(AppEffectSqlRuntimeLive),
+        Effect.provide(AppDatabaseRuntimeLive),
         withConfigProvider(
           configProviderFromMap(new Map([["DATABASE_URL", databaseUrl]]))
         )

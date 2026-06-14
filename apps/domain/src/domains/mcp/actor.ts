@@ -1,5 +1,5 @@
 import type { OrganizationId, SessionId, UserId } from "@ceird/identity-core";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, sql as drizzleSql } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import {
@@ -60,12 +60,7 @@ const makeCurrentOrganizationActorFromMcpSession = (
                 )
               )
               .limit(1)
-              .pipe(
-                Effect.catchTag(
-                  "EffectDrizzleQueryError",
-                  failCurrentOrganizationActorStorage
-                )
-              ),
+              .pipe(Effect.mapError(failCurrentOrganizationActorStorageError)),
           loadSessionById: (sessionId) =>
             db
               .select({
@@ -77,17 +72,14 @@ const makeCurrentOrganizationActorFromMcpSession = (
               .where(
                 and(
                   eq(sessionTable.id, sessionId),
-                  gt(sessionTable.expiresAt, sql`now()`)
+                  gt(sessionTable.expiresAt, drizzleSql`now()`)
                 )
               )
               .limit(1)
               .pipe(
-                Effect.catchTag(
-                  "EffectDrizzleQueryError",
-                  failCurrentOrganizationActorStorage
-                )
-              )
-              .pipe(Effect.map((rows) => rows[0] ?? null)),
+                Effect.map((rows) => rows[0] ?? null),
+                Effect.mapError(failCurrentOrganizationActorStorageError)
+              ),
           session,
         }),
     });
@@ -150,11 +142,9 @@ export const resolveCurrentOrganizationActorFromMcpSession = Effect.fn(
   });
 });
 
-function failCurrentOrganizationActorStorage(error: unknown) {
-  return Effect.fail(
-    new OrganizationActorStorageError({
-      cause: describeDomainStorageFailure(error),
-      message: "MCP actor storage lookup failed",
-    })
-  );
+function failCurrentOrganizationActorStorageError(error: unknown) {
+  return new OrganizationActorStorageError({
+    cause: describeDomainStorageFailure(error),
+    message: "MCP actor storage lookup failed",
+  });
 }

@@ -147,7 +147,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
               title: input.title,
               userId: currentActor.userId,
             })
-            .pipe(Effect.catchTag("SqlError", failStorage("session.prepare")));
+            .pipe(Effect.mapError(toStorageError("session.prepare")));
           yield* Effect.annotateCurrentSpan("agent.threadId", thread.id);
           const authorizationResponse = yield* signAgentAuthorization({
             agentInstanceName: thread.agentInstanceName,
@@ -184,7 +184,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
           .listForUser(currentActor.organizationId, currentActor.userId, {
             limit,
           })
-          .pipe(Effect.catchTag("SqlError", failStorage("thread.list")));
+          .pipe(Effect.mapError(toStorageError("thread.list")));
         yield* Effect.annotateCurrentSpan("agent.threadCount", items.length);
 
         return { items } as const;
@@ -210,7 +210,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
             title: input.title,
             userId: currentActor.userId,
           })
-          .pipe(Effect.catchTag("SqlError", failStorage("thread.create")));
+          .pipe(Effect.mapError(toStorageError("thread.create")));
         yield* Effect.annotateCurrentSpan("agent.threadId", item.id);
 
         return { item } as const;
@@ -234,7 +234,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         const result = yield* threadsRepository
           .archive(currentActor.organizationId, currentActor.userId, threadId)
           .pipe(
-            Effect.catchTag("SqlError", failStorage("thread.archive")),
+            Effect.mapError(toStorageError("thread.archive")),
             Effect.map(Option.getOrUndefined)
           );
 
@@ -272,7 +272,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
             threadId
           )
           .pipe(
-            Effect.catchTag("SqlError", failStorage("thread.authorizeConnect")),
+            Effect.mapError(toStorageError("thread.authorizeConnect")),
             Effect.map(Option.getOrUndefined)
           );
 
@@ -302,7 +302,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
           const item = yield* threadsRepository
             .touchActivity(threadId)
             .pipe(
-              Effect.catchTag("SqlError", failStorage("thread.touchActivity")),
+              Effect.mapError(toStorageError("thread.touchActivity")),
               Effect.map(Option.getOrUndefined)
             );
 
@@ -328,10 +328,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         const threadActor = yield* threadsRepository
           .resolveActiveThreadActor(threadId)
           .pipe(
-            Effect.catchTag(
-              "SqlError",
-              failStorage("thread.currentLocationAccess")
-            ),
+            Effect.mapError(toStorageError("thread.currentLocationAccess")),
             Effect.map(Option.getOrUndefined)
           );
 
@@ -380,7 +377,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
         const threadActor = yield* threadsRepository
           .resolveActiveThreadActor(input.threadId)
           .pipe(
-            Effect.catchTag("SqlError", failStorage("action.run")),
+            Effect.mapError(toStorageError("action.run")),
             Effect.map(Option.getOrUndefined)
           );
 
@@ -609,6 +606,15 @@ function failStorage(operation: AgentStorageOperation) {
         operation,
       })
     );
+}
+
+function toStorageError(operation: AgentStorageOperation) {
+  return (error: unknown) =>
+    new AgentStorageError({
+      cause: formatUnknownCause(error),
+      message: "Agent storage operation failed",
+      operation,
+    });
 }
 
 function signAgentAuthorization(input: {

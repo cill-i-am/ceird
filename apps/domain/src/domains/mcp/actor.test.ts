@@ -4,7 +4,6 @@ import {
   decodeUserId,
 } from "@ceird/identity-core";
 import { Effect, Exit, Layer } from "effect";
-import type { Context } from "effect";
 
 import { DomainDrizzle } from "../../platform/database/database.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -113,31 +112,16 @@ describe(resolveCurrentOrganizationActorFromMcpSession, () => {
   }, 10_000);
 
   it("provides CurrentOrganizationActor from MCP session without HttpServerRequest", async () => {
-    let selectCount = 0;
-    const db = {
-      select: () => {
-        const selectedIndex = selectCount;
-        selectCount += 1;
-        const rows =
-          selectedIndex === 0
-            ? [
-                {
-                  activeOrganizationId: "org_123",
-                  expiresAt: new Date("2999-01-01T00:00:00.000Z"),
-                  userId: "user_123",
-                },
-              ]
-            : [{ role: "member" }];
-
-        return {
-          from: () => ({
-            where: () => ({
-              limit: () => Effect.succeed(rows),
-            }),
-          }),
-        };
-      },
-    };
+    const db = makeMcpActorDrizzleMock([
+      [
+        {
+          activeOrganizationId: "org_123",
+          expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+          userId: "user_123",
+        },
+      ],
+      [{ role: "member" }],
+    ]);
 
     const exit = await Effect.runPromiseExit(
       Effect.gen(function* () {
@@ -153,9 +137,9 @@ describe(resolveCurrentOrganizationActorFromMcpSession, () => {
         Effect.provide(
           Layer.succeed(
             DomainDrizzle,
-            DomainDrizzle.of({ db } as unknown as Context.Service.Shape<
-              typeof DomainDrizzle
-            >)
+            DomainDrizzle.of({
+              db,
+            } as never)
           )
         )
       ) as unknown as Effect.Effect<
@@ -178,3 +162,17 @@ describe(resolveCurrentOrganizationActorFromMcpSession, () => {
     );
   }, 10_000);
 });
+
+function makeMcpActorDrizzleMock(results: readonly unknown[][]) {
+  const pendingResults = [...results];
+
+  return {
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          limit: () => Effect.succeed(pendingResults.shift() ?? []),
+        }),
+      }),
+    }),
+  };
+}
