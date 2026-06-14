@@ -3,9 +3,17 @@ import { LabelId as LabelIdSchema, LabelSchema } from "@ceird/labels-core";
 import type { Label } from "@ceird/labels-core";
 import { SiteId as SiteIdSchema } from "@ceird/sites-core";
 import type { SiteIdType as SiteId } from "@ceird/sites-core";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import type { SqlError } from "effect/unstable/sql";
 import type { SqlClient } from "effect/unstable/sql/SqlClient";
+
+import type {
+  DomainDrizzleDatabase,
+  DomainDrizzleStorageFailure,
+} from "../../platform/database/database.js";
+import { label } from "../labels/schema.js";
+import { site, siteLabel } from "./schema.js";
 
 interface SiteLabelRow {
   readonly created_at: Date;
@@ -19,16 +27,23 @@ const decodeLabel = Schema.decodeUnknownSync(LabelSchema);
 const decodeLabelId = Schema.decodeUnknownSync(LabelIdSchema);
 const decodeSiteId = Schema.decodeUnknownSync(SiteIdSchema);
 
-type SiteLabelsBySiteIdEffect = Effect.Effect<
+type RawSiteLabelsBySiteIdEffect = Effect.Effect<
   Map<SiteId, Label[]>,
   SqlError.SqlError
 >;
 
+type DrizzleSiteLabelsBySiteIdEffect = Effect.Effect<
+  Map<SiteId, Label[]>,
+  DomainDrizzleStorageFailure
+>;
+
+// Raw helper retained for jobs repository call sites; migrating those callers is
+// owned by the jobs DomainDrizzle slice rather than TSK-161.
 export const listSiteLabelsForSites: (
   sql: SqlClient,
   organizationId: OrganizationId,
   siteIds: readonly SiteId[]
-) => SiteLabelsBySiteIdEffect = Effect.fn(
+) => RawSiteLabelsBySiteIdEffect = Effect.fn(
   "SiteLabelQueries.listSiteLabelsForSites"
 )(function* (sql, organizationId, siteIds) {
   if (siteIds.length === 0) {
@@ -60,10 +75,11 @@ export const listSiteLabelsForSites: (
   return groupSiteLabelsBySiteId(rows);
 });
 
+// Raw helper retained for non-sites callers until their repository slice moves.
 export const listSiteLabelsForOrganization: (
   sql: SqlClient,
   organizationId: OrganizationId
-) => SiteLabelsBySiteIdEffect = Effect.fn(
+) => RawSiteLabelsBySiteIdEffect = Effect.fn(
   "SiteLabelQueries.listSiteLabelsForOrganization"
 )(function* (sql, organizationId) {
   const rows = yield* sql<SiteLabelRow>`
@@ -87,6 +103,97 @@ export const listSiteLabelsForOrganization: (
       and labels.archived_at is null
     order by site_labels.site_id asc, labels.name asc, labels.id asc
   `;
+
+  return groupSiteLabelsBySiteId(rows);
+});
+
+export const listSiteLabelsForSitesWithDrizzle: (
+  db: DomainDrizzleDatabase,
+  organizationId: OrganizationId,
+  siteIds: readonly SiteId[]
+) => DrizzleSiteLabelsBySiteIdEffect = Effect.fn(
+  "SiteLabelQueries.listSiteLabelsForSitesWithDrizzle"
+)(function* (db, organizationId, siteIds) {
+  if (siteIds.length === 0) {
+    return new Map<SiteId, Label[]>();
+  }
+
+  const rows = yield* db
+    .select({
+      created_at: label.createdAt,
+      label_id: siteLabel.labelId,
+      name: label.name,
+      site_id: siteLabel.siteId,
+      updated_at: label.updatedAt,
+    })
+    .from(siteLabel)
+    .innerJoin(
+      label,
+      and(
+        eq(label.id, siteLabel.labelId),
+        eq(label.organizationId, siteLabel.organizationId)
+      )
+    )
+    .innerJoin(
+      site,
+      and(
+        eq(site.id, siteLabel.siteId),
+        eq(site.organizationId, siteLabel.organizationId)
+      )
+    )
+    .where(
+      and(
+        eq(siteLabel.organizationId, organizationId),
+        eq(label.organizationId, organizationId),
+        eq(site.organizationId, organizationId),
+        inArray(siteLabel.siteId, siteIds),
+        isNull(label.archivedAt)
+      )
+    )
+    .orderBy(asc(label.name), asc(label.id));
+
+  return groupSiteLabelsBySiteId(rows);
+});
+
+export const listSiteLabelsForOrganizationWithDrizzle: (
+  db: DomainDrizzleDatabase,
+  organizationId: OrganizationId
+) => DrizzleSiteLabelsBySiteIdEffect = Effect.fn(
+  "SiteLabelQueries.listSiteLabelsForOrganizationWithDrizzle"
+)(function* (db, organizationId) {
+  const rows = yield* db
+    .select({
+      created_at: label.createdAt,
+      label_id: siteLabel.labelId,
+      name: label.name,
+      site_id: siteLabel.siteId,
+      updated_at: label.updatedAt,
+    })
+    .from(siteLabel)
+    .innerJoin(
+      label,
+      and(
+        eq(label.id, siteLabel.labelId),
+        eq(label.organizationId, siteLabel.organizationId)
+      )
+    )
+    .innerJoin(
+      site,
+      and(
+        eq(site.id, siteLabel.siteId),
+        eq(site.organizationId, siteLabel.organizationId)
+      )
+    )
+    .where(
+      and(
+        eq(siteLabel.organizationId, organizationId),
+        eq(label.organizationId, organizationId),
+        eq(site.organizationId, organizationId),
+        isNull(site.archivedAt),
+        isNull(label.archivedAt)
+      )
+    )
+    .orderBy(asc(siteLabel.siteId), asc(label.name), asc(label.id));
 
   return groupSiteLabelsBySiteId(rows);
 });

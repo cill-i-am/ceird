@@ -298,6 +298,154 @@ describe("sites repository", () => {
       highestActiveJobPriority: undefined,
     });
   });
+
+  it("uses organization-scoped site CRUD, option, cursor, and label projections", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "sites_repo" });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Sites integration database unavailable; skipping repository coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+    const organizationId = decodeOrganizationId(randomUUID());
+    const otherOrganizationId = decodeOrganizationId(randomUUID());
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Crud Sites",
+      });
+      await seedOrganization(pool, {
+        id: otherOrganizationId,
+        name: "Other Crud Sites",
+      });
+    });
+
+    const alphaSiteId = await runSitesRepositoryEffect(
+      testDatabase.url,
+      SitesRepository.create({
+        displayLocation: "",
+        locationStatus: "unverified",
+        name: "Alpha Site",
+        organizationId,
+      })
+    );
+    const betaSiteId = await runSitesRepositoryEffect(
+      testDatabase.url,
+      SitesRepository.create({
+        accessNotes: "Gate code 1234",
+        displayLocation: "Beta Yard, Dublin",
+        locationStatus: "unverified",
+        name: "Beta Site",
+        organizationId,
+        rawLocationInput: "Beta Yard, Dublin",
+      })
+    );
+    const otherSiteId = await runSitesRepositoryEffect(
+      testDatabase.url,
+      SitesRepository.create({
+        displayLocation: "",
+        locationStatus: "unverified",
+        name: "Other Organization Site",
+        organizationId: otherOrganizationId,
+      })
+    );
+
+    await withPool(testDatabase.url, async (pool) => {
+      const labelId = randomUUID();
+      await seedLabel(pool, {
+        id: labelId,
+        name: "Priority",
+        organizationId,
+      });
+      await seedSiteLabel(pool, {
+        labelId,
+        organizationId,
+        siteId: alphaSiteId,
+      });
+    });
+
+    await expect(
+      runSitesRepositoryEffect(
+        testDatabase.url,
+        SitesRepository.findById(organizationId, alphaSiteId)
+      )
+    ).resolves.toStrictEqual(Option.some(alphaSiteId));
+    await expect(
+      runSitesRepositoryEffect(
+        testDatabase.url,
+        SitesRepository.findById(organizationId, otherSiteId)
+      )
+    ).resolves.toStrictEqual(Option.none());
+
+    const firstPage = await runSitesRepositoryEffect(
+      testDatabase.url,
+      SitesRepository.list(organizationId, { limit: 1 })
+    );
+    expect(firstPage.items.map((site) => site.id)).toStrictEqual([alphaSiteId]);
+    expect(firstPage.items[0]?.labels.map((label) => label.name)).toStrictEqual(
+      ["Priority"]
+    );
+    expect(firstPage.nextCursor).toBeDefined();
+
+    const secondPage = await runSitesRepositoryEffect(
+      testDatabase.url,
+      SitesRepository.list(organizationId, {
+        cursor: firstPage.nextCursor,
+        limit: 1,
+      })
+    );
+    expect(secondPage.items.map((site) => site.id)).toStrictEqual([betaSiteId]);
+    expect(secondPage.nextCursor).toBeUndefined();
+
+    const options = await runSitesRepositoryEffect(
+      testDatabase.url,
+      SitesRepository.listOptions(organizationId)
+    );
+    expect(options.map((site) => site.id)).toStrictEqual([
+      alphaSiteId,
+      betaSiteId,
+    ]);
+
+    const updated = await runSitesRepositoryEffect(
+      testDatabase.url,
+      SitesRepository.update(organizationId, betaSiteId, {
+        accessNotes: "Use the north gate",
+        name: "Beta Updated",
+      })
+    );
+    expect(Option.getOrThrow(updated)).toMatchObject({
+      accessNotes: "Use the north gate",
+      id: betaSiteId,
+      name: "Beta Updated",
+    });
+
+    const updatedOption = await runSitesRepositoryEffect(
+      testDatabase.url,
+      SitesRepository.getOptionById(organizationId, betaSiteId)
+    );
+    expect(Option.getOrThrow(updatedOption)).toMatchObject({
+      accessNotes: "Use the north gate",
+      id: betaSiteId,
+      name: "Beta Updated",
+    });
+    await expect(
+      runSitesRepositoryEffect(
+        testDatabase.url,
+        SitesRepository.getOptionById(organizationId, otherSiteId)
+      )
+    ).resolves.toStrictEqual(Option.none());
+  });
 });
 
 function findSiteById<T extends { readonly id: string }>(
@@ -410,6 +558,48 @@ async function seedWorkItem(
       input.status === "completed" ? input.userId : null,
       input.userId,
     ]
+  );
+}
+
+async function seedLabel(
+  pool: Pool,
+  input: {
+    readonly id: string;
+    readonly name: string;
+    readonly organizationId: string;
+  }
+) {
+  await pool.query(
+    `insert into labels (
+       id,
+       organization_id,
+       name,
+       normalized_name,
+       created_at,
+       updated_at
+     )
+     values ($1, $2, $3, lower($3), now(), now())`,
+    [input.id, input.organizationId, input.name]
+  );
+}
+
+async function seedSiteLabel(
+  pool: Pool,
+  input: {
+    readonly labelId: string;
+    readonly organizationId: string;
+    readonly siteId: string;
+  }
+) {
+  await pool.query(
+    `insert into site_labels (
+       site_id,
+       label_id,
+       organization_id,
+       created_at
+     )
+     values ($1, $2, $3, now())`,
+    [input.siteId, input.labelId, input.organizationId]
   );
 }
 

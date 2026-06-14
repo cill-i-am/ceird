@@ -47,6 +47,11 @@ import { ProximityRouteUnavailableError } from "@ceird/proximity-core";
 import type { SiteIdType as SiteId } from "@ceird/sites-core";
 import { Layer, Context, Effect, Option } from "effect";
 
+import {
+  describeDomainStorageFailure,
+  isDomainDrizzleStorageFailure,
+} from "../../platform/database/database.js";
+import type { DomainDrizzleStorageFailure } from "../../platform/database/database.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -138,7 +143,7 @@ export class JobsService extends Context.Service<JobsService>()(
           sitesRepository.listOptions(actor.organizationId),
           contactsRepository.listOptions(actor.organizationId),
           labelsRepository.list(actor.organizationId),
-        ]).pipe(Effect.catchTag("SqlError", failJobsStorageError));
+        ]).pipe(catchJobsStorageError());
 
         return {
           contacts,
@@ -412,7 +417,7 @@ export class JobsService extends Context.Service<JobsService>()(
             })
           )
           .pipe(
-            Effect.catchTag("SqlError", failJobsStorageError),
+            catchJobsStorageError(),
             Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
               failActorMembershipLossOrDieOtherMember(error, { actor })
             ),
@@ -1202,6 +1207,25 @@ function failJobsStorageError(
   return Effect.fail(makeJobsStorageError(error));
 }
 
+function catchJobsStorageError<Value, Error, Requirements>(): (
+  effect: Effect.Effect<Value, Error, Requirements>
+) => Effect.Effect<
+  Value,
+  Exclude<Error, DomainDrizzleStorageFailure> | JobStorageError,
+  Requirements
+> {
+  return ((effect: Effect.Effect<Value, Error, Requirements>) =>
+    effect.pipe(
+      Effect.catchIf(isDomainDrizzleStorageFailure, failJobsStorageError)
+    )) as (
+    effect: Effect.Effect<Value, Error, Requirements>
+  ) => Effect.Effect<
+    Value,
+    Exclude<Error, DomainDrizzleStorageFailure> | JobStorageError,
+    Requirements
+  >;
+}
+
 function failActorMembershipLossOrDieOtherMember(
   error: OrganizationMemberNotFoundError,
   options: {
@@ -1301,7 +1325,7 @@ function ensureCanViewScopedExternalJobsData(
 
 function makeJobsStorageError(error: unknown): JobStorageError {
   return new JobStorageError({
-    cause: error instanceof Error ? error.message : String(error),
+    cause: describeDomainStorageFailure(error),
     message: "Jobs storage operation failed",
   });
 }

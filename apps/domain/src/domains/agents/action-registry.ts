@@ -10,6 +10,7 @@ import type {
 import { Effect, Option, Schema } from "effect";
 import type { HttpServerRequest } from "effect/unstable/http";
 
+import type { DomainDrizzleService } from "../../platform/database/database.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
@@ -23,6 +24,7 @@ type DomainAgentActionRequirements =
   | SitesRepository
   | JobsService
   | SitesService
+  | DomainDrizzleService
   | HttpServerRequest.HttpServerRequest;
 
 export interface DomainAgentActionHandler<

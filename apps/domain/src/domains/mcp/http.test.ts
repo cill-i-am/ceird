@@ -4,6 +4,7 @@ import { Effect, Layer, Logger, References } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { vi } from "vitest";
 
+import { DomainDrizzle } from "../../platform/database/database.js";
 import {
   configProviderFromMap,
   effectEither,
@@ -383,6 +384,7 @@ describe("mcp http handler", () => {
     const handler = makeMcpWebHandler({
       authConfig,
       runtimeLive: Layer.mergeAll(
+        makeUnusedDomainDrizzleLayer(),
         Layer.succeed(
           SqlClient.SqlClient,
           sql as unknown as SqlClient.SqlClient
@@ -466,6 +468,7 @@ describe("mcp http handler", () => {
         Layer.succeed(References.MinimumLogLevel, "Trace")
       ),
       runtimeLive: Layer.mergeAll(
+        makeUnusedDomainDrizzleLayer(),
         Layer.succeed(
           SqlClient.SqlClient,
           sql as unknown as SqlClient.SqlClient
@@ -713,6 +716,7 @@ describe("mcp http handler", () => {
       )
     );
     const runtimeLive = Layer.mergeAll(
+      makeUnusedDomainDrizzleLayer(),
       sqlLayer,
       SiteLocationProvider.Development
     );
@@ -804,6 +808,7 @@ describe("mcp http handler", () => {
     const handler = makeMcpWebHandler({
       authConfig,
       runtimeLive: Layer.mergeAll(
+        makeUnusedDomainDrizzleLayer(),
         Layer.succeed(
           SqlClient.SqlClient,
           sql as unknown as SqlClient.SqlClient
@@ -1129,9 +1134,27 @@ function makeSuccessfulLabelListSqlLayer() {
     withTransaction: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
   });
 
+  return Layer.mergeAll(
+    makeUnusedDomainDrizzleLayer(),
+    Layer.succeed(SqlClient.SqlClient, sql as unknown as SqlClient.SqlClient)
+  );
+}
+
+function makeUnusedDomainDrizzleLayer() {
   return Layer.succeed(
-    SqlClient.SqlClient,
-    sql as unknown as SqlClient.SqlClient
+    DomainDrizzle,
+    DomainDrizzle.of({
+      db: new Proxy(
+        {},
+        {
+          get: (_target, property) => {
+            throw new Error(
+              `DomainDrizzle.${String(property)} should not be called in MCP HTTP tests`
+            );
+          },
+        }
+      ) as never,
+    })
   );
 }
 

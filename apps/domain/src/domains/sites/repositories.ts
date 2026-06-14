@@ -33,6 +33,7 @@ import type {
   SiteOption,
   SiteProximityFilters,
 } from "@ceird/sites-core";
+import { and, asc, eq, gt, isNull, or, sql as drizzleSql } from "drizzle-orm";
 import {
   Array as Arr,
   Context,
@@ -44,11 +45,13 @@ import {
 } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
+import { DomainDrizzle } from "../../platform/database/database.js";
 import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
 import { generateSiteId } from "./id-generation.js";
+import { site } from "./schema.js";
 import {
-  listSiteLabelsForOrganization,
-  listSiteLabelsForSites,
+  listSiteLabelsForOrganizationWithDrizzle,
+  listSiteLabelsForSitesWithDrizzle,
 } from "./site-label-queries.js";
 import type { SiteOptionRow } from "./site-option-row.js";
 import { mapSiteOptionRow } from "./site-option-row.js";
@@ -182,6 +185,28 @@ const decodeIsoDateTimeString = Schema.decodeUnknownSync(
   IsoDateTimeStringSchema
 );
 
+const siteOptionSelection = {
+  access_notes: site.accessNotes,
+  address_components: site.addressComponents,
+  address_line_1: site.addressLine1,
+  address_line_2: site.addressLine2,
+  country: site.country,
+  county: site.county,
+  display_location: site.displayLocation,
+  eircode: site.eircode,
+  formatted_address: site.formattedAddress,
+  google_place_id: site.googlePlaceId,
+  id: site.id,
+  latitude: site.latitude,
+  location_provider: site.locationProvider,
+  location_resolved_at: site.locationResolvedAt,
+  location_status: site.locationStatus,
+  longitude: site.longitude,
+  name: site.name,
+  raw_location_input: site.rawLocationInput,
+  town: site.town,
+} as const;
+
 export class SitesRepository extends Context.Service<SitesRepository>()(
   "@ceird/domains/sites/SitesRepository",
   {
@@ -198,14 +223,18 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         organizationId: OrganizationId,
         siteId: SiteId
       ) {
-        const rows = yield* sql<IdRow>`
-          select id
-          from sites
-          where organization_id = ${organizationId}
-            and id = ${siteId}
-            and archived_at is null
-          limit 1
-        `;
+        const { db } = yield* DomainDrizzle;
+        const rows = yield* db
+          .select({ id: site.id })
+          .from(site)
+          .where(
+            and(
+              eq(site.organizationId, organizationId),
+              eq(site.id, siteId),
+              isNull(site.archivedAt)
+            )
+          )
+          .limit(1);
 
         return Option.fromNullishOr(rows[0]?.id).pipe(Option.map(decodeSiteId));
       });
@@ -213,16 +242,16 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
       const create = Effect.fn("SitesRepository.create")(function* (
         input: CreateSiteRecordInput
       ) {
-        const values = {
-          ...makeSiteBaseValues(input),
-          ...makeSiteLocationValues(input),
-          id: generateSiteId(),
-          organization_id: input.organizationId,
-        };
-
-        const rows = yield* sql<IdRow>`
-          insert into sites ${sql.insert(values).returning("id")}
-        `;
+        const { db } = yield* DomainDrizzle;
+        const rows = yield* db
+          .insert(site)
+          .values({
+            ...makeSiteBaseValues(input),
+            ...makeSiteLocationValues(input),
+            id: generateSiteId(),
+            organizationId: input.organizationId,
+          })
+          .returning({ id: site.id });
 
         const row = yield* getRequiredRow(rows, "inserted site id");
 
@@ -234,20 +263,24 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         siteId: SiteId,
         input: UpdateSiteRecordInput
       ) {
-        const rows = yield* sql<IdRow>`
-          update sites
-          set ${sql.update({
+        const { db } = yield* DomainDrizzle;
+        const rows = yield* db
+          .update(site)
+          .set({
             ...makeSiteBaseValues(input),
             ...(input.location === undefined
               ? {}
               : makeSiteLocationValues(input.location)),
-            updated_at: new Date(),
-          })}
-          where organization_id = ${organizationId}
-            and id = ${siteId}
-            and archived_at is null
-          returning id
-        `;
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(site.organizationId, organizationId),
+              eq(site.id, siteId),
+              isNull(site.archivedAt)
+            )
+          )
+          .returning({ id: site.id });
 
         if (rows[0] === undefined) {
           return Option.none<SiteOption>();
@@ -259,35 +292,20 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
       const listOptions = Effect.fn("SitesRepository.listOptions")(function* (
         organizationId: OrganizationId
       ) {
+        const { db } = yield* DomainDrizzle;
         const [rows, labelsBySiteId] = yield* Effect.all(
           [
-            sql<SiteOptionRow>`
-              select
-                sites.access_notes,
-                sites.address_components,
-                sites.address_line_1,
-                sites.address_line_2,
-                sites.country,
-                sites.county,
-                sites.display_location,
-                sites.eircode,
-                sites.formatted_address,
-                sites.google_place_id,
-                sites.id,
-                sites.latitude,
-                sites.location_provider,
-                sites.location_resolved_at,
-                sites.location_status,
-                sites.longitude,
-                sites.name,
-                sites.raw_location_input,
-                sites.town
-              from sites
-              where sites.organization_id = ${organizationId}
-                and sites.archived_at is null
-              order by sites.name asc nulls last, sites.id asc
-            `,
-            listSiteLabelsForOrganization(sql, organizationId),
+            db
+              .select(siteOptionSelection)
+              .from(site)
+              .where(
+                and(
+                  eq(site.organizationId, organizationId),
+                  isNull(site.archivedAt)
+                )
+              )
+              .orderBy(drizzleSql`${site.name} asc nulls last`, asc(site.id)),
+            listSiteLabelsForOrganizationWithDrizzle(db, organizationId),
           ],
           { concurrency: 2 }
         );
@@ -316,10 +334,11 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         organizationId: OrganizationId,
         query: SiteListQuery
       ) {
+        const { db } = yield* DomainDrizzle;
         const limit = clampSiteListLimit(query.limit ?? 50);
         const clauses = [
-          sql`sites.organization_id = ${organizationId}`,
-          sql`sites.archived_at is null`,
+          eq(site.organizationId, organizationId),
+          isNull(site.archivedAt),
         ];
 
         if (query.cursor !== undefined) {
@@ -342,43 +361,19 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
             );
           }
 
-          clauses.push(
-            sql`(
-              sites.name > ${cursor.name}
-              or (
-                sites.name = ${cursor.name}
-                and sites.id > ${cursor.id}
-              )
-            )`
+          const cursorClause = or(
+            gt(site.name, cursor.name),
+            and(eq(site.name, cursor.name), gt(site.id, cursor.id))
           );
+          clauses.push(cursorClause ?? drizzleSql`false`);
         }
 
-        const rows = yield* sql<SiteOptionRow>`
-          select
-            sites.access_notes,
-            sites.address_components,
-            sites.address_line_1,
-            sites.address_line_2,
-            sites.country,
-            sites.county,
-            sites.display_location,
-            sites.eircode,
-            sites.formatted_address,
-            sites.google_place_id,
-            sites.id,
-            sites.latitude,
-            sites.location_provider,
-            sites.location_resolved_at,
-            sites.location_status,
-            sites.longitude,
-            sites.name,
-            sites.raw_location_input,
-            sites.town
-          from sites
-          where ${sql.and(clauses)}
-          order by sites.name asc nulls last, sites.id asc
-          limit ${limit + 1}
-        `;
+        const rows = yield* db
+          .select(siteOptionSelection)
+          .from(site)
+          .where(and(...clauses))
+          .orderBy(drizzleSql`${site.name} asc nulls last`, asc(site.id))
+          .limit(limit + 1);
 
         const pageRows = Arr.take(rows, limit);
         const pageSiteIds = pipe(
@@ -387,7 +382,7 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         );
         const [labelsBySiteId, activeJobSummariesBySiteId] = yield* Effect.all(
           [
-            listSiteLabelsForSites(sql, organizationId, pageSiteIds),
+            listSiteLabelsForSitesWithDrizzle(db, organizationId, pageSiteIds),
             listActiveJobSummariesForSites(sql, organizationId, pageSiteIds),
           ],
           { concurrency: 2 }
@@ -417,33 +412,18 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
 
       const getOptionById = Effect.fn("SitesRepository.getOptionById")(
         function* (organizationId: OrganizationId, siteId: SiteId) {
-          const rows = yield* sql<SiteOptionRow>`
-            select
-              sites.access_notes,
-              sites.address_components,
-              sites.address_line_1,
-              sites.address_line_2,
-              sites.country,
-              sites.county,
-              sites.display_location,
-              sites.eircode,
-              sites.formatted_address,
-              sites.google_place_id,
-              sites.id,
-              sites.latitude,
-              sites.location_provider,
-              sites.location_resolved_at,
-              sites.location_status,
-              sites.longitude,
-              sites.name,
-              sites.raw_location_input,
-              sites.town
-            from sites
-            where sites.organization_id = ${organizationId}
-              and sites.id = ${siteId}
-              and sites.archived_at is null
-            limit 1
-          `;
+          const { db } = yield* DomainDrizzle;
+          const rows = yield* db
+            .select(siteOptionSelection)
+            .from(site)
+            .where(
+              and(
+                eq(site.organizationId, organizationId),
+                eq(site.id, siteId),
+                isNull(site.archivedAt)
+              )
+            )
+            .limit(1);
 
           const [row] = rows;
 
@@ -454,7 +434,7 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
           const [labelsBySiteId, activeJobSummariesBySiteId] =
             yield* Effect.all(
               [
-                listSiteLabelsForSites(sql, organizationId, [siteId]),
+                listSiteLabelsForSitesWithDrizzle(db, organizationId, [siteId]),
                 listActiveJobSummariesForSites(sql, organizationId, [siteId]),
               ],
               { concurrency: 2 }
@@ -473,6 +453,8 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
       const getActiveJobSummary = Effect.fn(
         "SitesRepository.getActiveJobSummary"
       )(function* (organizationId: OrganizationId, siteId: SiteId) {
+        // Raw SQL is retained for this aggregate projection because it uses
+        // PostgreSQL-specific priority ranking and filtered status logic.
         const rows = yield* sql<{
           readonly active_job_count: number;
           readonly highest_active_job_priority: string | null;
@@ -516,6 +498,10 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         organizationId: OrganizationId,
         filters: SiteProximityFilters
       ) {
+        const { db } = yield* DomainDrizzle;
+        // Raw SQL is retained for proximity stats and candidate reads because
+        // this path depends on filtered aggregates, concat_ws search behavior,
+        // and a routeable-site predicate that is query-plan sensitive.
         const clauses = [
           sql`sites.organization_id = ${organizationId}`,
           sql`sites.archived_at is null`,
@@ -599,7 +585,7 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
         const [activeJobSummariesBySiteId, labelsBySiteId] = yield* Effect.all(
           [
             listActiveJobSummariesForSites(sql, organizationId, siteIds),
-            listSiteLabelsForSites(sql, organizationId, siteIds),
+            listSiteLabelsForSitesWithDrizzle(db, organizationId, siteIds),
           ],
           { concurrency: 2 }
         );
@@ -614,14 +600,17 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
 
         for (const row of pageRows) {
           const siteId = decodeSiteId(row.id);
-          const site = mapSiteOptionRow(row, labelsBySiteId.get(siteId) ?? []);
+          const candidateSite = mapSiteOptionRow(
+            row,
+            labelsBySiteId.get(siteId) ?? []
+          );
           const activeJobSummary = activeJobSummariesBySiteId.get(siteId);
 
           candidates.push({
             activeJobCount: activeJobSummary?.activeJobCount ?? 0,
             highestActiveJobPriority:
               activeJobSummary?.highestActiveJobPriority,
-            site,
+            site: candidateSite,
           });
         }
 
@@ -683,6 +672,9 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
       Context.Service.Shape<typeof SitesRepository>["listOptions"]
     >
   ) => SitesRepository.use((service) => service.listOptions(...args));
+  static readonly update = (
+    ...args: Parameters<Context.Service.Shape<typeof SitesRepository>["update"]>
+  ) => SitesRepository.use((service) => service.update(...args));
   static readonly DefaultWithoutDependencies = Layer.effect(
     SitesRepository,
     SitesRepository.make
@@ -696,6 +688,8 @@ export class SiteLabelAssignmentsRepository extends Context.Service<SiteLabelAss
     make: Effect.gen(function* SiteLabelAssignmentsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
 
+      // Raw SQL is retained for label assignment paths because the insert/delete
+      // flows depend on CTEs, row locks, and precise changed-count projections.
       const ensureSiteInOrganization = Effect.fn(
         "SiteLabelAssignmentsRepository.ensureSiteInOrganization"
       )(function* (organizationId: OrganizationId, siteId: SiteId) {
@@ -892,31 +886,31 @@ export class SiteLabelAssignmentsRepository extends Context.Service<SiteLabelAss
 
 function makeSiteBaseValues(input: SiteRecordBaseWriteFields) {
   return {
-    access_notes: input.accessNotes ?? null,
+    accessNotes: input.accessNotes ?? null,
     name: input.name,
   };
 }
 
 function makeSiteLocationValues(input: SiteLocationRecordWriteFields) {
   return {
-    address_components: input.addressComponents ?? null,
-    address_line_1: input.addressLine1 ?? null,
-    address_line_2: input.addressLine2 ?? null,
+    addressComponents: input.addressComponents ?? null,
+    addressLine1: input.addressLine1 ?? null,
+    addressLine2: input.addressLine2 ?? null,
     country: input.country ?? null,
     county: input.county ?? null,
-    display_location: input.displayLocation,
+    displayLocation: input.displayLocation,
     eircode: input.eircode ?? null,
-    formatted_address: input.formattedAddress ?? null,
-    google_place_id: input.googlePlaceId ?? null,
+    formattedAddress: input.formattedAddress ?? null,
+    googlePlaceId: input.googlePlaceId ?? null,
     latitude: input.latitude ?? null,
-    location_provider: input.locationProvider ?? null,
-    location_resolved_at:
+    locationProvider: input.locationProvider ?? null,
+    locationResolvedAt:
       input.locationResolvedAt === undefined
         ? null
         : isoDateTimeStringToDate(input.locationResolvedAt),
-    location_status: input.locationStatus,
+    locationStatus: input.locationStatus,
     longitude: input.longitude ?? null,
-    raw_location_input: input.rawLocationInput ?? null,
+    rawLocationInput: input.rawLocationInput ?? null,
     town: input.town ?? null,
   };
 }
@@ -988,6 +982,8 @@ function listActiveJobSummariesForSites(
   }
 
   return Effect.gen(function* () {
+    // Raw SQL is retained for this aggregate projection because it shares the
+    // PostgreSQL-specific priority ranking used by getActiveJobSummary.
     const rows = yield* sql<SiteActiveJobSummaryRow>`
       select
         work_items.site_id,

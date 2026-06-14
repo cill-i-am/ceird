@@ -28,6 +28,8 @@ import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
+import { DomainDrizzle } from "../../platform/database/database.js";
+import type { DomainDrizzleService } from "../../platform/database/database.js";
 import {
   configProviderFromMap,
   withConfigProvider,
@@ -1158,6 +1160,7 @@ describe("SitesService contracts", () => {
 type TestSitesServiceRequirements =
   | CommentsRepository
   | CurrentOrganizationActor
+  | DomainDrizzleService
   | HttpServerRequest.HttpServerRequest
   | OrganizationAuthorization
   | RouteProximityService
@@ -1243,6 +1246,7 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
         get: () => Effect.succeed(actor),
       })
     ),
+    makeUnusedDomainDrizzleLayer(),
     Layer.succeed(
       HttpServerRequest.HttpServerRequest,
       {} as HttpServerRequest.HttpServerRequest
@@ -1319,6 +1323,24 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
         ) => effect,
       } as unknown as ContextService<typeof SitesRepository>)
     )
+  );
+}
+
+function makeUnusedDomainDrizzleLayer() {
+  return Layer.succeed(
+    DomainDrizzle,
+    DomainDrizzle.of({
+      db: new Proxy(
+        {},
+        {
+          get: (_target, property) => {
+            throw new Error(
+              `DomainDrizzle.${String(property)} should not be called in SitesService unit tests`
+            );
+          },
+        }
+      ) as never,
+    })
   );
 }
 

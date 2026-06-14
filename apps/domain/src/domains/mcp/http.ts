@@ -3,8 +3,11 @@ import { OrganizationId, SessionId, UserId } from "@ceird/identity-core";
 import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { McpServer } from "effect/unstable/ai";
 import { HttpRouter } from "effect/unstable/http";
+import type { HttpServerRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 
+import { DomainDrizzle } from "../../platform/database/database.js";
+import type { DomainDrizzleService } from "../../platform/database/database.js";
 import { CommentsRepository } from "../comments/repository.js";
 import type { AuthenticationConfig } from "../identity/authentication/config.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
@@ -36,6 +39,7 @@ import {
   McpToolDomainRuntime,
   McpToolRequestRuntime,
 } from "./tools.js";
+import type { McpToolDomainServices } from "./tools.js";
 
 const MCP_PATH = "/mcp";
 const OAUTH_PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
@@ -50,7 +54,10 @@ const CEIRD_ORGANIZATION_ID_TOKEN_CLAIM = "ceird_org_id";
 type McpPath = `/${string}`;
 
 type McpBaseLayer = Layer.Layer<never, never, never>;
-type McpRuntimeServices = SqlClient.SqlClient | SiteLocationProvider;
+type McpRuntimeServices =
+  | DomainDrizzleService
+  | SqlClient.SqlClient
+  | SiteLocationProvider;
 interface McpLayerOptions<ERuntime> {
   readonly baseLive?: McpBaseLayer | undefined;
   readonly authorizedAppCache?: McpAuthorizedAppCache | undefined;
@@ -536,13 +543,20 @@ function createMcpAppLayer<ERuntime>(options: {
   const toolDomainRuntimeLayer = Layer.succeed(
     McpToolDomainRuntime,
     McpToolDomainRuntime.of({
-      run: (effect) =>
+      run: <
+        A,
+        E,
+        R extends McpToolDomainServices | HttpServerRequest.HttpServerRequest,
+      >(
+        effect: Effect.Effect<A, E, R>
+      ) =>
         effect.pipe(
           Effect.provide(
             makeMcpToolLayer(options.session, options.runtimeLive)
           ),
+          Effect.provide(options.runtimeLive),
           Effect.provide(options.baseLive)
-        ),
+        ) as Effect.Effect<A, unknown, Exclude<R, McpToolDomainServices>>,
     })
   );
 
@@ -844,6 +858,12 @@ const McpRouteProximityUnavailable = Layer.succeed(
 );
 
 const MissingMcpRuntimeLive = Layer.mergeAll(
+  Layer.effect(
+    DomainDrizzle,
+    Effect.die(
+      new Error("MCP runtime is missing DomainDrizzle; pass runtimeLive")
+    )
+  ),
   Layer.effect(
     SqlClient.SqlClient,
     Effect.die(new Error("MCP runtime is missing SqlClient; pass runtimeLive"))
