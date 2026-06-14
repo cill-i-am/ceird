@@ -479,10 +479,12 @@ Cloudflare Hyperdrive config instead of renaming or replacing it during the v2
 migration. New non-parent stages default to stage-scoped Hyperdrive names such
 as `ceird-codex-alchemy-v2-native-migration-postgres`.
 
-The parent stage creates a shared Neon project with an unmigrated `base`
-default branch and a `main` branch. Parent branch protection is opt-in through
-`CEIRD_NEON_PARENT_BRANCH_PROTECTED` because not every Neon plan can create
-additional protected branches. The parent project also declares
+The parent stage creates a shared Neon project with logical replication enabled,
+an unmigrated `base` default branch, and a `main` branch. Logical replication is
+required by Electric SQL for deployed sync because Electric creates a
+replication slot and decodes Postgres WAL changes. Parent branch protection is
+opt-in through `CEIRD_NEON_PARENT_BRANCH_PROTECTED` because not every Neon plan
+can create additional protected branches. The parent project also declares
 `CEIRD_NEON_HISTORY_RETENTION_SECONDS` explicitly so Alchemy does not repeatedly
 try to normalize Neon's provider-reported retention window. Other stages
 reference the parent-stage project and create their own branch from `main`.

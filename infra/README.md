@@ -31,12 +31,12 @@ pnpm run test:infra
 
 ## Deployed Resources
 
-The stack provisions a native Alchemy Neon project for the parent stage, a
-per-stage Neon branch that applies the stage-specific domain SQL migrations,
-native Alchemy Cloudflare Hyperdrive backed by that branch, a private Cloudflare
-domain Worker, public API, MCP, and Agent adapter Workers, a Cloudflare Vite
-app, auth email queues, and the Cloudflare Email Worker binding used by deployed
-auth email delivery.
+The stack provisions a native Alchemy Neon project for the parent stage with
+logical replication enabled for Electric SQL, a per-stage Neon branch that
+applies the stage-specific domain SQL migrations, native Alchemy Cloudflare
+Hyperdrive backed by that branch, a private Cloudflare domain Worker, public
+API, MCP, and Agent adapter Workers, a Cloudflare Vite app, auth email queues,
+and the Cloudflare Email Worker binding used by deployed auth email delivery.
 
 Hyperdrive is configured with a conservative origin connection limit and reads
 its origin directly from the typed Neon branch output. The parent stage defaults

@@ -59,9 +59,10 @@ Use the Effect SQL layers when:
 The Cloudflare Alchemy stack keeps Postgres as the source of truth.
 
 Neon Postgres is provisioned through native Alchemy resources. The parent
-Alchemy stage creates the shared Neon project and parent branch, while local
-and preview stages create isolated copy-on-write Neon branches from that parent
-branch. Parent branch protection is opt-in through
+Alchemy stage creates the shared Neon project with logical replication enabled
+for Electric SQL and the parent branch, while local and preview stages create
+isolated copy-on-write Neon branches from that parent branch. Parent branch
+protection is opt-in through
 `CEIRD_NEON_PARENT_BRANCH_PROTECTED` because not every Neon plan can create
 additional protected branches. The parent project declares
 `CEIRD_NEON_HISTORY_RETENTION_SECONDS` explicitly so Neon's provider-reported
@@ -187,7 +188,10 @@ Electric SQL is deployed as a Cloudflare Container owned by `apps/sync`. The
 container reads the same stage Neon branch as the domain Worker through a
 `DATABASE_URL` supplied at container start, while the public sync Worker holds
 the matching `ELECTRIC_SOURCE_SECRET`. Both secrets are generated or supplied
-through the Alchemy stack and are not emitted as stack outputs.
+through the Alchemy stack and are not emitted as stack outputs. The shared
+parent Neon project must have logical replication enabled so Electric can
+create replication slots and consume Postgres WAL changes on every child
+branch.
 
 Electric stores shape logs and metadata on a filesystem that must survive sync
 service restarts. Cloudflare Container disks are ephemeral, so the Alchemy stack

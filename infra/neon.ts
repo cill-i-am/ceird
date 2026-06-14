@@ -36,6 +36,7 @@ export interface NeonPostgresLayout {
         readonly kind: "create";
         readonly databaseName: string;
         readonly defaultBranchName: string;
+        readonly enableLogicalReplication: true;
         readonly historyRetentionSeconds: number;
         readonly name: string;
         readonly orgId: string | undefined;
@@ -89,6 +90,7 @@ export function makeNeonPostgresLayout(
           kind: "create",
           databaseName: config.neonDatabaseName,
           defaultBranchName: config.neonDefaultBranchName,
+          enableLogicalReplication: true,
           historyRetentionSeconds: config.neonHistoryRetentionSeconds,
           name: resourceName(config, "postgres"),
           orgId: config.neonOrgId,
@@ -120,6 +122,7 @@ export const makeNeonPostgresResources = Effect.fn("NeonPostgres.make")(
         ? yield* Neon.Project("PostgresProject", {
             databaseName: layout.project.databaseName,
             defaultBranchName: layout.project.defaultBranchName,
+            enableLogicalReplication: layout.project.enableLogicalReplication,
             historyRetentionSeconds: layout.project.historyRetentionSeconds,
             name: layout.project.name,
             orgId: layout.project.orgId,
