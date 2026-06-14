@@ -1,10 +1,11 @@
 # Documentation Index
 
-This directory documents the current Ceird app and platform: the TanStack Start
-web app, public adapters, private domain Worker, Agent runtime, shared
-packages, Electric sync runtime, and Alchemy-managed infrastructure. The `architecture` guides
-describe how the major systems fit together; `superpowers/specs` and
-`superpowers/plans` preserve historical design and implementation context.
+This directory is the index for Ceird's current guides and historical planning
+context. `architecture/` owns source-backed product architecture and runtime
+ownership guides. `agents/` owns workflow policy for Linear, planning, worker
+execution, review, production readiness, reconciliation, and CI-watch.
+`superpowers/` preserves historical design, implementation, and progress
+context.
 
 ## Start Here
 
@@ -51,8 +52,9 @@ describe how the major systems fit together; `superpowers/specs` and
 
 `docs/superpowers/specs` contains feature design specs. `docs/superpowers/plans`
 contains implementation plans that were written before or during feature work.
-Use these documents for intent and decision history, but verify current behavior
-against source code before treating them as authoritative.
+Use these documents for intent and decision history only. Current source code,
+the guides under `architecture/`, and the workflow policy under `agents/` are
+authoritative.
 
 `docs/superpowers/progress` contains living progress notes for long-running
 agent goals, including feature exploration, design direction, implementation
@@ -68,6 +70,11 @@ Current route-aware proximity implementation plans:
 When code changes affect a boundary, update the matching guide in the same
 change:
 
+- Product architecture, runtime behavior, ownership seams, persistence,
+  infrastructure, or shared contracts: follow `architecture/AGENTS.md`.
+- Linear workflow, planning, triage, worker/orchestrator policy, review,
+  production readiness, reconciliation, or CI-watch rules: follow
+  `agents/AGENTS.md`.
 - Routes, UI architecture, hotkeys, or client/server data loading:
   `architecture/frontend.md`
 - API/domain/MCP/agent endpoints, services, repositories, auth behavior,
