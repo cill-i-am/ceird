@@ -817,7 +817,7 @@ describe("Cloudflare stack", () => {
     ).toBe(false);
   });
 
-  it("provisions Electric storage for local and ordinary stages but skips preview probes", () => {
+  it("provisions Electric storage for local, preview, ephemeral CI, and ordinary stages", () => {
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({
@@ -841,7 +841,7 @@ describe("Cloudflare stack", () => {
           localDev: false,
         })
       )
-    ).toBe(false);
+    ).toBe(true);
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({
@@ -852,7 +852,7 @@ describe("Cloudflare stack", () => {
           localDev: false,
         })
       )
-    ).toBe(false);
+    ).toBe(true);
     expect(
       Effect.runSync(
         shouldProvisionElectricStorage({
@@ -1461,6 +1461,15 @@ describe("Cloudflare stack", () => {
       "GOBIN=/out /usr/local/go/bin/go install ."
     );
     expect(electricContainerDockerfile).toContain("TIGRISFS_VERSION");
+    expect(electricContainerDockerfile).toContain(
+      "ln -sf /proc/mounts /etc/mtab"
+    );
+    expect(electricContainerDockerfile).toContain(
+      "echo 'electric:x:65532:' >> /etc/group"
+    );
+    expect(electricContainerDockerfile).toContain(
+      "echo 'electric:x:65532:65532:Electric Runtime:/home/electric:/usr/sbin/nologin' >> /etc/passwd"
+    );
     expect(electricContainerDockerfile).not.toContain("curl");
     expect(electricContainerDockerfile).not.toContain(
       "github.com/tigrisdata/tigrisfs/releases/download"

@@ -185,6 +185,13 @@ stage's `PostgresBranch` state and pipe the JSON to
 `attr.connectionUri` from either the current redacted Alchemy encoding
 (`{"__redacted__":"..."}`) or a plain string, emits a GitHub Actions `add-mask`
 command for the value, and writes `PLAYWRIGHT_DATABASE_URL` to `GITHUB_ENV`.
+The deploy jobs then run `scripts/run-deployed-sync-canary.mjs`, which signs up
+a throwaway user through the deployed API, marks that canary user verified in
+the stage database, creates and activates a stage-local organization, and
+requests the `jobs` shape through `PLAYWRIGHT_SYNC_URL`. A successful canary
+therefore proves the deployed sync Worker can authorize the active organization
+session, start the Electric Container, mount R2-backed storage, and serve an
+Electric shape.
 
 Preview stages named `pr-<number>` and ephemeral CI stages named
 `ci-<run-number>-<attempt>` deploy the domain Worker with
@@ -213,19 +220,18 @@ The audit reads state only. It blocks missing `PostgresBranch.origin`, missing
 `AgentAiGateway`, disabled AI Gateway authentication, prompt-log collection,
 missing Worker Analytics Engine bindings, missing Worker analytics sample-rate
 env, missing Sync Worker domain/analytics/Durable Object bindings, missing sync
-source configuration, missing Electric container or R2 storage for full-sync
-stages, missing Domain Worker Smart Placement, and stage tenant-route or
-wildcard-DNS drift while allowing the known legacy Drizzle tombstone until it
-has been inspected and intentionally removed. The audit treats `pr-<number>` and
-`ci-<run-number>-<attempt>` stages as shallow sync probes: they must deploy the
-sync Worker and authorization path, but they may omit the Electric Container and
-R2 runtime storage. Production `main`, and any ordinary audited non-preview
-stage that opts into tenant routing, must provision the full stage-scoped
-bucket, a bucket-scoped Cloudflare account API token, and the Electric
-Container. During full Electric deploys, Alchemy passes the R2 credentials plus
-the stage database URL and Electric source secret into the Sync Worker as
-secrets, and the `ElectricSql` Durable Object supplies them to the container
-when it starts. Plain
+source configuration, missing Electric container or R2 storage, missing Sync
+Worker Electric container startup env, missing Domain Worker Smart Placement,
+and stage tenant-route or wildcard-DNS drift while allowing the known legacy
+Drizzle tombstone until it has been inspected and intentionally removed. The
+audit treats `pr-<number>` preview stages and `ci-<run-number>-<attempt>`
+ephemeral CI stages as full-sync deployed coverage: they must provision the
+full stage-scoped bucket, a bucket-scoped Cloudflare account API token, the
+Electric Container, and the Sync Worker env needed to start the container.
+During full Electric deploys, Alchemy passes the R2 credentials plus the stage
+database URL and Electric source secret into the Sync Worker as secrets, and
+the `ElectricSql` Durable Object supplies them to the container when it starts.
+Plain
 `PostgresBranch.connectionUri` state is reported as a low-severity finding, not
 a CI blocker, because Alchemy may still expose that value for some provider
 shapes.
@@ -266,9 +272,9 @@ The resulting boundary is:
 - Electric runtime object credentials are generated per full-sync stage, scoped
   to that stage's R2 bucket, and passed only into the sync Worker/Container
   startup path as secrets
-- pull-request previews and ephemeral CI currently skip Electric R2 runtime
-  storage, so `preview-deploy`, `preview-cleanup`, and cloud E2E jobs must not
-  receive GitHub-provided Electric storage access-key or secret-key values
+- pull-request previews and ephemeral CI do not receive GitHub-provided Electric
+  storage access-key or secret-key values; their runtime object credentials are
+  generated during stage reconciliation for that stage's bucket
 - preview cleanup uses the repository default branch, validates `pr-<number>`,
   and restores only the deploy/state-store credentials needed to destroy the
   preview stage; it does not execute closed pull-request code with provider

@@ -653,20 +653,7 @@ export function shouldProvisionElectricStorage(input: {
   >;
   readonly localDev: boolean;
 }) {
-  if (input.localDev) {
-    return Effect.succeed(true);
-  }
-
-  const identity = makeAlchemyStageIdentity({
-    appName: input.config.appName,
-    productionStage: input.config.neonParentStage,
-    stage: input.config.stage,
-  });
-
-  if (identity.isPullRequestPreview || identity.isEphemeralCi) {
-    return Effect.succeed(false);
-  }
-
+  void input;
   return Effect.succeed(true);
 }
 

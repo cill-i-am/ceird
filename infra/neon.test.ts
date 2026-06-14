@@ -31,6 +31,7 @@ describe("Neon Postgres layout", () => {
       project: {
         databaseName: "ceird",
         defaultBranchName: "base",
+        enableLogicalReplication: true,
         kind: "create",
         name: "ceird-main-postgres",
         historyRetentionSeconds: 21_600,

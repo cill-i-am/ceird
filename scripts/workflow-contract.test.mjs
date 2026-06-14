@@ -808,6 +808,14 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
     ""
   );
   const ciAuditStep = getWorkflowStep(ciDeployJob, "Audit CI Alchemy state");
+  const ciDeployDatabaseExportStep = getWorkflowStep(
+    ciDeployJob,
+    "Export Playwright database URL"
+  );
+  const ciSyncCanaryStep = getWorkflowStep(
+    ciDeployJob,
+    "Run deployed sync canary"
+  );
   const ciDatabaseExportStep = getWorkflowStep(
     ciE2eJob,
     "Export Playwright database URL"
@@ -917,7 +925,9 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
     "name: Restore Alchemy state store credentials",
     "name: Deploy cloud E2E",
     "name: Audit CI Alchemy state",
+    "name: Export Playwright database URL",
     "name: Wait for CI deploy health",
+    "name: Run deployed sync canary",
   ]);
   assert.match(buildWorkflow, /Restore Alchemy state store credentials/);
   assert.match(buildWorkflow, /ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS/);
@@ -935,17 +945,16 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   );
   assert.match(ciDeployJob, /Wait for CI deploy health/);
   assert.match(ciDeployJob, /"\$PLAYWRIGHT_SYNC_URL\/health"/);
-  assert.match(ciDeployJob, /wait_for_sync_authorization/);
-  assert.match(
-    ciDeployJob,
-    /"\$PLAYWRIGHT_SYNC_URL\/v1\/shapes\/jobs\?offset=-1"/
-  );
+  assert.match(ciDeployJob, /node scripts\/run-deployed-sync-canary\.mjs/);
   assertNoElectricStorageCredentialsEnv(ciDeployJob);
   assertNoElectricStorageCredentialsEnv(ciAuditStep);
+  assertNoElectricStorageCredentialsEnv(ciDeployDatabaseExportStep);
+  assertNoElectricStorageCredentialsEnv(ciSyncCanaryStep);
   assertNoElectricStorageCredentialsEnv(ciDatabaseExportStep);
   assertNoElectricStorageCredentialsEnv(ciDestroyJob);
   assertCloudflareGlobalKeyCredentials(ciDeployJob);
   assertCloudflareGlobalKeyCredentials(ciAuditStep);
+  assertCloudflareGlobalKeyCredentials(ciDeployDatabaseExportStep);
   assertCloudflareGlobalKeyCredentials(ciDatabaseExportStep);
   assertCloudflareGlobalKeyCredentials(ciDestroyJob);
   assert.match(
@@ -1001,7 +1010,7 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   );
   assert.match(
     cloudflareCiGuide,
-    /they may omit the Electric Container and\s+R2 runtime storage/
+    /`pr-<number>` preview stages and `ci-<run-number>-<attempt>`\s+ephemeral CI stages as full-sync deployed coverage/
   );
   assert.match(
     developmentGuide,
@@ -1064,6 +1073,10 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   const previewDatabaseExportStep = getWorkflowStep(
     previewDeployJob,
     "Export Playwright database URL"
+  );
+  const previewSyncCanaryStep = getWorkflowStep(
+    previewDeployJob,
+    "Run deployed sync canary"
   );
 
   assert.match(previewWorkflow, /^name: Preview$/m);
@@ -1130,6 +1143,8 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
     "name: Deploy preview",
     "name: Audit preview Alchemy state",
     "name: Export Playwright database URL",
+    "name: Wait for preview health",
+    "name: Run deployed sync canary",
   ]);
   assert.match(
     previewWorkflow,
@@ -1160,11 +1175,7 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_AGENT_URL\/health"/);
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_BASE_URL\/health"/);
   assert.match(previewWorkflow, /"\$PLAYWRIGHT_SYNC_URL\/health"/);
-  assert.match(previewWorkflow, /wait_for_sync_authorization/);
-  assert.match(
-    previewWorkflow,
-    /"\$PLAYWRIGHT_SYNC_URL\/v1\/shapes\/jobs\?offset=-1"/
-  );
+  assert.match(previewWorkflow, /node scripts\/run-deployed-sync-canary\.mjs/);
   assert.match(previewWorkflow, /wait_for_app_authenticated_navigation/);
   assert.match(previewWorkflow, /preview-app-health-%s@example\.com/);
   assert.match(previewWorkflow, /\^location: \/create-organization/);
@@ -1177,6 +1188,7 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assertNoElectricStorageCredentialsEnv(previewDeployJob);
   assertNoElectricStorageCredentialsEnv(previewAuditStep);
   assertNoElectricStorageCredentialsEnv(previewDatabaseExportStep);
+  assertNoElectricStorageCredentialsEnv(previewSyncCanaryStep);
   assertCloudflareGlobalKeyCredentials(previewDeployJob);
   assertCloudflareGlobalKeyCredentials(previewAuditStep);
   assertCloudflareGlobalKeyCredentials(previewDatabaseExportStep);
@@ -1274,7 +1286,7 @@ test("preview R2 credential posture separates deploy credentials from runtime cr
   );
   assert.match(
     cloudflareCiGuide,
-    /pull-request previews and ephemeral CI currently skip Electric R2 runtime\s+storage/
+    /pull-request previews and ephemeral CI do not receive GitHub-provided Electric\s+storage access-key or secret-key values/
   );
   assert.match(
     cloudflareCiGuide,

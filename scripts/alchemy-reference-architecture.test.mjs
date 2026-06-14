@@ -231,6 +231,12 @@ test("state audit flags legacy migration state and validates expected managed re
           ElectricSql: { name: "ElectricSql" },
           AUTH_APP_ORIGIN: "https://app.ceird.app",
           CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+          ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID: "r2-access-key-id",
+          ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY: "r2-secret-access-key",
+          ELECTRIC_CONTAINER_DATABASE_URL: "postgresql://redacted",
+          ELECTRIC_CONTAINER_ELECTRIC_SECRET: "electric-secret",
+          ELECTRIC_CONTAINER_R2_ACCOUNT_ID: "cloudflare-account-id",
+          ELECTRIC_CONTAINER_R2_BUCKET_NAME: "ceird-main-electric-storage",
           ELECTRIC_SOURCE_SECRET: "secret",
           ELECTRIC_SQL_LOCATION_HINT: "weur",
         },
@@ -313,6 +319,7 @@ test("state audit flags legacy migration state and validates expected managed re
       "sync_worker",
       "electric_storage_bucket",
       "electric_container",
+      "electric_container_runtime_env",
       "tenant_route_pattern",
       "tenant_wildcard_dns_record",
     ]
@@ -419,7 +426,7 @@ test("state audit flags legacy migration state and validates expected managed re
     }).ok,
     true
   );
-  const previewShallowSyncReport = analyzeAlchemyStateResources({
+  const previewMissingElectricReport = analyzeAlchemyStateResources({
     resources: {
       ...healthyResources,
       ElectricSql: undefined,
@@ -433,12 +440,18 @@ test("state audit flags legacy migration state and validates expected managed re
     tenantRoutingRequired: true,
   });
 
-  assert.equal(previewShallowSyncReport.ok, true);
+  assert.equal(previewMissingElectricReport.ok, false);
   assert.equal(
-    previewShallowSyncReport.checks.find(
-      (check) => check.name === "electric_preview_shallow_sync"
+    previewMissingElectricReport.checks.find(
+      (check) => check.name === "electric_storage_bucket"
     )?.status,
-    "pass"
+    "fail"
+  );
+  assert.equal(
+    previewMissingElectricReport.checks.find(
+      (check) => check.name === "electric_container"
+    )?.status,
+    "fail"
   );
   const nonPreviewMissingElectricReport = analyzeAlchemyStateResources({
     resources: {
@@ -458,6 +471,35 @@ test("state audit flags legacy migration state and validates expected managed re
   assert.equal(
     nonPreviewMissingElectricReport.checks.find(
       (check) => check.name === "electric_storage_bucket"
+    )?.status,
+    "fail"
+  );
+  const missingElectricRuntimeEnvReport = analyzeAlchemyStateResources({
+    resources: {
+      ...healthyResources,
+      Sync: {
+        resourceType: "Cloudflare.Worker",
+        props: {
+          env: {
+            ANALYTICS: { name: "ANALYTICS" },
+            DOMAIN: { name: "DOMAIN" },
+            ElectricSql: { name: "ElectricSql" },
+            AUTH_APP_ORIGIN: "https://app.ceird.app",
+            CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+            ELECTRIC_SOURCE_SECRET: "secret",
+            ELECTRIC_SQL_LOCATION_HINT: "weur",
+          },
+        },
+      },
+    },
+    stage: "pr-104",
+    tenantRoutingRequired: true,
+  });
+
+  assert.equal(missingElectricRuntimeEnvReport.ok, false);
+  assert.equal(
+    missingElectricRuntimeEnvReport.checks.find(
+      (check) => check.name === "electric_container_runtime_env"
     )?.status,
     "fail"
   );
