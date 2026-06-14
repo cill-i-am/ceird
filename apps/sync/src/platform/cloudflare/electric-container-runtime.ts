@@ -89,8 +89,9 @@ function readSensitiveLogValues() {
     process.env.ELECTRIC_SECRET,
   ]
     .map((value) => value?.trim())
-    .filter((value): value is string => value !== undefined && value.length > 0)
-    .toSorted((left, right) => right.length - left.length);
+    .filter(
+      (value): value is string => value !== undefined && value.length > 0
+    );
 }
 
 function redactContainerLogLine(
