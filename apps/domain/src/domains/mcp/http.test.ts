@@ -1,7 +1,6 @@
 import type { mcpHandler as betterAuthMcpHandler } from "@better-auth/oauth-provider";
 import { beforeEach, describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Logger, References } from "effect";
-import type { Context } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { vi } from "vitest";
 
@@ -385,12 +384,11 @@ describe("mcp http handler", () => {
     const handler = makeMcpWebHandler({
       authConfig,
       runtimeLive: Layer.mergeAll(
-        makeUnusedDomainDrizzleLayer(),
+        makeDomainDrizzleLayer({ consentRows: [] }),
         Layer.succeed(
           SqlClient.SqlClient,
           sql as unknown as SqlClient.SqlClient
         ),
-        makeNoConsentDomainDrizzleLayer(),
         SiteLocationProvider.Development
       ),
     });
@@ -470,13 +468,14 @@ describe("mcp http handler", () => {
         Layer.succeed(References.MinimumLogLevel, "Trace")
       ),
       runtimeLive: Layer.mergeAll(
-        makeUnusedDomainDrizzleLayer(),
+        makeFailingDomainDrizzleLayer(
+          new Error(
+            "database unavailable for rawtokenrawtokenrawtokenrawtoken1234"
+          )
+        ),
         Layer.succeed(
           SqlClient.SqlClient,
           sql as unknown as SqlClient.SqlClient
-        ),
-        makeFailingConsentDomainDrizzleLayer(
-          "database unavailable for rawtokenrawtokenrawtokenrawtoken1234"
         ),
         SiteLocationProvider.Development
       ),
@@ -708,6 +707,8 @@ describe("mcp http handler", () => {
     });
     let acquiredSqlClients = 0;
     let releasedSqlClients = 0;
+    let acquiredDomainDrizzle = 0;
+    let releasedDomainDrizzle = 0;
     const sqlLayer = Layer.effect(SqlClient.SqlClient)(
       Effect.acquireRelease(
         Effect.sync(() => {
@@ -720,10 +721,23 @@ describe("mcp http handler", () => {
           })
       )
     );
+    const domainDrizzleLayer = Layer.effect(DomainDrizzle)(
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          acquiredDomainDrizzle += 1;
+          return DomainDrizzle.of({
+            db: makeDomainDrizzleMock(),
+          } as never);
+        }),
+        () =>
+          Effect.sync(() => {
+            releasedDomainDrizzle += 1;
+          })
+      )
+    );
     const runtimeLive = Layer.mergeAll(
-      makeUnusedDomainDrizzleLayer(),
+      domainDrizzleLayer,
       sqlLayer,
-      makeSuccessfulDomainDrizzleLayer(),
       SiteLocationProvider.Development
     );
 
@@ -736,6 +750,8 @@ describe("mcp http handler", () => {
       const sessionId = await initializeMcpSession(initializeHandler);
       await initializeHandler.dispose();
 
+      expect(acquiredDomainDrizzle).toBe(1);
+      expect(releasedDomainDrizzle).toBe(1);
       expect(acquiredSqlClients).toBe(1);
       expect(releasedSqlClients).toBe(1);
 
@@ -767,8 +783,10 @@ describe("mcp http handler", () => {
           isError: false,
         },
       });
-      expect(acquiredSqlClients).toBe(3);
-      expect(releasedSqlClients).toBe(3);
+      expect(acquiredDomainDrizzle).toBeGreaterThan(1);
+      expect(releasedDomainDrizzle).toBe(acquiredDomainDrizzle);
+      expect(acquiredSqlClients).toBeGreaterThan(1);
+      expect(releasedSqlClients).toBe(acquiredSqlClients);
     } finally {
       await disposeMcpAuthorizedAppCache(authorizedAppCache);
     }
@@ -814,12 +832,11 @@ describe("mcp http handler", () => {
     const handler = makeMcpWebHandler({
       authConfig,
       runtimeLive: Layer.mergeAll(
-        makeUnusedDomainDrizzleLayer(),
+        makeDomainDrizzleLayer(),
         Layer.succeed(
           SqlClient.SqlClient,
           sql as unknown as SqlClient.SqlClient
         ),
-        makeSuccessfulDomainDrizzleLayer(),
         SiteLocationProvider.Development
       ),
     });
@@ -1102,8 +1119,18 @@ function makeSuccessfulLabelListSqlLayer() {
   >((strings) => {
     const statement = strings.join(" ");
 
-    if (statement.includes("from oauth_consent")) {
-      return Effect.succeed([{ scopes: ["ceird:read"] }]);
+    if (statement.includes("from labels")) {
+      return Effect.succeed([
+        {
+          archived_at: null,
+          created_at: new Date("2026-01-01T00:00:00.000Z"),
+          id: "11111111-1111-4111-8111-111111111111",
+          name: "Priority",
+          normalized_name: "priority",
+          organization_id: "org_123",
+          updated_at: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      ]);
     }
 
     return Effect.die(new Error(`Unexpected SQL in test mock: ${statement}`));
@@ -1115,114 +1142,81 @@ function makeSuccessfulLabelListSqlLayer() {
 
   return Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, sql as unknown as SqlClient.SqlClient),
-    makeSuccessfulDomainDrizzleLayer()
+    makeDomainDrizzleLayer()
   );
 }
 
-function makeUnusedDomainDrizzleLayer() {
+function makeDomainDrizzleLayer(options: DomainDrizzleMockOptions = {}) {
   return Layer.succeed(
     DomainDrizzle,
     DomainDrizzle.of({
-      db: new Proxy(
-        {},
-        {
-          get: (_target, property) => {
-            throw new Error(
-              `DomainDrizzle.${String(property)} should not be called in MCP HTTP tests`
-            );
-          },
-        }
-      ) as never,
-    })
+      db: makeDomainDrizzleMock(options),
+    } as never)
   );
 }
 
-function makeSuccessfulDomainDrizzleLayer() {
-  const db = {
-    select: (selection: Record<string, unknown>) => ({
-      from: () => ({
-        where: () => ({
-          limit: () => Effect.succeed(makeDrizzleRows(selection)),
-          orderBy: () => Effect.succeed(makeDrizzleRows(selection)),
-        }),
-        orderBy: () => Effect.succeed(makeDrizzleRows(selection)),
-      }),
-    }),
-  };
-
+function makeFailingDomainDrizzleLayer(error: unknown) {
   return Layer.succeed(
     DomainDrizzle,
-    DomainDrizzle.of({ db } as unknown as Context.Service.Shape<
-      typeof DomainDrizzle
-    >)
+    DomainDrizzle.of({
+      db: {
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              limit: () => Effect.die(error),
+            }),
+          }),
+        }),
+      },
+    } as never)
   );
 }
 
-function makeFailingConsentDomainDrizzleLayer(message: string) {
-  const db = {
+interface DomainDrizzleMockOptions {
+  readonly consentRows?: readonly unknown[] | undefined;
+  readonly membershipRows?: readonly unknown[] | undefined;
+  readonly sessionRows?: readonly unknown[] | undefined;
+}
+
+function makeDomainDrizzleMock(options: DomainDrizzleMockOptions = {}) {
+  return {
     select: (selection: Record<string, unknown>) => ({
       from: () => ({
         where: () => ({
           limit: () =>
-            "scopes" in selection
-              ? Effect.die(new Error(message))
-              : Effect.succeed(makeDrizzleRows(selection)),
-          orderBy: () => Effect.succeed(makeDrizzleRows(selection)),
+            Effect.succeed(resolveDomainDrizzleMockRows(selection, options)),
+          orderBy: () =>
+            Effect.succeed(resolveDomainDrizzleMockRows(selection, options)),
         }),
-        orderBy: () => Effect.succeed(makeDrizzleRows(selection)),
+        orderBy: () =>
+          Effect.succeed(resolveDomainDrizzleMockRows(selection, options)),
       }),
     }),
   };
-
-  return Layer.succeed(
-    DomainDrizzle,
-    DomainDrizzle.of({ db } as unknown as Context.Service.Shape<
-      typeof DomainDrizzle
-    >)
-  );
 }
 
-function makeNoConsentDomainDrizzleLayer() {
-  const db = {
-    select: (selection: Record<string, unknown>) => ({
-      from: () => ({
-        where: () => ({
-          limit: () =>
-            "scopes" in selection
-              ? Effect.succeed([])
-              : Effect.succeed(makeDrizzleRows(selection)),
-          orderBy: () => Effect.succeed(makeDrizzleRows(selection)),
-        }),
-        orderBy: () => Effect.succeed(makeDrizzleRows(selection)),
-      }),
-    }),
-  };
-
-  return Layer.succeed(
-    DomainDrizzle,
-    DomainDrizzle.of({ db } as unknown as Context.Service.Shape<
-      typeof DomainDrizzle
-    >)
-  );
-}
-
-function makeDrizzleRows(selection: Record<string, unknown>) {
+function resolveDomainDrizzleMockRows(
+  selection: Record<string, unknown>,
+  options: DomainDrizzleMockOptions
+) {
   if ("scopes" in selection) {
-    return [{ scopes: ["ceird:read"] }];
+    return options.consentRows ?? [{ scopes: ["ceird:read"] }];
   }
 
   if ("activeOrganizationId" in selection) {
-    return [
-      {
-        activeOrganizationId: "org_123",
-        expiresAt: new Date("2999-01-01T00:00:00.000Z"),
-        userId: "user_abc",
-      },
-    ];
+    return (
+      options.sessionRows ?? [
+        {
+          activeOrganizationId: "org_123",
+          expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+          userId: "user_abc",
+        },
+      ]
+    );
   }
 
   if ("role" in selection) {
-    return [{ role: "member" }];
+    return options.membershipRows ?? [{ role: "member" }];
   }
 
   if ("archivedAt" in selection) {

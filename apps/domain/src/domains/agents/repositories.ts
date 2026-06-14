@@ -29,9 +29,13 @@ import {
   UserId as UserIdSchema,
 } from "@ceird/identity-core";
 import type { OrganizationId, UserId } from "@ceird/identity-core";
+import { and, desc, eq, sql as drizzleSql } from "drizzle-orm";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
+import { DomainDrizzle } from "../../platform/database/database.js";
+import { agentThread } from "../../platform/database/schema.js";
+import { member } from "../identity/authentication/schema.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import {
   generateAgentActionRunId,
@@ -50,10 +54,6 @@ interface AgentThreadRow {
   readonly title: string;
   readonly updated_at: Date;
   readonly user_id: string;
-}
-
-interface AgentThreadActorRow extends AgentThreadRow {
-  readonly member_role: string;
 }
 
 interface AgentActionRunRow {
@@ -188,6 +188,7 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
   {
     make: Effect.gen(function* AgentThreadsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
+      const { db } = yield* DomainDrizzle;
 
       const create = Effect.fn("AgentThreadsRepository.create")(function* (
         input: CreateAgentThreadRecordInput
@@ -205,19 +206,18 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
           threadId: id,
           userId: input.userId,
         });
-        const rows = yield* sql<AgentThreadRow>`
-          insert into agent_threads ${sql
-            .insert({
-              agent_instance_name: agentInstanceName,
-              id,
-              organization_id: input.organizationId,
-              title,
-              user_id: input.userId,
-            })
-            .returning("*")}
-        `;
+        const rows = yield* db
+          .insert(agentThread)
+          .values({
+            agentInstanceName,
+            id,
+            organizationId: input.organizationId,
+            title,
+            userId: input.userId,
+          })
+          .returning();
 
-        return mapThreadRow(
+        return mapDrizzleThreadRow(
           yield* getRequiredRow(rows, "inserted agent thread")
         );
       });
@@ -231,18 +231,21 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
           yield* Effect.annotateCurrentSpan("organizationId", organizationId);
           yield* Effect.annotateCurrentSpan("userId", userId);
           yield* Effect.annotateCurrentSpan("agent.threadLimit", options.limit);
-          const rows = yield* sql<AgentThreadRow>`
-            select *
-            from agent_threads
-            where organization_id = ${organizationId}
-              and user_id = ${userId}
-              and status = 'active'
-            order by updated_at desc, id desc
-            limit ${options.limit}
-          `;
+          const rows = yield* db
+            .select()
+            .from(agentThread)
+            .where(
+              and(
+                eq(agentThread.organizationId, organizationId),
+                eq(agentThread.userId, userId),
+                eq(agentThread.status, "active")
+              )
+            )
+            .orderBy(desc(agentThread.updatedAt), desc(agentThread.id))
+            .limit(options.limit);
           yield* Effect.annotateCurrentSpan("agent.threadCount", rows.length);
 
-          return rows.map(mapThreadRow);
+          return rows.map(mapDrizzleThreadRow);
         }
       );
 
@@ -255,6 +258,8 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
         );
         yield* Effect.annotateCurrentSpan("userId", input.userId);
 
+        // Retained as raw SQL because current-thread selection is coupled to a
+        // transaction-scoped advisory lock that protects idempotent prepare.
         return yield* sql.withTransaction(
           Effect.gen(function* () {
             yield* sql`
@@ -313,18 +318,23 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
         yield* Effect.annotateCurrentSpan("organizationId", organizationId);
         yield* Effect.annotateCurrentSpan("userId", userId);
         yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
-        const rows = yield* sql<AgentThreadRow>`
-          select *
-          from agent_threads
-          where organization_id = ${organizationId}
-            and user_id = ${userId}
-            and id = ${threadId}
-            and status = 'active'
-          limit 1
-        `;
+        const rows = yield* db
+          .select()
+          .from(agentThread)
+          .where(
+            and(
+              eq(agentThread.organizationId, organizationId),
+              eq(agentThread.userId, userId),
+              eq(agentThread.id, threadId),
+              eq(agentThread.status, "active")
+            )
+          )
+          .limit(1);
         yield* Effect.annotateCurrentSpan("agent.threadFound", rows.length > 0);
 
-        return Option.fromNullishOr(rows[0]).pipe(Option.map(mapThreadRow));
+        return Option.fromNullishOr(rows[0]).pipe(
+          Option.map(mapDrizzleThreadRow)
+        );
       });
 
       const archive = Effect.fn("AgentThreadsRepository.archive")(function* (
@@ -335,36 +345,52 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
         yield* Effect.annotateCurrentSpan("organizationId", organizationId);
         yield* Effect.annotateCurrentSpan("userId", userId);
         yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
-        const rows = yield* sql<AgentThreadRow>`
-          update agent_threads
-          set status = 'archived', updated_at = now()
-          where organization_id = ${organizationId}
-            and user_id = ${userId}
-            and id = ${threadId}
-            and status = 'active'
-          returning *
-        `;
+        const rows = yield* db
+          .update(agentThread)
+          .set({
+            status: "archived",
+            updatedAt: drizzleSql`now()`,
+          })
+          .where(
+            and(
+              eq(agentThread.organizationId, organizationId),
+              eq(agentThread.userId, userId),
+              eq(agentThread.id, threadId),
+              eq(agentThread.status, "active")
+            )
+          )
+          .returning();
         yield* Effect.annotateCurrentSpan("agent.threadFound", rows.length > 0);
 
-        return Option.fromNullishOr(rows[0]).pipe(Option.map(mapThreadRow));
+        return Option.fromNullishOr(rows[0]).pipe(
+          Option.map(mapDrizzleThreadRow)
+        );
       });
 
       const touchActivity = Effect.fn("AgentThreadsRepository.touchActivity")(
         function* (threadId: AgentThreadId) {
           yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
-          const rows = yield* sql<AgentThreadRow>`
-          update agent_threads
-          set last_message_at = now(), updated_at = now()
-          where id = ${threadId}
-            and status = 'active'
-          returning *
-        `;
+          const rows = yield* db
+            .update(agentThread)
+            .set({
+              lastMessageAt: drizzleSql`now()`,
+              updatedAt: drizzleSql`now()`,
+            })
+            .where(
+              and(
+                eq(agentThread.id, threadId),
+                eq(agentThread.status, "active")
+              )
+            )
+            .returning();
           yield* Effect.annotateCurrentSpan(
             "agent.threadFound",
             rows.length > 0
           );
 
-          return Option.fromNullishOr(rows[0]).pipe(Option.map(mapThreadRow));
+          return Option.fromNullishOr(rows[0]).pipe(
+            Option.map(mapDrizzleThreadRow)
+          );
         }
       );
 
@@ -372,18 +398,23 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
         "AgentThreadsRepository.resolveActiveThreadActor"
       )(function* (threadId: AgentThreadId) {
         yield* Effect.annotateCurrentSpan("agent.threadId", threadId);
-        const rows = yield* sql<AgentThreadActorRow>`
-          select
-            agent_threads.*,
-            member.role as member_role
-          from agent_threads
-          join member
-            on member.organization_id = agent_threads.organization_id
-           and member.user_id = agent_threads.user_id
-          where agent_threads.id = ${threadId}
-            and agent_threads.status = 'active'
-          limit 1
-        `;
+        const rows = yield* db
+          .select({
+            memberRole: member.role,
+            thread: agentThread,
+          })
+          .from(agentThread)
+          .innerJoin(
+            member,
+            and(
+              eq(member.organizationId, agentThread.organizationId),
+              eq(member.userId, agentThread.userId)
+            )
+          )
+          .where(
+            and(eq(agentThread.id, threadId), eq(agentThread.status, "active"))
+          )
+          .limit(1);
         const [row] = rows;
 
         if (row === undefined) {
@@ -391,7 +422,7 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
           return Option.none<AgentThreadActor>();
         }
 
-        const role = normalizeOrganizationActorRole(row.member_role);
+        const role = normalizeOrganizationActorRole(row.memberRole);
 
         if (role === undefined) {
           yield* Effect.annotateCurrentSpan("agent.threadFound", false);
@@ -400,18 +431,18 @@ export class AgentThreadsRepository extends Context.Service<AgentThreadsReposito
         yield* Effect.annotateCurrentSpan("agent.threadFound", true);
         yield* Effect.annotateCurrentSpan(
           "organizationId",
-          row.organization_id
+          row.thread.organizationId
         );
-        yield* Effect.annotateCurrentSpan("userId", row.user_id);
+        yield* Effect.annotateCurrentSpan("userId", row.thread.userId);
         yield* Effect.annotateCurrentSpan("actorRole", role);
 
         return Option.some({
           actor: {
-            organizationId: decodeOrganizationId(row.organization_id),
+            organizationId: decodeOrganizationId(row.thread.organizationId),
             role,
-            userId: decodeUserId(row.user_id),
+            userId: decodeUserId(row.thread.userId),
           },
-          thread: mapThreadRow(row),
+          thread: mapDrizzleThreadRow(row.thread),
         });
       });
 
@@ -507,6 +538,8 @@ export class AgentActionRunsRepository extends Context.Service<AgentActionRunsRe
         );
         yield* Effect.annotateCurrentSpan("agent.actionName", input.actionName);
         yield* Effect.annotateCurrentSpan("agent.actionKind", input.actionKind);
+        // Retained as raw SQL because the action-run ledger owns idempotent
+        // insert-or-replay semantics and projection shape for action execution.
         const insertedRows = yield* sql<AgentActionRunBeginProjectionRow>`
           insert into agent_action_runs (
             id,
@@ -607,6 +640,8 @@ export class AgentActionRunsRepository extends Context.Service<AgentActionRunsRe
           "agent.actionRunStoresResult",
           options.storeResult
         );
+        // Retained as raw SQL with the rest of the action-run ledger so terminal
+        // race/replay behavior stays reviewed as one slice.
         const rows = yield* sql<AgentActionRunRow>`
           update agent_action_runs
           set
@@ -639,6 +674,8 @@ export class AgentActionRunsRepository extends Context.Service<AgentActionRunsRe
           options.staleAfterSeconds === undefined
             ? sql``
             : sql`and created_at <= now() - (${options.staleAfterSeconds} * interval '1 second')`;
+        // Retained as raw SQL with the rest of the action-run ledger because the
+        // stale recovery predicate is idempotency-sensitive.
         const rows = yield* sql<AgentActionRunRow>`
           update agent_action_runs
           set
@@ -733,6 +770,21 @@ export function mapThreadRow(row: AgentThreadRow): AgentThread {
     status: decodeAgentThreadStatus(row.status),
     title: row.title,
     updatedAt: row.updated_at.toISOString(),
+  });
+}
+
+function mapDrizzleThreadRow(
+  row: typeof agentThread.$inferSelect
+): AgentThread {
+  return decodeAgentThread({
+    agentInstanceName: decodeAgentInstanceName(row.agentInstanceName),
+    createdAt: row.createdAt.toISOString(),
+    id: decodeAgentThreadId(row.id),
+    lastMessageAt:
+      row.lastMessageAt === null ? null : row.lastMessageAt.toISOString(),
+    status: decodeAgentThreadStatus(row.status),
+    title: row.title,
+    updatedAt: row.updatedAt.toISOString(),
   });
 }
 

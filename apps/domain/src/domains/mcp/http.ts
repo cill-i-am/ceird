@@ -1,6 +1,6 @@
 import { mcpHandler } from "@better-auth/oauth-provider";
 import { OrganizationId, SessionId, UserId } from "@ceird/identity-core";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, sql as drizzleSql } from "drizzle-orm";
 import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { McpServer } from "effect/unstable/ai";
 import { HttpRouter } from "effect/unstable/http";
@@ -83,6 +83,7 @@ interface McpAuthorizedClientIdentity {
   readonly clientId: string;
   readonly session: McpSessionIdentity;
 }
+
 export class McpAuthorizedAppCache {
   private readonly apps = new Map<string, AuthorizedMcpAppCacheEntry>();
   private readonly pendingApps = new Map<string, Promise<AuthorizedMcpApp>>();
@@ -450,9 +451,9 @@ function verifyMcpConnectedAppGrant<ERuntime>(options: {
         and(
           eq(oauthConsent.userId, options.userId),
           eq(oauthConsent.clientId, options.clientId),
-          options.organizationId === undefined
-            ? isNull(oauthConsent.referenceId)
-            : eq(oauthConsent.referenceId, options.organizationId)
+          drizzleSql`${oauthConsent.referenceId} is not distinct from ${
+            options.organizationId ?? null
+          }`
         )
       )
       .limit(1);
