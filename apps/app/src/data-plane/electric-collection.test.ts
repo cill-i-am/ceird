@@ -70,6 +70,12 @@ describe("Ceird Electric collection factory", () => {
     expect(result).toStrictEqual({
       collection: null,
       disabledReason: "server-render",
+      health: expect.objectContaining({
+        current: expect.objectContaining({
+          disabledReason: "server-render",
+          status: "disabled",
+        }),
+      }),
       status: "disabled",
     });
   });
@@ -82,6 +88,12 @@ describe("Ceird Electric collection factory", () => {
     expect(result).toStrictEqual({
       collection: null,
       disabledReason: "missing-sync-origin",
+      health: expect.objectContaining({
+        current: expect.objectContaining({
+          disabledReason: "missing-sync-origin",
+          status: "disabled",
+        }),
+      }),
       status: "disabled",
     });
   });
@@ -96,11 +108,17 @@ describe("Ceird Electric collection factory", () => {
     expect(result).toStrictEqual({
       collection: null,
       disabledReason: "invalid-sync-origin",
+      health: expect.objectContaining({
+        current: expect.objectContaining({
+          disabledReason: "invalid-sync-origin",
+          status: "disabled",
+        }),
+      }),
       status: "disabled",
     });
   });
 
-  it("creates an Electric collection with the contract id and schema in browser runtime", () => {
+  it("creates an Electric collection with connecting health in browser runtime", () => {
     vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
 
     const result = createElectricCollectionFromContract(testContract, {
@@ -120,6 +138,16 @@ describe("Ceird Electric collection factory", () => {
     expect(result.collection.id).toBe(testContract.id);
     expect(result.collection.config.schema).toBe(TestRowStandardSchema);
     expect(result.collection.config.syncMode).toBe("eager");
+    expect(result.health.current).toStrictEqual(
+      expect.objectContaining({
+        collection: "labels",
+        collectionId: testContract.id,
+        recoveryAttempts: 0,
+        source: "electric",
+        status: "connecting",
+        subscriptionName: "labels",
+      })
+    );
   });
 
   it("converts schema and safe shape options into Electric ShapeStream options", async () => {
@@ -171,6 +199,7 @@ describe("Ceird Electric collection factory", () => {
     expect(onSyncError).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "auth",
+        message: "Sync authorization failed.",
         retryable: false,
         shapeName: "labels",
         status: 401,
@@ -283,7 +312,7 @@ describe("Ceird Electric collection factory", () => {
     expect(
       normalizeElectricSyncError(
         {
-          message: "Sync authorization failed",
+          message: "source secret should not leak",
           status: 503,
         },
         "jobs" satisfies SyncShapeName
@@ -291,7 +320,7 @@ describe("Ceird Electric collection factory", () => {
     ).toStrictEqual(
       expect.objectContaining({
         kind: "server",
-        message: "Sync authorization failed",
+        message: "Sync origin is unavailable with status 503.",
         retryable: true,
         shapeName: "jobs",
         status: 503,
@@ -309,6 +338,7 @@ describe("Ceird Electric collection factory", () => {
     ).toStrictEqual(
       expect.objectContaining({
         kind: "configuration",
+        message: "Sync configuration failed with status 400.",
         retryable: false,
         shapeName: "jobs",
         status: 400,
@@ -326,6 +356,7 @@ describe("Ceird Electric collection factory", () => {
     ).toStrictEqual(
       expect.objectContaining({
         kind: "rate-limited",
+        message: "Sync origin rate limited the collection.",
         retryable: true,
         shapeName: "jobs",
         status: 429,
@@ -337,6 +368,7 @@ describe("Ceird Electric collection factory", () => {
     ).toStrictEqual(
       expect.objectContaining({
         kind: "network",
+        message: "Sync request failed before a response was received.",
         retryable: true,
         shapeName: "jobs",
       })
@@ -350,8 +382,70 @@ describe("Ceird Electric collection factory", () => {
     ).toStrictEqual(
       expect.objectContaining({
         kind: "missing-headers",
+        message: "Sync response is missing required Electric headers.",
         retryable: false,
         shapeName: "jobs",
+      })
+    );
+  });
+
+  it("records authorization failures as unavailable collection health", async () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+    const result = createElectricCollectionFromContract(testContract, {
+      runtime: {
+        fetch: makeTestFetch(new Response("denied raw-token", { status: 403 })),
+        isBrowser: true,
+      },
+    });
+
+    expect(result.status).toBe("enabled");
+    if (result.status !== "enabled") {
+      throw new Error("Expected Electric collection to be enabled");
+    }
+
+    await result.collection.preload();
+
+    expect(result.health.current).toStrictEqual(
+      expect.objectContaining({
+        lastError: {
+          kind: "auth",
+          message: "Sync authorization failed.",
+          retryable: false,
+          status: 403,
+        },
+        recoveryAttempts: 0,
+        status: "unavailable",
+      })
+    );
+    expect(result.health.current.lastError).not.toHaveProperty("cause");
+  });
+
+  it("records retryable sync origin failures as recovery attempts", async () => {
+    const { health } = createElectricCollectionFromContract(testContract, {
+      runtime: { isBrowser: false },
+    });
+    const shapeOptions = createElectricShapeOptions(testContract, {
+      onSyncError: (error) => {
+        health.markUnavailable(error);
+      },
+      shapeUrl: "https://sync.codex.ceird.localhost/v1/shapes/labels",
+    });
+
+    await shapeOptions.onError?.({
+      message: "upstream source_secret=s3cr3t",
+      status: 503,
+    } as Error & { readonly status: number });
+
+    expect(health.current).toStrictEqual(
+      expect.objectContaining({
+        lastError: {
+          kind: "server",
+          message: "Sync origin is unavailable with status 503.",
+          retryable: true,
+          status: 503,
+        },
+        recoveryAttempts: 1,
+        status: "unavailable",
       })
     );
   });
