@@ -1231,6 +1231,58 @@ test("preview workflow destroys PR stages from the default branch on close", () 
   assert.doesNotMatch(previewWorkflow, /CEIRD_API_HOSTNAME: api\.ceird\.app/);
 });
 
+test("preview R2 credential posture separates deploy credentials from runtime credentials", () => {
+  const previewWorkflow = readFileSync(
+    path.join(repoRoot, ".github/workflows/preview.yml"),
+    "utf8"
+  );
+  const buildWorkflow = readFileSync(
+    path.join(repoRoot, ".github/workflows/build.yml"),
+    "utf8"
+  );
+  const cloudflareCiGuide = readFileSync(
+    path.join(repoRoot, "docs/architecture/cloudflare-ci.md"),
+    "utf8"
+  );
+  const previewDeployJob = getWorkflowJob(previewWorkflow, "deploy-e2e");
+  const previewCleanupJob = getWorkflowJob(previewWorkflow, "cleanup");
+  const cloudE2eDeployJob = getWorkflowJob(buildWorkflow, "cloud-e2e-deploy");
+  const cloudE2eDestroyJob = getWorkflowJob(buildWorkflow, "cloud-e2e-destroy");
+
+  for (const [name, job] of [
+    ["preview deploy", previewDeployJob],
+    ["preview cleanup", previewCleanupJob],
+    ["cloud E2E deploy", cloudE2eDeployJob],
+    ["cloud E2E destroy", cloudE2eDestroyJob],
+  ]) {
+    assertNoElectricStorageCredentialsEnv(job);
+    assertCloudflareGlobalKeyCredentials(job);
+    assert.doesNotMatch(
+      job,
+      /ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID|ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY/,
+      `${name} should not receive generated Electric runtime object credentials from GitHub`
+    );
+  }
+
+  assert.match(
+    cloudflareCiGuide,
+    /deployment credentials are broad, environment-scoped Cloudflare provider\s+credentials/
+  );
+  assert.match(
+    cloudflareCiGuide,
+    /Electric runtime object credentials are generated per full-sync stage, scoped\s+to that stage's R2 bucket/
+  );
+  assert.match(
+    cloudflareCiGuide,
+    /pull-request previews and ephemeral CI currently skip Electric R2 runtime\s+storage/
+  );
+  assert.match(
+    cloudflareCiGuide,
+    /https:\/\/developers\.cloudflare\.com\/r2\/api\/tokens\//
+  );
+  assert.match(cloudflareCiGuide, /https:\/\/v2\.alchemy\.run\/guides\/ci\//);
+});
+
 test("Playwright database URL fallback is package-local only", () => {
   const testUrls = readFileSync(
     path.join(repoRoot, "apps/app/e2e/test-urls.ts"),

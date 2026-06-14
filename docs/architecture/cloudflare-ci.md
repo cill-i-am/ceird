@@ -238,10 +238,52 @@ credentials are present, so do not store `CLOUDFLARE_API_TOKEN` in GitHub
 environments. The key credentials must be able to read and update the
 Cloudflare state store, reconcile AI Gateway, deploy Workers, manage custom
 domains, queues, Hyperdrive, and bind Cloudflare Email Service to the domain
-Worker. Alchemy's CI guide specifically calls out that
-`Cloudflare.state()` needs Cloudflare Secrets Store Read/Write in CI because
-Alchemy reads the state-store token back through an ephemeral edge-preview
-Worker with a secret binding.
+Worker.
+
+Cloudflare's R2 token model separates bucket object access from account-level
+bucket administration. Object Read & Write tokens can be scoped to selected
+buckets, and Cloudflare represents an individual bucket as
+`com.cloudflare.edge.r2.bucket.<ACCOUNT_ID>_<JURISDICTION>_<BUCKET_NAME>`.
+Those bucket-scoped permissions are the correct shape for Electric runtime S3
+credentials, and Ceird creates exactly that token from the app stack for
+full-sync stages. Cloudflare's Admin Read & Write R2 permission is the account
+permission that can create, list, and delete buckets and edit bucket
+configuration, so it is not a replacement for the runtime object token when the
+stack itself must reconcile bucket resources. Alchemy's CI guide also calls out
+that credentials which mint scoped Cloudflare tokens need API Tokens Write, and
+that an ordinary Edit Cloudflare Workers token cannot mint other tokens.
+Alchemy's state-store docs describe `Cloudflare.state()` as a Worker-backed
+remote store with its auth token and encryption key in Cloudflare Secrets Store;
+the Alchemy CLI bootstrap docs note that adoption/repair re-fetches the state
+auth token via an edge-preview probe because that is the available way to read a
+Secrets Store value.
+
+The resulting boundary is:
+
+- deployment credentials are broad, environment-scoped Cloudflare provider
+  credentials used only by reviewed workflow code to reconcile the stack and
+  state store
+- Electric runtime object credentials are generated per full-sync stage, scoped
+  to that stage's R2 bucket, and passed only into the sync Worker/Container
+  startup path as secrets
+- pull-request previews and ephemeral CI currently skip Electric R2 runtime
+  storage, so `preview-deploy`, `preview-cleanup`, and cloud E2E jobs must not
+  receive GitHub-provided Electric storage access-key or secret-key values
+- preview cleanup uses the repository default branch, validates `pr-<number>`,
+  and restores only the deploy/state-store credentials needed to destroy the
+  preview stage; it does not execute closed pull-request code with provider
+  secrets
+
+Official references checked for this decision:
+
+- Cloudflare R2 authentication: `https://developers.cloudflare.com/r2/api/tokens/`
+- Cloudflare API token permissions:
+  `https://developers.cloudflare.com/fundamentals/api/reference/permissions/`
+- Alchemy CI guide: `https://v2.alchemy.run/guides/ci/`
+- Alchemy state store:
+  `https://v2.alchemy.run/concepts/state-store/`
+- Alchemy CLI state-store bootstrap:
+  `https://v2.alchemy.run/guides/cli/`
 
 ## Preview Workflow
 

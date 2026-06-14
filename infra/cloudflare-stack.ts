@@ -23,7 +23,7 @@ import {
 import type { ElectricContainerConfig } from "../apps/sync/infra/cloudflare-worker.ts";
 import { readCloudflareAccountId } from "./cloudflare-environment.ts";
 import {
-  makeCloudflareR2BucketResourceKey,
+  makeElectricStorageR2TokenPolicy,
   makeR2SecretAccessKey,
 } from "./cloudflare-r2.ts";
 import {
@@ -631,20 +631,11 @@ function makeElectricStorageCredentials(input: {
       name: resourceName(input.config, "electric-storage-r2-token"),
       accountId: input.accountId,
       policies: [
-        {
-          effect: "allow",
-          permissionGroups: [
-            "Workers R2 Storage Bucket Item Read",
-            "Workers R2 Storage Bucket Item Write",
-          ],
-          resources: {
-            [makeCloudflareR2BucketResourceKey({
-              accountId: input.accountId,
-              bucketName: input.bucketName,
-              jurisdiction: "default",
-            })]: "*",
-          },
-        },
+        makeElectricStorageR2TokenPolicy({
+          accountId: input.accountId,
+          bucketName: input.bucketName,
+          jurisdiction: "default",
+        }),
       ],
     });
 

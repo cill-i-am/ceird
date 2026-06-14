@@ -78,6 +78,7 @@ import type {
   SyncWorkerConfigEnv,
 } from "../apps/sync/src/platform/cloudflare/env.ts";
 import {
+  makeElectricStorageR2TokenPolicy,
   makeCloudflareR2BucketResourceKey,
   makeR2SecretAccessKey,
 } from "./cloudflare-r2.ts";
@@ -1400,6 +1401,23 @@ describe("Cloudflare stack", () => {
     expect(makeR2SecretAccessKey(Redacted.make("r2-api-token"))).toBe(
       "aa5f2214de84af13e0c69fa550e9c92fa4a5ca10d115fdd708acf64f9b4ff0ac"
     );
+    expect(
+      makeElectricStorageR2TokenPolicy({
+        accountId: "cloudflare-account-id",
+        bucketName: "ceird-main-electric-storage",
+        jurisdiction: "default",
+      })
+    ).toStrictEqual({
+      effect: "allow",
+      permissionGroups: [
+        "Workers R2 Storage Bucket Item Read",
+        "Workers R2 Storage Bucket Item Write",
+      ],
+      resources: {
+        "com.cloudflare.edge.r2.bucket.cloudflare-account-id_default_ceird-main-electric-storage":
+          "*",
+      },
+    });
     expect(makeDurableObjectLocationHintForNeonRegion("aws-eu-west-2")).toBe(
       "weur"
     );
