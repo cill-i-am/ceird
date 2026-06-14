@@ -37,14 +37,12 @@ type DrizzleSiteLabelsBySiteIdEffect = Effect.Effect<
   DomainDrizzleStorageFailure
 >;
 
-// Raw helper retained for jobs repository call sites; migrating those callers is
-// owned by the jobs DomainDrizzle slice rather than TSK-161.
-export const listSiteLabelsForSites: (
+export const listSiteLabelsForSitesWithSql: (
   sql: SqlClient,
   organizationId: OrganizationId,
   siteIds: readonly SiteId[]
 ) => RawSiteLabelsBySiteIdEffect = Effect.fn(
-  "SiteLabelQueries.listSiteLabelsForSites"
+  "SiteLabelQueries.listSiteLabelsForSitesWithSql"
 )(function* (sql, organizationId, siteIds) {
   if (siteIds.length === 0) {
     return new Map<SiteId, Label[]>();
@@ -70,38 +68,6 @@ export const listSiteLabelsForSites: (
       and site_labels.site_id in ${sql.in(siteIds)}
       and labels.archived_at is null
     order by labels.name asc, labels.id asc
-  `;
-
-  return groupSiteLabelsBySiteId(rows);
-});
-
-// Raw helper retained for non-sites callers until their repository slice moves.
-export const listSiteLabelsForOrganization: (
-  sql: SqlClient,
-  organizationId: OrganizationId
-) => RawSiteLabelsBySiteIdEffect = Effect.fn(
-  "SiteLabelQueries.listSiteLabelsForOrganization"
-)(function* (sql, organizationId) {
-  const rows = yield* sql<SiteLabelRow>`
-    select
-      site_labels.site_id,
-      site_labels.label_id,
-      labels.created_at,
-      labels.name,
-      labels.updated_at
-    from site_labels
-    join labels
-      on labels.id = site_labels.label_id
-      and labels.organization_id = site_labels.organization_id
-    join sites
-      on sites.id = site_labels.site_id
-      and sites.organization_id = site_labels.organization_id
-    where site_labels.organization_id = ${organizationId}
-      and labels.organization_id = ${organizationId}
-      and sites.organization_id = ${organizationId}
-      and sites.archived_at is null
-      and labels.archived_at is null
-    order by site_labels.site_id asc, labels.name asc, labels.id asc
   `;
 
   return groupSiteLabelsBySiteId(rows);

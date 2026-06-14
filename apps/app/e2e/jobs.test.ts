@@ -160,7 +160,10 @@ test.describe("jobs flow", () => {
     }
     await expect(detailSheet.pickStatusChange).toBeDisabled();
 
+    const labelAssignmentResponse = waitForJobLabelAssignmentResponse(page);
     await detailSheet.createAndAssignLabel(labelName);
+    const labelAssignmentResult = await labelAssignmentResponse;
+    expect(labelAssignmentResult.ok()).toBe(true);
     await expect(
       detailSheet.root.getByText(labelName, { exact: true })
     ).toBeVisible();
@@ -203,6 +206,15 @@ function waitForJobReopenResponse(page: Page) {
     (response) =>
       response.request().method() === "POST" &&
       /^\/jobs\/[^/]+\/reopen$/.test(new URL(response.url()).pathname),
+    { timeout: JOB_ACTIVITY_TIMEOUT_MS }
+  );
+}
+
+function waitForJobLabelAssignmentResponse(page: Page) {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      /^\/jobs\/[^/]+\/labels$/.test(new URL(response.url()).pathname),
     { timeout: JOB_ACTIVITY_TIMEOUT_MS }
   );
 }
