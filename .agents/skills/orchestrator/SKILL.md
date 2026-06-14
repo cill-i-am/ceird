@@ -51,9 +51,25 @@ when available to create or steer user-visible worker threads.
    explicit reasoning effort. Include the Linear issue, parent PRD/Project,
    blockers, relevant comments, branch naming convention, and instruction to use
    the `worker` skill.
+   - Tell every worker that after opening or updating a PR it must run
+     `ci-watch`, monitor CI plus GitHub PR comments/review threads and Linear
+     comments, fix actionable in-scope failures or comments, and keep watching
+     until checks are green or genuinely blocked.
+   - Tell every worker to create or update a 2-3 minute heartbeat automation for
+     its worker thread when PR checks or comments are still pending after a
+     short inline watch. The heartbeat prompt should include the PR URL, Linear
+     issue key, branch, head SHA, current blockers, comment-review requirement,
+     retry/fix budget, Linear update requirement, and stop condition.
 6. **Track status.** Move assigned issues to `in-progress` and comment with the
    worker thread, branch expectation, and dispatch time.
-7. **Review returns.** For each worker report or PR, run the acceptance gates
+7. **Set a heartbeat.** After dispatching workers, create or update one
+   current-thread heartbeat automation to continue orchestration while work is
+   active. Prefer a short interval, such as 10 minutes, for active worker
+   batches; lengthen or pause it only when the project is waiting on human input
+   or external systems. The heartbeat prompt should check Linear issue status,
+   worker threads, PRs, CI, blockers, and acceptance gates. Update an existing
+   project heartbeat instead of creating duplicates.
+8. **Review returns.** For each worker report or PR, run the acceptance gates
    below before moving Linear forward.
 
 ## Acceptance Gates
@@ -80,7 +96,10 @@ Require worker evidence from `production-ready`:
 - relevant review stack completed
 - verification commands and results recorded
 - PR linked
-- CI green or blocked with evidence
+- CI and PR/Linear comments watched until green/resolved or blocked with
+  evidence
+- any active worker CI heartbeat automation named with its interval and stop
+  condition
 
 Escalate to read-only `review-swarm`, `backend-review`, `frontend-review`, or
 `auth-context-review` when risk is high or worker evidence is weak.

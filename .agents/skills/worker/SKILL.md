@@ -36,8 +36,22 @@ slice, prove it, and report evidence. The orchestrator owns final acceptance.
 5. **Review locally.** Before claiming done, run `production-ready`.
 6. **Open or update a PR.** Use the Linear issue title as the PR title when it
    includes the key.
-7. **Update Linear.** Comment with PR URL, branch, commits, verification
-   evidence, CI-watch status, blockers, and residual risks.
+7. **Own CI and comments.** Immediately after PR creation/update, run
+   `ci-watch` in this worker thread. Watch GitHub checks, GitHub PR comments,
+   review threads/review decisions, and new Linear comments. Fix actionable
+   failures or comments when the fix stays inside the issue scope, push
+   follow-up commits, reply/update evidence, and keep watching until green,
+   resolved, or genuinely blocked.
+8. **Use a short watcher heartbeat when needed.** If checks or comments remain
+   pending after a short inline watch, create or update a 2-3 minute heartbeat
+   automation for this worker thread. Include the PR URL, Linear issue key,
+   branch, head SHA, pending checks/comments, retry/fix budget, Linear update
+   requirement, and stop condition. Reuse an existing watcher for the same PR;
+   do not create duplicates. Delete or stop the watcher once the PR is green,
+   merged, closed, or blocked with evidence.
+9. **Update Linear.** Comment with PR URL, branch, commits, verification
+   evidence, CI/comment-watch status, watcher automation if active, blockers,
+   and residual risks.
 
 ## Stop Conditions
 
@@ -49,3 +63,4 @@ Stop and update Linear instead of improvising when:
 - verification fails repeatedly without a clear root cause
 - provider credentials, Alchemy stage mutation, or production data is needed
 - PR scope grows beyond one vertical slice
+- GitHub or Linear auth is unavailable for required PR/comment watching
