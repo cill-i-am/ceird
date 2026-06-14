@@ -23,6 +23,11 @@ import {
 } from "@ceird/sites-core";
 import { Layer, Context, Effect, Option } from "effect";
 
+import {
+  describeDomainStorageFailure,
+  isDomainDrizzleStorageFailure,
+} from "../../platform/database/database.js";
+import type { DomainDrizzleStorageFailure } from "../../platform/database/database.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
@@ -140,7 +145,7 @@ export class SitesService extends Context.Service<SitesService>()(
               return site;
             })
           )
-          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+          .pipe(catchSitesStorageError());
       });
 
       const update = Effect.fn("SitesService.update")(function* (
@@ -174,7 +179,7 @@ export class SitesService extends Context.Service<SitesService>()(
                 onSome: Effect.succeed,
               })
             ),
-            Effect.catchTag("SqlError", failSitesStorageError)
+            catchSitesStorageError()
           );
 
         const location =
@@ -197,7 +202,7 @@ export class SitesService extends Context.Service<SitesService>()(
               })
               .pipe(Effect.map(Option.getOrUndefined))
           )
-          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+          .pipe(catchSitesStorageError());
 
         if (site !== undefined) {
           return site;
@@ -231,7 +236,7 @@ export class SitesService extends Context.Service<SitesService>()(
 
         const result = yield* sitesRepository
           .list(actor.organizationId, query)
-          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+          .pipe(catchSitesStorageError());
 
         yield* Effect.annotateCurrentSpan("resultCount", result.items.length);
         yield* Effect.annotateCurrentSpan(
@@ -255,7 +260,7 @@ export class SitesService extends Context.Service<SitesService>()(
 
         const sites = yield* sitesRepository
           .listOptions(actor.organizationId)
-          .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+          .pipe(catchSitesStorageError());
 
         return {
           sites,
@@ -286,7 +291,7 @@ export class SitesService extends Context.Service<SitesService>()(
 
           const candidateSet = yield* sitesRepository
             .listProximityCandidates(actor.organizationId, input.filters ?? {})
-            .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+            .pipe(catchSitesStorageError());
           const routeCostContext = yield* makeCurrentRouteCostContext({
             actorUserId: actor.userId,
             organizationId: actor.organizationId,
@@ -365,7 +370,7 @@ export class SitesService extends Context.Service<SitesService>()(
 
           const summary = yield* sitesRepository
             .getActiveJobSummary(actor.organizationId, siteId)
-            .pipe(Effect.catchTag("SqlError", failSitesStorageError));
+            .pipe(catchSitesStorageError());
           const routeCostContext = yield* makeCurrentRouteCostContext({
             actorUserId: actor.userId,
             organizationId: actor.organizationId,
@@ -451,11 +456,7 @@ export class SitesService extends Context.Service<SitesService>()(
 
         const comments = yield* commentsRepository
           .listForExistingSite(actor.organizationId, siteId)
-          .pipe(
-            Effect.catchTag("SqlError", (error) =>
-              failSitesStorageError(error, { siteId })
-            )
-          );
+          .pipe(catchSitesStorageError({ siteId }));
 
         return yield* Option.match(comments, {
           onNone: () => failSiteNotFound(siteId),
@@ -485,11 +486,7 @@ export class SitesService extends Context.Service<SitesService>()(
             organizationId: actor.organizationId,
             siteId,
           })
-          .pipe(
-            Effect.catchTag("SqlError", (error) =>
-              failSitesStorageError(error, { siteId })
-            )
-          );
+          .pipe(catchSitesStorageError({ siteId }));
 
         return yield* Option.match(comment, {
           onNone: () => failSiteNotFound(siteId),
@@ -528,11 +525,7 @@ export class SitesService extends Context.Service<SitesService>()(
               siteId,
             })
           )
-          .pipe(
-            Effect.catchTag("SqlError", (error) =>
-              failSitesStorageError(error, { siteId })
-            )
-          );
+          .pipe(catchSitesStorageError({ siteId }));
 
         return yield* loadSiteDetailOrFail(
           actor.organizationId,
@@ -572,11 +565,7 @@ export class SitesService extends Context.Service<SitesService>()(
               siteId,
             })
           )
-          .pipe(
-            Effect.catchTag("SqlError", (error) =>
-              failSitesStorageError(error, { siteId })
-            )
-          );
+          .pipe(catchSitesStorageError({ siteId }));
 
         return yield* loadSiteDetailOrFail(
           actor.organizationId,
@@ -654,9 +643,7 @@ const loadSiteDetailOrFail = Effect.fn("SitesService.loadSiteDetailOrFail")(
     const site = yield* sitesRepository
       .getOptionById(organizationId, siteId)
       .pipe(
-        Effect.catchTag("SqlError", (error) =>
-          failSitesStorageError(error, { siteId })
-        ),
+        catchSitesStorageError({ siteId }),
         Effect.map(Option.getOrUndefined)
       );
 
@@ -702,11 +689,34 @@ function failSitesStorageError(
 
   return Effect.fail(
     new SiteStorageError({
-      cause: error instanceof Error ? error.message : String(error),
+      cause: describeDomainStorageFailure(error),
       message: "Sites storage operation failed",
       ...siteContext,
     })
   );
+}
+
+function catchSitesStorageError<Value, Error, Requirements>(
+  context: { readonly siteId?: SiteId } = {}
+): (
+  effect: Effect.Effect<Value, Error, Requirements>
+) => Effect.Effect<
+  Value,
+  Exclude<Error, DomainDrizzleStorageFailure> | SiteStorageError,
+  Requirements
+> {
+  return ((effect: Effect.Effect<Value, Error, Requirements>) =>
+    effect.pipe(
+      Effect.catchIf(isDomainDrizzleStorageFailure, (error) =>
+        failSitesStorageError(error, context)
+      )
+    )) as (
+    effect: Effect.Effect<Value, Error, Requirements>
+  ) => Effect.Effect<
+    Value,
+    Exclude<Error, DomainDrizzleStorageFailure> | SiteStorageError,
+    Requirements
+  >;
 }
 
 function ensureCanViewOrganizationSiteOptions(

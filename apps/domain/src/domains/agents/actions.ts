@@ -43,6 +43,8 @@ import {
 import { Context, Effect, Layer, Schema } from "effect";
 import type { HttpServerRequest } from "effect/unstable/http";
 
+import { DomainDrizzle } from "../../platform/database/database.js";
+import type { DomainDrizzleService } from "../../platform/database/database.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
@@ -121,6 +123,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
       const jobsRepository = yield* JobsRepository;
       const labelsRepository = yield* LabelsRepository;
       const organizationAuthorization = yield* OrganizationAuthorization;
+      const domainDrizzle = yield* DomainDrizzle;
       const siteLocationProvider = yield* SiteLocationProvider;
       const siteLabelAssignmentsRepository =
         yield* SiteLabelAssignmentsRepository;
@@ -156,6 +159,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
                   jobsRepository,
                   labelsRepository,
                   organizationAuthorization,
+                  domainDrizzle,
                   siteLocationProvider,
                   siteLabelAssignmentsRepository,
                   sitesRepository,
@@ -200,6 +204,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
 
 interface SitesServiceLayerDependencies {
   readonly commentsRepository: Context.Service.Shape<typeof CommentsRepository>;
+  readonly domainDrizzle: DomainDrizzleService;
   readonly organizationAuthorization: Context.Service.Shape<
     typeof OrganizationAuthorization
   >;
@@ -218,6 +223,7 @@ interface SitesServiceLayerDependencies {
 
 interface JobsServiceLayerDependencies {
   readonly contactsRepository: Context.Service.Shape<typeof ContactsRepository>;
+  readonly domainDrizzle: DomainDrizzleService;
   readonly jobLabelAssignmentsRepository: Context.Service.Shape<
     typeof JobLabelAssignmentsRepository
   >;
@@ -247,6 +253,7 @@ type AgentActionRequirements =
   | SitesRepository
   | JobsService
   | SitesService
+  | DomainDrizzleService
   | HttpServerRequest.HttpServerRequest;
 
 type DirectAgentActionRequirements =
@@ -259,6 +266,7 @@ type DirectAgentActionRequirements =
   | OrganizationAuthorization
   | SiteLabelAssignmentsRepository
   | SitesRepository
+  | DomainDrizzleService
   | HttpServerRequest.HttpServerRequest;
 
 interface ActionServiceDependencies
@@ -338,6 +346,7 @@ function provideDirectActionServices(
     Effect.provideService(JobsAuthorization, dependencies.jobsAuthorization),
     Effect.provideService(JobsRepository, dependencies.jobsRepository),
     Effect.provideService(LabelsRepository, dependencies.labelsRepository),
+    Effect.provideService(DomainDrizzle, dependencies.domainDrizzle),
     Effect.provideService(
       OrganizationAuthorization,
       dependencies.organizationAuthorization
@@ -372,6 +381,7 @@ function makeJobsServiceLayer(
       Layer.succeed(JobsAuthorization, dependencies.jobsAuthorization),
       Layer.succeed(JobsRepository, dependencies.jobsRepository),
       Layer.succeed(LabelsRepository, dependencies.labelsRepository),
+      Layer.succeed(DomainDrizzle, dependencies.domainDrizzle),
       makeRouteProximityServiceLayer(dependencies.routeProximityService),
       Layer.succeed(SiteLocationProvider, dependencies.siteLocationProvider),
       Layer.succeed(SitesRepository, dependencies.sitesRepository),
@@ -401,6 +411,7 @@ function makeSitesServiceLayer(
         OrganizationAuthorization,
         dependencies.organizationAuthorization
       ),
+      Layer.succeed(DomainDrizzle, dependencies.domainDrizzle),
       makeRouteProximityServiceLayer(dependencies.routeProximityService),
       Layer.succeed(SiteLocationProvider, dependencies.siteLocationProvider),
       Layer.succeed(

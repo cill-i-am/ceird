@@ -14,6 +14,7 @@ import { Context, Effect, Schema } from "effect";
 import { Tool, Toolkit } from "effect/unstable/ai";
 import { HttpServerRequest } from "effect/unstable/http";
 
+import type { DomainDrizzleService } from "../../platform/database/database.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsService } from "../labels/service.js";
 import { SitesService } from "../sites/service.js";
@@ -67,7 +68,11 @@ export class McpToolRequestRuntime extends Context.Service<
   }
 >()("McpToolRequestRuntime") {}
 
-type McpToolDomainServices = JobsService | LabelsService | SitesService;
+export type McpToolDomainServices =
+  | JobsService
+  | LabelsService
+  | SitesService
+  | DomainDrizzleService;
 type McpToolPassthroughServices = HttpServerRequest.HttpServerRequest;
 
 export class McpToolDomainRuntime extends Context.Service<

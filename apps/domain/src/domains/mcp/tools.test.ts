@@ -2,6 +2,8 @@ import type { Context } from "effect";
 import { Effect, Layer, Stream } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
+import { DomainDrizzle } from "../../platform/database/database.js";
+import type { DomainDrizzleService } from "../../platform/database/database.js";
 import { JobsService } from "../jobs/service.js";
 import { LabelsService } from "../labels/service.js";
 import { SitesService } from "../sites/service.js";
@@ -105,7 +107,9 @@ function runToolkitTool(
   name: keyof typeof CeirdMcpToolkit.tools,
   params: unknown,
   runtime: ContextRuntime,
-  servicesLayer: Layer.Layer<JobsService | LabelsService | SitesService>
+  servicesLayer: Layer.Layer<
+    DomainDrizzleService | JobsService | LabelsService | SitesService
+  >
 ) {
   return Effect.runPromise(
     Effect.gen(function* () {
@@ -144,6 +148,7 @@ function makeTestToolServicesLayer(options: {
   readonly labelsList?: () => Effect.Effect<unknown>;
 }) {
   return Layer.mergeAll(
+    makeUnusedDomainDrizzleLayer(),
     Layer.succeed(
       LabelsService,
       LabelsService.of({
@@ -163,4 +168,22 @@ function makeTestToolServicesLayer(options: {
 
 function notImplementedToolService(name: string) {
   return () => Effect.die(new Error(`${name} should not be called`));
+}
+
+function makeUnusedDomainDrizzleLayer() {
+  return Layer.succeed(
+    DomainDrizzle,
+    DomainDrizzle.of({
+      db: new Proxy(
+        {},
+        {
+          get: (_target, property) => {
+            throw new Error(
+              `DomainDrizzle.${String(property)} should not be called in MCP tool tests`
+            );
+          },
+        }
+      ) as never,
+    })
+  );
 }
