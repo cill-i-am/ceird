@@ -16,6 +16,11 @@ import type {
   DataPlaneCollectionCompleteness,
   DataPlaneCollectionName,
 } from "./collection-contract";
+import type {
+  DataPlaneCollectionHealth,
+  DataPlaneCollectionHealthError,
+} from "./collection-health";
+import { createDataPlaneCollectionHealth } from "./collection-health";
 
 export type DataPlaneElectricCollectionSyncMode =
   | "eager"
@@ -30,26 +35,16 @@ export type DataPlaneElectricDisabledReason =
   | "server-render";
 
 export type DataPlaneElectricSyncErrorKind =
-  | "auth"
-  | "configuration"
-  | "missing-headers"
-  | "network"
-  | "rate-limited"
-  | "server"
-  | "unknown";
+  DataPlaneCollectionHealthError["kind"];
 
-export interface DataPlaneElectricSyncError {
-  readonly cause: unknown;
-  readonly kind: DataPlaneElectricSyncErrorKind;
-  readonly message: string;
-  readonly retryable: boolean;
+export interface DataPlaneElectricSyncError extends DataPlaneCollectionHealthError {
   readonly shapeName: SyncShapeName;
-  readonly status?: number | undefined;
 }
 
 export interface DataPlaneElectricRuntime {
   readonly fetch?: typeof fetch | undefined;
   readonly isBrowser: boolean;
+  readonly now?: (() => number) | undefined;
 }
 
 interface ResolvedDataPlaneElectricRuntime extends DataPlaneElectricRuntime {
@@ -93,12 +88,14 @@ export type DataPlaneElectricCollectionResult<Collection> =
   | {
       readonly collection: Collection;
       readonly disabledReason?: undefined;
+      readonly health: DataPlaneCollectionHealth;
       readonly shapeUrl: string;
       readonly status: "enabled";
     }
   | {
       readonly collection: null;
       readonly disabledReason: DataPlaneElectricDisabledReason;
+      readonly health: DataPlaneCollectionHealth;
       readonly shapeUrl?: undefined;
       readonly status: "disabled";
     };
@@ -153,6 +150,11 @@ export function createElectricCollectionFromContract<
     return {
       collection: null,
       disabledReason: "server-render",
+      health: createElectricCollectionHealth(contract, {
+        disabledReason: "server-render",
+        now: runtime.now,
+        status: "disabled",
+      }),
       status: "disabled",
     } as const satisfies DataPlaneElectricCollectionResult<never>;
   }
@@ -161,6 +163,11 @@ export function createElectricCollectionFromContract<
     return {
       collection: null,
       disabledReason: "missing-sync-origin",
+      health: createElectricCollectionHealth(contract, {
+        disabledReason: "missing-sync-origin",
+        now: runtime.now,
+        status: "disabled",
+      }),
       status: "disabled",
     } as const satisfies DataPlaneElectricCollectionResult<never>;
   }
@@ -175,13 +182,25 @@ export function createElectricCollectionFromContract<
     return {
       collection: null,
       disabledReason: "invalid-sync-origin",
+      health: createElectricCollectionHealth(contract, {
+        disabledReason: "invalid-sync-origin",
+        now: runtime.now,
+        status: "disabled",
+      }),
       status: "disabled",
     } as const satisfies DataPlaneElectricCollectionResult<never>;
   }
 
+  const health = createElectricCollectionHealth(contract, {
+    now: runtime.now,
+    status: "connecting",
+  });
   const shapeOptions = createElectricShapeOptions(contract, {
     fetch: runtime.fetch,
-    onSyncError: options.onSyncError,
+    onSyncError: (error) => {
+      health.markUnavailable(error);
+      options.onSyncError?.(error);
+    },
     shapeUrl,
   });
   const collection = createCollection(
@@ -193,9 +212,11 @@ export function createElectricCollectionFromContract<
       syncMode: contract.syncMode ?? "eager",
     })
   );
+  connectElectricCollectionHealth(collection, health);
 
   return {
     collection,
+    health,
     shapeUrl,
     status: "enabled",
   } as const;
@@ -378,9 +399,8 @@ export function normalizeElectricSyncError(
 
   if (isNetworkLikeError(error)) {
     return {
-      cause: error,
       kind: "network",
-      message: formatUnknownElectricError(error),
+      message: formatElectricSyncErrorMessage("network"),
       retryable: true,
       shapeName,
     };
@@ -388,18 +408,16 @@ export function normalizeElectricSyncError(
 
   if (isMissingHeadersError(error)) {
     return {
-      cause: error,
       kind: "missing-headers",
-      message: error.message,
+      message: formatElectricSyncErrorMessage("missing-headers"),
       retryable: false,
       shapeName,
     };
   }
 
   return {
-    cause: error,
     kind: "unknown",
-    message: formatUnknownElectricError(error),
+    message: formatElectricSyncErrorMessage("unknown"),
     retryable: false,
     shapeName,
   };
@@ -413,9 +431,8 @@ function normalizeElectricFetchError(
   const kind = classifyElectricFetchError(status);
 
   return {
-    cause: error,
     kind,
-    message: error.message,
+    message: formatElectricSyncErrorMessage(kind, status),
     retryable: isRetryableElectricFetchStatus(status),
     shapeName,
     status,
@@ -487,8 +504,41 @@ function isNetworkLikeError(error: unknown) {
   );
 }
 
-function formatUnknownElectricError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+function formatElectricSyncErrorMessage(
+  kind: DataPlaneElectricSyncErrorKind,
+  status?: number | undefined
+) {
+  switch (kind) {
+    case "auth": {
+      return "Sync authorization failed.";
+    }
+    case "configuration": {
+      return status === undefined
+        ? "Sync configuration failed."
+        : `Sync configuration failed with status ${status}.`;
+    }
+    case "missing-headers": {
+      return "Sync response is missing required Electric headers.";
+    }
+    case "network": {
+      return "Sync request failed before a response was received.";
+    }
+    case "rate-limited": {
+      return "Sync origin rate limited the collection.";
+    }
+    case "server": {
+      return status === undefined
+        ? "Sync origin is unavailable."
+        : `Sync origin is unavailable with status ${status}.`;
+    }
+    case "unknown": {
+      return "Sync failed.";
+    }
+    default: {
+      kind satisfies never;
+      return "Sync failed.";
+    }
+  }
 }
 
 function resolveElectricRuntime(
@@ -497,8 +547,68 @@ function resolveElectricRuntime(
   return {
     fetch: runtime?.fetch,
     isBrowser: runtime?.isBrowser ?? isBrowserRuntime(),
+    now: runtime?.now,
     syncOrigin: readViteSyncOrigin(),
   };
+}
+
+function createElectricCollectionHealth<
+  Schema extends StandardSchemaV1<unknown, ElectricRow<unknown>>,
+  Key extends string | number,
+>(
+  contract: DataPlaneElectricCollectionContract<Schema, Key>,
+  options: {
+    readonly disabledReason?: DataPlaneElectricDisabledReason | undefined;
+    readonly now?: (() => number) | undefined;
+    readonly status: "connecting" | "disabled";
+  }
+) {
+  return createDataPlaneCollectionHealth({
+    collection: contract.collection,
+    collectionId: contract.id,
+    disabledReason: options.disabledReason,
+    now: options.now,
+    source: "electric",
+    status: options.status,
+    subscriptionName: contract.shapeName,
+  });
+}
+
+interface ElectricCollectionHealthObservable {
+  readonly status: string;
+  readonly on?:
+    | ((
+        event: "status:change",
+        callback: (event: { readonly status: string }) => void
+      ) => () => void)
+    | undefined;
+  readonly onFirstReady?: ((callback: () => void) => void) | undefined;
+}
+
+export function connectElectricCollectionHealth(
+  collection: ElectricCollectionHealthObservable,
+  health: DataPlaneCollectionHealth
+) {
+  const markReadyWhenReady = (status: string) => {
+    if (status === "ready") {
+      health.markReady();
+    }
+  };
+  const unsubscribe = collection.on?.("status:change", (event) => {
+    markReadyWhenReady(event.status);
+  });
+
+  if (collection.status === "ready") {
+    health.markReady();
+  }
+
+  if (unsubscribe === undefined) {
+    collection.onFirstReady?.(() => {
+      health.markReady();
+    });
+  }
+
+  return unsubscribe ?? (() => null);
 }
 
 function isBrowserRuntime() {

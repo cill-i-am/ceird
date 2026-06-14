@@ -34,14 +34,41 @@ ElectricSQL integration starts at this same boundary. Raw
 in `apps/app/src/data-plane/electric-collection.ts`, which standardizes
 collection ids, named sync shapes, `VITE_SYNC_ORIGIN` URL construction, schema
 pass-through, snake-case/camel-case column mapping, row transformation hooks,
-auth-aware fetch behavior, and normalized sync errors. Feature slices may opt
-into that factory while keeping their current Query Collection contracts
-available as fallbacks; route views must not construct Electric streams
-directly.
+auth-aware fetch behavior, normalized sync errors, and the shared collection
+health surface. Feature slices may opt into that factory while keeping their
+current Query Collection contracts available as fallbacks; route views must not
+construct Electric streams directly.
 The initial factory supports eager full-shape sync only. Electric
 `on-demand`/`progressive` subset loading remains a future extension because the
 current sync Worker intentionally accepts named shape requests and protocol-safe
 resume/live parameters, not caller-supplied subset predicates.
+
+## Collection Health
+
+Data-plane collection health is a durable app boundary owned by
+`apps/app/src/data-plane/collection-health.ts`. Electric-backed collection
+creation returns a per-collection health object alongside the TanStack DB
+collection. The health snapshot records the collection root, stable collection
+id, source, named subscription, status, start timestamp, last status-change
+timestamp, initial readiness latency, sanitized last error, recovery-attempt
+count, and fallback reason when a Query Collection path is active.
+
+The shared status vocabulary is `disabled`, `connecting`, `ready`,
+`unavailable`, and `fallback-active`. Electric disabled states cover SSR,
+missing `VITE_SYNC_ORIGIN`, and invalid sync origins. Browser Electric
+collections start as `connecting`; their initial ready latency is recorded when
+TanStack DB first marks the collection ready after Electric reaches its
+up-to-date point. `ShapeStreamOptions.onError` is normalized into the Ceird
+health error shape before any caller retry handling runs. That error shape keeps
+only kind, safe message, retryability, and optional HTTP status, so auth
+cookies, bearer tokens, source secrets, sync URLs, and raw Electric internals do
+not cross the data-plane status boundary.
+
+Query Collection fallback uses the same health object by marking
+`fallback-active` through the shared helper instead of carrying a separate
+feature-local flag. Product routes may consume the resulting status through
+feature data-plane modules, but should not inspect raw Electric errors or
+construct a separate fallback-health model.
 
 Completeness is a discriminated contract, not a boolean. `complete-tenant`
 means the data covers the active organization scope. `paged-query` and
