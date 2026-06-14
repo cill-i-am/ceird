@@ -39,6 +39,17 @@ historical plans as decision context only.
 - Use `docs/superpowers/specs` and `docs/superpowers/plans` to understand prior
   intent, but verify current behavior against source before relying on them.
 
+## Instruction Mirrors
+
+`AGENTS.md` is the source of truth for local agent instructions. Every canonical
+instruction node in the tracked source tree should have a colocated `CLAUDE.md`
+mirror as a symlink to `AGENTS.md`.
+
+- Prefer `CLAUDE.md -> AGENTS.md` symlinks so mirror content cannot drift.
+- Use a regular `CLAUDE.md` file only when a tool or runtime cannot follow a
+  symlink, and document that exception in the nearest `AGENTS.md`.
+- Do not add Claude-only instruction content; update `AGENTS.md` instead.
+
 ## Worktrees And Alchemy Stages
 
 Local development is Alchemy-native. Root `pnpm dev` delegates to
