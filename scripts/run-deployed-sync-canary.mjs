@@ -382,16 +382,36 @@ async function waitForAuthenticatedShape(config, dependencies, cookieJar) {
   let lastBody = "";
 
   for (let attempt = 1; attempt <= config.attempts; attempt += 1) {
-    const response = await fetchWithTimeout(
-      dependencies.fetch,
-      shapeUrl,
-      {
-        headers: makeHeaders({ config, cookieJar }),
-        method: "GET",
-      },
-      config.requestTimeoutMs
-    );
-    const body = await readResponseText(response);
+    let response;
+    let body = "";
+
+    try {
+      response = await fetchWithTimeout(
+        dependencies.fetch,
+        shapeUrl,
+        {
+          headers: makeHeaders({ config, cookieJar }),
+          method: "GET",
+        },
+        config.requestTimeoutMs
+      );
+      body = await readResponseText(response);
+    } catch (error) {
+      lastStatus = "request-error";
+      lastBody = summarizeBody(
+        error instanceof Error ? error.message : String(error)
+      );
+
+      if (attempt < config.attempts) {
+        dependencies.logger.log(
+          `Authenticated Electric sync canary attempt ${attempt} failed before a response: ${lastBody}; waiting for container readiness.`
+        );
+        await dependencies.delay(config.intervalMs);
+        continue;
+      }
+
+      break;
+    }
 
     lastStatus = String(response.status);
     lastBody = summarizeBody(body);

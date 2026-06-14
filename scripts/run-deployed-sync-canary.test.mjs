@@ -174,6 +174,89 @@ test("creates a verified org session and retries until the Electric shape respon
   );
 });
 
+test("retries shape request errors while the Electric container starts", async () => {
+  const requests = [];
+  const logs = [];
+  const result = await runDeployedSyncCanary(
+    {
+      apiUrl: "https://api.pr-123.ceird.app",
+      appUrl: "https://app.pr-123.ceird.app",
+      attempts: 2,
+      databaseUrl: "postgresql://ceird:secret@example/db",
+      intervalMs: 1,
+      requestTimeoutMs: 1000,
+      stage: "pr-123",
+      syncUrl: "https://sync.pr-123.ceird.app",
+    },
+    {
+      canaryId: "loyw3v28-abcdef12",
+      createDatabaseClient: () => makeDatabaseClient([]),
+      delay: () => Promise.resolve(),
+      fetch: (url) => {
+        requests.push(url);
+
+        if (url.endsWith("/api/auth/sign-up/email")) {
+          return makeJsonResponse(
+            { ok: true },
+            {
+              headers: {
+                "set-cookie": "ceird_session=session-token; Path=/; HttpOnly",
+              },
+            }
+          );
+        }
+
+        if (url.endsWith("/api/auth/organization/create")) {
+          return makeJsonResponse({
+            id: "org_canary",
+            name: "Sync Canary",
+            slug: "sync-canary-loyw3v28-abcdef12",
+          });
+        }
+
+        if (
+          url.endsWith("/api/auth/organization/set-active") ||
+          url.endsWith("/api/auth/get-session")
+        ) {
+          return makeJsonResponse({ ok: true });
+        }
+
+        if (url.endsWith("/v1/shapes/jobs?offset=-1")) {
+          const syncRequests = requests.filter((requestUrl) =>
+            requestUrl.endsWith("/v1/shapes/jobs?offset=-1")
+          );
+
+          if (syncRequests.length === 1) {
+            return Promise.reject(new Error("This operation was aborted"));
+          }
+
+          return makeTextResponse('[{"headers":{"control":"up-to-date"}}]', {
+            headers: { "electric-handle": "shape-handle" },
+            status: 200,
+          });
+        }
+
+        throw new Error(`Unexpected URL ${url}`);
+      },
+      logger: {
+        log(message) {
+          logs.push(message);
+        },
+      },
+    }
+  );
+
+  assert.equal(result.shape.status, 200);
+  assert.equal(
+    requests.filter((request) => request.endsWith("/v1/shapes/jobs?offset=-1"))
+      .length,
+    2
+  );
+  assert.ok(
+    logs.some((message) => message.includes("failed before a response"))
+  );
+});
+
 test("fails when the authenticated Electric shape never responds successfully", async () => {
   await assert.rejects(
     runDeployedSyncCanary(
