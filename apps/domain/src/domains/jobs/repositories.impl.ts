@@ -110,7 +110,7 @@ import {
 } from "../../platform/database/schema.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
-import { listSiteLabelsForSitesWithDrizzle } from "../sites/site-label-queries.js";
+import { listSiteLabelsForSitesWithSql } from "../sites/site-label-queries.js";
 import type { SiteOptionRow } from "../sites/site-option-row.js";
 import { mapSiteOptionRow } from "../sites/site-option-row.js";
 import { WorkItemOrganizationMismatchError } from "./errors.js";
@@ -1466,7 +1466,7 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           [
             listLabelsForWorkItems(organizationId, workItemIds),
             includeSiteLabels
-              ? listSiteLabelsForSitesWithDrizzle(db, organizationId, [
+              ? listSiteLabelsForSitesWithSql(sql, organizationId, [
                   ...new Set(routableSiteIds),
                 ])
               : Effect.succeed(new Map<SiteId, readonly Label[]>()),
@@ -2142,7 +2142,7 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           }
 
           const labelsBySiteId = includeLabels
-            ? yield* listSiteLabelsForSitesWithDrizzle(db, organizationId, [
+            ? yield* listSiteLabelsForSitesWithSql(sql, organizationId, [
                 siteId,
               ])
             : new Map<SiteId, Label[]>();

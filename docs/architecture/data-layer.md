@@ -94,14 +94,16 @@ thread create/list/find/archive/touch/actor-resolution reads, ordinary
 connected-app consent checks for MCP request validation, site CRUD/options/list
 reads, site label read helpers, and jobs safe-read paths such as scoped external
 options, member/contact/collaborator reads, accessible-work-item ids, selected
-job detail projections, and job/site label read helpers. These paths keep
-explicit column projections and continue to map Drizzle query failures into the
-same domain storage-error surfaces as their previous raw SQL implementations.
+job detail projections, and work-item label reads. These paths keep explicit
+column projections and continue to map Drizzle query failures into the same
+domain storage-error surfaces as their previous raw SQL implementations.
 
-After the TSK-164 final pass, production domain repositories retain 53
-`yield* sql` raw Effect SQL statements across seven files. Two stale raw
-site-label helper statements were removed in this pass after their remaining
-jobs callers moved to the Drizzle helper. The retained raw inventory is:
+After the TSK-164 final pass, production domain repositories retain 58
+`yield* sql` raw Effect SQL call sites across eight files. The unused
+organization-wide raw site-label helper was removed in this pass. The jobs
+repository site-label read helper remains raw after Preview/E2E showed the
+mixed raw-write plus Drizzle-detail refresh path was not a safe whole-slice
+migration. The retained raw inventory is:
 
 | Area                                   | Retained raw shape                                                                                                                                            | Rationale                                                                                                                                                                                                        |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -111,7 +113,7 @@ jobs callers moved to the Drizzle helper. The retained raw inventory is:
 | Connected-app listing and disconnect   | lateral token-count projections, transactional consent delete, refresh-token revoke, access-token delete, and JSONB audit insert                              | The path is Better Auth adjacent and security-sensitive. The list query depends on lateral aggregates, and disconnect must keep revocation plus audit as one transaction.                                        |
 | Comments repository                    | comment list reads plus CTE ownership writes for work-item and site comments                                                                                  | Comment ownership rows and inserted comments are coupled through CTE projections, and site comment creation locks the active site. Migrate only as a whole comments repository slice with focused comment tests. |
 | Jobs repository write and lock helpers | linked-reference validation, collaborator writes, job create/patch/transition/reopen, comments, activity, visits, contact creation, and `for update` variants | These methods participate in service-level transaction workflows or write-side invariants. Partial Drizzle rewrites would make lock and rollback semantics harder to review.                                     |
-| Job and site label assignments         | active-label CTEs, `for share`, insert/delete projections, and changed-count results                                                                          | Assignment endpoints need atomic existence checks and changed-count projections. The raw CTEs make not-found versus no-op outcomes explicit.                                                                     |
+| Job and site label assignments         | active-label CTEs, `for share`, insert/delete projections, changed-count results, and jobs detail/proximity site-label reads                                  | Assignment endpoints need atomic existence checks and changed-count projections. Jobs detail/proximity keeps the related site-label read raw until the whole post-write detail refresh path can move safely.     |
 | Jobs list/activity/search              | dynamic filters, external-collaborator predicates, cursor comparisons, and text search                                                                        | These are plan-sensitive, predicate-heavy read paths that remain easier to audit as SQL until a whole query-builder rewrite has equivalent tests.                                                                |
 | Jobs dashboard and proximity           | filtered aggregates, dashboard top rows, routeable-site predicates, exclusion counts, candidate caps, and search predicates                                   | The SQL encodes Postgres-specific aggregate and route-candidate behavior. Mechanical Drizzle translation would add risk without improving clarity.                                                               |
 | Sites proximity and active-job stats   | filtered aggregates, priority ranking, concat/search behavior, routeable-site predicates, and candidate caps                                                  | The remaining site raw reads are aggregate/query-plan-sensitive and intentionally mirror the jobs proximity/dashboard patterns.                                                                                  |
