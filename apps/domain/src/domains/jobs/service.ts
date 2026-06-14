@@ -259,10 +259,7 @@ export class JobsService extends Context.Service<JobsService>()(
             normalizeJobProximityFilters(input.filters),
             getRepositoryAccess(actor)
           )
-          .pipe(
-            Effect.catchTag("SqlError", failJobsStorageError),
-            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError)
-          );
+          .pipe(catchJobsStorageError());
         const routeCostContext = yield* makeCurrentRouteCostContext({
           actorUserId: actor.userId,
           organizationId: actor.organizationId,
@@ -1166,11 +1163,7 @@ function loadJobDetailOrFail(
   return Effect.gen(function* () {
     const detail = yield* jobsRepository
       .getDetail(organizationId, workItemId, access)
-      .pipe(
-        Effect.catchTag("SqlError", failJobsStorageError),
-        Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
-        Effect.map(Option.getOrUndefined)
-      );
+      .pipe(catchJobsStorageError(), Effect.map(Option.getOrUndefined));
 
     if (detail !== undefined) {
       return detail;

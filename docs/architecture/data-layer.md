@@ -55,40 +55,71 @@ Use regular Drizzle when:
 - maintaining the Better Auth schema
 - following the library's expected adapter shape
 
-Use the Effect SQL layers when:
-
-- new backend slices need Effect-native query composition
-- a service already lives naturally inside Effect layers
-- observability, dependency injection, or Effect-based composition matters
-
 Use `DomainDrizzle` when:
 
-- product repositories can benefit from schema-backed table and column
+- product repositories need Effect-native, schema-backed table and column
   references
-- queries are ordinary CRUD, joins, upserts, bounded pagination, or explicit
-  projections
-- Drizzle `sql` fragments are enough for a small SQL-specific expression
-- agent thread list/find/archive/touch/actor-resolution reads and ordinary MCP
-  session, membership, and connected-app consent checks need Effect-native
-  schema-backed access
+- queries are ordinary CRUD, joins, upserts, bounded pagination, authorization
+  predicates, or explicit projections
+- a small SQL-specific expression is clearer as a Drizzle `sql` fragment than
+  as raw Effect SQL
+- repository failures can be mapped from `EffectDrizzleQueryError` or Drizzle
+  rollback errors into the same typed storage-error surface as the old raw path
+
+Use raw Drizzle `sql` fragments when:
+
+- the surrounding query should remain a Drizzle query builder expression
+- the fragment is parameterized through Drizzle's `sql` template
+- the fragment is local to an expression such as `now()`, `count(*)::int`,
+  `is not distinct from`, `nulls last`, filtered aggregate syntax, or a
+  predicate that Drizzle does not model directly
+
+Use raw `SqlClient` / Effect SQL when:
+
+- the path is already a raw transaction slice and a partial Drizzle rewrite
+  would split lock or rollback semantics across boundaries
+- the SQL depends on advisory locks, explicit row locks,
+  `for update skip locked`, CTE write projections, lateral joins, JSONB
+  search/cursor behavior, filtered aggregates, or query plans that are clearer
+  to review as SQL
+- the path is Better Auth adjacent and the regular Better Auth adapter or
+  auth-token revocation policy is the source of truth
+- moving the query would require broader product, API, auth, organization, or
+  migration-history changes
 
 Current `DomainDrizzle` migrations include organization label CRUD and
 active-label reads, user preference get/upsert paths, current organization actor
-membership lookup, MCP actor session/membership lookup, and jobs safe-read paths
-such as scoped external options, member/contact/collaborator reads, and selected
-job detail projections. These paths keep explicit column projections and
-continue to map Drizzle query failures into the same domain storage-error
-surfaces as their previous raw SQL implementations.
+membership lookup, MCP actor session/membership lookup, straightforward agent
+thread create/list/find/archive/touch/actor-resolution reads, ordinary
+connected-app consent checks for MCP request validation, site CRUD/options/list
+reads, site label read helpers, and jobs safe-read paths such as scoped external
+options, member/contact/collaborator reads, accessible-work-item ids, selected
+job detail projections, and job/site label read helpers. These paths keep
+explicit column projections and continue to map Drizzle query failures into the
+same domain storage-error surfaces as their previous raw SQL implementations.
 
-Keep raw Effect SQL when CTEs, locks, lateral joins, `skip locked`, JSONB
-cursor/search behavior, query-plan sensitivity, or review clarity make raw SQL
-the better representation. Repository services should map
-`EffectDrizzleQueryError`, Drizzle transaction rollback failures, and `SqlError`
-into their typed storage-error surface instead of leaking unknown failures.
-The agent current-thread prepare path remains raw because it uses a
-transaction-scoped advisory lock. The agent action-run ledger also remains raw
-so idempotent insert-or-replay, stale recovery, and terminal-race behavior stay
-reviewed as one SQL slice.
+After the TSK-164 final pass, production domain repositories retain 53
+`yield* sql` raw Effect SQL statements across seven files. Two stale raw
+site-label helper statements were removed in this pass after their remaining
+jobs callers moved to the Drizzle helper. The retained raw inventory is:
+
+| Area                                   | Retained raw shape                                                                                                                                            | Rationale                                                                                                                                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent current-thread prepare           | transaction-scoped advisory lock plus current active-thread lookup                                                                                            | `pg_advisory_xact_lock` protects idempotent prepare; the lock and lookup should remain one reviewed raw transaction slice.                                                                                       |
+| Agent action-run ledger                | insert-or-replay, terminal success/failure updates, stale recovery, and terminal-race lookup                                                                  | Idempotency, replay, and abandoned-running-row recovery are ledger semantics. Keeping the whole ledger raw avoids splitting race behavior across query boundaries.                                               |
+| Auth rate-limit cleanup                | batched delete using `for update skip locked`                                                                                                                 | Concurrent cleanup workers must claim bounded victim rows without blocking request writes. The SQL shape is the concurrency control.                                                                             |
+| Connected-app listing and disconnect   | lateral token-count projections, transactional consent delete, refresh-token revoke, access-token delete, and JSONB audit insert                              | The path is Better Auth adjacent and security-sensitive. The list query depends on lateral aggregates, and disconnect must keep revocation plus audit as one transaction.                                        |
+| Comments repository                    | comment list reads plus CTE ownership writes for work-item and site comments                                                                                  | Comment ownership rows and inserted comments are coupled through CTE projections, and site comment creation locks the active site. Migrate only as a whole comments repository slice with focused comment tests. |
+| Jobs repository write and lock helpers | linked-reference validation, collaborator writes, job create/patch/transition/reopen, comments, activity, visits, contact creation, and `for update` variants | These methods participate in service-level transaction workflows or write-side invariants. Partial Drizzle rewrites would make lock and rollback semantics harder to review.                                     |
+| Job and site label assignments         | active-label CTEs, `for share`, insert/delete projections, and changed-count results                                                                          | Assignment endpoints need atomic existence checks and changed-count projections. The raw CTEs make not-found versus no-op outcomes explicit.                                                                     |
+| Jobs list/activity/search              | dynamic filters, external-collaborator predicates, cursor comparisons, and text search                                                                        | These are plan-sensitive, predicate-heavy read paths that remain easier to audit as SQL until a whole query-builder rewrite has equivalent tests.                                                                |
+| Jobs dashboard and proximity           | filtered aggregates, dashboard top rows, routeable-site predicates, exclusion counts, candidate caps, and search predicates                                   | The SQL encodes Postgres-specific aggregate and route-candidate behavior. Mechanical Drizzle translation would add risk without improving clarity.                                                               |
+| Sites proximity and active-job stats   | filtered aggregates, priority ranking, concat/search behavior, routeable-site predicates, and candidate caps                                                  | The remaining site raw reads are aggregate/query-plan-sensitive and intentionally mirror the jobs proximity/dashboard patterns.                                                                                  |
+| Organization security activity         | JSONB metadata search, target joins, microsecond cursor formatting, and cursor predicates                                                                     | The audit log list is JSONB and cursor heavy. Raw SQL keeps target search and stable cursor formatting visible in one query.                                                                                     |
+
+Repository services should map `EffectDrizzleQueryError`, Drizzle transaction
+rollback failures, and `SqlError` into their typed storage-error surface instead
+of leaking unknown failures.
 
 ## Cloudflare Neon Postgres And Hyperdrive
 
