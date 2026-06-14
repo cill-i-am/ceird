@@ -29,8 +29,19 @@ are the first cursor page filtered by `siteId`. Job options remain an eager
 complete-tenant option collection. Labels are a scoped option index. Job
 details, collaborators, and site comments are lazy per-record collections that
 request snapshots from their mounted subscribers rather than from Start loaders.
-Future ElectricSQL integration should keep these contracts and swap the sync
-implementation behind them rather than moving state back into route views.
+ElectricSQL integration starts at this same boundary. Raw
+`@tanstack/electric-db-collection` and `@electric-sql/client` usage belongs only
+in `apps/app/src/data-plane/electric-collection.ts`, which standardizes
+collection ids, named sync shapes, `VITE_SYNC_ORIGIN` URL construction, schema
+pass-through, snake-case/camel-case column mapping, row transformation hooks,
+auth-aware fetch behavior, and normalized sync errors. Feature slices may opt
+into that factory while keeping their current Query Collection contracts
+available as fallbacks; route views must not construct Electric streams
+directly.
+The initial factory supports eager full-shape sync only. Electric
+`on-demand`/`progressive` subset loading remains a future extension because the
+current sync Worker intentionally accepts named shape requests and protocol-safe
+resume/live parameters, not caller-supplied subset predicates.
 
 Completeness is a discriminated contract, not a boolean. `complete-tenant`
 means the data covers the active organization scope. `paged-query` and
@@ -58,7 +69,9 @@ time.
 
 Do not call collection `preload()` in SSR loaders. Start loaders should fetch
 server DTOs, seed query cache, and let browser collection subscriptions own
-client sync.
+client sync. The Electric factory is SSR-safe by returning a disabled result
+during server render; browser-only ShapeStream state is created only when the
+runtime is hydrated and `VITE_SYNC_ORIGIN` is configured.
 
 ## Session Scope
 
@@ -88,8 +101,9 @@ widening the command implementation, not by bypassing the data plane.
 ## Enforcement
 
 `apps/app/src/test/data-plane-boundaries.test.ts` prevents product views from
-importing `queryCollectionOptions` or `createCollection` directly, keeps jobs
-and sites facades out of raw collection factories, verifies product roots stay
-distinct, and checks command affected-collection declarations against the known
-data-plane roots. When adding new API-backed product state, add a feature
+importing `queryCollectionOptions`, `createCollection`,
+`@tanstack/electric-db-collection`, or `@electric-sql/client` directly, keeps
+jobs and sites facades out of raw collection factories, verifies product roots
+stay distinct, and checks command affected-collection declarations against the
+known data-plane roots. When adding new API-backed product state, add a feature
 data-plane module and keep the same contract and command boundaries.
