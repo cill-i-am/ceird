@@ -25,7 +25,8 @@
     "test": "pnpm -r --if-present --workspace-concurrency=1 test && pnpm run test:infra && pnpm run test:scripts",
     "test:domain:integration": "node scripts/run-domain-integration-tests.mjs",
     "test:infra": "vitest run --dir infra --exclude 'opensrc/**'",
-    "test:scripts": "node --test scripts/*.test.mjs"
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "topology:check": "node scripts/check-instruction-topology.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260611.1",
