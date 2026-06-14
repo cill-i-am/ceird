@@ -37,6 +37,16 @@ const exposedElectricResponseHeaders = [
   "electric-up-to-date",
   REQUEST_ID_HEADER,
 ];
+const defaultSyncAuthorizationCacheTtlMs = 10_000;
+const maxSyncAuthorizationCacheTtlMs = 60_000;
+const maxSyncAuthorizationCacheEntries = 2048;
+const syncAuthorizationCache = new Map<
+  string,
+  {
+    readonly authorization: SyncShapeAuthorization;
+    readonly expiresAtMs: number;
+  }
+>();
 
 export const SYNC_WORKER_FAILURE_ERROR_TAG =
   "@ceird/sync/WorkerFailure" as const;
@@ -76,6 +86,15 @@ export interface SyncWorkerDependencies {
   readonly fetchElectric?: (
     request: Request
   ) => Effect.Effect<Response, SyncWorkerFailure>;
+  readonly now?: () => number;
+}
+
+type RequiredSyncRequestDependencies = Required<
+  Pick<SyncWorkerDependencies, "authorizeShape" | "fetchElectric">
+>;
+
+export function clearSyncAuthorizationCacheForTesting() {
+  syncAuthorizationCache.clear();
 }
 
 export function handleSyncWorkerFetch(
@@ -86,8 +105,11 @@ export function handleSyncWorkerFetch(
 ) {
   const startedAt = performance.now();
   const requestId = readRequestId(request);
-  const authorizeShape =
-    dependencies.authorizeShape ?? makeDomainShapeAuthorizer(env);
+  const authorizeShape = makeCachedShapeAuthorizer(
+    dependencies.authorizeShape ?? makeDomainShapeAuthorizer(env),
+    env,
+    dependencies.now ?? performance.now.bind(performance)
+  );
   const fetchElectric = dependencies.fetchElectric ?? makeElectricFetcher(env);
 
   return Effect.gen(function* () {
@@ -96,6 +118,7 @@ export function handleSyncWorkerFetch(
         makeFailure("SyncWorkerMisconfigured", formatUnknownError(cause), 503)
       )
     );
+    yield* readSyncAuthorizationCacheTtlMs(env);
 
     return yield* handleSyncRequest(request, env, {
       authorizeShape,
@@ -160,7 +183,7 @@ function recordSyncWorkerAnalytics(
 function handleSyncRequest(
   request: Request,
   env: SyncWorkerEnv,
-  dependencies: Required<SyncWorkerDependencies> & {
+  dependencies: RequiredSyncRequestDependencies & {
     readonly requestId: string;
   }
 ) {
@@ -290,6 +313,204 @@ function makeDomainShapeAuthorizer(env: SyncWorkerEnv) {
         },
       })
     );
+}
+
+function makeCachedShapeAuthorizer(
+  authorizeShape: RequiredSyncRequestDependencies["authorizeShape"],
+  env: SyncWorkerEnv,
+  now: () => number
+) {
+  return (request: Request, shapeName: SyncShapeName, requestId: string) =>
+    Effect.gen(function* () {
+      const ttlMs = yield* readSyncAuthorizationCacheTtlMs(env);
+
+      if (ttlMs === 0) {
+        return yield* authorizeAndValidateShape(
+          authorizeShape,
+          request,
+          shapeName,
+          requestId
+        );
+      }
+
+      const cacheKey = yield* makeSyncAuthorizationCacheKey(request, shapeName);
+
+      if (cacheKey === null) {
+        return yield* authorizeAndValidateShape(
+          authorizeShape,
+          request,
+          shapeName,
+          requestId
+        );
+      }
+
+      const nowMs = now();
+      const cachedGrant = syncAuthorizationCache.get(cacheKey);
+
+      if (cachedGrant !== undefined) {
+        if (
+          cachedGrant.expiresAtMs > nowMs &&
+          cachedGrant.authorization.shape === shapeName
+        ) {
+          return cachedGrant.authorization;
+        }
+
+        syncAuthorizationCache.delete(cacheKey);
+      }
+
+      const authorization = yield* authorizeAndValidateShape(
+        authorizeShape,
+        request,
+        shapeName,
+        requestId
+      );
+
+      pruneExpiredSyncAuthorizationCache(nowMs);
+      syncAuthorizationCache.set(cacheKey, {
+        authorization,
+        expiresAtMs: nowMs + ttlMs,
+      });
+      pruneOversizedSyncAuthorizationCache();
+
+      return authorization;
+    }).pipe(
+      Effect.withSpan("SyncWorker.authorizeShape.cache", {
+        attributes: {
+          "http.request_id": requestId,
+          "sync.shapeName": shapeName,
+        },
+      })
+    );
+}
+
+function authorizeAndValidateShape(
+  authorizeShape: RequiredSyncRequestDependencies["authorizeShape"],
+  request: Request,
+  shapeName: SyncShapeName,
+  requestId: string
+) {
+  return Effect.gen(function* () {
+    const authorization = yield* authorizeShape(request, shapeName, requestId);
+
+    if (authorization.shape !== shapeName) {
+      return yield* Effect.fail(
+        makeFailure(
+          "SyncAuthorizationInvalidResponse",
+          "Sync authorization response shape did not match the requested shape",
+          502,
+          shapeName
+        )
+      );
+    }
+
+    return authorization;
+  });
+}
+
+function readSyncAuthorizationCacheTtlMs(env: SyncWorkerEnv) {
+  return Effect.sync(() => {
+    const rawValue = env.SYNC_AUTHORIZATION_CACHE_TTL_SECONDS?.trim();
+
+    if (rawValue === undefined || rawValue.length === 0) {
+      return defaultSyncAuthorizationCacheTtlMs;
+    }
+
+    const value = Number(rawValue);
+
+    if (!Number.isFinite(value) || value < 0 || value > 60) {
+      throw new Error(
+        "SYNC_AUTHORIZATION_CACHE_TTL_SECONDS must be a number from 0 to 60"
+      );
+    }
+
+    return Math.round(value * 1000);
+  }).pipe(
+    Effect.mapError((cause) =>
+      makeFailure("SyncWorkerMisconfigured", formatUnknownError(cause), 503)
+    ),
+    Effect.map((ttlMs) => Math.min(ttlMs, maxSyncAuthorizationCacheTtlMs))
+  );
+}
+
+function makeSyncAuthorizationCacheKey(
+  request: Request,
+  shapeName: SyncShapeName
+) {
+  return Effect.tryPromise({
+    catch: (cause) =>
+      makeFailure(
+        "SyncAuthorizationUnavailable",
+        formatUnknownError(cause),
+        503,
+        shapeName
+      ),
+    try: async () => {
+      const identityParts = readSyncAuthorizationIdentityParts(request);
+
+      if (identityParts.length === 0) {
+        return null;
+      }
+
+      const digest = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(JSON.stringify(identityParts))
+      );
+
+      return `v1:${shapeName}:${formatDigestHex(digest)}`;
+    },
+  });
+}
+
+function readSyncAuthorizationIdentityParts(request: Request) {
+  const { headers } = request;
+  const authHeaderNames = ["authorization", "cookie"] as const;
+  const authParts = authHeaderNames.flatMap((name) =>
+    headers.get(name) === null ? [] : [[name, headers.get(name)] as const]
+  );
+
+  if (authParts.length === 0) {
+    return [];
+  }
+
+  const url = new URL(request.url);
+  const routingHeaderNames = [
+    "origin",
+    "referer",
+    "x-ceird-active-organization-id",
+    "x-ceird-organization-id",
+    "x-organization-id",
+  ] as const;
+  const routingParts = routingHeaderNames.flatMap((name) =>
+    headers.get(name) === null ? [] : [[name, headers.get(name)] as const]
+  );
+
+  return [["host", url.host] as const, ...routingParts, ...authParts];
+}
+
+function formatDigestHex(digest: ArrayBuffer) {
+  return [...new Uint8Array(digest)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function pruneExpiredSyncAuthorizationCache(nowMs: number) {
+  for (const [cacheKey, grant] of syncAuthorizationCache) {
+    if (grant.expiresAtMs <= nowMs) {
+      syncAuthorizationCache.delete(cacheKey);
+    }
+  }
+}
+
+function pruneOversizedSyncAuthorizationCache() {
+  while (syncAuthorizationCache.size > maxSyncAuthorizationCacheEntries) {
+    const oldestKey = syncAuthorizationCache.keys().next().value;
+
+    if (oldestKey === undefined) {
+      return;
+    }
+
+    syncAuthorizationCache.delete(oldestKey);
+  }
 }
 
 function readDomainAuthorizationFailureMessage(response: Response) {

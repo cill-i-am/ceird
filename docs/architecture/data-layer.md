@@ -247,6 +247,21 @@ Electric source parameters, then injects the authorized table, predicate,
 parameters, and source secret before forwarding to the `ElectricSql` Durable
 Object and container. Postgres remains the source of truth; Electric provides
 client-facing shape replication for selected domain tables.
+To reduce repeated session and membership checks on hot polling paths, the sync
+Worker keeps a v1 authorization cache in warm isolate memory only. Successful
+domain authorization payloads are cached for
+`SYNC_AUTHORIZATION_CACHE_TTL_SECONDS`, which defaults to 10 seconds and is
+bounded to 0-60 seconds. The cache key includes the requested shape and a
+SHA-256 fingerprint of auth-bearing request identity material, including
+cookies or bearer tokens when present, plus routing context such as origin,
+referer, host, and explicit organization headers. Raw cookies and bearer tokens
+are never stored. Cache values retain the authorized user id, organization id,
+scope, table, predicate, and params returned by the domain Worker, and cached
+entries are only reused for the same requested shape. Authorization failures,
+malformed payloads, unknown shapes, and domain/service errors are never cached;
+expired or absent grants call the domain Worker live and keep fail-closed
+behavior. Active membership invalidation is intentionally out of scope for v1,
+so revocation exposure is bounded by the short TTL.
 Pull-request previews can temporarily deploy the sync Worker without the
 Electric Container because preview environments intentionally avoid
 account-token lifecycle and full container startup. Ephemeral push-to-main cloud

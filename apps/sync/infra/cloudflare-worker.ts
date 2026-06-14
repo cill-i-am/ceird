@@ -82,6 +82,7 @@ export interface SyncWorkerConfiguredEnv {
   readonly ELECTRIC_SQL_LOCATION_HINT: DurableObjectLocationHint;
   readonly ELECTRIC_SOURCE_SECRET: Redacted.Redacted<string>;
   readonly NODE_ENV: "production";
+  readonly SYNC_AUTHORIZATION_CACHE_TTL_SECONDS: "10";
 }
 
 export interface ElectricContainerConfiguredEnv {
@@ -161,6 +162,7 @@ export function makeSyncWorkerConfiguredEnv(input: {
     ELECTRIC_SQL_LOCATION_HINT: input.electricSqlLocationHint,
     ELECTRIC_SOURCE_SECRET: input.electricSourceSecret,
     NODE_ENV: "production",
+    SYNC_AUTHORIZATION_CACHE_TTL_SECONDS: "10",
   } satisfies SyncWorkerConfiguredEnvInput;
   const electricContainerEnv = makeSyncWorkerElectricContainerEnv(
     input.electricContainer

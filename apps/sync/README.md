@@ -42,6 +42,15 @@ remain a
 Alchemy container binding; this is the class Cloudflare marks as
 container-enabled during application attachment.
 
+The sync Worker keeps a short-lived authorization cache in warm isolate memory
+only. Successful domain authorization payloads are cached for
+`SYNC_AUTHORIZATION_CACHE_TTL_SECONDS`, which defaults to `10` and may be set
+from `0` to `60` seconds. Cache keys include the shape name and a SHA-256
+fingerprint of auth-bearing request identity material such as cookies or bearer
+tokens, plus routing context; raw cookies and tokens are never stored. Failed,
+malformed, or unavailable authorization responses are not cached, so absent or
+expired grants fall back to the live domain authorization path and fail closed.
+
 ## Important Paths
 
 | Path                                                    | Purpose                                                                   |

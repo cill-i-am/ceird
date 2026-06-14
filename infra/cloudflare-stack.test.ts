@@ -385,6 +385,7 @@ type SyncWorkerStackRuntimeConfigEnv = Required<
     | "ELECTRIC_SQL_LOCATION_HINT"
     | "ELECTRIC_SOURCE_SECRET"
     | "NODE_ENV"
+    | "SYNC_AUTHORIZATION_CACHE_TTL_SECONDS"
   >
 > &
   Pick<
@@ -669,6 +670,7 @@ describe("Cloudflare stack", () => {
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
       ELECTRIC_SQL_LOCATION_HINT: "weur",
       NODE_ENV: "production",
+      SYNC_AUTHORIZATION_CACHE_TTL_SECONDS: "10",
     });
   });
 
@@ -1348,6 +1350,7 @@ describe("Cloudflare stack", () => {
         ELECTRIC_SQL_LOCATION_HINT: "weur",
         ELECTRIC_SOURCE_SECRET: electricSourceSecret,
         NODE_ENV: "production",
+        SYNC_AUTHORIZATION_CACHE_TTL_SECONDS: "10",
       },
       name: "ceird-main-sync",
       url: false,
