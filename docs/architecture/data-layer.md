@@ -2,15 +2,16 @@
 
 ## Overview
 
-The authentication slice uses two closely related database paths:
+The authentication slice uses three closely related database paths:
 
 - regular Drizzle for Better Auth's adapter
-- Effect SQL for domain-owned repository code
+- Effect SQL for existing raw domain-owned repository code
+- Effect Drizzle for product repositories that can use schema-backed queries
 
 Both target the same Postgres database, but they serve different jobs. The
 agents domain follows the same pattern as jobs, sites, labels, and comments:
-Drizzle owns table shape and migrations, while Effect SQL owns repository
-behavior.
+Drizzle owns table shape and migrations, while Effect SQL and Effect Drizzle
+own Effect-native repository behavior.
 
 ## Why Better Auth Uses Regular Drizzle
 
@@ -24,21 +25,27 @@ Because of that, the auth slice creates:
 
 This keeps the Better Auth boundary conventional and easy to reason about.
 
-## Why We Also Added Effect SQL
+## Why We Also Added Effect SQL And Effect Drizzle
 
 The project is Effect-first, so domain-owned repository code uses an
 Effect-native database path.
 
-The auth slice exposes:
+The domain database layer exposes:
 
 - `@effect/sql-pg` for Effect-native Postgres access
+- `DomainDrizzle`, backed by `drizzle-orm/effect-postgres`, for
+  Effect-native Drizzle queries
 
-That gives repository slices an Effect-compatible way to access the same
-Postgres backend without forcing Better Auth itself through a custom
-abstraction. We intentionally do not keep an `@effect/sql-drizzle` runtime
-layer: domain-owned repositories already use Effect SQL directly, and the v4
-Effect migration path does not have a matching SQL-Drizzle package to carry
-forward.
+Both are derived from the same `AppDatabase` pool. `AppDatabase` owns pool
+lifecycle and constructs the Better Auth `authDb`; `PgClient` borrows that
+pool; `DomainDrizzle` is then created from `PgClient`. This gives repository
+slices Effect-compatible access to the same Postgres backend without forcing
+Better Auth itself through a custom abstraction or creating a second pool.
+
+Do not add standalone `@effect/sql-drizzle`. That package belongs to an older
+Effect/Drizzle integration line. The repo-pinned Drizzle 1.0 RC line has its
+own built-in Effect Postgres driver at `drizzle-orm/effect-postgres`, and that
+is the supported path for product repository Drizzle work.
 
 ## Current Guidance
 
@@ -53,6 +60,20 @@ Use the Effect SQL layers when:
 - new backend slices need Effect-native query composition
 - a service already lives naturally inside Effect layers
 - observability, dependency injection, or Effect-based composition matters
+
+Use `DomainDrizzle` when:
+
+- product repositories can benefit from schema-backed table and column
+  references
+- queries are ordinary CRUD, joins, upserts, bounded pagination, or explicit
+  projections
+- Drizzle `sql` fragments are enough for a small SQL-specific expression
+
+Keep raw Effect SQL when CTEs, locks, lateral joins, `skip locked`, JSONB
+cursor/search behavior, query-plan sensitivity, or review clarity make raw SQL
+the better representation. Repository services should map
+`EffectDrizzleQueryError`, Drizzle transaction rollback failures, and `SqlError`
+into their typed storage-error surface instead of leaking unknown failures.
 
 ## Cloudflare Neon Postgres And Hyperdrive
 
@@ -93,10 +114,11 @@ delivery path uses the deployed Cloudflare Email Worker binding; package-local
 domain runs use deterministic development email delivery.
 
 The current stack uses Alchemy v2 native Neon and Cloudflare Hyperdrive
-resources. Domain runtime code uses the Effect 4 database layer and
-`@effect/sql-pg`, while deploy-time migration drift is tracked with Alchemy
-`Drizzle.Schema`. The root `infra` directory models that handoff as an
-`alchemy-drizzle-schema`
+resources. Domain runtime code uses the Effect 4 database layer,
+`@effect/sql-pg`, and the `DomainDrizzle` service from
+`drizzle-orm/effect-postgres`, while deploy-time migration drift is tracked
+with Alchemy `Drizzle.Schema`. The root `infra` directory models that handoff
+as an `alchemy-drizzle-schema`
 `NeonMigrationSource`, pointing at the `infra/domain-drizzle-schema.ts` wrapper.
 That wrapper loads the domain schema barrel at
 `apps/domain/src/platform/database/schema.ts` through the TypeScript resolver

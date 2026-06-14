@@ -1,6 +1,11 @@
 import { PgClient } from "@effect/sql-pg";
+import {
+  EffectDrizzleQueryError,
+  EffectTransactionRollbackError,
+} from "drizzle-orm/effect-core";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Effect, Layer, Redacted } from "effect";
+import { SqlError } from "effect/unstable/sql";
 import type { Pool } from "pg";
 
 import {
@@ -10,6 +15,9 @@ import {
 import {
   AppDatabase,
   AppEffectSqlLive,
+  describeDomainStorageFailure,
+  DomainDrizzle,
+  isDomainDrizzleStorageFailure,
   makeAppDatabaseRuntimeLive,
 } from "./database.js";
 
@@ -99,6 +107,7 @@ describe("shared app database effect layers", () => {
       Effect.scoped(
         Effect.all({
           appDatabase: AppDatabase,
+          domainDrizzle: DomainDrizzle,
           sqlClient: PgClient.PgClient,
         }).pipe(
           Effect.provide(
@@ -115,6 +124,35 @@ describe("shared app database effect layers", () => {
 
     expect(services.appDatabase.pool).toBe(pool);
     expect(databaseUrl).toBe(SHARED_POOL_DATABASE_URL);
+    expect(services.domainDrizzle.db.$client).toBe(services.sqlClient);
+  }, 10_000);
+
+  it("maps Effect Drizzle and transaction SQL failures as storage failures", () => {
+    const queryError = new EffectDrizzleQueryError({
+      cause: new Error("boom"),
+      params: [],
+      query: "select 1",
+    });
+    const rollbackError = new EffectTransactionRollbackError();
+    const sqlError = new SqlError.SqlError({
+      reason: new SqlError.UnknownError({
+        cause: new Error("connection lost"),
+        message: "SQL failed",
+      }),
+    });
+
+    expect(isDomainDrizzleStorageFailure(queryError)).toBeTruthy();
+    expect(isDomainDrizzleStorageFailure(rollbackError)).toBeTruthy();
+    expect(isDomainDrizzleStorageFailure(sqlError)).toBeTruthy();
+    expect(isDomainDrizzleStorageFailure(new Error("other"))).toBeFalsy();
+
+    expect(describeDomainStorageFailure(queryError)).toContain(
+      "Drizzle query failed"
+    );
+    expect(describeDomainStorageFailure(rollbackError)).toBe(
+      "Drizzle transaction rolled back"
+    );
+    expect(describeDomainStorageFailure(sqlError)).toBe("SQL failed");
   }, 10_000);
 });
 
