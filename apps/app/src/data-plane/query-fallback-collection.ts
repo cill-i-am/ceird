@@ -365,12 +365,12 @@ function createSwitchableFallbackCollection<
       }
 
       if (property === "subscribeChanges") {
-        return (callback: () => void) =>
+        return (...args: unknown[]) =>
           subscribeSwitchableCollection({
-            callback,
             getElectricCollection,
             health,
             queryCollection,
+            subscribeArgs: args,
           });
       }
 
@@ -389,25 +389,26 @@ function subscribeSwitchableCollection<
   QueryCollection extends object,
   ElectricCollection extends object,
 >({
-  callback,
   getElectricCollection,
   health,
   queryCollection,
+  subscribeArgs,
 }: {
-  readonly callback: () => void;
   readonly getElectricCollection: () => ElectricCollection;
   readonly health: DataPlaneFallbackHealth;
   readonly queryCollection: QueryCollection;
+  readonly subscribeArgs: unknown[];
 }) {
   let activeBackend = activeFallbackBackend(health);
+  let latestSnapshotArgs: unknown[] | undefined;
   let activeSubscription = subscribeCollectionChanges(
     activeBackend === "electric" ? getElectricCollection() : queryCollection,
-    callback
+    subscribeArgs
   );
   const unsubscribeHealth = health.subscribe(() => {
     const nextBackend = activeFallbackBackend(health);
     if (nextBackend === activeBackend) {
-      callback();
+      notifySubscribeChangesCallback(subscribeArgs);
       return;
     }
 
@@ -415,19 +416,32 @@ function subscribeSwitchableCollection<
     activeBackend = nextBackend;
     activeSubscription = subscribeCollectionChanges(
       activeBackend === "electric" ? getElectricCollection() : queryCollection,
-      callback
+      subscribeArgs
     );
-    callback();
+    if (latestSnapshotArgs !== undefined) {
+      activeSubscription.requestSnapshot?.(...latestSnapshotArgs);
+    }
+    notifySubscribeChangesCallback(subscribeArgs);
   });
 
   return {
-    requestSnapshot: (snapshotOptions?: { readonly optimizedOnly?: boolean }) =>
-      activeSubscription.requestSnapshot?.(snapshotOptions),
+    requestSnapshot: (...snapshotArgs: unknown[]) => {
+      latestSnapshotArgs = snapshotArgs;
+      return activeSubscription.requestSnapshot?.(...snapshotArgs);
+    },
     unsubscribe: () => {
       unsubscribeHealth();
       activeSubscription.unsubscribe();
     },
   };
+}
+
+function notifySubscribeChangesCallback(subscribeArgs: readonly unknown[]) {
+  const [callback] = subscribeArgs;
+
+  if (typeof callback === "function") {
+    callback([]);
+  }
 }
 
 function activeFallbackBackend(
@@ -436,17 +450,24 @@ function activeFallbackBackend(
   return health.current.status === "fallback-active" ? "query" : "electric";
 }
 
-function subscribeCollectionChanges(collection: object, callback: () => void) {
+interface DataPlaneFallbackCollectionSubscription {
+  readonly requestSnapshot?: (...args: unknown[]) => unknown;
+  readonly unsubscribe: () => void;
+}
+
+function subscribeCollectionChanges(
+  collection: object,
+  subscribeArgs: unknown[]
+): DataPlaneFallbackCollectionSubscription {
   const subscribeChanges = readCollectionFunction<
-    (callback: () => void) => {
-      requestSnapshot?: (options?: {
-        readonly optimizedOnly?: boolean;
-      }) => void;
-      unsubscribe: () => void;
-    }
+    (...args: unknown[]) => DataPlaneFallbackCollectionSubscription
   >(collection, "subscribeChanges");
 
-  return subscribeChanges?.(callback) ?? { unsubscribe: () => null };
+  return (
+    subscribeChanges?.apply(collection, subscribeArgs) ?? {
+      unsubscribe: () => null,
+    }
+  );
 }
 
 function scheduleReadinessFallback({

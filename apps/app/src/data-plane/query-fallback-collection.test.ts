@@ -3,6 +3,7 @@ import { QueryClient } from "@tanstack/query-core";
 import { Schema } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { seedQueryCollectionInitialData } from "./bootstrap";
 import {
   COMPLETE_TENANT_COLLECTION,
   defineQueryCollectionContract,
@@ -296,6 +297,133 @@ describe("data-plane Query Collection fallback", () => {
     ).toStrictEqual(["loader-label"]);
   });
 
+  it("preserves subscription options and replays requested snapshots after fallback switches", () => {
+    const queryCollection = makeTestCollection([
+      { id: "query-label", name: "Query label" },
+    ]);
+    const electricCollection = makeTestCollection([
+      { id: "electric-label", name: "Electric label" },
+    ]);
+    let onSyncError: ((error: DataPlaneElectricSyncError) => void) | undefined;
+    const health = makeElectricHealth();
+
+    const result = createCollectionWithQueryFallback(
+      new QueryClient(),
+      {
+        electric: electricContract,
+        query: queryContract,
+      },
+      {
+        createElectricCollection: (_contract, options) => {
+          ({ onSyncError } = options);
+          return {
+            collection: electricCollection,
+            health,
+            shapeUrl: "https://sync.example/v1/shapes/labels",
+            status: "enabled",
+          };
+        },
+        createQueryCollection: () => queryCollection,
+        runtime: { isBrowser: true },
+      }
+    );
+    const callback = vi.fn<() => void>();
+    const subscribeOptions = { includeInitialState: false };
+    const snapshotOptions = { optimizedOnly: false };
+
+    const subscription = readTestSubscription(result.collection);
+    const activeSubscription = subscription.subscribeChanges(
+      callback,
+      subscribeOptions
+    );
+    activeSubscription.requestSnapshot?.(snapshotOptions);
+
+    expect(electricCollection.subscribeChanges).toHaveBeenCalledWith(
+      callback,
+      subscribeOptions
+    );
+    expect(
+      electricCollection.subscriptions[0]?.requestSnapshot
+    ).toHaveBeenCalledWith(snapshotOptions);
+
+    const error = makeElectricError({ kind: "network" });
+    health.markUnavailable(error);
+    onSyncError?.(error);
+
+    expect(queryCollection.subscribeChanges).toHaveBeenCalledWith(
+      callback,
+      subscribeOptions
+    );
+    expect(
+      queryCollection.subscriptions[0]?.requestSnapshot
+    ).toHaveBeenCalledWith(snapshotOptions);
+  });
+
+  it("loads seeded Query Collection data after hydration snapshot replay and Electric fallback", async () => {
+    const queryClient = new QueryClient();
+    const queryKey = ["labels", "hydrated-fallback"];
+    const loaderRow = {
+      id: "loader-label",
+      name: "Loader label",
+    } satisfies TestRow;
+    const queryFn = vi.fn<() => readonly TestRow[]>(() => [
+      { id: "server-label", name: "Server label" },
+    ]);
+    const hydrationQueryContract = defineQueryCollectionContract({
+      ...queryContract,
+      id: "organization:org_123:user:user_123:role:owner:labels:hydrated",
+      queryFn,
+      queryKey,
+      staleTime: 30_000,
+    });
+    seedQueryCollectionInitialData(queryClient, queryKey, [loaderRow]);
+    const electricCollection = makeTestCollection([
+      { id: "electric-label", name: "Electric label" },
+    ]);
+    let onSyncError: ((error: DataPlaneElectricSyncError) => void) | undefined;
+    const health = makeElectricHealth();
+
+    const result = createCollectionWithQueryFallback(
+      queryClient,
+      {
+        electric: electricContract,
+        query: hydrationQueryContract,
+      },
+      {
+        createElectricCollection: (_contract, options) => {
+          ({ onSyncError } = options);
+          return {
+            collection: electricCollection,
+            health,
+            shapeUrl: "https://sync.example/v1/shapes/labels",
+            status: "enabled",
+          };
+        },
+        runtime: { isBrowser: true },
+      }
+    );
+    const collection = readTestSubscription(result.collection);
+    const activeSubscription = collection.subscribeChanges(vi.fn(), {
+      includeInitialState: false,
+    });
+    activeSubscription.requestSnapshot?.({ optimizedOnly: false });
+
+    expect([...collection.entries()].map(([, row]) => row.id)).toStrictEqual([
+      "electric-label",
+    ]);
+
+    const error = makeElectricError({ kind: "network" });
+    health.markUnavailable(error);
+    onSyncError?.(error);
+
+    await vi.waitFor(() => {
+      expect([...collection.entries()].map(([, row]) => row.id)).toStrictEqual([
+        "loader-label",
+      ]);
+    });
+    expect(queryFn).not.toHaveBeenCalled();
+  });
+
   it("activates Query fallback when Electric is slow to become ready", () => {
     vi.useFakeTimers();
 
@@ -362,11 +490,31 @@ function makeElectricHealth(): DataPlaneCollectionHealth {
   });
 }
 
+interface TestSubscription {
+  readonly requestSnapshot: ReturnType<
+    typeof vi.fn<(...args: unknown[]) => true>
+  >;
+  readonly unsubscribe: ReturnType<typeof vi.fn<() => void>>;
+}
+
+interface TestSubscribableCollection {
+  entries: () => Iterable<[string, TestRow]>;
+  subscribeChanges: (...args: unknown[]) => {
+    requestSnapshot?: (...args: unknown[]) => unknown;
+    unsubscribe: () => void;
+  };
+}
+
+function readTestSubscription(collection: object): TestSubscribableCollection {
+  return collection as TestSubscribableCollection;
+}
+
 function makeTestCollection(
   rows: readonly TestRow[],
   options: { readonly status?: string | undefined } = {}
 ) {
   let currentRows = [...rows];
+  const subscriptions: TestSubscription[] = [];
 
   return {
     cleanup: vi.fn<() => Promise<void>>(() => Promise.resolve()),
@@ -375,9 +523,18 @@ function makeTestCollection(
     keys: () => currentRows.map((row) => row.id).values(),
     preload: vi.fn<() => Promise<void>>(() => Promise.resolve()),
     status: options.status ?? "ready",
-    subscribeChanges: vi.fn<
-      (callback: () => void) => { unsubscribe: () => void }
-    >(() => ({ unsubscribe: vi.fn<() => void>() })),
+    subscribeChanges: vi.fn<(..._args: unknown[]) => TestSubscription>(() => {
+      const subscription = {
+        requestSnapshot: vi.fn<(..._snapshotArgs: unknown[]) => true>(
+          () => true
+        ),
+        unsubscribe: vi.fn<() => void>(),
+      };
+      subscriptions.push(subscription);
+
+      return subscription;
+    }),
+    subscriptions,
     subscriberCount: 0,
     toArray: currentRows,
     utils: {

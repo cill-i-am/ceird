@@ -71,7 +71,10 @@ Query Collection fallback uses the same health object by marking
 `fallback-active` through the shared helper instead of carrying a separate
 feature-local flag. Product routes may consume the resulting status through
 feature data-plane modules, but should not inspect raw Electric errors or
-construct a separate fallback-health model.
+construct a separate fallback-health model. The fallback wrapper preserves
+TanStack DB subscription options and replays the latest hydration snapshot
+request when the active backend changes, so loader-seeded Query Collection data
+is still loaded after an Electric failure.
 
 Completeness is a discriminated contract, not a boolean. `complete-tenant`
 means the data covers the active organization scope. `paged-query` and
