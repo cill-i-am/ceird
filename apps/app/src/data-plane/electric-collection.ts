@@ -409,7 +409,7 @@ function normalizeElectricFetchError(
   error: FetchError | FetchErrorLike,
   shapeName: SyncShapeName
 ): DataPlaneElectricSyncError {
-  const {status} = error;
+  const { status } = error;
   const kind = classifyElectricFetchError(status);
 
   return {
@@ -506,11 +506,9 @@ function isBrowserRuntime() {
 }
 
 function readViteSyncOrigin() {
-  const {env} = (
-    import.meta as ImportMeta & {
-      readonly env?: { readonly VITE_SYNC_ORIGIN?: string | undefined };
-    }
-  );
+  const { env } = import.meta as ImportMeta & {
+    readonly env?: { readonly VITE_SYNC_ORIGIN?: string | undefined };
+  };
   const processEnv = (
     globalThis as typeof globalThis & {
       readonly process?: {
