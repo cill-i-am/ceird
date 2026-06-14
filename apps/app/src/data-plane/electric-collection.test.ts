@@ -359,7 +359,9 @@ describe("Ceird Electric collection factory", () => {
 
 function makeTestFetch(response: Response) {
   return Object.assign(
-    vi.fn<typeof fetch>(() => Promise.resolve(response)),
+    vi.fn<(...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>>(
+      () => Promise.resolve(response) as ReturnType<typeof fetch>
+    ),
     {
       preconnect: vi.fn<typeof fetch.preconnect>(),
     }
