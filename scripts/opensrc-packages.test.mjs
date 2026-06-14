@@ -11,7 +11,9 @@ test("includes runtime and framework packages in the opensrc source list", () =>
     {
       dependencies: {
         "@effect/platform": "^0.96.0",
+        "@electric-sql/client": "1.5.21",
         "@tanstack/db": "^0.6.5",
+        "@tanstack/electric-db-collection": "0.3.6",
         "@tanstack/react-form": "^1.28.6",
         "@tanstack/react-router": "latest",
         "@tanstack/react-router-ssr-query": "latest",
@@ -29,7 +31,9 @@ test("includes runtime and framework packages in the opensrc source list", () =>
 
   assert.deepEqual(sourceList, [
     "@effect/platform",
+    "@electric-sql/client",
     "@tanstack/db",
+    "@tanstack/electric-db-collection",
     "@tanstack/react-router",
     "@tanstack/react-router-ssr-query",
     "@tanstack/react-start",
@@ -67,7 +71,12 @@ test("excludes assets, lightweight helpers, build tooling, and workspace package
 
 test("matches allowed packages by exact name or approved scope prefix", () => {
   assert.equal(shouldIncludeOpensrcPackage("@effect/sql"), true);
+  assert.equal(shouldIncludeOpensrcPackage("@electric-sql/client"), true);
   assert.equal(shouldIncludeOpensrcPackage("@tanstack/db"), true);
+  assert.equal(
+    shouldIncludeOpensrcPackage("@tanstack/electric-db-collection"),
+    true
+  );
   assert.equal(shouldIncludeOpensrcPackage("@tanstack/react-start"), true);
   assert.equal(shouldIncludeOpensrcPackage("@tanstack/router-plugin"), false);
   assert.equal(shouldIncludeOpensrcPackage("tailwindcss"), true);

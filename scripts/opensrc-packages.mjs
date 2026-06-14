@@ -1,8 +1,10 @@
 const INCLUDED_PACKAGE_NAMES = new Set([
   "@tanstack/db",
+  "@tanstack/electric-db-collection",
   "@tanstack/react-router",
   "@tanstack/react-router-ssr-query",
   "@tanstack/react-start",
+  "@electric-sql/client",
   "better-auth",
   "drizzle-orm",
   "effect",

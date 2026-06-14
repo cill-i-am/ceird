@@ -16,6 +16,7 @@ const THIS_FILE = "test/data-plane-boundaries.test.ts";
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
 const DIRECT_COLLECTION_IMPORT_ALLOWLIST = new Set([
   "data-plane/collection-contract.ts",
+  "data-plane/electric-collection.ts",
 ]);
 const PRODUCT_COLLECTION_ROOTS = DATA_PLANE_COLLECTION_NAMES;
 
@@ -41,6 +42,16 @@ describe("data-plane architecture boundaries", () => {
 
       if (source.includes("@tanstack/react-db")) {
         violations.push(`${filePath}: imports @tanstack/react-db`);
+      }
+
+      if (source.includes("@tanstack/electric-db-collection")) {
+        violations.push(
+          `${filePath}: imports @tanstack/electric-db-collection`
+        );
+      }
+
+      if (source.includes("@electric-sql/client")) {
+        violations.push(`${filePath}: imports @electric-sql/client`);
       }
     }
 
