@@ -3,6 +3,11 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import {
+  formatInstructionTopologyReport,
+  validateInstructionTopology,
+} from "./instruction-topology.mjs";
+
 const defaultScenarioDirectory = "evals/skills/scenarios";
 const defaultForwardPackDirectory = "evals/skills/forward/packs";
 
@@ -194,6 +199,19 @@ function checkNoDuplicateReviewSkills(cwd) {
   });
 }
 
+function checkInstructionTopology(cwd) {
+  const result = validateInstructionTopology(cwd);
+
+  return checkResult({
+    id: "instruction-topology",
+    title: "Instruction topology policy is executable",
+    failures: result.failures,
+    details: result.ok
+      ? `${result.policy.canonicalNodes.length} canonical nodes, ${result.expected.mirrorFiles.length} mirrors`
+      : formatInstructionTopologyReport(result),
+  });
+}
+
 async function checkNoStaleReviewReferences(cwd) {
   const scanRoots = [
     "AGENTS.md",
@@ -273,6 +291,7 @@ const staticChecks = [
   checkRequiredAgentDocs,
   checkSkillLockOwnership,
   checkNoDuplicateReviewSkills,
+  checkInstructionTopology,
   checkNoStaleReviewReferences,
   checkStopHookReviewRouting,
   checkEvalScenariosExist,

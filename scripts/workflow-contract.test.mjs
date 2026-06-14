@@ -4,6 +4,11 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import {
+  formatInstructionTopologyReport,
+  validateInstructionTopology,
+} from "./instruction-topology.mjs";
+
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   ".."
@@ -169,6 +174,21 @@ test("root workflow scripts call the Alchemy CLI directly", () => {
   assert.equal(rootPackage.scripts["infra:dev"], undefined);
   assert.equal(rootPackage.engines.node, ">=24");
   assert.equal(rootPackage.devDependencies.portless, "^0.14.0");
+});
+
+test("instruction topology policy matches canonical nodes and mirrors", () => {
+  const result = validateInstructionTopology(repoRoot);
+  const report = formatInstructionTopologyReport(result);
+
+  assert.equal(result.ok, true, report);
+  assert.deepEqual(result.failures, []);
+  assert.equal(result.policy.canonicalNodes.length, 23);
+  assert.equal(result.expected.canonicalFiles.length, 23);
+  assert.equal(result.expected.mirrorFiles.length, 23);
+  assert.match(report, /Instruction topology PASS/);
+  assert.match(report, /apps\/sync\/AGENTS\.md/);
+  assert.match(report, /packages\/proximity-core\/CLAUDE\.md -> AGENTS\.md/);
+  assert.match(report, /docs\/agents\/AGENTS\.md/);
 });
 
 test("Alchemy dev wrapper keeps local development to one command", async () => {
