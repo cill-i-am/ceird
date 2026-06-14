@@ -3,14 +3,20 @@ import {
   UserPreferencesStorageError,
 } from "@ceird/identity-core";
 import type { UserId, UserPreferences } from "@ceird/identity-core";
+import { eq, sql } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+
+import {
+  describeDomainStorageFailure,
+  DomainDrizzle,
+} from "../../../platform/database/database.js";
+import { userPreferences } from "../../../platform/database/schema.js";
 
 const DEFAULT_USER_PREFERENCES_UPDATED_AT = "1970-01-01T00:00:00.000Z";
 
 interface UserPreferencesRow {
-  readonly route_proximity_location_enabled: boolean;
-  readonly updated_at: Date;
+  readonly routeProximityLocationEnabled: boolean;
+  readonly updatedAt: Date;
 }
 
 export interface UpdateUserPreferencesRecordInput {
@@ -22,17 +28,22 @@ export class UserPreferencesRepository extends Context.Service<UserPreferencesRe
   "@ceird/domains/identity/preferences/UserPreferencesRepository",
   {
     make: Effect.gen(function* UserPreferencesRepositoryLive() {
-      const sql = yield* SqlClient.SqlClient;
+      const { db } = yield* DomainDrizzle;
 
       const get = Effect.fn("UserPreferencesRepository.get")(function* (
         userId: UserId
       ) {
-        const rows = yield* sql<UserPreferencesRow>`
-          select route_proximity_location_enabled, updated_at
-          from user_preferences
-          where user_id = ${userId}
-          limit 1
-        `.pipe(Effect.catchTag("SqlError", failUserPreferencesStorage));
+        const rows = yield* db
+          .select(userPreferencesSelection)
+          .from(userPreferences)
+          .where(eq(userPreferences.userId, userId))
+          .limit(1)
+          .pipe(
+            Effect.catchTag(
+              "EffectDrizzleQueryError",
+              failUserPreferencesStorage
+            )
+          );
 
         return rows[0] === undefined
           ? makeDefaultUserPreferences()
@@ -42,17 +53,27 @@ export class UserPreferencesRepository extends Context.Service<UserPreferencesRe
       const update = Effect.fn("UserPreferencesRepository.update")(function* (
         input: UpdateUserPreferencesRecordInput
       ) {
-        const rows = yield* sql<UserPreferencesRow>`
-          insert into user_preferences ${sql.insert({
-            route_proximity_location_enabled:
-              input.routeProximityLocationEnabled,
-            user_id: input.userId,
-          })}
-          on conflict (user_id) do update
-          set route_proximity_location_enabled = excluded.route_proximity_location_enabled,
-              updated_at = now()
-          returning route_proximity_location_enabled, updated_at
-        `.pipe(Effect.catchTag("SqlError", failUserPreferencesStorage));
+        const rows = yield* db
+          .insert(userPreferences)
+          .values({
+            routeProximityLocationEnabled: input.routeProximityLocationEnabled,
+            userId: input.userId,
+          })
+          .onConflictDoUpdate({
+            set: {
+              routeProximityLocationEnabled:
+                input.routeProximityLocationEnabled,
+              updatedAt: sql`now()`,
+            },
+            target: userPreferences.userId,
+          })
+          .returning(userPreferencesSelection)
+          .pipe(
+            Effect.catchTag(
+              "EffectDrizzleQueryError",
+              failUserPreferencesStorage
+            )
+          );
 
         return mapUserPreferencesRow(
           yield* getRequiredRow(rows, "updated user preferences")
@@ -90,10 +111,15 @@ function makeDefaultUserPreferences(): UserPreferences {
 
 function mapUserPreferencesRow(row: UserPreferencesRow): UserPreferences {
   return decodeUserPreferences({
-    routeProximityLocationEnabled: row.route_proximity_location_enabled,
-    updatedAt: row.updated_at.toISOString(),
+    routeProximityLocationEnabled: row.routeProximityLocationEnabled,
+    updatedAt: row.updatedAt.toISOString(),
   });
 }
+
+const userPreferencesSelection = {
+  routeProximityLocationEnabled: userPreferences.routeProximityLocationEnabled,
+  updatedAt: userPreferences.updatedAt,
+} satisfies Record<keyof UserPreferencesRow, unknown>;
 
 function getRequiredRow<Row>(
   rows: readonly Row[],
@@ -113,7 +139,7 @@ function getRequiredRow<Row>(
 function failUserPreferencesStorage(error: unknown) {
   return Effect.fail(
     new UserPreferencesStorageError({
-      cause: error instanceof Error ? error.message : String(error),
+      cause: describeDomainStorageFailure(error),
       message: "User preferences storage operation failed",
     })
   );

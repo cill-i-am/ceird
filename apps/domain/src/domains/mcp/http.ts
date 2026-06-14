@@ -1,5 +1,6 @@
 import { mcpHandler } from "@better-auth/oauth-provider";
 import { OrganizationId, SessionId, UserId } from "@ceird/identity-core";
+import { and, eq, isNull } from "drizzle-orm";
 import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { McpServer } from "effect/unstable/ai";
 import { HttpRouter } from "effect/unstable/http";
@@ -8,6 +9,7 @@ import { SqlClient } from "effect/unstable/sql";
 
 import { DomainDrizzle } from "../../platform/database/database.js";
 import type { DomainDrizzleService } from "../../platform/database/database.js";
+import { oauthConsent } from "../../platform/database/schema.js";
 import { CommentsRepository } from "../comments/repository.js";
 import type { AuthenticationConfig } from "../identity/authentication/config.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
@@ -81,10 +83,6 @@ interface McpAuthorizedClientIdentity {
   readonly clientId: string;
   readonly session: McpSessionIdentity;
 }
-interface McpConnectedAppGrantRow {
-  readonly scopes: readonly string[];
-}
-
 export class McpAuthorizedAppCache {
   private readonly apps = new Map<string, AuthorizedMcpAppCacheEntry>();
   private readonly pendingApps = new Map<string, Promise<AuthorizedMcpApp>>();
@@ -444,15 +442,20 @@ function verifyMcpConnectedAppGrant<ERuntime>(options: {
   readonly userId: UserId;
 }) {
   const grantActive = Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const rows = yield* sql<McpConnectedAppGrantRow>`
-      select scopes
-      from oauth_consent
-      where user_id = ${options.userId}
-        and client_id = ${options.clientId}
-        and reference_id is not distinct from ${options.organizationId ?? null}
-      limit 1
-    `;
+    const { db } = yield* DomainDrizzle;
+    const rows = yield* db
+      .select({ scopes: oauthConsent.scopes })
+      .from(oauthConsent)
+      .where(
+        and(
+          eq(oauthConsent.userId, options.userId),
+          eq(oauthConsent.clientId, options.clientId),
+          options.organizationId === undefined
+            ? isNull(oauthConsent.referenceId)
+            : eq(oauthConsent.referenceId, options.organizationId)
+        )
+      )
+      .limit(1);
     const [grant] = rows;
 
     return (

@@ -4,8 +4,9 @@ import {
   decodeUserId,
 } from "@ceird/identity-core";
 import { Effect, Exit, Layer } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import type { Context } from "effect";
 
+import { DomainDrizzle } from "../../platform/database/database.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import {
   makeCurrentOrganizationActorFromMcpSessionLayer,
@@ -112,32 +113,31 @@ describe(resolveCurrentOrganizationActorFromMcpSession, () => {
   }, 10_000);
 
   it("provides CurrentOrganizationActor from MCP session without HttpServerRequest", async () => {
-    const sql = Object.assign(
-      (strings: TemplateStringsArray) => {
-        const statement = strings.join(" ");
+    let selectCount = 0;
+    const db = {
+      select: () => {
+        const selectedIndex = selectCount;
+        selectCount += 1;
+        const rows =
+          selectedIndex === 0
+            ? [
+                {
+                  activeOrganizationId: "org_123",
+                  expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+                  userId: "user_123",
+                },
+              ]
+            : [{ role: "member" }];
 
-        if (statement.includes("from session")) {
-          return Effect.succeed([
-            {
-              activeOrganizationId: "org_123",
-              expiresAt: new Date("2999-01-01T00:00:00.000Z"),
-              userId: "user_123",
-            },
-          ]);
-        }
-
-        if (statement.includes("from member")) {
-          return Effect.succeed([{ role: "member" }]);
-        }
-
-        return Effect.die(
-          new Error(`Unexpected SQL in test mock: ${statement}`)
-        );
+        return {
+          from: () => ({
+            where: () => ({
+              limit: () => Effect.succeed(rows),
+            }),
+          }),
+        };
       },
-      {
-        withTransaction: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
-      }
-    );
+    };
 
     const exit = await Effect.runPromiseExit(
       Effect.gen(function* () {
@@ -152,8 +152,10 @@ describe(resolveCurrentOrganizationActorFromMcpSession, () => {
         ),
         Effect.provide(
           Layer.succeed(
-            SqlClient.SqlClient,
-            sql as unknown as SqlClient.SqlClient
+            DomainDrizzle,
+            DomainDrizzle.of({ db } as unknown as Context.Service.Shape<
+              typeof DomainDrizzle
+            >)
           )
         )
       ) as unknown as Effect.Effect<

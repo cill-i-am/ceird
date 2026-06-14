@@ -19,19 +19,35 @@ import {
   UserPreferencesStorageError,
 } from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
+import { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Cause, Effect, Exit, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 import type { SqlError } from "effect/unstable/sql";
 
+import { DomainDrizzle } from "../../platform/database/database.js";
 import {
   configProviderFromMap,
   withConfigProvider,
 } from "../../test/effect-test-helpers.js";
+import { CommentsRepository } from "../comments/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
+import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
+import { JobsAuthorization } from "../jobs/authorization.js";
+import {
+  ContactsRepository,
+  JobLabelAssignmentsRepository,
+  JobsRepository,
+} from "../jobs/repositories.js";
+import { LabelsRepository } from "../labels/repositories.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import { OrganizationAuthorizationDeniedError } from "../organizations/errors.js";
+import { SiteLocationProvider } from "../sites/location-provider.js";
+import {
+  SiteLabelAssignmentsRepository,
+  SitesRepository,
+} from "../sites/repositories.js";
 import { AgentActions } from "./actions.js";
 import {
   AgentActionRunsRepository,
@@ -724,6 +740,32 @@ describe("agent threads service", () => {
     });
   });
 
+  it("maps Drizzle label action failures to agent storage errors", async () => {
+    const error = await Effect.runPromise(
+      runAgentActions(
+        Effect.gen(function* () {
+          const actions = yield* AgentActions;
+
+          return yield* actions
+            .execute(actor, "ceird.labels.create", { name: "Plumbing" })
+            .pipe(Effect.flip);
+        }),
+        {
+          labelsRepository: {
+            create: () => Effect.fail(makeEffectDrizzleQueryError()),
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentStorageError);
+    expect(error).toMatchObject({
+      message: "Agent action storage operation failed",
+      operation: "action.execute",
+    });
+    expect(error.cause).toContain("EffectDrizzleQueryError");
+  });
+
   it("validates internal current-location access for an enabled thread owner", async () => {
     const response = await Effect.runPromise(
       runAgentThreadsService(
@@ -944,6 +986,20 @@ function runAgentThreadsService<Value, Error>(
   ) as Effect.Effect<Value, Error, never>;
 }
 
+function runAgentActions<Value, Error>(
+  effect: Effect.Effect<
+    Value,
+    Error,
+    AgentActions | HttpServerRequest.HttpServerRequest
+  >,
+  options: AgentActionsTestOptions = {}
+): Effect.Effect<Value, Error, never> {
+  return effect.pipe(
+    Effect.provide(AgentActions.DefaultWithoutDependencies),
+    Effect.provide(makeAgentActionsTestLayer(options))
+  ) as Effect.Effect<Value, Error, never>;
+}
+
 function makeAgentThreadsServiceTestLayer(
   options: AgentThreadsServiceTestOptions
 ) {
@@ -1012,6 +1068,90 @@ function makeAgentThreadsServiceTestLayer(
   );
 }
 
+function makeAgentActionsTestLayer(options: AgentActionsTestOptions) {
+  return Layer.mergeAll(
+    makeUnusedDomainDrizzleLayer(),
+    Layer.succeed(
+      CommentsRepository,
+      {} as ContextService<typeof CommentsRepository>
+    ),
+    Layer.succeed(
+      ContactsRepository,
+      {} as ContextService<typeof ContactsRepository>
+    ),
+    Layer.succeed(
+      JobLabelAssignmentsRepository,
+      {} as ContextService<typeof JobLabelAssignmentsRepository>
+    ),
+    Layer.succeed(
+      JobsActivityRecorder,
+      {} as ContextService<typeof JobsActivityRecorder>
+    ),
+    Layer.succeed(
+      JobsAuthorization,
+      {} as ContextService<typeof JobsAuthorization>
+    ),
+    Layer.succeed(JobsRepository, {} as ContextService<typeof JobsRepository>),
+    Layer.succeed(
+      LabelsRepository,
+      LabelsRepository.of({
+        create: () => Effect.die("Unexpected LabelsRepository.create"),
+        ...options.labelsRepository,
+      } as unknown as ContextService<typeof LabelsRepository>)
+    ),
+    Layer.succeed(
+      OrganizationAuthorization,
+      OrganizationAuthorization.of({
+        ensureCanCreateSite: () => Effect.void,
+        ensureCanManageConfiguration: () => Effect.void,
+        ensureCanManageLabels: () => Effect.void,
+        ensureCanViewOrganizationData: () => Effect.void,
+        ensureCanViewOrganizationSecurityActivity: () => Effect.void,
+        ...options.organizationAuthorization,
+      } as unknown as ContextService<typeof OrganizationAuthorization>)
+    ),
+    Layer.succeed(HttpServerRequest.HttpServerRequest, {
+      headers: new Headers({
+        authorization: "Bearer agent-secret",
+      }),
+    } as unknown as HttpServerRequest.HttpServerRequest),
+    Layer.succeed(
+      SiteLocationProvider,
+      {} as ContextService<typeof SiteLocationProvider>
+    ),
+    Layer.succeed(
+      SiteLabelAssignmentsRepository,
+      {} as ContextService<typeof SiteLabelAssignmentsRepository>
+    ),
+    Layer.succeed(
+      SitesRepository,
+      {} as ContextService<typeof SitesRepository>
+    ),
+    Layer.succeed(
+      UserPreferencesRepository,
+      {} as ContextService<typeof UserPreferencesRepository>
+    )
+  );
+}
+
+function makeUnusedDomainDrizzleLayer() {
+  return Layer.succeed(
+    DomainDrizzle,
+    DomainDrizzle.of({
+      db: new Proxy(
+        {},
+        {
+          get: (_target, property) => {
+            throw new Error(
+              `DomainDrizzle.${String(property)} should not be called in AgentActions unit tests`
+            );
+          },
+        }
+      ) as never,
+    })
+  );
+}
+
 interface AgentThreadsServiceTestOptions {
   readonly actions?: Partial<ContextService<typeof AgentActions>>;
   readonly actionRunsRepository?: Partial<
@@ -1028,11 +1168,26 @@ interface AgentThreadsServiceTestOptions {
   >;
 }
 
+interface AgentActionsTestOptions {
+  readonly labelsRepository?: Partial<ContextService<typeof LabelsRepository>>;
+  readonly organizationAuthorization?: Partial<
+    ContextService<typeof OrganizationAuthorization>
+  >;
+}
+
 function makeSqlError(): SqlError.SqlError {
   return Object.assign(new Error("database unavailable"), {
     _tag: "SqlError" as const,
     cause: "database unavailable",
   }) as unknown as SqlError.SqlError;
+}
+
+function makeEffectDrizzleQueryError(): EffectDrizzleQueryError {
+  return new EffectDrizzleQueryError({
+    cause: new Error("database unavailable"),
+    params: [],
+    query: "insert into label ...",
+  });
 }
 
 type ContextService<Service> = Service extends {
