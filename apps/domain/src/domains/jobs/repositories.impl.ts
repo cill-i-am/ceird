@@ -80,6 +80,7 @@ import type {
   SiteIdType as SiteId,
   SiteOption,
 } from "@ceird/sites-core";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
   Array as Arr,
   Context,
@@ -93,6 +94,20 @@ import {
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql";
 
+import { DomainDrizzle } from "../../platform/database/database.js";
+import {
+  contact as contactTable,
+  label as labelTable,
+  member,
+  site as siteTable,
+  siteContact,
+  user as userTable,
+  workItem,
+  workItemActivity,
+  workItemCollaborator,
+  workItemLabel,
+  workItemVisit,
+} from "../../platform/database/schema.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
 import { listSiteLabelsForSites } from "../sites/site-label-queries.js";
@@ -471,11 +486,135 @@ const decodeOrganizationActivityCursorState = Schema.decodeUnknownSync(
   })
 );
 
+const workItemSelection = {
+  assignee_id: workItem.assigneeId,
+  blocked_reason: workItem.blockedReason,
+  completed_at: workItem.completedAt,
+  completed_by_user_id: workItem.completedByUserId,
+  contact_id: workItem.contactId,
+  coordinator_id: workItem.coordinatorId,
+  created_at: workItem.createdAt,
+  created_by_user_id: workItem.createdByUserId,
+  id: workItem.id,
+  kind: workItem.kind,
+  organization_id: workItem.organizationId,
+  priority: workItem.priority,
+  site_id: workItem.siteId,
+  status: workItem.status,
+  title: workItem.title,
+  updated_at: workItem.updatedAt,
+} satisfies Record<keyof WorkItemRow, unknown>;
+
+const workItemCollaboratorSelection = {
+  access_level: workItemCollaborator.accessLevel,
+  created_at: workItemCollaborator.createdAt,
+  id: workItemCollaborator.id,
+  role_label: workItemCollaborator.roleLabel,
+  subject_type: workItemCollaborator.subjectType,
+  updated_at: workItemCollaborator.updatedAt,
+  user_id: workItemCollaborator.userId,
+  work_item_id: workItemCollaborator.workItemId,
+} satisfies Record<keyof WorkItemCollaboratorRow, unknown>;
+
+const workItemActivitySelection = {
+  actor_user_id: workItemActivity.actorUserId,
+  created_at: workItemActivity.createdAt,
+  event_type: workItemActivity.eventType,
+  id: workItemActivity.id,
+  organization_id: workItemActivity.organizationId,
+  payload: workItemActivity.payload,
+  work_item_id: workItemActivity.workItemId,
+} satisfies Record<keyof WorkItemActivityRow, unknown>;
+
+const workItemVisitSelection = {
+  author_user_id: workItemVisit.authorUserId,
+  created_at: workItemVisit.createdAt,
+  duration_minutes: workItemVisit.durationMinutes,
+  id: workItemVisit.id,
+  note: workItemVisit.note,
+  organization_id: workItemVisit.organizationId,
+  visit_date: workItemVisit.visitDate,
+  work_item_id: workItemVisit.workItemId,
+} satisfies Record<keyof WorkItemVisitRow, unknown>;
+
+const labelSelection = {
+  archived_at: labelTable.archivedAt,
+  created_at: labelTable.createdAt,
+  id: labelTable.id,
+  name: labelTable.name,
+  normalized_name: labelTable.normalizedName,
+  organization_id: labelTable.organizationId,
+  updated_at: labelTable.updatedAt,
+} satisfies Record<keyof LabelRow, unknown>;
+
+const workItemLabelSelection = {
+  created_at: labelTable.createdAt,
+  label_id: workItemLabel.labelId,
+  name: labelTable.name,
+  updated_at: labelTable.updatedAt,
+  work_item_id: workItemLabel.workItemId,
+} satisfies Record<keyof WorkItemLabelRow, unknown>;
+
+const jobMemberOptionSelection = {
+  email: userTable.email,
+  id: userTable.id,
+  name: userTable.name,
+} satisfies Record<keyof JobMemberOptionRow, unknown>;
+
+const jobContactOptionFromWorkItemSelection = {
+  email: contactTable.email,
+  id: contactTable.id,
+  name: contactTable.name,
+  phone: contactTable.phone,
+  site_id: workItem.siteId,
+} satisfies Record<keyof JobContactOptionRow, unknown>;
+
+const jobContactOptionFromSiteContactSelection = {
+  email: contactTable.email,
+  id: contactTable.id,
+  name: contactTable.name,
+  phone: contactTable.phone,
+  site_id: siteContact.siteId,
+} satisfies Record<keyof JobContactOptionRow, unknown>;
+
+const jobContactDetailSelection = {
+  email: contactTable.email,
+  id: contactTable.id,
+  name: contactTable.name,
+  notes: contactTable.notes,
+  phone: contactTable.phone,
+} satisfies Record<keyof JobContactDetailRow, unknown>;
+
+const siteOptionSelection = {
+  access_notes: siteTable.accessNotes,
+  address_components: siteTable.addressComponents,
+  address_line_1: siteTable.addressLine1,
+  address_line_2: siteTable.addressLine2,
+  country: siteTable.country,
+  county: siteTable.county,
+  display_location: siteTable.displayLocation,
+  eircode: siteTable.eircode,
+  formatted_address: siteTable.formattedAddress,
+  google_place_id: siteTable.googlePlaceId,
+  id: siteTable.id,
+  latitude: siteTable.latitude,
+  location_provider: siteTable.locationProvider,
+  location_resolved_at: siteTable.locationResolvedAt,
+  location_status: siteTable.locationStatus,
+  longitude: siteTable.longitude,
+  name: siteTable.name,
+  raw_location_input: siteTable.rawLocationInput,
+  town: siteTable.town,
+} satisfies Record<keyof SiteOptionRow, unknown>;
+
 export class JobsRepository extends Context.Service<JobsRepository>()(
   "@ceird/domains/jobs/JobsRepository",
   {
     make: Effect.gen(function* JobsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
+      const { db } = yield* DomainDrizzle;
+      // Raw SQL remains for write transactions, lock-taking checks, and complex
+      // cursor/search/proximity/activity queries outside this safe-read slice.
       const commentsRepository = yield* CommentsRepository;
       const defaultListLimit = yield* Config.int(
         "JOBS_DEFAULT_LIST_LIMIT"
@@ -808,27 +947,34 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           return new Map<WorkItemId, Label[]>();
         }
 
-        const rows = yield* sql<WorkItemLabelRow>`
-          select
-            work_item_labels.work_item_id,
-            work_item_labels.label_id,
-            labels.created_at,
-            labels.name,
-            labels.updated_at
-          from work_item_labels
-          join labels
-            on labels.id = work_item_labels.label_id
-            and labels.organization_id = work_item_labels.organization_id
-          join work_items
-            on work_items.id = work_item_labels.work_item_id
-            and work_items.organization_id = work_item_labels.organization_id
-          where work_item_labels.organization_id = ${organizationId}
-            and labels.organization_id = ${organizationId}
-            and work_items.organization_id = ${organizationId}
-            and work_item_labels.work_item_id in ${sql.in(workItemIds)}
-            and labels.archived_at is null
-          order by labels.name asc, labels.id asc
-        `;
+        const rows = yield* db
+          .select(workItemLabelSelection)
+          .from(workItemLabel)
+          .innerJoin(
+            labelTable,
+            and(
+              eq(labelTable.id, workItemLabel.labelId),
+              eq(labelTable.organizationId, workItemLabel.organizationId)
+            )
+          )
+          .innerJoin(
+            workItem,
+            and(
+              eq(workItem.id, workItemLabel.workItemId),
+              eq(workItem.organizationId, workItemLabel.organizationId)
+            )
+          )
+          .where(
+            and(
+              eq(workItemLabel.organizationId, organizationId),
+              eq(labelTable.organizationId, organizationId),
+              eq(workItem.organizationId, organizationId),
+              inArray(workItemLabel.workItemId, workItemIds),
+              isNull(labelTable.archivedAt)
+            )
+          )
+          .orderBy(asc(labelTable.name), asc(labelTable.id))
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
         const labelsByWorkItemId = new Map<WorkItemId, Label[]>();
 
@@ -1464,17 +1610,18 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
 
       const listMemberOptions = Effect.fn("JobsRepository.listMemberOptions")(
         function* (organizationId: OrganizationId) {
-          const rows = yield* sql<JobMemberOptionRow>`
-          select
-            "user".id,
-            "user".name,
-            "user".email
-          from member
-          join "user" on "user".id = member.user_id
-          where member.organization_id = ${organizationId}
-            and member.role in ${sql.in(INTERNAL_ORGANIZATION_ROLES)}
-          order by "user".name asc, "user".email asc
-        `;
+          const rows = yield* db
+            .select(jobMemberOptionSelection)
+            .from(member)
+            .innerJoin(userTable, eq(userTable.id, member.userId))
+            .where(
+              and(
+                eq(member.organizationId, organizationId),
+                inArray(member.role, INTERNAL_ORGANIZATION_ROLES)
+              )
+            )
+            .orderBy(asc(userTable.name), asc(userTable.email))
+            .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
           return rows.map(mapJobMemberOptionRow);
         }
@@ -1483,17 +1630,18 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
       const listExternalMemberOptions = Effect.fn(
         "JobsRepository.listExternalMemberOptions"
       )(function* (organizationId: OrganizationId) {
-        const rows = yield* sql<JobMemberOptionRow>`
-          select
-            "user".id,
-            "user".name,
-            "user".email
-          from member
-          join "user" on "user".id = member.user_id
-          where member.organization_id = ${organizationId}
-            and member.role = ${EXTERNAL_ORGANIZATION_ROLE}
-          order by "user".name asc, "user".email asc
-        `;
+        const rows = yield* db
+          .select(jobMemberOptionSelection)
+          .from(member)
+          .innerJoin(userTable, eq(userTable.id, member.userId))
+          .where(
+            and(
+              eq(member.organizationId, organizationId),
+              eq(member.role, EXTERNAL_ORGANIZATION_ROLE)
+            )
+          )
+          .orderBy(asc(userTable.name), asc(userTable.email))
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
         return rows.map(mapJobExternalMemberOptionRow);
       });
@@ -1501,78 +1649,68 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
       const listExternalScopedOptions = Effect.fn(
         "JobsRepository.listExternalScopedOptions"
       )(function* (organizationId: OrganizationId, userId: UserId) {
-        const labelsEffect = sql<LabelRow>`
-          select distinct labels.*
-          from work_item_collaborators
-          join work_items
-            on work_items.id = work_item_collaborators.work_item_id
-            and work_items.organization_id = work_item_collaborators.organization_id
-          join work_item_labels
-            on work_item_labels.work_item_id = work_items.id
-            and work_item_labels.organization_id = work_items.organization_id
-          join labels
-            on labels.id = work_item_labels.label_id
-            and labels.organization_id = work_item_labels.organization_id
-          where work_item_collaborators.organization_id = ${organizationId}
-            and work_item_collaborators.subject_type = 'user'
-            and work_item_collaborators.user_id = ${userId}
-            and labels.archived_at is null
-          order by labels.name asc, labels.id asc
-        `;
-        const sitesEffect = sql<SiteOptionRow>`
-          select distinct
-            sites.access_notes,
-            sites.address_components,
-            sites.address_line_1,
-            sites.address_line_2,
-            sites.country,
-            sites.county,
-            sites.display_location,
-            sites.eircode,
-            sites.formatted_address,
-            sites.google_place_id,
-            sites.id,
-            sites.latitude,
-            sites.location_provider,
-            sites.location_resolved_at,
-            sites.location_status,
-            sites.longitude,
-            sites.name,
-            sites.raw_location_input,
-            sites.town
-          from work_item_collaborators
-          join work_items
-            on work_items.id = work_item_collaborators.work_item_id
-            and work_items.organization_id = work_item_collaborators.organization_id
-          join sites
-            on sites.id = work_items.site_id
-            and sites.organization_id = work_items.organization_id
-          where work_item_collaborators.organization_id = ${organizationId}
-            and work_item_collaborators.subject_type = 'user'
-            and work_item_collaborators.user_id = ${userId}
-            and sites.archived_at is null
-          order by sites.name asc nulls last, sites.id asc
-        `;
-        const contactsEffect = sql<JobContactOptionRow>`
-          select distinct
-            contacts.id,
-            contacts.name,
-            contacts.email,
-            contacts.phone,
-            work_items.site_id
-          from work_item_collaborators
-          join work_items
-            on work_items.id = work_item_collaborators.work_item_id
-            and work_items.organization_id = work_item_collaborators.organization_id
-          join contacts
-            on contacts.id = work_items.contact_id
-            and contacts.organization_id = work_items.organization_id
-          where work_item_collaborators.organization_id = ${organizationId}
-            and work_item_collaborators.subject_type = 'user'
-            and work_item_collaborators.user_id = ${userId}
-            and contacts.archived_at is null
-          order by contacts.name asc, contacts.id asc, work_items.site_id asc
-        `;
+        const visibleCollaboratorWhere = and(
+          eq(workItemCollaborator.organizationId, organizationId),
+          eq(workItemCollaborator.subjectType, "user"),
+          eq(workItemCollaborator.userId, userId)
+        );
+        const joinVisibleWorkItems = and(
+          eq(workItem.id, workItemCollaborator.workItemId),
+          eq(workItem.organizationId, workItemCollaborator.organizationId)
+        );
+        const labelsEffect = db
+          .selectDistinct(labelSelection)
+          .from(workItemCollaborator)
+          .innerJoin(workItem, joinVisibleWorkItems)
+          .innerJoin(
+            workItemLabel,
+            and(
+              eq(workItemLabel.workItemId, workItem.id),
+              eq(workItemLabel.organizationId, workItem.organizationId)
+            )
+          )
+          .innerJoin(
+            labelTable,
+            and(
+              eq(labelTable.id, workItemLabel.labelId),
+              eq(labelTable.organizationId, workItemLabel.organizationId)
+            )
+          )
+          .where(and(visibleCollaboratorWhere, isNull(labelTable.archivedAt)))
+          .orderBy(asc(labelTable.name), asc(labelTable.id))
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
+        const sitesEffect = db
+          .selectDistinct(siteOptionSelection)
+          .from(workItemCollaborator)
+          .innerJoin(workItem, joinVisibleWorkItems)
+          .innerJoin(
+            siteTable,
+            and(
+              eq(siteTable.id, workItem.siteId),
+              eq(siteTable.organizationId, workItem.organizationId)
+            )
+          )
+          .where(and(visibleCollaboratorWhere, isNull(siteTable.archivedAt)))
+          .orderBy(asc(siteTable.name), asc(siteTable.id))
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
+        const contactsEffect = db
+          .selectDistinct(jobContactOptionFromWorkItemSelection)
+          .from(workItemCollaborator)
+          .innerJoin(workItem, joinVisibleWorkItems)
+          .innerJoin(
+            contactTable,
+            and(
+              eq(contactTable.id, workItem.contactId),
+              eq(contactTable.organizationId, workItem.organizationId)
+            )
+          )
+          .where(and(visibleCollaboratorWhere, isNull(contactTable.archivedAt)))
+          .orderBy(
+            asc(contactTable.name),
+            asc(contactTable.id),
+            asc(workItem.siteId)
+          )
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
         const [labels, sites, contacts] = yield* Effect.all(
           [labelsEffect, sitesEffect, contactsEffect],
           { concurrency: 3 }
@@ -1590,13 +1728,20 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         function* (organizationId: OrganizationId, workItemId: WorkItemId) {
           yield* ensureWorkItemOrganizationMatches(organizationId, workItemId);
 
-          const rows = yield* sql<WorkItemCollaboratorRow>`
-          select *
-          from work_item_collaborators
-          where organization_id = ${organizationId}
-            and work_item_id = ${workItemId}
-          order by created_at asc, id asc
-        `;
+          const rows = yield* db
+            .select(workItemCollaboratorSelection)
+            .from(workItemCollaborator)
+            .where(
+              and(
+                eq(workItemCollaborator.organizationId, organizationId),
+                eq(workItemCollaborator.workItemId, workItemId)
+              )
+            )
+            .orderBy(
+              asc(workItemCollaborator.createdAt),
+              asc(workItemCollaborator.id)
+            )
+            .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
           return rows.map(mapJobCollaboratorRow);
         }
@@ -1724,15 +1869,19 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         workItemId: WorkItemId,
         userId: UserId
       ) {
-        const rows = yield* sql<WorkItemCollaboratorRow>`
-          select *
-          from work_item_collaborators
-          where organization_id = ${organizationId}
-            and work_item_id = ${workItemId}
-            and subject_type = 'user'
-            and user_id = ${userId}
-          limit 1
-        `;
+        const rows = yield* db
+          .select(workItemCollaboratorSelection)
+          .from(workItemCollaborator)
+          .where(
+            and(
+              eq(workItemCollaborator.organizationId, organizationId),
+              eq(workItemCollaborator.workItemId, workItemId),
+              eq(workItemCollaborator.subjectType, "user"),
+              eq(workItemCollaborator.userId, userId)
+            )
+          )
+          .limit(1)
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
         return Option.fromNullishOr(rows[0]).pipe(
           Option.map(mapJobCollaboratorRow)
@@ -1742,16 +1891,25 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
       const listAccessibleWorkItemIdsForUser = Effect.fn(
         "JobsRepository.listAccessibleWorkItemIdsForUser"
       )(function* (organizationId: OrganizationId, userId: UserId) {
-        const rows = yield* sql<IdRow>`
-          select work_items.id
-          from work_item_collaborators
-          join work_items on work_items.id = work_item_collaborators.work_item_id
-            and work_items.organization_id = work_item_collaborators.organization_id
-          where work_item_collaborators.organization_id = ${organizationId}
-            and work_item_collaborators.subject_type = 'user'
-            and work_item_collaborators.user_id = ${userId}
-          order by work_items.updated_at desc, work_items.id desc
-        `;
+        const rows = yield* db
+          .select({ id: workItem.id })
+          .from(workItemCollaborator)
+          .innerJoin(
+            workItem,
+            and(
+              eq(workItem.id, workItemCollaborator.workItemId),
+              eq(workItem.organizationId, workItemCollaborator.organizationId)
+            )
+          )
+          .where(
+            and(
+              eq(workItemCollaborator.organizationId, organizationId),
+              eq(workItemCollaborator.subjectType, "user"),
+              eq(workItemCollaborator.userId, userId)
+            )
+          )
+          .orderBy(desc(workItem.updatedAt), desc(workItem.id))
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
         return rows.map((row) => decodeWorkItemId(row.id));
       });
@@ -1778,10 +1936,46 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           readonly forUpdate?: boolean;
         }
       ) {
+        if (options?.forUpdate !== true) {
+          const rows = yield* db
+            .select(workItemSelection)
+            .from(workItem)
+            .where(
+              and(
+                eq(workItem.organizationId, organizationId),
+                eq(workItem.id, workItemId)
+              )
+            )
+            .limit(1)
+            .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
+
+          return Option.fromNullishOr(rows[0]).pipe(
+            Option.map((row) => mapJobRow(row))
+          );
+        }
+
+        // Keep the lock-taking variant raw so existing write transactions retain
+        // their exact `for update` behavior until the whole workflow migrates.
         const lockClause =
           options?.forUpdate === true ? sql`for update` : sql``;
         const rows = yield* sql<WorkItemRow>`
-          select *
+          select
+            id,
+            kind,
+            title,
+            status,
+            priority,
+            site_id,
+            contact_id,
+            assignee_id,
+            coordinator_id,
+            blocked_reason,
+            completed_at,
+            completed_by_user_id,
+            created_at,
+            updated_at,
+            created_by_user_id,
+            organization_id
           from work_items
           where organization_id = ${organizationId}
             and id = ${workItemId}
@@ -1828,23 +2022,34 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         const activityEffect =
           resolvedAccess.visibility === "external"
             ? Effect.succeed<WorkItemActivityRow[]>([])
-            : sql<WorkItemActivityRow>`
-                select *
-                from work_item_activity
-                where work_item_id = ${workItemId}
-                  and organization_id = ${organizationId}
-                order by created_at desc, id desc
-              `;
+            : db
+                .select(workItemActivitySelection)
+                .from(workItemActivity)
+                .where(
+                  and(
+                    eq(workItemActivity.workItemId, workItemId),
+                    eq(workItemActivity.organizationId, organizationId)
+                  )
+                )
+                .orderBy(
+                  desc(workItemActivity.createdAt),
+                  desc(workItemActivity.id)
+                )
+                .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
         const visitsEffect =
           resolvedAccess.visibility === "external"
             ? Effect.succeed<WorkItemVisitRow[]>([])
-            : sql<WorkItemVisitRow>`
-                select *
-                from work_item_visits
-                where work_item_id = ${workItemId}
-                  and organization_id = ${organizationId}
-                order by visit_date desc, id desc
-              `;
+            : db
+                .select(workItemVisitSelection)
+                .from(workItemVisit)
+                .where(
+                  and(
+                    eq(workItemVisit.workItemId, workItemId),
+                    eq(workItemVisit.organizationId, organizationId)
+                  )
+                )
+                .orderBy(desc(workItemVisit.visitDate), desc(workItemVisit.id))
+                .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
         const contactEffect =
           job.contactId === undefined
             ? Effect.succeed(Option.none<JobContactDetail>())
@@ -1917,33 +2122,18 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           siteId: SiteId,
           includeLabels = true
         ) {
-          const rows = yield* sql<SiteOptionRow>`
-          select
-            sites.access_notes,
-            sites.address_components,
-            sites.address_line_1,
-            sites.address_line_2,
-            sites.country,
-            sites.county,
-            sites.display_location,
-            sites.eircode,
-            sites.formatted_address,
-            sites.google_place_id,
-            sites.id,
-            sites.latitude,
-            sites.location_provider,
-            sites.location_resolved_at,
-            sites.location_status,
-            sites.longitude,
-            sites.name,
-            sites.raw_location_input,
-            sites.town
-          from sites
-          where sites.organization_id = ${organizationId}
-            and sites.id = ${siteId}
-            and sites.archived_at is null
-          limit 1
-        `;
+          const rows = yield* db
+            .select(siteOptionSelection)
+            .from(siteTable)
+            .where(
+              and(
+                eq(siteTable.organizationId, organizationId),
+                eq(siteTable.id, siteId),
+                isNull(siteTable.archivedAt)
+              )
+            )
+            .limit(1)
+            .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
           const [row] = rows;
 
@@ -1964,19 +2154,18 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
       const findContactDetailById = Effect.fn(
         "JobsRepository.findContactDetailById"
       )(function* (organizationId: OrganizationId, contactId: ContactId) {
-        const rows = yield* sql<JobContactDetailRow>`
-          select
-            id,
-            name,
-            email,
-            phone,
-            notes
-          from contacts
-          where organization_id = ${organizationId}
-            and id = ${contactId}
-            and archived_at is null
-          limit 1
-        `;
+        const rows = yield* db
+          .select(jobContactDetailSelection)
+          .from(contactTable)
+          .where(
+            and(
+              eq(contactTable.organizationId, organizationId),
+              eq(contactTable.id, contactId),
+              isNull(contactTable.archivedAt)
+            )
+          )
+          .limit(1)
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
         return Option.fromNullishOr(rows[0]).pipe(
           Option.map(mapJobContactDetailRow),
@@ -2353,12 +2542,28 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
     JobsRepository.use((service) =>
       service.listAccessibleWorkItemIdsForUser(...args)
     );
+  static readonly listCollaborators = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["listCollaborators"]
+    >
+  ) => JobsRepository.use((service) => service.listCollaborators(...args));
+  static readonly listExternalMemberOptions = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["listExternalMemberOptions"]
+    >
+  ) =>
+    JobsRepository.use((service) => service.listExternalMemberOptions(...args));
   static readonly listOrganizationActivity = (
     ...args: Parameters<
       Context.Service.Shape<typeof JobsRepository>["listOrganizationActivity"]
     >
   ) =>
     JobsRepository.use((service) => service.listOrganizationActivity(...args));
+  static readonly listMemberOptions = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof JobsRepository>["listMemberOptions"]
+    >
+  ) => JobsRepository.use((service) => service.listMemberOptions(...args));
   static readonly listExternalScopedOptions = (
     ...args: Parameters<
       Context.Service.Shape<typeof JobsRepository>["listExternalScopedOptions"]
@@ -2400,25 +2605,31 @@ export class ContactsRepository extends Context.Service<ContactsRepository>()(
   {
     make: Effect.gen(function* ContactsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
+      const { db } = yield* DomainDrizzle;
 
       const findById = Effect.fn("ContactsRepository.findById")(function* (
         organizationId: OrganizationId,
         contactId: ContactId
       ) {
-        const rows = yield* sql<IdRow>`
-          select id
-          from contacts
-          where organization_id = ${organizationId}
-            and id = ${contactId}
-            and archived_at is null
-          limit 1
-        `;
+        const rows = yield* db
+          .select({ id: contactTable.id })
+          .from(contactTable)
+          .where(
+            and(
+              eq(contactTable.organizationId, organizationId),
+              eq(contactTable.id, contactId),
+              isNull(contactTable.archivedAt)
+            )
+          )
+          .limit(1)
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
         return Option.fromNullishOr(rows[0]?.id).pipe(
           Option.map(decodeContactId)
         );
       });
 
+      // Keep contact creation raw while write paths still use Effect SQL.
       const create = Effect.fn("ContactsRepository.create")(function* (
         input: CreateContactRecordInput
       ) {
@@ -2451,20 +2662,28 @@ export class ContactsRepository extends Context.Service<ContactsRepository>()(
 
       const listOptions = Effect.fn("ContactsRepository.listOptions")(
         function* (organizationId: OrganizationId) {
-          const rows = yield* sql<JobContactOptionRow>`
-          select
-            contacts.id,
-            contacts.name,
-            contacts.email,
-            contacts.phone,
-            site_contacts.site_id
-          from contacts
-          left join site_contacts on site_contacts.contact_id = contacts.id
-            and site_contacts.organization_id = contacts.organization_id
-          where contacts.organization_id = ${organizationId}
-            and contacts.archived_at is null
-          order by contacts.name asc, contacts.id asc, site_contacts.site_id asc
-        `;
+          const rows = yield* db
+            .select(jobContactOptionFromSiteContactSelection)
+            .from(contactTable)
+            .leftJoin(
+              siteContact,
+              and(
+                eq(siteContact.contactId, contactTable.id),
+                eq(siteContact.organizationId, contactTable.organizationId)
+              )
+            )
+            .where(
+              and(
+                eq(contactTable.organizationId, organizationId),
+                isNull(contactTable.archivedAt)
+              )
+            )
+            .orderBy(
+              asc(contactTable.name),
+              asc(contactTable.id),
+              asc(siteContact.siteId)
+            )
+            .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
           return mapJobContactOptions(rows);
         }
@@ -2505,6 +2724,8 @@ export class JobLabelAssignmentsRepository extends Context.Service<JobLabelAssig
   {
     make: Effect.gen(function* JobLabelAssignmentsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
+      // Label assignment stays raw because it combines label reads, existence
+      // checks, inserts, and lock semantics as one write workflow.
 
       const lookupWorkItemOrganization = Effect.fn(
         "JobLabelAssignmentsRepository.lookupWorkItemOrganization"

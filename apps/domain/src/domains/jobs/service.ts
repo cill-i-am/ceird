@@ -131,7 +131,10 @@ export class JobsService extends Context.Service<JobsService>()(
 
         return yield* jobsRepository
           .list(actor.organizationId, query, getRepositoryAccess(actor))
-          .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+          .pipe(
+            Effect.catchTag("SqlError", failJobsStorageError),
+            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError)
+          );
       });
 
       const getOptions = Effect.fn("JobsService.getOptions")(function* () {
@@ -160,7 +163,9 @@ export class JobsService extends Context.Service<JobsService>()(
 
           const members = yield* jobsRepository
             .listMemberOptions(actor.organizationId)
-            .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+            .pipe(
+              Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError)
+            );
 
           return {
             members,
@@ -175,7 +180,9 @@ export class JobsService extends Context.Service<JobsService>()(
 
           const scopedOptions = yield* jobsRepository
             .listExternalScopedOptions(actor.organizationId, actor.userId)
-            .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+            .pipe(
+              Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError)
+            );
 
           return {
             ...scopedOptions,
@@ -192,7 +199,9 @@ export class JobsService extends Context.Service<JobsService>()(
 
         const members = yield* jobsRepository
           .listExternalMemberOptions(actor.organizationId)
-          .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+          .pipe(
+            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError)
+          );
 
         return {
           members,
@@ -250,7 +259,10 @@ export class JobsService extends Context.Service<JobsService>()(
             normalizeJobProximityFilters(input.filters),
             getRepositoryAccess(actor)
           )
-          .pipe(Effect.catchTag("SqlError", failJobsStorageError));
+          .pipe(
+            Effect.catchTag("SqlError", failJobsStorageError),
+            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError)
+          );
         const routeCostContext = yield* makeCurrentRouteCostContext({
           actorUserId: actor.userId,
           organizationId: actor.organizationId,
@@ -532,6 +544,7 @@ export class JobsService extends Context.Service<JobsService>()(
               dieWorkItemOrganizationMismatch
             ),
             Effect.catchTag("SqlError", failJobsStorageError),
+            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
             Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
               failActorMembershipLossOrPreserveOtherMember(error, {
                 actor,
@@ -618,6 +631,7 @@ export class JobsService extends Context.Service<JobsService>()(
               dieWorkItemOrganizationMismatch
             ),
             Effect.catchTag("SqlError", failJobsStorageError),
+            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
             Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
               failActorMembershipLossOrDieOtherMember(error, {
                 actor,
@@ -686,6 +700,7 @@ export class JobsService extends Context.Service<JobsService>()(
               dieWorkItemOrganizationMismatch
             ),
             Effect.catchTag("SqlError", failJobsStorageError),
+            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
             Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
               failActorMembershipLossOrDieOtherMember(error, {
                 actor,
@@ -743,6 +758,7 @@ export class JobsService extends Context.Service<JobsService>()(
               dieWorkItemOrganizationMismatch
             ),
             Effect.catchTag("SqlError", failJobsStorageError),
+            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
             Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
               failActorMembershipLossOrDieOtherMember(error, {
                 actor,
@@ -798,6 +814,7 @@ export class JobsService extends Context.Service<JobsService>()(
               dieWorkItemOrganizationMismatch
             ),
             Effect.catchTag("SqlError", failJobsStorageError),
+            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
             Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
               failActorMembershipLossOrDieOtherMember(error, {
                 actor,
@@ -859,6 +876,7 @@ export class JobsService extends Context.Service<JobsService>()(
               dieWorkItemOrganizationMismatch
             ),
             Effect.catchTag("SqlError", failJobsStorageError),
+            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
             Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
               failActorMembershipLossOrDieOtherMember(error, {
                 actor,
@@ -929,6 +947,7 @@ export class JobsService extends Context.Service<JobsService>()(
               dieWorkItemOrganizationMismatch
             ),
             Effect.catchTag("SqlError", failJobsStorageError),
+            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
             Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
               failActorMembershipLossOrDieOtherMember(error, {
                 actor,
@@ -950,7 +969,8 @@ export class JobsService extends Context.Service<JobsService>()(
                 WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
                 failWorkItemOrganizationMismatchAsNotFound
               ),
-              Effect.catchTag("SqlError", failJobsStorageError)
+              Effect.catchTag("SqlError", failJobsStorageError),
+              Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError)
             );
 
           return { collaborators } satisfies JobCollaboratorsResponse;
@@ -1148,6 +1168,7 @@ function loadJobDetailOrFail(
       .getDetail(organizationId, workItemId, access)
       .pipe(
         Effect.catchTag("SqlError", failJobsStorageError),
+        Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
         Effect.map(Option.getOrUndefined)
       );
 
@@ -1187,7 +1208,7 @@ function loadExternalGrantIfNeeded(
   return jobsRepository
     .findUserCollaboratorGrant(actor.organizationId, workItemId, actor.userId)
     .pipe(
-      Effect.catchTag("SqlError", failJobsStorageError),
+      Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
       Effect.map(Option.getOrUndefined)
     );
 }
