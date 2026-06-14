@@ -1,7 +1,15 @@
 import type { OrganizationId, SessionId, UserId } from "@ceird/identity-core";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { Effect, Layer } from "effect";
-import { SqlClient } from "effect/unstable/sql";
 
+import {
+  describeDomainStorageFailure,
+  DomainDrizzle,
+} from "../../platform/database/database.js";
+import {
+  member,
+  session as sessionTable,
+} from "../../platform/database/schema.js";
 import {
   CurrentOrganizationActor,
   resolveCurrentOrganizationActor,
@@ -36,35 +44,50 @@ const makeCurrentOrganizationActorFromMcpSession = (
   session: McpSessionIdentity
 ) =>
   Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
+    const { db } = yield* DomainDrizzle;
 
     return CurrentOrganizationActor.of({
       get: () =>
         resolveCurrentOrganizationActorFromMcpSession({
           loadMembershipRoles: (organizationId, userId) =>
-            sql<MembershipRoleRow>`
-              select role
-              from member
-              where organization_id = ${organizationId}
-                and user_id = ${userId}
-              limit 1
-            `.pipe(
-              Effect.catchTag("SqlError", failCurrentOrganizationActorStorage)
-            ),
+            db
+              .select({ role: member.role })
+              .from(member)
+              .where(
+                and(
+                  eq(member.organizationId, organizationId),
+                  eq(member.userId, userId)
+                )
+              )
+              .limit(1)
+              .pipe(
+                Effect.catchTag(
+                  "EffectDrizzleQueryError",
+                  failCurrentOrganizationActorStorage
+                )
+              ),
           loadSessionById: (sessionId) =>
-            sql<SessionRow>`
-              select
-                active_organization_id as "activeOrganizationId",
-                expires_at as "expiresAt",
-                user_id as "userId"
-              from session
-              where id = ${sessionId}
-                and expires_at > now()
-              limit 1
-            `.pipe(
-              Effect.map((rows) => rows[0] ?? null),
-              Effect.catchTag("SqlError", failCurrentOrganizationActorStorage)
-            ),
+            db
+              .select({
+                activeOrganizationId: sessionTable.activeOrganizationId,
+                expiresAt: sessionTable.expiresAt,
+                userId: sessionTable.userId,
+              })
+              .from(sessionTable)
+              .where(
+                and(
+                  eq(sessionTable.id, sessionId),
+                  gt(sessionTable.expiresAt, sql`now()`)
+                )
+              )
+              .limit(1)
+              .pipe(
+                Effect.catchTag(
+                  "EffectDrizzleQueryError",
+                  failCurrentOrganizationActorStorage
+                )
+              )
+              .pipe(Effect.map((rows) => rows[0] ?? null)),
           session,
         }),
     });
@@ -130,7 +153,7 @@ export const resolveCurrentOrganizationActorFromMcpSession = Effect.fn(
 function failCurrentOrganizationActorStorage(error: unknown) {
   return Effect.fail(
     new OrganizationActorStorageError({
-      cause: error instanceof Error ? error.message : String(error),
+      cause: describeDomainStorageFailure(error),
       message: "MCP actor storage lookup failed",
     })
   );

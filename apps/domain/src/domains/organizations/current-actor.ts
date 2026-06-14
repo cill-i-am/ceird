@@ -11,10 +11,15 @@ import type {
   OrganizationRole,
   UserId as UserIdType,
 } from "@ceird/identity-core";
+import { and, eq } from "drizzle-orm";
 import { Layer, Context, Effect, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
 
+import {
+  describeDomainStorageFailure,
+  DomainDrizzle,
+} from "../../platform/database/database.js";
+import { member } from "../../platform/database/schema.js";
 import { Authentication } from "../identity/authentication/auth.js";
 import {
   OrganizationActiveOrganizationRequiredError,
@@ -134,7 +139,7 @@ export class CurrentOrganizationActor extends Context.Service<CurrentOrganizatio
   {
     make: Effect.gen(function* CurrentOrganizationActorLive() {
       const auth = yield* Authentication;
-      const sql = yield* SqlClient.SqlClient;
+      const { db } = yield* DomainDrizzle;
 
       const get = Effect.fn("CurrentOrganizationActor.get")(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
@@ -143,15 +148,22 @@ export class CurrentOrganizationActor extends Context.Service<CurrentOrganizatio
           getSession: (headers) => auth.api.getSession({ headers }),
           headers: new Headers(request.headers),
           loadMembershipRoles: (organizationId, userId) =>
-            sql<MembershipRoleRow>`
-              select role
-              from member
-              where organization_id = ${organizationId}
-                and user_id = ${userId}
-              limit 1
-            `.pipe(
-              Effect.catchTag("SqlError", failCurrentOrganizationActorStorage)
-            ),
+            db
+              .select({ role: member.role })
+              .from(member)
+              .where(
+                and(
+                  eq(member.organizationId, organizationId),
+                  eq(member.userId, userId)
+                )
+              )
+              .limit(1)
+              .pipe(
+                Effect.catchTag(
+                  "EffectDrizzleQueryError",
+                  failCurrentOrganizationActorStorage
+                )
+              ),
         });
       });
 
@@ -198,7 +210,7 @@ function decodeSessionUserId(input: unknown) {
 function failCurrentOrganizationActorStorage(error: unknown) {
   return Effect.fail(
     new OrganizationActorStorageError({
-      cause: error instanceof Error ? error.message : String(error),
+      cause: describeDomainStorageFailure(error),
       message: "Organization actor storage lookup failed",
     })
   );

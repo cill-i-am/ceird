@@ -69,6 +69,12 @@ Use `DomainDrizzle` when:
   projections
 - Drizzle `sql` fragments are enough for a small SQL-specific expression
 
+Current low-risk `DomainDrizzle` migrations include organization label CRUD and
+active-label reads, user preference get/upsert paths, current organization actor
+membership lookup, and MCP actor session/membership lookup. These paths keep
+explicit column projections and continue to map Drizzle query failures into the
+same domain storage-error surfaces as their previous raw SQL implementations.
+
 Keep raw Effect SQL when CTEs, locks, lateral joins, `skip locked`, JSONB
 cursor/search behavior, query-plan sensitivity, or review clarity make raw SQL
 the better representation. Repository services should map

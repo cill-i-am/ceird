@@ -10,6 +10,7 @@ import type {
 } from "@ceird/labels-core";
 import { Layer, Context, Effect, Option } from "effect";
 
+import { describeDomainStorageFailure } from "../../platform/database/database.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -45,7 +46,7 @@ export class LabelsService extends Context.Service<LabelsService>()(
 
         const labels = yield* labelsRepository
           .list(currentActor.organizationId)
-          .pipe(Effect.catchTag("SqlError", failLabelStorage));
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", failLabelStorage));
 
         return { labels } as const;
       });
@@ -63,7 +64,7 @@ export class LabelsService extends Context.Service<LabelsService>()(
             name: input.name,
             organizationId: currentActor.organizationId,
           })
-          .pipe(Effect.catchTag("SqlError", failLabelStorage));
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", failLabelStorage));
       });
 
       const update = Effect.fn("LabelsService.update")(function* (
@@ -80,7 +81,7 @@ export class LabelsService extends Context.Service<LabelsService>()(
             name: input.name,
           })
           .pipe(
-            Effect.catchTag("SqlError", failLabelStorage),
+            Effect.catchTag("EffectDrizzleQueryError", failLabelStorage),
             Effect.map(Option.getOrUndefined)
           );
 
@@ -106,7 +107,7 @@ export class LabelsService extends Context.Service<LabelsService>()(
 
         const result = yield* labelsRepository
           .archive(currentActor.organizationId, labelId)
-          .pipe(Effect.catchTag("SqlError", failLabelStorage));
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", failLabelStorage));
 
         if (Option.isSome(result)) {
           return result.value;
@@ -158,7 +159,7 @@ function mapAuthorizationDenied(error: OrganizationAuthorizationDeniedError) {
 function failLabelStorage(error: unknown) {
   return Effect.fail(
     new LabelStorageError({
-      cause: error instanceof Error ? error.message : String(error),
+      cause: describeDomainStorageFailure(error),
       message: "Label storage operation failed",
     })
   );

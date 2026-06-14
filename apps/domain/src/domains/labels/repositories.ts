@@ -13,20 +13,22 @@ import type {
   LabelIdType as LabelId,
   LabelName,
 } from "@ceird/labels-core";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import type { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Layer, Context, Effect, Option, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql";
 
+import { DomainDrizzle } from "../../platform/database/database.js";
+import { label } from "../../platform/database/schema.js";
 import { generateLabelId } from "./id-generation.js";
 
 interface LabelRow {
-  readonly archived_at: Date | null;
-  readonly created_at: Date;
+  readonly archivedAt: Date | null;
+  readonly createdAt: Date;
   readonly id: string;
   readonly name: string;
-  readonly normalized_name: string;
-  readonly organization_id: string;
-  readonly updated_at: Date;
+  readonly normalizedName: string;
+  readonly organizationId: string;
+  readonly updatedAt: Date;
 }
 
 export interface CreateLabelRecordInput {
@@ -49,20 +51,24 @@ export class LabelsRepository extends Context.Service<LabelsRepository>()(
   "@ceird/domains/labels/LabelsRepository",
   {
     make: Effect.gen(function* LabelsRepositoryLive() {
-      const sql = yield* SqlClient.SqlClient;
+      const { db } = yield* DomainDrizzle;
 
       const findById = Effect.fn("LabelsRepository.findById")(function* (
         organizationId: OrganizationId,
         labelId: LabelId
       ) {
-        const rows = yield* sql<LabelRow>`
-          select *
-          from labels
-          where organization_id = ${organizationId}
-            and id = ${labelId}
-            and archived_at is null
-          limit 1
-        `;
+        const rows = yield* db
+          .select(labelSelection)
+          .from(label)
+          .where(
+            and(
+              eq(label.organizationId, organizationId),
+              eq(label.id, labelId),
+              isNull(label.archivedAt)
+            )
+          )
+          .limit(1)
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
         return Option.fromNullishOr(rows[0]).pipe(Option.map(mapLabelRow));
       });
@@ -70,11 +76,11 @@ export class LabelsRepository extends Context.Service<LabelsRepository>()(
       const getActiveLabelOrFail = Effect.fn(
         "LabelsRepository.getActiveLabelOrFail"
       )(function* (organizationId: OrganizationId, labelId: LabelId) {
-        const label = yield* findById(organizationId, labelId).pipe(
+        const activeLabel = yield* findById(organizationId, labelId).pipe(
           Effect.map(Option.getOrUndefined)
         );
 
-        if (label === undefined) {
+        if (activeLabel === undefined) {
           return yield* Effect.fail(
             new LabelNotFoundError({
               labelId,
@@ -83,19 +89,23 @@ export class LabelsRepository extends Context.Service<LabelsRepository>()(
           );
         }
 
-        return label;
+        return activeLabel;
       });
 
       const list = Effect.fn("LabelsRepository.list")(function* (
         organizationId: OrganizationId
       ) {
-        const rows = yield* sql<LabelRow>`
-          select *
-          from labels
-          where organization_id = ${organizationId}
-            and archived_at is null
-          order by name asc, id asc
-        `;
+        const rows = yield* db
+          .select(labelSelection)
+          .from(label)
+          .where(
+            and(
+              eq(label.organizationId, organizationId),
+              isNull(label.archivedAt)
+            )
+          )
+          .orderBy(asc(label.name), asc(label.id))
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
 
         return decodeLabelsResponse({
           labels: rows.map(mapLabelRow),
@@ -106,20 +116,20 @@ export class LabelsRepository extends Context.Service<LabelsRepository>()(
         input: CreateLabelRecordInput
       ) {
         const name = decodeLabelName(input.name);
-        const rows = yield* sql<LabelRow>`
-          insert into labels ${sql
-            .insert({
-              id: generateLabelId(),
-              name,
-              normalized_name: normalizeLabelName(name),
-              organization_id: input.organizationId,
-            })
-            .returning("*")}
-        `.pipe(
-          Effect.catchTag("SqlError", (error) =>
-            mapLabelNameConflict(error, name)
-          )
-        );
+        const rows = yield* db
+          .insert(label)
+          .values({
+            id: generateLabelId(),
+            name,
+            normalizedName: normalizeLabelName(name),
+            organizationId: input.organizationId,
+          })
+          .returning(labelSelection)
+          .pipe(
+            Effect.catchTag("EffectDrizzleQueryError", (error) =>
+              mapLabelNameConflict(error, name)
+            )
+          );
 
         const row = yield* getRequiredRow(rows, "inserted label");
 
@@ -132,22 +142,26 @@ export class LabelsRepository extends Context.Service<LabelsRepository>()(
         input: UpdateLabelRecordInput
       ) {
         const name = decodeLabelName(input.name);
-        const rows = yield* sql<LabelRow>`
-          update labels
-          set ${sql.update({
+        const rows = yield* db
+          .update(label)
+          .set({
             name,
-            normalized_name: normalizeLabelName(name),
-            updated_at: new Date(),
-          })}
-          where organization_id = ${organizationId}
-            and id = ${labelId}
-            and archived_at is null
-          returning *
-        `.pipe(
-          Effect.catchTag("SqlError", (error) =>
-            mapLabelNameConflict(error, name)
+            normalizedName: normalizeLabelName(name),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(label.organizationId, organizationId),
+              eq(label.id, labelId),
+              isNull(label.archivedAt)
+            )
           )
-        );
+          .returning(labelSelection)
+          .pipe(
+            Effect.catchTag("EffectDrizzleQueryError", (error) =>
+              mapLabelNameConflict(error, name)
+            )
+          );
 
         return Option.fromNullishOr(rows[0]).pipe(Option.map(mapLabelRow));
       });
@@ -156,28 +170,29 @@ export class LabelsRepository extends Context.Service<LabelsRepository>()(
         organizationId: OrganizationId,
         labelId: LabelId
       ) {
-        return yield* sql.withTransaction(
-          Effect.gen(function* () {
-            const rows = yield* sql<LabelRow>`
-              update labels
-              set archived_at = now(), updated_at = now()
-              where organization_id = ${organizationId}
-                and id = ${labelId}
-                and archived_at is null
-              returning *
-            `;
-
-            const label = Option.fromNullishOr(rows[0]).pipe(
-              Option.map(mapLabelRow)
-            );
-
-            if (Option.isNone(label)) {
-              return Option.none<ArchiveLabelResult>();
-            }
-
-            return Option.some(label.value);
+        const rows = yield* db
+          .update(label)
+          .set({
+            archivedAt: sql`now()`,
+            updatedAt: sql`now()`,
           })
+          .where(
+            and(
+              eq(label.organizationId, organizationId),
+              eq(label.id, labelId),
+              isNull(label.archivedAt)
+            )
+          )
+          .returning(labelSelection)
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
+
+        const archivedLabel = Option.fromNullishOr(rows[0]).pipe(
+          Option.map(mapLabelRow)
         );
+
+        return Option.isNone(archivedLabel)
+          ? Option.none<ArchiveLabelResult>()
+          : Option.some(archivedLabel.value);
       });
 
       return {
@@ -216,19 +231,29 @@ export class LabelsRepository extends Context.Service<LabelsRepository>()(
   static readonly Default = LabelsRepository.DefaultWithoutDependencies;
 }
 
+const labelSelection = {
+  archivedAt: label.archivedAt,
+  createdAt: label.createdAt,
+  id: label.id,
+  name: label.name,
+  normalizedName: label.normalizedName,
+  organizationId: label.organizationId,
+  updatedAt: label.updatedAt,
+} satisfies Record<keyof LabelRow, unknown>;
+
 function mapLabelRow(row: LabelRow): Label {
   return decodeLabel({
-    createdAt: row.created_at.toISOString(),
+    createdAt: row.createdAt.toISOString(),
     id: decodeLabelId(row.id),
     name: row.name,
-    updatedAt: row.updated_at.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   });
 }
 
 function mapLabelNameConflict(
-  error: SqlError.SqlError,
+  error: EffectDrizzleQueryError,
   name: LabelName
-): Effect.Effect<never, LabelNameConflictError | SqlError.SqlError> {
+): Effect.Effect<never, LabelNameConflictError | EffectDrizzleQueryError> {
   if (
     isUniqueConstraintError(error, "labels_organization_normalized_active_idx")
   ) {
@@ -260,12 +285,12 @@ function isUniqueConstraintError(
 
 function getRequiredRow<Value>(
   rows: readonly Value[],
-  label: string
+  description: string
 ): Effect.Effect<Value> {
   const [row] = rows;
 
   if (row === undefined) {
-    return Effect.die(new Error(`Expected ${label} row to be returned`));
+    return Effect.die(new Error(`Expected ${description} row to be returned`));
   }
 
   return Effect.succeed(row);
