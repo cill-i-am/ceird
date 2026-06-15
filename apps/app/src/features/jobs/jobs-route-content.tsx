@@ -5,7 +5,10 @@ import type { ComponentProps } from "react";
 
 import type { DataPlaneSeed } from "#/data-plane/bootstrap";
 import { useApplyDataPlaneSeeds } from "#/data-plane/session";
-import type { JobsListScope } from "#/features/jobs/jobs-data-plane";
+import type {
+  JobsCollectionSyncOptions,
+  JobsListScope,
+} from "#/features/jobs/jobs-data-plane";
 import { JobsPage } from "#/features/jobs/jobs-page";
 import type { JobsListFilters } from "#/features/jobs/jobs-state";
 import { JobsStateProvider } from "#/features/jobs/jobs-state";
@@ -33,6 +36,7 @@ export function JobsRouteContent({
   routeLimit,
   routeProximityLocationEnabled,
   stack = EMPTY_WORKSPACE_SHEET_STACK,
+  sync,
   viewMode,
   viewer,
 }: {
@@ -62,6 +66,7 @@ export function JobsRouteContent({
     typeof JobsPage
   >["routeProximityLocationEnabled"];
   readonly stack?: readonly WorkspaceSheet[] | undefined;
+  readonly sync?: JobsCollectionSyncOptions | undefined;
   readonly viewMode?: ComponentProps<typeof JobsPage>["viewMode"];
   readonly viewer: JobsViewer;
 }) {
@@ -76,6 +81,7 @@ export function JobsRouteContent({
       listScope={listScope}
       options={options}
       queryClient={queryClient}
+      sync={sync}
       viewer={viewer}
     >
       <JobsPage

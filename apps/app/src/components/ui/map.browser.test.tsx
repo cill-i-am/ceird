@@ -118,7 +118,7 @@ vi.mock(import("maplibre-gl"), () => {
       this.container.requestFullscreen = mockedRequestFullscreen;
       this.canvas = document.createElement("canvas");
       this.canvas.tabIndex = 0;
-      this.container.append(this.canvas);
+      (this.container as ParentNode).append(this.canvas);
     }
 
     addLayer(layer: { id: string }, before?: string) {
