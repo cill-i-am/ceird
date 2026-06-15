@@ -110,9 +110,9 @@ export function buildAuthenticatedHomeDashboard({
     activity: {
       available: activityAvailable,
       items: activity.items.slice(0, 5).map((item) => ({
-        actorName: item.actor?.name,
+        actorName: item.actor?.displayName,
         createdAt: formatJobDateTime(item.createdAt),
-        description: describeJobActivity(item.actor?.name, item.payload),
+        description: describeJobActivity(item.actor?.displayName, item.payload),
         jobTitle: item.jobTitle,
         workItemId: item.workItemId,
       })),

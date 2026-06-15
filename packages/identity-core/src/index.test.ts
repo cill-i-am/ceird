@@ -37,6 +37,7 @@ import {
   decodeConnectedAppGrantListResponse,
   decodeDisconnectConnectedAppGrantInput,
   IdentityApi,
+  ProductActorSchema,
 } from "./index.js";
 
 describe("createOrganizationInputSchema", () => {
@@ -71,6 +72,59 @@ describe("createOrganizationInputSchema", () => {
       ).toThrow(/reserved/);
     }
   }, 1000);
+});
+
+describe("product-safe actor projection", () => {
+  const decodeActor = Schema.decodeUnknownSync(ProductActorSchema);
+
+  it("decodes member, agent, and system display actors without auth fields", () => {
+    expect(
+      decodeActor({
+        displayDetail: "Team member",
+        displayName: "Ciara",
+        id: "77777777-7777-4777-8777-777777777777",
+        kind: "member",
+      })
+    ).toStrictEqual({
+      displayDetail: "Team member",
+      displayName: "Ciara",
+      id: "77777777-7777-4777-8777-777777777777",
+      kind: "member",
+    });
+
+    expect(
+      decodeActor({
+        displayName: "Ceird Agent",
+        id: "88888888-8888-4888-8888-888888888888",
+        kind: "agent",
+        route: {
+          href: "/agent/threads/99999999-9999-4999-8999-999999999999",
+          label: "Open thread",
+        },
+      })
+    ).toMatchObject({ displayName: "Ceird Agent", kind: "agent" });
+
+    expect(
+      decodeActor({
+        displayName: "Ceird",
+        id: "99999999-9999-4999-8999-999999999999",
+        kind: "system",
+      })
+    ).toMatchObject({ displayName: "Ceird", kind: "system" });
+  });
+
+  it("rejects Better Auth fields at the actor DTO boundary", () => {
+    expect(() =>
+      decodeActor({
+        displayName: "Ciara",
+        email: "ciara@example.com",
+        id: "77777777-7777-4777-8777-777777777777",
+        kind: "member",
+        sessionId: "session_123",
+        userId: "user_123",
+      })
+    ).toThrow(/[Uu]nexpected/);
+  });
 });
 
 describe("organization slug generation", () => {

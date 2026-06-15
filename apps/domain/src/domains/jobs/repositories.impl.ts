@@ -108,6 +108,7 @@ import {
   workItemLabel,
   workItemVisit,
 } from "../../platform/database/schema.js";
+import { ProductActivityActorsRepository } from "../activity/repository.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
 import { listSiteLabelsForSitesWithSql } from "../sites/site-label-queries.js";
@@ -166,6 +167,7 @@ interface WorkItemCollaboratorRow {
 }
 
 interface WorkItemActivityRow {
+  readonly actor_id: string | null;
   readonly actor_user_id: string | null;
   readonly created_at: Date;
   readonly event_type: string;
@@ -176,8 +178,11 @@ interface WorkItemActivityRow {
 }
 
 interface OrganizationActivityRow extends WorkItemActivityRow {
-  readonly actor_email: string | null;
-  readonly actor_name: string | null;
+  readonly actor_display_detail: string | null;
+  readonly actor_display_name: string | null;
+  readonly actor_kind: string | null;
+  readonly actor_route_href: string | null;
+  readonly actor_route_label: string | null;
   readonly job_title: string;
 }
 
@@ -517,6 +522,7 @@ const workItemCollaboratorSelection = {
 } satisfies Record<keyof WorkItemCollaboratorRow, unknown>;
 
 const workItemActivitySelection = {
+  actor_id: workItemActivity.actorId,
   actor_user_id: workItemActivity.actorUserId,
   created_at: workItemActivity.createdAt,
   event_type: workItemActivity.eventType,
@@ -616,6 +622,7 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
       // Raw SQL remains for write transactions, lock-taking checks, and complex
       // cursor/search/proximity/activity queries outside this safe-read slice.
       const commentsRepository = yield* CommentsRepository;
+      const actors = yield* ProductActivityActorsRepository;
       const defaultListLimit = yield* Config.int(
         "JOBS_DEFAULT_LIST_LIMIT"
       ).pipe(Config.withDefault(50));
@@ -1577,13 +1584,18 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           select
             work_item_activity.*,
             work_items.title as job_title,
-            "user".name as actor_name,
-            "user".email as actor_email
+            product_activity_actors.kind as actor_kind,
+            product_activity_actors.display_name as actor_display_name,
+            product_activity_actors.display_detail as actor_display_detail,
+            product_activity_actors.route_href as actor_route_href,
+            product_activity_actors.route_label as actor_route_label
           from work_item_activity
           join work_items
             on work_items.id = work_item_activity.work_item_id
             and work_items.organization_id = work_item_activity.organization_id
-          left join "user" on "user".id = work_item_activity.actor_user_id
+          left join product_activity_actors
+            on product_activity_actors.id = work_item_activity.actor_id
+            and product_activity_actors.organization_id = work_item_activity.organization_id
           where ${sql.and(clauses)}
           order by work_item_activity.created_at desc, work_item_activity.id desc
           limit ${limit + 1}
@@ -2400,9 +2412,18 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           );
         }
 
+        const actorProjection =
+          input.actorUserId === undefined
+            ? undefined
+            : yield* actors.ensureMemberActor({
+                organizationId: input.organizationId,
+                userId: input.actorUserId,
+              });
+
         const rows = yield* sql<WorkItemActivityRow>`
           insert into work_item_activity ${sql
             .insert({
+              actor_id: actorProjection?.actor.id ?? null,
               actor_user_id: input.actorUserId ?? null,
               event_type: input.payload.eventType,
               id: generateActivityId(),
@@ -2598,7 +2619,8 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
     JobsRepository.make
   );
   static readonly Default = JobsRepository.DefaultWithoutDependencies.pipe(
-    Layer.provide(CommentsRepository.Default)
+    Layer.provide(CommentsRepository.Default),
+    Layer.provide(ProductActivityActorsRepository.Default)
   );
 }
 
@@ -3164,17 +3186,7 @@ function mapOrganizationActivityRow(
   row: OrganizationActivityRow
 ): OrganizationActivityItem {
   return decodeOrganizationActivityItem({
-    actor:
-      row.actor_user_id === null
-        ? undefined
-        : {
-            email: row.actor_email ?? "",
-            id: row.actor_user_id,
-            name: normalizeOptionName(
-              row.actor_name,
-              row.actor_email ?? "Team member"
-            ),
-          },
+    actor: mapProductActorProjection(row),
     createdAt: row.created_at.toISOString(),
     eventType: row.event_type,
     id: row.id,
@@ -3182,6 +3194,30 @@ function mapOrganizationActivityRow(
     payload: decodeJobActivityPayload(row.payload),
     workItemId: row.work_item_id,
   });
+}
+
+function mapProductActorProjection(row: OrganizationActivityRow) {
+  if (
+    row.actor_id === null ||
+    row.actor_kind === null ||
+    row.actor_display_name === null
+  ) {
+    return;
+  }
+
+  return {
+    displayDetail: nullableToUndefined(row.actor_display_detail),
+    displayName: row.actor_display_name,
+    id: row.actor_id,
+    kind: row.actor_kind,
+    route:
+      row.actor_route_href === null || row.actor_route_label === null
+        ? undefined
+        : {
+            href: row.actor_route_href,
+            label: row.actor_route_label,
+          },
+  };
 }
 
 function mapJobVisitRow(row: WorkItemVisitRow): JobVisit {

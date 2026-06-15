@@ -172,7 +172,7 @@ function ActivityTimelineRow({
 }: {
   readonly item: OrganizationActivityItem;
 }) {
-  const actorName = item.actor?.name;
+  const actorName = item.actor?.displayName;
   const actorLabel = actorName ?? "System";
   const summary = describeJobActivity(actorName, item.payload);
 
@@ -294,8 +294,6 @@ function activityItemMatchesSearch(
   const jobTitle = search.jobTitle?.trim().toLocaleLowerCase();
 
   return (
-    (search.actorUserId === undefined ||
-      item.actor?.id === search.actorUserId) &&
     (search.eventType === undefined || item.eventType === search.eventType) &&
     (search.fromDate === undefined ||
       item.createdAt.slice(0, 10) >= search.fromDate) &&

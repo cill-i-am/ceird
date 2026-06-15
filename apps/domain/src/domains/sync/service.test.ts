@@ -91,6 +91,10 @@ const expectedShapeDefinitions = {
     table: "labels",
     where: "organization_id = $1 AND archived_at IS NULL",
   },
+  "product-activity-actors": {
+    scope: "organization",
+    table: "product_activity_actors",
+  },
   "site-comments": {
     scope: "organization",
     table: "site_comments",
