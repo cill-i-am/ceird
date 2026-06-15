@@ -87,6 +87,11 @@ const AGENT_HOST_MISSING_MESSAGE = "The Agent Worker origin is not configured.";
 const AGENT_CONNECT_TOKEN_CACHE_SAFETY_MS = 60_000;
 const AGENT_CONNECT_TOKEN_MAX_CACHE_MS = 240_000;
 const AGENT_PROXIMITY_CONTEXT_ID_PREFIX = "agent-origin-";
+const AGENT_STARTER_PROMPTS = [
+  "Find closest active jobs",
+  "Show open jobs",
+  "Summarize recent activity",
+] as const;
 
 function AgentIcon({
   icon,
@@ -528,6 +533,7 @@ function AgentConversation({
     () => buildActionLookup(actions),
     [actions]
   );
+  const composerRef = React.useRef<AgentComposerHandle | null>(null);
   const conversationContext = React.useMemo(
     () => ({
       actionLookup,
@@ -679,7 +685,13 @@ function AgentConversation({
     <>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 sm:px-6">
         {messages.length === 0 ? (
-          <AgentEmptyState actions={actions} role={role} />
+          <AgentEmptyState
+            actions={actions}
+            onSelectStarterPrompt={(prompt) => {
+              composerRef.current?.setDraft(prompt);
+            }}
+            role={role}
+          />
         ) : (
           <div
             className="flex flex-col gap-4"
@@ -709,6 +721,7 @@ function AgentConversation({
         ) : null}
       </div>
       <AgentComposer
+        ref={composerRef}
         busy={busy}
         locationNotice={locationNotice}
         sendMessage={sendMessageWithRouteContext}
@@ -746,15 +759,16 @@ function ConversationMeta({
 
 function AgentEmptyState({
   actions,
+  onSelectStarterPrompt,
   role,
 }: {
   readonly actions: readonly AgentActionManifestItem[];
+  readonly onSelectStarterPrompt?: (prompt: string) => void;
   readonly role: OrganizationRole;
 }) {
   const readActions = actions.filter((action) => action.kind === "read");
-  const writeActions = actions.filter(
-    (action) =>
-      action.kind !== "read" && action.executionStatus === "executable"
+  const approvalGatedActions = actions.filter(
+    (action) => action.kind !== "read"
   );
 
   return (
@@ -765,27 +779,46 @@ function AgentEmptyState({
         </EmptyMedia>
         <EmptyTitle>Ready for the workspace</EmptyTitle>
         <EmptyDescription>
-          {formatRoleLabel(role)} access is active for this organization.
+          {formatRoleLabel(role)} access is active. Ceird can read workspace
+          context now; write and destructive action entries are treated as
+          approval-gated metadata, not runtime-available tools.
         </EmptyDescription>
       </EmptyHeader>
-      <EmptyContent className="max-w-lg">
+      <EmptyContent className="max-w-xl">
         <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3">
           <CapabilityTile
             icon={FileSearchIcon}
-            label="Read workspace"
+            label="Read workspace now"
             value={`${readActions.length} tools`}
           />
           <CapabilityTile
             icon={Task01Icon}
-            label="Draft changes"
-            value={`${writeActions.length} tools`}
+            label="Approval-gated entries"
+            value={`${approvalGatedActions.length} listed`}
           />
           <CapabilityTile
             icon={CheckmarkCircle02Icon}
-            label="Approval required"
-            value="Before writes"
+            label="Writes are gated"
+            value="Metadata only"
           />
         </div>
+        {onSelectStarterPrompt ? (
+          <div className="mt-4 flex w-full flex-wrap justify-center gap-2">
+            {AGENT_STARTER_PROMPTS.map((prompt) => (
+              <Button
+                key={prompt}
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  onSelectStarterPrompt(prompt);
+                }}
+              >
+                {prompt}
+              </Button>
+            ))}
+          </div>
+        ) : null}
       </EmptyContent>
     </Empty>
   );
@@ -811,21 +844,25 @@ function CapabilityTile({
   );
 }
 
-function AgentComposer({
-  busy,
-  locationNotice,
-  sendMessage,
-}: {
-  readonly busy: boolean;
-  readonly locationNotice: AgentComposerLocationNotice | null;
-  readonly sendMessage: (
-    message: { readonly text: string },
-    options?: AgentSendMessageOptions
-  ) => Promise<boolean>;
-}) {
+interface AgentComposerHandle {
+  setDraft: (draft: string) => void;
+}
+
+const AgentComposer = React.forwardRef<
+  AgentComposerHandle,
+  {
+    readonly busy: boolean;
+    readonly locationNotice: AgentComposerLocationNotice | null;
+    readonly sendMessage: (
+      message: { readonly text: string },
+      options?: AgentSendMessageOptions
+    ) => Promise<boolean>;
+  }
+>(function AgentComposer({ busy, locationNotice, sendMessage }, ref) {
   const [draft, setDraft] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const composerRef = React.useRef<HTMLDivElement | null>(null);
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const pendingOriginMessageRef = React.useRef<string | null>(null);
   const isBusy = busy || submitting;
   const originDialog = useProximityOriginDialogController({
@@ -884,6 +921,17 @@ function AgentComposer({
     }
   });
 
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      setDraft(nextDraft) {
+        setDraft(nextDraft);
+        textareaRef.current?.focus();
+      },
+    }),
+    []
+  );
+
   return (
     <DrawerFooter className="shrink-0 gap-3 border-t bg-background px-5 py-3 sm:px-6">
       <div ref={composerRef} className="flex w-full flex-col gap-2">
@@ -902,6 +950,7 @@ function AgentComposer({
           />
         ) : null}
         <Textarea
+          ref={textareaRef}
           aria-label="Message Ask Ceird"
           className="max-h-36 min-h-20 resize-none"
           placeholder="Describe the next operation"
@@ -967,7 +1016,7 @@ function AgentComposer({
       </div>
     </DrawerFooter>
   );
-}
+});
 
 function AgentLocationNotice({
   busy,

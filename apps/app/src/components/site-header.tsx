@@ -1,7 +1,10 @@
 "use client";
 import type { OrganizationRole } from "@ceird/identity-core";
+import { AiChat02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useRouterState } from "@tanstack/react-router";
 
+import { Button } from "#/components/ui/button";
 import { SidebarTrigger, useSidebar } from "#/components/ui/sidebar";
 import {
   Tooltip,
@@ -20,9 +23,15 @@ import { ShortcutHelpOverlay } from "#/hotkeys/shortcut-help-overlay";
 import { ShortcutIntroNotice } from "#/hotkeys/shortcut-intro-notice";
 
 export function SiteHeader({
+  agentChatOpen = false,
+  canUseAgent = false,
   currentOrganizationRole: appCurrentOrganizationRole,
+  onOpenAgentChat,
 }: {
+  agentChatOpen?: boolean;
+  canUseAgent?: boolean;
   currentOrganizationRole?: OrganizationRole | undefined;
+  onOpenAgentChat?: () => void;
 }) {
   const { isMobile } = useSidebar();
   const activeScopes = useRouterState({
@@ -62,6 +71,38 @@ export function SiteHeader({
             buttonClassName="size-10 gap-0 rounded-lg border-border/70 bg-background/80 px-0 sm:size-8 sm:rounded-md"
             labelClassName="sr-only"
           />
+        ) : null}
+        {canUseAgent ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="ml-auto h-10 rounded-lg border-border/70 bg-background/80 px-3 sm:h-8 sm:rounded-md"
+                  aria-label="Ask Ceird"
+                  aria-expanded={agentChatOpen}
+                  aria-haspopup="dialog"
+                  onClick={onOpenAgentChat}
+                >
+                  <HugeiconsIcon
+                    aria-hidden="true"
+                    icon={AiChat02Icon}
+                    strokeWidth={2}
+                    data-icon="inline-start"
+                  />
+                  <span className="hidden sm:inline">Ask Ceird</span>
+                </Button>
+              }
+            />
+            <TooltipContent>
+              <span>Ask Ceird</span>
+              <ShortcutHint
+                hotkey={HOTKEYS.openAgentChat.hotkey}
+                label={HOTKEYS.openAgentChat.label}
+              />
+            </TooltipContent>
+          </Tooltip>
         ) : null}
       </div>
       <ShortcutIntroNotice />

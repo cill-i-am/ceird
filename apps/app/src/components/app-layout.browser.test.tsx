@@ -11,6 +11,7 @@ const {
   mockedAppSidebar,
   mockedEmailVerificationBanner,
   mockedGlobalAgentChat,
+  mockedSiteHeader,
   mockedSidebarInset,
 } = vi.hoisted(() => ({
   mockedAppSidebar: vi.fn<
@@ -60,15 +61,42 @@ const {
     ({
       activeOrganizationId,
       currentOrganizationRole,
+      onOpenChange,
+      open,
     }: {
       activeOrganizationId?: unknown;
       currentOrganizationRole?: unknown;
+      onOpenChange?: (open: boolean) => void;
+      open?: boolean;
     }) => ReactElement | null
-  >(({ activeOrganizationId, currentOrganizationRole }) =>
+  >(({ activeOrganizationId, currentOrganizationRole, open }) =>
     activeOrganizationId && currentOrganizationRole ? (
-      <button type="button">Ask Ceird</button>
+      <div data-open={String(open)} data-testid="global-agent-chat" />
     ) : null
   ),
+  mockedSiteHeader: vi.fn<
+    ({
+      agentChatOpen,
+      canUseAgent,
+      onOpenAgentChat,
+    }: {
+      agentChatOpen?: boolean;
+      canUseAgent?: boolean;
+      onOpenAgentChat?: () => void;
+    }) => ReactElement
+  >(({ agentChatOpen, canUseAgent, onOpenAgentChat }) => (
+    <header
+      data-agent-chat-open={String(agentChatOpen)}
+      data-can-use-agent={String(canUseAgent)}
+      data-testid="site-header"
+    >
+      {canUseAgent ? (
+        <button type="button" onClick={onOpenAgentChat}>
+          Ask Ceird
+        </button>
+      ) : null}
+    </header>
+  )),
   mockedSidebarInset: vi.fn<
     ({ children, ...props }: ComponentProps<"div">) => ReactElement
   >(({ children, ...props }: ComponentProps<"div">) => (
@@ -98,7 +126,7 @@ vi.mock(import("#/components/ui/sidebar"), () => ({
 }));
 
 vi.mock(import("#/components/site-header"), () => ({
-  SiteHeader: () => <header data-testid="site-header" />,
+  SiteHeader: mockedSiteHeader,
 }));
 
 vi.mock(import("#/components/app-sidebar"), () => ({
@@ -110,6 +138,7 @@ vi.mock(import("#/features/auth/email-verification-banner"), () => ({
 }));
 
 vi.mock(import("#/features/agent/global-agent-chat"), () => ({
+  GLOBAL_AGENT_CHAT_OPEN_EVENT: "ceird:agent-chat-open" as const,
   GlobalAgentChat: mockedGlobalAgentChat,
   requestOpenGlobalAgentChat: vi.fn<() => void>(),
 }));
@@ -230,7 +259,7 @@ describe("app layout", () => {
   );
 
   it(
-    "mounts the app-level agent chat only inside an organization",
+    "wires the shell Ask Ceird action to the app-level agent chat",
     {
       timeout: 10_000,
     },
@@ -251,10 +280,29 @@ describe("app layout", () => {
       expect(mockedGlobalAgentChat.mock.lastCall?.[0]).toStrictEqual({
         activeOrganizationId: "org_123",
         currentOrganizationRole: "owner",
+        onOpenChange: expect.any(Function),
+        open: false,
       });
       expect(
         screen.getByRole("button", { name: /ask ceird/i })
       ).toBeInTheDocument();
+      expect(screen.getByTestId("site-header")).toHaveAttribute(
+        "data-agent-chat-open",
+        "false"
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /ask ceird/i }));
+
+      expect(mockedGlobalAgentChat.mock.lastCall?.[0]).toStrictEqual({
+        activeOrganizationId: "org_123",
+        currentOrganizationRole: "owner",
+        onOpenChange: expect.any(Function),
+        open: true,
+      });
+      expect(screen.getByTestId("site-header")).toHaveAttribute(
+        "data-agent-chat-open",
+        "true"
+      );
 
       rerender(
         <AppLayout
@@ -271,6 +319,8 @@ describe("app layout", () => {
       expect(mockedGlobalAgentChat.mock.lastCall?.[0]).toStrictEqual({
         activeOrganizationId: null,
         currentOrganizationRole: undefined,
+        onOpenChange: expect.any(Function),
+        open: false,
       });
       expect(
         screen.queryByRole("button", { name: /ask ceird/i })
