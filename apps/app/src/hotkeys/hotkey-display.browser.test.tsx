@@ -213,6 +213,17 @@ describe("hotkey registry", () => {
     }
   );
 
+  it("registers the Agent stop shortcut contract", () => {
+    expect(HOTKEYS.agentStop).toMatchObject({
+      group: "Agent",
+      hotkey: "Mod+.",
+      id: "agentStop",
+      label: "Stop agent response",
+      scope: "global",
+      when: "Agent turn is active",
+    });
+  });
+
   it("keeps the Jobs Near me sequence clear of active map single-key shortcuts", () => {
     const [jobsNearMeFirstChord] = HOTKEYS.jobsNearMe.hotkey.split(/\s+/);
     const [sitesNearMeFirstChord] = HOTKEYS.sitesNearMe.hotkey.split(/\s+/);

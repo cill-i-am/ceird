@@ -154,6 +154,29 @@ describe("shortcut help overlay", () => {
     ).not.toBeInTheDocument();
   }, 1000);
 
+  it("lists the active Agent stop shortcut when the active turn registers it", async () => {
+    renderShortcutHelpOverlay(
+      ["global"],
+      <RegisteredShortcut id="agentStop" />
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /keyboard shortcuts/i })
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /keyboard shortcuts/i,
+    });
+
+    expect(within(dialog).getByText("Stop agent response")).toBeVisible();
+    expect(within(dialog).getByText("Agent turn is active")).toBeVisible();
+    expect(
+      within(dialog).getByLabelText(
+        /stop agent response shortcut: (cmd|ctrl)\+period/i
+      )
+    ).toBeVisible();
+  }, 1000);
+
   it("does not list disabled registered shortcut sequences", async () => {
     renderShortcutHelpOverlay(
       ["global"],
