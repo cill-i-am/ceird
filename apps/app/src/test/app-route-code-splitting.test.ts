@@ -22,6 +22,7 @@ const FORM_HEAVY_ROUTE_FILES = [
   "routes/signup.tsx",
   "routes/verify-email.tsx",
   "routes/_app.settings.tsx",
+  "routes/_app._org.sites-workspace.tsx",
 ] as const;
 
 const ROUTE_SEARCH_FILES = [
@@ -31,6 +32,7 @@ const ROUTE_SEARCH_FILES = [
   "features/jobs/jobs-search.ts",
   "features/organization-security/organization-security-search.ts",
   "features/settings/user-settings-search.ts",
+  "features/sites-workspace/sites-workspace-search.ts",
   "features/workspace-sheets/workspace-sheet-search.ts",
 ] as const;
 

@@ -24,6 +24,7 @@ import { Route as AcceptInvitationInvitationIdRouteImport } from './routes/accep
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppOrgRouteImport } from './routes/_app._org'
 import { Route as AppOrgIndexRouteImport } from './routes/_app._org.index'
+import { Route as AppOrgSitesWorkspaceRouteImport } from './routes/_app._org.sites-workspace'
 import { Route as AppOrgSitesRouteImport } from './routes/_app._org.sites'
 import { Route as AppOrgMembersRouteImport } from './routes/_app._org.members'
 import { Route as AppOrgJobsWorkspaceRouteImport } from './routes/_app._org.jobs-workspace'
@@ -107,6 +108,11 @@ const AppOrgIndexRoute = AppOrgIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppOrgRoute,
 } as any)
+const AppOrgSitesWorkspaceRoute = AppOrgSitesWorkspaceRouteImport.update({
+  id: '/sites-workspace',
+  path: '/sites-workspace',
+  getParentRoute: () => AppOrgRoute,
+} as any)
 const AppOrgSitesRoute = AppOrgSitesRouteImport.update({
   id: '/sites',
   path: '/sites',
@@ -170,6 +176,7 @@ export interface FileRoutesByFullPath {
   '/jobs-workspace': typeof AppOrgJobsWorkspaceRoute
   '/members': typeof AppOrgMembersRoute
   '/sites': typeof AppOrgSitesRoute
+  '/sites-workspace': typeof AppOrgSitesWorkspaceRoute
   '/organization/security': typeof AppOrgOrganizationSecurityRoute
   '/organization/settings': typeof AppOrgOrganizationSettingsRouteWithChildren
   '/organization/settings/labels': typeof AppOrgOrganizationSettingsLabelsRoute
@@ -193,6 +200,7 @@ export interface FileRoutesByTo {
   '/jobs-workspace': typeof AppOrgJobsWorkspaceRoute
   '/members': typeof AppOrgMembersRoute
   '/sites': typeof AppOrgSitesRoute
+  '/sites-workspace': typeof AppOrgSitesWorkspaceRoute
   '/organization/security': typeof AppOrgOrganizationSecurityRoute
   '/organization/settings': typeof AppOrgOrganizationSettingsRouteWithChildren
   '/organization/settings/labels': typeof AppOrgOrganizationSettingsLabelsRoute
@@ -218,6 +226,7 @@ export interface FileRoutesById {
   '/_app/_org/jobs-workspace': typeof AppOrgJobsWorkspaceRoute
   '/_app/_org/members': typeof AppOrgMembersRoute
   '/_app/_org/sites': typeof AppOrgSitesRoute
+  '/_app/_org/sites-workspace': typeof AppOrgSitesWorkspaceRoute
   '/_app/_org/': typeof AppOrgIndexRoute
   '/_app/_org/organization/security': typeof AppOrgOrganizationSecurityRoute
   '/_app/_org/organization/settings': typeof AppOrgOrganizationSettingsRouteWithChildren
@@ -244,6 +253,7 @@ export interface FileRouteTypes {
     | '/jobs-workspace'
     | '/members'
     | '/sites'
+    | '/sites-workspace'
     | '/organization/security'
     | '/organization/settings'
     | '/organization/settings/labels'
@@ -267,6 +277,7 @@ export interface FileRouteTypes {
     | '/jobs-workspace'
     | '/members'
     | '/sites'
+    | '/sites-workspace'
     | '/organization/security'
     | '/organization/settings'
     | '/organization/settings/labels'
@@ -291,6 +302,7 @@ export interface FileRouteTypes {
     | '/_app/_org/jobs-workspace'
     | '/_app/_org/members'
     | '/_app/_org/sites'
+    | '/_app/_org/sites-workspace'
     | '/_app/_org/'
     | '/_app/_org/organization/security'
     | '/_app/_org/organization/settings'
@@ -419,6 +431,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrgIndexRouteImport
       parentRoute: typeof AppOrgRoute
     }
+    '/_app/_org/sites-workspace': {
+      id: '/_app/_org/sites-workspace'
+      path: '/sites-workspace'
+      fullPath: '/sites-workspace'
+      preLoaderRoute: typeof AppOrgSitesWorkspaceRouteImport
+      parentRoute: typeof AppOrgRoute
+    }
     '/_app/_org/sites': {
       id: '/_app/_org/sites'
       path: '/sites'
@@ -499,6 +518,7 @@ interface AppOrgRouteChildren {
   AppOrgJobsWorkspaceRoute: typeof AppOrgJobsWorkspaceRoute
   AppOrgMembersRoute: typeof AppOrgMembersRoute
   AppOrgSitesRoute: typeof AppOrgSitesRoute
+  AppOrgSitesWorkspaceRoute: typeof AppOrgSitesWorkspaceRoute
   AppOrgIndexRoute: typeof AppOrgIndexRoute
   AppOrgOrganizationSecurityRoute: typeof AppOrgOrganizationSecurityRoute
   AppOrgOrganizationSettingsRoute: typeof AppOrgOrganizationSettingsRouteWithChildren
@@ -510,6 +530,7 @@ const AppOrgRouteChildren: AppOrgRouteChildren = {
   AppOrgJobsWorkspaceRoute: AppOrgJobsWorkspaceRoute,
   AppOrgMembersRoute: AppOrgMembersRoute,
   AppOrgSitesRoute: AppOrgSitesRoute,
+  AppOrgSitesWorkspaceRoute: AppOrgSitesWorkspaceRoute,
   AppOrgIndexRoute: AppOrgIndexRoute,
   AppOrgOrganizationSecurityRoute: AppOrgOrganizationSecurityRoute,
   AppOrgOrganizationSettingsRoute: AppOrgOrganizationSettingsRouteWithChildren,
