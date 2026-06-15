@@ -140,6 +140,7 @@ test.describe("global agent chat", () => {
 
     const prepareResponse = await sessionPrepareResponse;
     expect(prepareResponse.ok()).toBe(true);
+    await agentChat.expectComposerReady();
     expect(agentSessionPrepareRequests).toHaveLength(1);
     expect(legacyAgentThreadRequests).toStrictEqual([]);
     const preparedSession = decodePreparedAgentSession(

@@ -1,6 +1,8 @@
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
+import { waitForLocatorHydration } from "./wait-for-submit-hydration";
+
 const AGENT_CHAT_TIMEOUT_MS = 30_000;
 const GLOBAL_AGENT_CHAT_OPEN_EVENT = "ceird:agent-chat-open";
 
@@ -25,6 +27,7 @@ export class GlobalAgentChatPage {
 
   async expectLauncherReady() {
     await expect(this.launcher).toBeVisible({ timeout: AGENT_CHAT_TIMEOUT_MS });
+    await waitForLocatorHydration(this.launcher);
     await expect(this.launcher).toBeEnabled({ timeout: AGENT_CHAT_TIMEOUT_MS });
   }
 
@@ -37,8 +40,11 @@ export class GlobalAgentChatPage {
         timeout: 2500,
       });
       await expect(this.drawer).toBeVisible({ timeout: 2500 });
-      await expect(this.message).toBeVisible({ timeout: 2500 });
     }).toPass({ timeout: AGENT_CHAT_TIMEOUT_MS });
+  }
+
+  async expectComposerReady() {
+    await expect(this.message).toBeVisible({ timeout: AGENT_CHAT_TIMEOUT_MS });
   }
 
   private async openThroughSharedShellEventIfClosed() {

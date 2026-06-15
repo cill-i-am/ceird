@@ -46,12 +46,12 @@ export function AppLayout({
   const previousActiveOrganizationId = React.useRef(activeOrganizationId);
 
   const openAgentChat = React.useCallback(() => {
-    if (!canUseAgent || !agentChatControlsReady) {
+    if (!canUseAgent) {
       return;
     }
 
     setAgentChatOpen(true);
-  }, [agentChatControlsReady, canUseAgent]);
+  }, [canUseAgent]);
   const openAgentChatRef = React.useRef(openAgentChat);
   openAgentChatRef.current = openAgentChat;
 
