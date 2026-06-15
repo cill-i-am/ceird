@@ -1,9 +1,7 @@
 {
   "dialect": "postgres",
   "id": "612f5ce3-2684-47a8-a55a-ace691a31611",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "version": "8",
   "ddl": [
     {
@@ -6827,14 +6825,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "account_user_id_user_id_fkey",
@@ -6844,18 +6838,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "thread_id",
-        "organization_id",
-        "user_id"
-      ],
+      "columns": ["thread_id", "organization_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "agent_threads",
-      "columnsTo": [
-        "id",
-        "organization_id",
-        "user_id"
-      ],
+      "columnsTo": ["id", "organization_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "agent_action_runs_thread_actor_fk",
@@ -6865,14 +6851,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "agent_threads_organization_id_organization_id_fkey",
@@ -6882,14 +6864,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "agent_threads_user_id_user_id_fkey",
@@ -6899,14 +6877,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "comments_organization_id_organization_id_fkey",
@@ -6916,14 +6890,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "author_user_id"
-      ],
+      "columns": ["author_user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "comments_author_user_id_user_id_fkey",
@@ -6933,14 +6903,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "updated_by_user_id"
-      ],
+      "columns": ["updated_by_user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "comments_updated_by_user_id_user_id_fkey",
@@ -6950,16 +6916,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "actor_id",
-        "organization_id"
-      ],
+      "columns": ["actor_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "product_activity_actors",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "comments_actor_org_fk",
@@ -6969,14 +6929,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "contacts_organization_id_organization_id_fkey",
@@ -6986,14 +6942,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "invitation_organization_id_organization_id_fkey",
@@ -7003,14 +6955,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "inviter_id"
-      ],
+      "columns": ["inviter_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "invitation_inviter_id_user_id_fkey",
@@ -7020,14 +6968,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "labels_organization_id_organization_id_fkey",
@@ -7037,14 +6981,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "member_organization_id_organization_id_fkey",
@@ -7054,14 +6994,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "member_user_id_user_id_fkey",
@@ -7071,14 +7007,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "client_id"
-      ],
+      "columns": ["client_id"],
       "schemaTo": "public",
       "tableTo": "oauth_client",
-      "columnsTo": [
-        "client_id"
-      ],
+      "columnsTo": ["client_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "oauth_access_token_client_id_oauth_client_client_id_fkey",
@@ -7088,14 +7020,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "session_id"
-      ],
+      "columns": ["session_id"],
       "schemaTo": "public",
       "tableTo": "session",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "oauth_access_token_session_id_session_id_fkey",
@@ -7105,14 +7033,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "oauth_access_token_user_id_user_id_fkey",
@@ -7122,14 +7046,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "refresh_id"
-      ],
+      "columns": ["refresh_id"],
       "schemaTo": "public",
       "tableTo": "oauth_refresh_token",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "oauth_access_token_refresh_id_oauth_refresh_token_id_fkey",
@@ -7139,14 +7059,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "oauth_client_user_id_user_id_fkey",
@@ -7156,14 +7072,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "client_id"
-      ],
+      "columns": ["client_id"],
       "schemaTo": "public",
       "tableTo": "oauth_client",
-      "columnsTo": [
-        "client_id"
-      ],
+      "columnsTo": ["client_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "oauth_consent_client_id_oauth_client_client_id_fkey",
@@ -7173,14 +7085,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "oauth_consent_user_id_user_id_fkey",
@@ -7190,14 +7098,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "client_id"
-      ],
+      "columns": ["client_id"],
       "schemaTo": "public",
       "tableTo": "oauth_client",
-      "columnsTo": [
-        "client_id"
-      ],
+      "columnsTo": ["client_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "oauth_refresh_token_client_id_oauth_client_client_id_fkey",
@@ -7207,14 +7111,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "session_id"
-      ],
+      "columns": ["session_id"],
       "schemaTo": "public",
       "tableTo": "session",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "oauth_refresh_token_session_id_session_id_fkey",
@@ -7224,14 +7124,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "oauth_refresh_token_user_id_user_id_fkey",
@@ -7241,14 +7137,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "product_activity_actors_organization_id_organization_id_fkey",
@@ -7258,14 +7150,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "product_activity_actor_sources_maep6qoXJmr4_fkey",
@@ -7275,14 +7163,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "product_activity_actor_sources_user_id_user_id_fkey",
@@ -7292,16 +7176,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "actor_id",
-        "organization_id"
-      ],
+      "columns": ["actor_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "product_activity_actors",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "product_activity_actor_sources_actor_org_fk",
@@ -7311,18 +7189,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "agent_thread_id",
-        "organization_id",
-        "user_id"
-      ],
+      "columns": ["agent_thread_id", "organization_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "agent_threads",
-      "columnsTo": [
-        "id",
-        "organization_id",
-        "user_id"
-      ],
+      "columnsTo": ["id", "organization_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "product_activity_actor_sources_agent_thread_fk",
@@ -7332,14 +7202,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "active_organization_id"
-      ],
+      "columns": ["active_organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "session_active_organization_id_organization_id_fkey",
@@ -7349,14 +7215,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "session_user_id_user_id_fkey",
@@ -7366,14 +7228,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "sites_organization_id_organization_id_fkey",
@@ -7383,14 +7241,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "site_active_job_summaries_organization_id_organization_id_fkey",
@@ -7400,16 +7254,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "site_id",
-        "organization_id"
-      ],
+      "columns": ["site_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "sites",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "site_active_job_summaries_site_org_fk",
@@ -7419,16 +7267,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "comment_id",
-        "organization_id"
-      ],
+      "columns": ["comment_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "comments",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "site_comments_comment_org_fk",
@@ -7438,16 +7280,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "site_id",
-        "organization_id"
-      ],
+      "columns": ["site_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "sites",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "site_comments_site_org_fk",
@@ -7457,14 +7293,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "site_contacts_organization_id_organization_id_fkey",
@@ -7474,16 +7306,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "site_id",
-        "organization_id"
-      ],
+      "columns": ["site_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "sites",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "site_contacts_site_org_fk",
@@ -7493,16 +7319,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "contact_id",
-        "organization_id"
-      ],
+      "columns": ["contact_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "contacts",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "site_contacts_contact_org_fk",
@@ -7512,14 +7332,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "site_labels_organization_id_organization_id_fkey",
@@ -7529,16 +7345,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "site_id",
-        "organization_id"
-      ],
+      "columns": ["site_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "sites",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "site_labels_site_org_fk",
@@ -7548,16 +7358,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "label_id",
-        "organization_id"
-      ],
+      "columns": ["label_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "labels",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "site_labels_label_org_fk",
@@ -7567,14 +7371,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "two_factor_user_id_user_id_fkey",
@@ -7584,14 +7384,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "user_preferences_user_id_user_id_fkey",
@@ -7601,14 +7397,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_items_organization_id_organization_id_fkey",
@@ -7618,14 +7410,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "assignee_id"
-      ],
+      "columns": ["assignee_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "work_items_assignee_id_user_id_fkey",
@@ -7635,14 +7423,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "coordinator_id"
-      ],
+      "columns": ["coordinator_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "work_items_coordinator_id_user_id_fkey",
@@ -7652,14 +7436,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "completed_by_user_id"
-      ],
+      "columns": ["completed_by_user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "work_items_completed_by_user_id_user_id_fkey",
@@ -7669,14 +7449,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "created_by_user_id"
-      ],
+      "columns": ["created_by_user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "work_items_created_by_user_id_user_id_fkey",
@@ -7686,16 +7462,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "site_id",
-        "organization_id"
-      ],
+      "columns": ["site_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "sites",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "work_items_site_org_fk",
@@ -7705,16 +7475,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "contact_id",
-        "organization_id"
-      ],
+      "columns": ["contact_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "contacts",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "work_items_contact_org_fk",
@@ -7724,14 +7488,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_activity_organization_id_organization_id_fkey",
@@ -7741,14 +7501,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "actor_user_id"
-      ],
+      "columns": ["actor_user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "work_item_activity_actor_user_id_user_id_fkey",
@@ -7758,16 +7514,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "work_item_id",
-        "organization_id"
-      ],
+      "columns": ["work_item_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "work_items",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_activity_work_item_organization_fk",
@@ -7777,16 +7527,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "actor_id",
-        "organization_id"
-      ],
+      "columns": ["actor_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "product_activity_actors",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "work_item_activity_actor_org_fk",
@@ -7796,14 +7540,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_collaborators_organization_id_organization_id_fkey",
@@ -7813,14 +7553,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_collaborators_user_id_user_id_fkey",
@@ -7830,14 +7566,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "created_by_user_id"
-      ],
+      "columns": ["created_by_user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "work_item_collaborators_created_by_user_id_user_id_fkey",
@@ -7847,16 +7579,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "work_item_id",
-        "organization_id"
-      ],
+      "columns": ["work_item_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "work_items",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_collaborators_work_item_org_fk",
@@ -7866,16 +7592,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "organization_id",
-        "user_id"
-      ],
+      "columns": ["organization_id", "user_id"],
       "schemaTo": "public",
       "tableTo": "member",
-      "columnsTo": [
-        "organization_id",
-        "user_id"
-      ],
+      "columnsTo": ["organization_id", "user_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_collaborators_member_fk",
@@ -7885,16 +7605,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "comment_id",
-        "organization_id"
-      ],
+      "columns": ["comment_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "comments",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_comments_comment_org_fk",
@@ -7904,16 +7618,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "work_item_id",
-        "organization_id"
-      ],
+      "columns": ["work_item_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "work_items",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_comments_work_item_org_fk",
@@ -7923,14 +7631,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_labels_organization_id_organization_id_fkey",
@@ -7940,16 +7644,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "work_item_id",
-        "organization_id"
-      ],
+      "columns": ["work_item_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "work_items",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_labels_work_item_org_fk",
@@ -7959,16 +7657,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "label_id",
-        "organization_id"
-      ],
+      "columns": ["label_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "labels",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_labels_label_org_fk",
@@ -7978,14 +7670,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "organization_id"
-      ],
+      "columns": ["organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_visits_organization_id_organization_id_fkey",
@@ -7995,14 +7683,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "author_user_id"
-      ],
+      "columns": ["author_user_id"],
       "schemaTo": "public",
       "tableTo": "user",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "work_item_visits_author_user_id_user_id_fkey",
@@ -8012,16 +7696,10 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "work_item_id",
-        "organization_id"
-      ],
+      "columns": ["work_item_id", "organization_id"],
       "schemaTo": "public",
       "tableTo": "work_items",
-      "columnsTo": [
-        "id",
-        "organization_id"
-      ],
+      "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_visits_work_item_organization_fk",
@@ -8030,10 +7708,7 @@
       "table": "work_item_visits"
     },
     {
-      "columns": [
-        "site_id",
-        "organization_id"
-      ],
+      "columns": ["site_id", "organization_id"],
       "nameExplicit": false,
       "name": "site_active_job_summaries_pkey",
       "entityType": "pks",
@@ -8041,10 +7716,7 @@
       "table": "site_active_job_summaries"
     },
     {
-      "columns": [
-        "site_id",
-        "contact_id"
-      ],
+      "columns": ["site_id", "contact_id"],
       "nameExplicit": false,
       "name": "site_contacts_pkey",
       "entityType": "pks",
@@ -8052,10 +7724,7 @@
       "table": "site_contacts"
     },
     {
-      "columns": [
-        "site_id",
-        "label_id"
-      ],
+      "columns": ["site_id", "label_id"],
       "nameExplicit": false,
       "name": "site_labels_pkey",
       "entityType": "pks",
@@ -8063,10 +7732,7 @@
       "table": "site_labels"
     },
     {
-      "columns": [
-        "work_item_id",
-        "label_id"
-      ],
+      "columns": ["work_item_id", "label_id"],
       "nameExplicit": false,
       "name": "work_item_labels_pkey",
       "entityType": "pks",
@@ -8074,9 +7740,7 @@
       "table": "work_item_labels"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "account_pkey",
       "schema": "public",
@@ -8084,9 +7748,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "agent_action_runs_pkey",
       "schema": "public",
@@ -8094,9 +7756,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "agent_threads_pkey",
       "schema": "public",
@@ -8104,9 +7764,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "auth_security_audit_event_pkey",
       "schema": "public",
@@ -8114,9 +7772,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "comments_pkey",
       "schema": "public",
@@ -8124,9 +7780,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "contacts_pkey",
       "schema": "public",
@@ -8134,9 +7788,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "invitation_pkey",
       "schema": "public",
@@ -8144,9 +7796,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "jwks_pkey",
       "schema": "public",
@@ -8154,9 +7804,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "labels_pkey",
       "schema": "public",
@@ -8164,9 +7812,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "member_pkey",
       "schema": "public",
@@ -8174,9 +7820,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "oauth_access_token_pkey",
       "schema": "public",
@@ -8184,9 +7828,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "oauth_client_pkey",
       "schema": "public",
@@ -8194,9 +7836,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "oauth_consent_pkey",
       "schema": "public",
@@ -8204,9 +7844,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "oauth_refresh_token_pkey",
       "schema": "public",
@@ -8214,9 +7852,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "organization_pkey",
       "schema": "public",
@@ -8224,9 +7860,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "product_activity_actors_pkey",
       "schema": "public",
@@ -8234,9 +7868,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "actor_id"
-      ],
+      "columns": ["actor_id"],
       "nameExplicit": false,
       "name": "product_activity_actor_sources_pkey",
       "schema": "public",
@@ -8244,9 +7876,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "rate_limit_pkey",
       "schema": "public",
@@ -8254,9 +7884,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "session_pkey",
       "schema": "public",
@@ -8264,9 +7892,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "sites_pkey",
       "schema": "public",
@@ -8274,9 +7900,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "comment_id"
-      ],
+      "columns": ["comment_id"],
       "nameExplicit": false,
       "name": "site_comments_pkey",
       "schema": "public",
@@ -8284,9 +7908,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "two_factor_pkey",
       "schema": "public",
@@ -8294,9 +7916,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "user_pkey",
       "schema": "public",
@@ -8304,9 +7924,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "nameExplicit": false,
       "name": "user_preferences_pkey",
       "schema": "public",
@@ -8314,9 +7932,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "verification_pkey",
       "schema": "public",
@@ -8324,9 +7940,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "work_items_pkey",
       "schema": "public",
@@ -8334,9 +7948,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "work_item_activity_pkey",
       "schema": "public",
@@ -8344,9 +7956,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "work_item_collaborators_pkey",
       "schema": "public",
@@ -8354,9 +7964,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "comment_id"
-      ],
+      "columns": ["comment_id"],
       "nameExplicit": false,
       "name": "work_item_comments_pkey",
       "schema": "public",
@@ -8364,9 +7972,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "work_item_visits_pkey",
       "schema": "public",
@@ -8375,9 +7981,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "token"
-      ],
+      "columns": ["token"],
       "nullsNotDistinct": false,
       "name": "oauth_access_token_token_key",
       "schema": "public",
@@ -8386,9 +7990,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "client_id"
-      ],
+      "columns": ["client_id"],
       "nullsNotDistinct": false,
       "name": "oauth_client_client_id_key",
       "schema": "public",
@@ -8397,9 +7999,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "token"
-      ],
+      "columns": ["token"],
       "nullsNotDistinct": false,
       "name": "oauth_refresh_token_token_key",
       "schema": "public",
@@ -8408,9 +8008,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "token"
-      ],
+      "columns": ["token"],
       "nullsNotDistinct": false,
       "name": "session_token_key",
       "schema": "public",
@@ -8419,9 +8017,7 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "email"
-      ],
+      "columns": ["email"],
       "nullsNotDistinct": false,
       "name": "user_email_key",
       "schema": "public",
