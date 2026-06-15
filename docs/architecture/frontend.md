@@ -149,14 +149,21 @@ Authenticated layout and navigation live under:
 
 The authenticated app shell also mounts the global Ceird Agent entry point in
 `features/agent/global-agent-chat.tsx`. It is app-level rather than
-route-level: the fixed launcher, `Mod+J` hotkey, and command bar action are
-available anywhere an active organization exists. The shell entry stays
-intentionally small; it lazy-loads
-`features/agent/global-agent-chat-panel.tsx` only after the user opens the
-drawer, keeping `agents/react`, `@cloudflare/ai-chat/react`, and the Agent API
-client out of normal authenticated page startup. Desktop opens a right-side
-drawer and mobile uses the existing bottom drawer behavior. The browser app
-prepares or reuses the current user's active thread through
+route-level: `AppLayout` owns the Agent drawer open state, the authenticated
+header exposes the visible `Ask Ceird` action when an active organization and
+current role are available, and the command bar action plus `Mod+J` hotkey open
+that same drawer. The header action uses dialog semantics, accurate expanded
+state, and the shared shortcut display for `Mod+J`; there is no fixed
+bottom-right launcher. The shell entry stays intentionally small; it
+lazy-loads `features/agent/global-agent-chat-panel.tsx` only after the user
+opens the drawer, keeping `agents/react`, `@cloudflare/ai-chat/react`, and the
+Agent API client out of normal authenticated page startup. Desktop opens a
+right-side drawer and mobile uses the existing bottom drawer behavior. The
+first-open drawer state presents read capabilities as usable, frames write and
+destructive manifest entries conservatively as approval-gated metadata unless a
+runtime availability signal proves otherwise, and offers prompt starter buttons
+that fill the composer draft without sending. The browser app prepares or
+reuses the current user's active thread through
 `POST /agent/session/prepare`, which returns the thread, public action
 manifest, and initial short-lived connect token before the drawer connects to
 the Agent Worker. Later reconnects refresh the token through the thread

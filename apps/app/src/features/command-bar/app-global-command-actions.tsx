@@ -9,7 +9,7 @@ import {
   getPrimaryNavItemsForRole,
   getPrimaryNavShortcut,
 } from "#/components/app-navigation";
-import { requestOpenGlobalAgentChat } from "#/features/agent/global-agent-chat";
+import { requestOpenGlobalAgentChat } from "#/features/agent/global-agent-chat-events";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 
 import { useRegisterCommandActions } from "./command-bar";

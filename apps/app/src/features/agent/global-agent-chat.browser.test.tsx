@@ -403,7 +403,13 @@ describe("global agent chat", () => {
   });
 
   it("stays hidden when there is no active organization", () => {
-    render(<GlobalAgentChat activeOrganizationId={null} />);
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={null}
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
+      />
+    );
 
     expect(
       screen.queryByRole("button", { name: /ask ceird/i })
@@ -411,7 +417,13 @@ describe("global agent chat", () => {
   });
 
   it("stays hidden until the active organization role is known", () => {
-    render(<GlobalAgentChat activeOrganizationId={"org_123" as never} />);
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
+      />
+    );
 
     expect(
       screen.queryByRole("button", { name: /ask ceird/i })
@@ -419,7 +431,13 @@ describe("global agent chat", () => {
   });
 
   it("ignores app-level open events until agent access is available", () => {
-    render(<GlobalAgentChat activeOrganizationId={"org_123" as never} />);
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
+      />
+    );
 
     act(() => {
       window.dispatchEvent(new CustomEvent("ceird:agent-chat-open"));
@@ -431,15 +449,14 @@ describe("global agent chat", () => {
   });
 
   it("opens one app-level drawer and prepares a single org agent session", async () => {
-    const user = userEvent.setup();
     render(
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     await expect(
       screen.findByRole("heading", { name: /ask ceird/i })
@@ -492,6 +509,49 @@ describe("global agent chat", () => {
     expect(useAgentChatOptions?.getInitialMessages).toBeUndefined();
   });
 
+  it("fills the composer from first-open prompt starters without sending", async () => {
+    const user = userEvent.setup();
+    mockedUseAgentChat.mockReturnValueOnce({
+      clearHistory: () => {},
+      error: undefined,
+      isStreaming: false,
+      messages: [],
+      addToolApprovalResponse: mockedAddToolApprovalResponse,
+      sendMessage: mockedSendMessage,
+      status: "ready",
+    } as unknown as ReturnType<typeof AiChatReactModule.useAgentChat>);
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
+      />
+    );
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    await expect(
+      within(drawer).findByText(/read workspace context now/i)
+    ).resolves.toBeVisible();
+    expect(within(drawer).getByText(/approval-gated metadata/i)).toBeVisible();
+    expect(within(drawer).getByText("Writes are gated")).toBeVisible();
+    expect(within(drawer).getByText("Metadata only")).toBeVisible();
+    expect(within(drawer).queryByText(/confirmed/i)).not.toBeInTheDocument();
+
+    await user.click(
+      within(drawer).getByRole("button", {
+        name: "Find closest active jobs",
+      })
+    );
+
+    await waitFor(() => {
+      expect(
+        within(drawer).getByRole("textbox", { name: /message ask ceird/i })
+      ).toHaveValue("Find closest active jobs");
+    });
+    expect(mockedSendMessage).not.toHaveBeenCalled();
+  });
+
   it("shows a retryable configuration error before creating a thread", async () => {
     const user = userEvent.setup();
     mockedResolveAgentHost.mockImplementation(missingAgentHost);
@@ -499,10 +559,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     await expect(
       screen.findByText(/agent worker origin is not configured/i)
@@ -526,10 +586,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     await expect(
       screen.findByText("Agent authorization failed.")
@@ -563,10 +623,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     expect(within(drawer).getByRole("log")).toHaveAttribute(
@@ -609,10 +669,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     const textbox = within(drawer).getByRole("textbox", {
@@ -663,10 +723,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     const textbox = within(drawer).getByRole("textbox", {
@@ -699,10 +759,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     const textbox = within(drawer).getByRole("textbox", {
@@ -748,10 +808,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     const textbox = within(drawer).getByRole("textbox", {
@@ -818,10 +878,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     const textbox = within(drawer).getByRole("textbox", {
@@ -874,10 +934,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     const textbox = within(drawer).getByRole("textbox", {
@@ -912,10 +972,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     const textbox = within(drawer).getByRole("textbox", {
@@ -957,10 +1017,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     await user.type(
@@ -970,7 +1030,13 @@ describe("global agent chat", () => {
     await user.click(within(drawer).getByRole("button", { name: /^send$/i }));
 
     expect(geolocation.getCurrentPosition).toHaveBeenCalledOnce();
-    rerender(<GlobalAgentChat activeOrganizationId={null} />);
+    rerender(
+      <GlobalAgentChat
+        activeOrganizationId={null}
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
+      />
+    );
 
     act(() => {
       geolocation.resolve();
@@ -999,10 +1065,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     await user.type(
@@ -1014,7 +1080,13 @@ describe("global agent chat", () => {
     await waitFor(() => {
       expect(mockedGetCurrentUserPreferences).toHaveBeenCalledOnce();
     });
-    rerender(<GlobalAgentChat activeOrganizationId={null} />);
+    rerender(
+      <GlobalAgentChat
+        activeOrganizationId={null}
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
+      />
+    );
 
     act(() => {
       preferenceLookup.resolve({
@@ -1040,10 +1112,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     await user.type(
@@ -1077,10 +1149,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     await user.type(
@@ -1106,7 +1178,6 @@ describe("global agent chat", () => {
   });
 
   it("renders nearby job tool output as compact route rows", async () => {
-    const user = userEvent.setup();
     mockedUseAgentChat.mockReturnValue(
       makeChatReturnValue([
         {
@@ -1127,10 +1198,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     expect(within(drawer).getByText("Closest jobs")).toBeVisible();
@@ -1143,7 +1214,6 @@ describe("global agent chat", () => {
   });
 
   it("renders nearby site and route preview tool output inline", async () => {
-    const user = userEvent.setup();
     mockedUseAgentChat.mockReturnValue(
       makeChatReturnValue([
         {
@@ -1170,10 +1240,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     expect(within(drawer).getByText("Closest sites")).toBeVisible();
@@ -1216,10 +1286,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     expect(within(drawer).getByText("Approval required")).toBeVisible();
@@ -1246,7 +1316,6 @@ describe("global agent chat", () => {
   });
 
   it("does not show approval controls without an approval decision id", async () => {
-    const user = userEvent.setup();
     mockedUseAgentChat.mockReturnValue({
       clearHistory: () => {},
       error: undefined,
@@ -1273,10 +1342,10 @@ describe("global agent chat", () => {
       <GlobalAgentChat
         activeOrganizationId={"org_123" as never}
         currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
       />
     );
-
-    await user.click(screen.getByRole("button", { name: /ask ceird/i }));
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     expect(within(drawer).getByText("Approval required")).toBeVisible();
