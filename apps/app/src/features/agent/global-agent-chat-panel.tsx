@@ -765,9 +765,7 @@ function ConversationMeta({
       <div className="flex items-center gap-2">
         <span>{actions.length} registered actions</span>
         {statusBadgeLabel ? (
-          <Badge variant="secondary" render={<output aria-live="polite" />}>
-            {statusBadgeLabel}
-          </Badge>
+          <Badge variant="secondary">{statusBadgeLabel}</Badge>
         ) : null}
       </div>
     </div>
