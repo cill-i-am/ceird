@@ -359,6 +359,80 @@ describe("data-plane Query Collection fallback", () => {
     ).toHaveBeenCalledWith(snapshotOptions);
   });
 
+  it("replays requested snapshots to the newly retried Electric collection", () => {
+    const queryCollection = makeTestCollection([
+      { id: "query-label", name: "Query label" },
+    ]);
+    const firstElectricCollection = makeTestCollection([
+      { id: "first-electric-label", name: "First Electric label" },
+    ]);
+    const retriedElectricCollection = makeTestCollection([
+      { id: "retried-electric-label", name: "Retried Electric label" },
+    ]);
+    const firstHealth = makeElectricHealth();
+    const retriedHealth = makeElectricHealth();
+    let createElectricCallCount = 0;
+    let onSyncError: ((error: DataPlaneElectricSyncError) => void) | undefined;
+
+    const result = createCollectionWithQueryFallback(
+      new QueryClient(),
+      {
+        electric: electricContract,
+        query: queryContract,
+      },
+      {
+        createElectricCollection: (_contract, options) => {
+          ({ onSyncError } = options);
+          createElectricCallCount += 1;
+          return {
+            collection:
+              createElectricCallCount === 1
+                ? firstElectricCollection
+                : retriedElectricCollection,
+            health: createElectricCallCount === 1 ? firstHealth : retriedHealth,
+            shapeUrl: "https://sync.example/v1/shapes/labels",
+            status: "enabled",
+          };
+        },
+        createQueryCollection: () => queryCollection,
+        runtime: { isBrowser: true },
+      }
+    );
+    const callback = vi.fn<() => void>();
+    const subscribeOptions = { includeInitialState: false };
+    const snapshotOptions = { optimizedOnly: false };
+    const collection = readTestSubscription(result.collection);
+    const activeSubscription = collection.subscribeChanges(
+      callback,
+      subscribeOptions
+    );
+    activeSubscription.requestSnapshot?.(snapshotOptions);
+
+    const error = makeElectricError({ kind: "network", status: 503 });
+    firstHealth.markUnavailable(error);
+    onSyncError?.(error);
+
+    expect(
+      queryCollection.subscriptions[0]?.requestSnapshot
+    ).toHaveBeenCalledWith(snapshotOptions);
+    expect(result.health.retryElectric()).toBeTruthy();
+
+    expect(firstElectricCollection.subscribeChanges).toHaveBeenCalledOnce();
+    expect(
+      firstElectricCollection.subscriptions[0]?.requestSnapshot
+    ).toHaveBeenCalledOnce();
+    expect(retriedElectricCollection.subscribeChanges).toHaveBeenCalledWith(
+      callback,
+      subscribeOptions
+    );
+    expect(
+      retriedElectricCollection.subscriptions[0]?.requestSnapshot
+    ).toHaveBeenCalledWith(snapshotOptions);
+    expect(
+      [...result.collection.entries()].map(([, row]) => row.id)
+    ).toStrictEqual(["retried-electric-label"]);
+  });
+
   it("loads seeded Query Collection data after hydration snapshot replay and Electric fallback", async () => {
     const queryClient = new QueryClient();
     const queryKey = ["labels", "hydrated-fallback"];

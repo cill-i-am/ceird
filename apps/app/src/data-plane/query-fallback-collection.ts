@@ -178,8 +178,8 @@ export function createCollectionWithQueryFallback<
   let electricCollection = electricResult.collection;
   healthBridge.setRetryElectric(() => {
     const retryResult = createElectricResult();
-    healthBridge.replaceHealth(retryResult.health);
     if (retryResult.status === "disabled") {
+      healthBridge.replaceHealth(retryResult.health);
       healthBridge.markFallbackActive({
         reason: fallbackReasonFromElectricDisabledReason(
           retryResult.disabledReason
@@ -188,8 +188,10 @@ export function createCollectionWithQueryFallback<
       return false;
     }
 
-    void cleanupCollection(electricCollection);
+    const previousElectricCollection = electricCollection;
     electricCollection = retryResult.collection;
+    healthBridge.replaceHealth(retryResult.health);
+    void cleanupCollection(previousElectricCollection);
     return true;
   });
 
