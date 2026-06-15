@@ -7,10 +7,8 @@ import { AppSidebar } from "#/components/app-sidebar";
 import type { NavUserAccount } from "#/components/nav-user";
 import { SiteHeader } from "#/components/site-header";
 import { SidebarInset, SidebarProvider } from "#/components/ui/sidebar";
-import {
-  GLOBAL_AGENT_CHAT_OPEN_EVENT,
-  GlobalAgentChat,
-} from "#/features/agent/global-agent-chat";
+import { GlobalAgentChat } from "#/features/agent/global-agent-chat";
+import { GLOBAL_AGENT_CHAT_OPEN_EVENT } from "#/features/agent/global-agent-chat-events";
 import { EmailVerificationBanner } from "#/features/auth/email-verification-banner";
 import {
   AppAgentCommandActions,
