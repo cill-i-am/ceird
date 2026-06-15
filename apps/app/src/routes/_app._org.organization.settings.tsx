@@ -1,5 +1,10 @@
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
-import { createFileRoute, useRouteContext } from "@tanstack/react-router";
+import {
+  Outlet,
+  createFileRoute,
+  useRouteContext,
+  useRouterState,
+} from "@tanstack/react-router";
 
 import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-route-access";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
@@ -35,9 +40,16 @@ export function assertSettingsRouteAccess(context: SettingsRouteContext) {
   assertOrganizationAdministrationRouteContext(context);
 }
 
-function SettingsRoute() {
+export function SettingsRoute() {
   const { activeOrganization } = useRouteContext({ from: "/_app/_org" });
   const { organizationLabels } = Route.useLoaderData();
+  const isSettingsIndexRoute = useRouterState({
+    select: (state) => state.location.pathname === "/organization/settings",
+  });
+
+  if (!isSettingsIndexRoute) {
+    return <Outlet />;
+  }
 
   if (!activeOrganization) {
     throw new Error("Organization settings require an active organization.");
