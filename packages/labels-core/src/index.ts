@@ -11,15 +11,17 @@ export type {
 } from "./domain.js";
 export {
   CreateLabelInputSchema,
-  LabelResponseSchema,
+  ElectricMutationConfirmationSchema,
+  LabelWriteResponseSchema,
   LabelsResponseSchema,
   LabelSchema,
   UpdateLabelInputSchema,
 } from "./dto.js";
 export type {
   CreateLabelInput,
+  ElectricMutationConfirmation,
   Label,
-  LabelResponse,
+  LabelWriteResponse,
   LabelsResponse,
   UpdateLabelInput,
 } from "./dto.js";

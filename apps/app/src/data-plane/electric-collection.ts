@@ -10,6 +10,7 @@ import type {
 import { FetchError, snakeCamelMapper } from "@electric-sql/client";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { electricCollectionOptions } from "@tanstack/electric-db-collection";
+import type { ElectricCollectionConfig } from "@tanstack/electric-db-collection";
 import { createCollection } from "@tanstack/react-db";
 
 import type {
@@ -51,21 +52,39 @@ interface ResolvedDataPlaneElectricRuntime extends DataPlaneElectricRuntime {
   readonly syncOrigin?: string | undefined;
 }
 
+type DataPlaneElectricSchemaOutput<
+  Schema extends StandardSchemaV1<unknown, ElectricRow<unknown>>,
+> = Schema extends StandardSchemaV1
+  ? StandardSchemaV1.InferOutput<Schema> extends ElectricRow<unknown>
+    ? StandardSchemaV1.InferOutput<Schema>
+    : ElectricRow<unknown>
+  : ElectricRow<unknown>;
+
 export interface DataPlaneElectricCollectionContract<
   Schema extends StandardSchemaV1<unknown, ElectricRow<unknown>>,
   Key extends string | number,
 > {
   readonly collection: DataPlaneCollectionName;
   readonly completeness: DataPlaneCollectionCompleteness;
-  readonly getKey: (item: StandardSchemaV1.InferOutput<Schema>) => Key;
+  readonly getKey: (item: DataPlaneElectricSchemaOutput<Schema>) => Key;
   readonly id: string;
+  readonly mutationHandlers?:
+    | DataPlaneElectricMutationHandlers<Schema>
+    | undefined;
   readonly schema: Schema;
   readonly shapeName: SyncShapeName;
   readonly shapeOptions?:
-    | DataPlaneElectricShapeOptions<StandardSchemaV1.InferOutput<Schema>>
+    | DataPlaneElectricShapeOptions<DataPlaneElectricSchemaOutput<Schema>>
     | undefined;
   readonly syncMode?: DataPlaneElectricCollectionSyncMode | undefined;
 }
+
+export type DataPlaneElectricMutationHandlers<
+  Schema extends StandardSchemaV1<unknown, ElectricRow<unknown>>,
+> = Pick<
+  ElectricCollectionConfig<DataPlaneElectricSchemaOutput<Schema>, Schema>,
+  "onDelete" | "onInsert" | "onUpdate"
+>;
 
 export type DataPlaneElectricShapeOptions<Row extends ElectricRow<unknown>> =
   Omit<
@@ -207,6 +226,7 @@ export function createElectricCollectionFromContract<
     electricCollectionOptions({
       getKey: contract.getKey,
       id: contract.id,
+      ...contract.mutationHandlers,
       schema: contract.schema,
       shapeOptions,
       syncMode: contract.syncMode ?? "eager",
@@ -234,7 +254,7 @@ export function createElectricShapeOptions<
       | undefined;
     readonly shapeUrl: string;
   }
-): ShapeStreamOptions<GetExtensions<StandardSchemaV1.InferOutput<Schema>>> {
+): ShapeStreamOptions<GetExtensions<DataPlaneElectricSchemaOutput<Schema>>> {
   assertSafeElectricShapeOptions(contract.shapeOptions);
 
   const {

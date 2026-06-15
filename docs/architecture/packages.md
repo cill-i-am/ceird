@@ -222,6 +222,9 @@ Exports the shared organization-label contract:
 - `LabelId`
 - label name schema and `normalizeLabelName`
 - label create/update/list DTOs
+- `LabelWriteResponse`, which wraps the canonical label row with
+  `mutation.txid` confirmation metadata for Electric-backed label mutation
+  handlers
 - typed label access-denied, storage, not-found, and name-conflict errors
 - `LabelsApi` and `LabelsApiGroup`
 

@@ -3,8 +3,10 @@ import type {
   CreateLabelInput,
   Label,
   LabelIdType,
+  LabelWriteResponse,
   UpdateLabelInput,
 } from "@ceird/labels-core";
+import { Effect } from "effect";
 
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 
@@ -34,6 +36,10 @@ export function getOrganizationLabelsKey(labels: readonly Label[]) {
 }
 
 export function createBrowserLabel(input: CreateLabelInput) {
+  return createBrowserLabelWithConfirmation(input).pipe(Effect.map(getLabel));
+}
+
+export function createBrowserLabelWithConfirmation(input: CreateLabelInput) {
   return runBrowserAppApiRequest("LabelsBrowser.createLabel", (client) =>
     client.labels.createLabel({
       payload: input,
@@ -42,6 +48,15 @@ export function createBrowserLabel(input: CreateLabelInput) {
 }
 
 export function updateBrowserLabel(
+  labelId: LabelIdType,
+  input: UpdateLabelInput
+) {
+  return updateBrowserLabelWithConfirmation(labelId, input).pipe(
+    Effect.map(getLabel)
+  );
+}
+
+export function updateBrowserLabelWithConfirmation(
   labelId: LabelIdType,
   input: UpdateLabelInput
 ) {
@@ -54,11 +69,21 @@ export function updateBrowserLabel(
 }
 
 export function archiveBrowserLabel(labelId: LabelIdType) {
+  return archiveBrowserLabelWithConfirmation(labelId).pipe(
+    Effect.map(getLabel)
+  );
+}
+
+export function archiveBrowserLabelWithConfirmation(labelId: LabelIdType) {
   return runBrowserAppApiRequest("LabelsBrowser.archiveLabel", (client) =>
     client.labels.deleteLabel({
       params: { labelId },
     })
   );
+}
+
+function getLabel(response: LabelWriteResponse) {
+  return response.label;
 }
 
 function compareLabels(left: Label, right: Label) {

@@ -1,7 +1,18 @@
-import type { Label } from "@ceird/labels-core";
-import { LabelSchema } from "@ceird/labels-core";
+import type {
+  CreateLabelInput,
+  Label,
+  LabelIdType,
+  LabelWriteResponse,
+  UpdateLabelInput,
+} from "@ceird/labels-core";
+import {
+  CreateLabelInputSchema,
+  LabelId,
+  LabelSchema,
+  UpdateLabelInputSchema,
+} from "@ceird/labels-core";
 import type { QueryClient } from "@tanstack/query-core";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 import { seedQueryCollectionInitialData } from "#/data-plane/bootstrap";
 import {
@@ -19,6 +30,7 @@ import type {
   DataPlaneCollectionWriteVersionRef,
 } from "#/data-plane/collection-write";
 import { defineElectricCollectionContract } from "#/data-plane/electric-collection";
+import type { DataPlaneElectricMutationHandlers } from "#/data-plane/electric-collection";
 import { createCollectionWithQueryFallback } from "#/data-plane/query-fallback-collection";
 import type {
   CreateDataPlaneFallbackCollectionOptions,
@@ -28,6 +40,11 @@ import { organizationDataQueryKey } from "#/data-plane/query-scope";
 import type { OrganizationDataScope } from "#/data-plane/query-scope";
 import type { DataPlaneSession } from "#/data-plane/session";
 import { getCurrentServerLabels } from "#/features/api/app-api-server";
+import {
+  archiveBrowserLabelWithConfirmation,
+  createBrowserLabelWithConfirmation,
+  updateBrowserLabelWithConfirmation,
+} from "#/features/labels/labels-state";
 
 interface LabelsCollection extends DataPlaneCollectionSnapshot<Label> {
   readonly cleanup: () => Promise<void>;
@@ -46,6 +63,34 @@ type LabelsCollectionSyncOptions = Omit<
   CreateDataPlaneFallbackCollectionOptions<LabelsCollection, LabelsCollection>,
   "createQueryCollection"
 >;
+type LabelElectricMutationHandlers = DataPlaneElectricMutationHandlers<
+  typeof LabelStandardSchema
+>;
+
+interface LabelElectricMutationHandlerDependencies {
+  readonly archiveLabel: (
+    labelId: LabelIdType
+  ) => Effect.Effect<LabelWriteResponse, unknown>;
+  readonly createLabel: (
+    input: CreateLabelInput
+  ) => Effect.Effect<LabelWriteResponse, unknown>;
+  readonly updateLabel: (
+    labelId: LabelIdType,
+    input: UpdateLabelInput
+  ) => Effect.Effect<LabelWriteResponse, unknown>;
+}
+
+const LABEL_ELECTRIC_MUTATION_CONFIRMATION_TIMEOUT_MS = 10_000;
+
+const decodeCreateLabelInput = Schema.decodeUnknownSync(CreateLabelInputSchema);
+const decodeUpdateLabelInput = Schema.decodeUnknownSync(UpdateLabelInputSchema);
+const decodeLabelId = Schema.decodeUnknownSync(LabelId);
+const LabelStandardSchema = Schema.toStandardSchemaV1(LabelSchema);
+const defaultLabelElectricMutationHandlerDependencies = {
+  archiveLabel: archiveBrowserLabelWithConfirmation,
+  createLabel: createBrowserLabelWithConfirmation,
+  updateLabel: updateBrowserLabelWithConfirmation,
+} satisfies LabelElectricMutationHandlerDependencies;
 
 export interface LabelsCollectionState {
   readonly collection: LabelsCollection;
@@ -150,7 +195,8 @@ function createLabelsCollection({
     }),
     getKey: (label: Label) => label.id,
     id: `${labelsCollectionId(scope)}:electric`,
-    schema: Schema.toStandardSchemaV1(LabelSchema),
+    mutationHandlers: createLabelElectricMutationHandlers(),
+    schema: LabelStandardSchema,
     shapeName: "labels",
     shapeOptions: {
       transformer: toLabelElectricRow,
@@ -193,6 +239,69 @@ function createLabelsCollection({
     },
     { ...sync, electricEnabled: sync?.electricEnabled === true }
   );
+}
+
+export function createLabelElectricMutationHandlers(
+  dependencies: LabelElectricMutationHandlerDependencies = defaultLabelElectricMutationHandlerDependencies
+): LabelElectricMutationHandlers {
+  return {
+    onDelete: async ({ transaction }) => {
+      const responses = await Promise.all(
+        transaction.mutations.map((mutation) =>
+          Effect.runPromise(
+            dependencies.archiveLabel(decodeLabelId(mutation.original.id))
+          )
+        )
+      );
+
+      return toElectricLabelMatchingStrategy(responses);
+    },
+    onInsert: async ({ transaction }) => {
+      const responses = await Promise.all(
+        transaction.mutations.map((mutation) =>
+          Effect.runPromise(
+            dependencies.createLabel(
+              decodeCreateLabelInput({ name: mutation.modified.name })
+            )
+          )
+        )
+      );
+
+      return toElectricLabelMatchingStrategy(responses);
+    },
+    onUpdate: async ({ transaction }) => {
+      const responses = await Promise.all(
+        transaction.mutations.map((mutation) =>
+          Effect.runPromise(
+            dependencies.updateLabel(
+              decodeLabelId(mutation.original.id),
+              decodeUpdateLabelInput({
+                name: mutation.modified.name,
+              })
+            )
+          )
+        )
+      );
+
+      return toElectricLabelMatchingStrategy(responses);
+    },
+  };
+}
+
+function toElectricLabelMatchingStrategy(
+  responses: readonly LabelWriteResponse[]
+) {
+  const txids = responses.map((response) => response.mutation.txid);
+  const [firstTxid] = txids;
+
+  if (firstTxid === undefined) {
+    throw new Error("Electric label mutation did not produce a txid.");
+  }
+
+  return {
+    timeout: LABEL_ELECTRIC_MUTATION_CONFIRMATION_TIMEOUT_MS,
+    txid: txids.length === 1 ? firstTxid : txids,
+  };
 }
 
 function toLabelElectricRow(row: Record<string, unknown>) {

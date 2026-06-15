@@ -123,6 +123,17 @@ Repository services should map `EffectDrizzleQueryError`, Drizzle transaction
 rollback failures, and `SqlError` into their typed storage-error surface instead
 of leaking unknown failures.
 
+Electric mutation confirmation metadata is sourced from the domain database
+runtime, not from browser writes. The domain
+`electric-mutation-confirmation.ts` helper wraps the write in the same
+`SqlClient.withTransaction` boundary and reads
+`pg_current_xact_id()::xid::text` before commit, returning the 32-bit xid as the
+Electric adapter `txid`. The local Postgres integration test verifies that the
+value read inside the wrapped write and the returned confirmation metadata are
+the same transaction id. Deployed Neon/Hyperdrive runtime uses the same
+`@effect/sql-pg` pool path through the `DATABASE` Hyperdrive binding; provider
+stage mutation is not required to exercise this helper.
+
 ## Cloudflare Neon Postgres And Hyperdrive
 
 The Cloudflare Alchemy stack keeps Postgres as the source of truth.
