@@ -8,13 +8,33 @@ import type {
   WorkItemIdType,
 } from "@ceird/jobs-core";
 import {
+  ActivityId,
+  CommentId,
+  ContactId,
+  IsoDateTimeString,
+  JobActivityEventTypeSchema,
+  JobActivityPayloadSchema,
   JobCollaboratorSchema,
   JobDetailResponseSchema,
+  JobKindSchema,
   JobListItemSchema,
   JobOptionsResponseSchema,
+  JobPrioritySchema,
+  JobStatusSchema,
+  JobVisitSchema,
+  UserId,
+  WorkItemId,
 } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
+import { LabelId, LabelSchema } from "@ceird/labels-core";
 import type { SiteOption } from "@ceird/sites-core";
+import {
+  SiteId,
+  SiteLatitudeSchema,
+  SiteLocationProviderSchema,
+  SiteLocationStatusSchema,
+  SiteLongitudeSchema,
+} from "@ceird/sites-core";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { QueryClient } from "@tanstack/query-core";
 import { Schema } from "effect";
@@ -76,6 +96,8 @@ export const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
 
 const JOB_OPTIONS_COLLECTION_ITEM_ID = "job-options";
 const DEFAULT_JOBS_LIST_LIMIT = 50;
+const JOBS_WORKSPACE_READ_MODEL_QUERY_NAME = "jobs.workspace.electric";
+const JOBS_WORKSPACE_DETAIL_QUERY_NAME = "jobs.workspace.detail.electric";
 type JobsElectricRowValue =
   | bigint
   | boolean
@@ -133,6 +155,186 @@ const JobDetailCollectionItemSchema = Schema.Struct({
 export type JobDetailCollectionItem = Schema.Schema.Type<
   typeof JobDetailCollectionItemSchema
 >;
+
+export const JobsWorkspaceJobRowSchema = Schema.Struct({
+  assigneeId: Schema.optional(UserId),
+  blockedReason: Schema.optional(Schema.String),
+  completedAt: Schema.optional(IsoDateTimeString),
+  completedByUserId: Schema.optional(UserId),
+  contactId: Schema.optional(ContactId),
+  coordinatorId: Schema.optional(UserId),
+  createdAt: IsoDateTimeString,
+  createdByUserId: UserId,
+  id: WorkItemId,
+  kind: JobKindSchema,
+  priority: JobPrioritySchema,
+  siteId: Schema.optional(SiteId),
+  status: JobStatusSchema,
+  title: Schema.String,
+  updatedAt: IsoDateTimeString,
+});
+export type JobsWorkspaceJobRow = Schema.Schema.Type<
+  typeof JobsWorkspaceJobRowSchema
+>;
+
+export const JobLabelAssignmentRowSchema = Schema.Struct({
+  createdAt: IsoDateTimeString,
+  id: Schema.String,
+  labelId: LabelId,
+  workItemId: WorkItemId,
+});
+export type JobLabelAssignmentRow = Schema.Schema.Type<
+  typeof JobLabelAssignmentRowSchema
+>;
+
+export const JobContactSummaryRowSchema = Schema.Struct({
+  email: Schema.optional(Schema.String),
+  id: ContactId,
+  name: Schema.String,
+  notes: Schema.optional(Schema.String),
+  phone: Schema.optional(Schema.String),
+  updatedAt: IsoDateTimeString,
+});
+export type JobContactSummaryRow = Schema.Schema.Type<
+  typeof JobContactSummaryRowSchema
+>;
+
+export const JobSiteSummaryRowSchema = Schema.Struct({
+  accessNotes: Schema.optional(Schema.String),
+  displayLocation: Schema.String,
+  formattedAddress: Schema.optional(Schema.String),
+  hasUsableCoordinates: Schema.Boolean,
+  id: SiteId,
+  latitude: Schema.optional(SiteLatitudeSchema),
+  locationProvider: Schema.optional(SiteLocationProviderSchema),
+  locationStatus: SiteLocationStatusSchema,
+  longitude: Schema.optional(SiteLongitudeSchema),
+  name: Schema.String,
+  updatedAt: IsoDateTimeString,
+});
+export type JobSiteSummaryRow = Schema.Schema.Type<
+  typeof JobSiteSummaryRowSchema
+>;
+
+export const JobCommentEdgeRowSchema = Schema.Struct({
+  commentId: CommentId,
+  createdAt: IsoDateTimeString,
+  id: Schema.String,
+  workItemId: WorkItemId,
+});
+export type JobCommentEdgeRow = Schema.Schema.Type<
+  typeof JobCommentEdgeRowSchema
+>;
+
+export const JobsWorkspaceCommentRowSchema = Schema.Struct({
+  authorUserId: UserId,
+  body: Schema.String,
+  createdAt: IsoDateTimeString,
+  id: CommentId,
+  updatedAt: IsoDateTimeString,
+  updatedByUserId: Schema.optional(UserId),
+});
+export type JobsWorkspaceCommentRow = Schema.Schema.Type<
+  typeof JobsWorkspaceCommentRowSchema
+>;
+
+export const JobsWorkspaceActivityRowSchema = Schema.Struct({
+  actorUserId: Schema.optional(UserId),
+  createdAt: IsoDateTimeString,
+  eventType: JobActivityEventTypeSchema,
+  id: ActivityId,
+  payload: JobActivityPayloadSchema,
+  workItemId: WorkItemId,
+});
+export type JobsWorkspaceActivityRow = Schema.Schema.Type<
+  typeof JobsWorkspaceActivityRowSchema
+>;
+
+export interface JobsWorkspaceReadModelContracts {
+  readonly activity: ReturnType<typeof createJobActivityElectricContract>;
+  readonly collaborators: ReturnType<
+    typeof createJobCollaboratorsElectricContract
+  >;
+  readonly comments: ReturnType<typeof createJobCommentsElectricContract>;
+  readonly contactSummaries: ReturnType<
+    typeof createJobContactSummariesElectricContract
+  >;
+  readonly detail: JobsWorkspaceDetailContract;
+  readonly jobComments: ReturnType<
+    typeof createJobCommentEdgesElectricContract
+  >;
+  readonly jobLabelAssignments: ReturnType<
+    typeof createJobLabelAssignmentsElectricContract
+  >;
+  readonly jobs: ReturnType<typeof createJobsWorkspaceJobsElectricContract>;
+  readonly labels: ReturnType<typeof createJobsWorkspaceLabelsElectricContract>;
+  readonly list: JobsWorkspaceListContract;
+  readonly siteSummaries: ReturnType<
+    typeof createJobSiteSummariesElectricContract
+  >;
+  readonly visits: ReturnType<typeof createJobVisitsElectricContract>;
+}
+
+export interface JobsWorkspaceListContract {
+  readonly completeness: ReturnType<typeof jobsWorkspaceListCompleteness>;
+  readonly derivesFromCollections: readonly [
+    "jobs",
+    "job-label-assignments",
+    "labels",
+    "job-sites",
+    "job-contacts",
+  ];
+  readonly healthCollection: "jobs";
+  readonly requiredShapes: readonly [
+    "jobs",
+    "work-item-labels",
+    "labels",
+    "sites",
+    "contacts",
+  ];
+}
+
+export interface JobsWorkspaceDetailContract {
+  readonly completeness: ReturnType<typeof jobsWorkspaceDetailCompleteness>;
+  readonly derivesFromCollections: readonly [
+    "jobs",
+    "job-label-assignments",
+    "labels",
+    "job-sites",
+    "job-contacts",
+    "job-collaborators",
+    "job-activity",
+    "job-visits",
+    "job-comments",
+    "job-comment-bodies",
+  ];
+  readonly healthCollections: readonly [
+    "jobs",
+    "job-label-assignments",
+    "labels",
+    "job-sites",
+    "job-contacts",
+    "job-collaborators",
+    "job-activity",
+    "job-visits",
+    "job-comments",
+    "job-comment-bodies",
+  ];
+  readonly projectionFollowUps: readonly string[];
+  readonly requiredShapes: readonly [
+    "jobs",
+    "work-item-labels",
+    "labels",
+    "sites",
+    "contacts",
+    "work-item-collaborators",
+    "work-item-activity",
+    "work-item-visits",
+    "work-item-comments",
+    "comments",
+  ];
+}
+
 const JobListItemStandardSchema = Schema.toStandardSchemaV1(JobListItemSchema);
 const JobListItemElectricStandardSchema =
   JobListItemStandardSchema as unknown as StandardSchemaV1<
@@ -262,6 +464,13 @@ function jobCollaboratorsCollectionId(
   workItemId: WorkItemIdType
 ) {
   return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:job:${workItemId}:collaborators`;
+}
+
+function jobsWorkspaceCollectionId(
+  scope: OrganizationDataScope,
+  collection: string
+) {
+  return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:jobs-workspace:${collection}`;
 }
 
 export function createJobsListSeed(
@@ -643,6 +852,284 @@ export async function loadCurrentJobsOptionsForViewer(
   return await getCurrentServerExternalJobOptions();
 }
 
+export function createJobsWorkspaceReadModelContracts(
+  scope: OrganizationDataScope
+): JobsWorkspaceReadModelContracts {
+  return {
+    activity: createJobActivityElectricContract(scope),
+    collaborators: createJobCollaboratorsElectricContract(scope),
+    comments: createJobCommentsElectricContract(scope),
+    contactSummaries: createJobContactSummariesElectricContract(scope),
+    detail: createJobsWorkspaceDetailContract(),
+    jobComments: createJobCommentEdgesElectricContract(scope),
+    jobLabelAssignments: createJobLabelAssignmentsElectricContract(scope),
+    jobs: createJobsWorkspaceJobsElectricContract(scope),
+    labels: createJobsWorkspaceLabelsElectricContract(scope),
+    list: createJobsWorkspaceListContract(),
+    siteSummaries: createJobSiteSummariesElectricContract(scope),
+    visits: createJobVisitsElectricContract(scope),
+  };
+}
+
+export function createJobsWorkspaceListContract(): JobsWorkspaceListContract {
+  return {
+    completeness: jobsWorkspaceListCompleteness(),
+    derivesFromCollections: [
+      "jobs",
+      "job-label-assignments",
+      "labels",
+      "job-sites",
+      "job-contacts",
+    ],
+    healthCollection: "jobs",
+    requiredShapes: ["jobs", "work-item-labels", "labels", "sites", "contacts"],
+  };
+}
+
+export function createJobsWorkspaceDetailContract(): JobsWorkspaceDetailContract {
+  return {
+    completeness: jobsWorkspaceDetailCompleteness(),
+    derivesFromCollections: [
+      "jobs",
+      "job-label-assignments",
+      "labels",
+      "job-sites",
+      "job-contacts",
+      "job-collaborators",
+      "job-activity",
+      "job-visits",
+      "job-comments",
+      "job-comment-bodies",
+    ],
+    healthCollections: [
+      "jobs",
+      "job-label-assignments",
+      "labels",
+      "job-sites",
+      "job-contacts",
+      "job-collaborators",
+      "job-activity",
+      "job-visits",
+      "job-comments",
+      "job-comment-bodies",
+    ],
+    projectionFollowUps: [
+      "Member/actor display names and external-collaborator-safe actor summaries should come from a domain-owned product projection before Jobs detail renders them from Electric.",
+      "Site active-job counts and highest-active-priority summaries remain domain projections; the Jobs workspace should not recompute those site-level rollups from synced job rows.",
+    ],
+    requiredShapes: [
+      "jobs",
+      "work-item-labels",
+      "labels",
+      "sites",
+      "contacts",
+      "work-item-collaborators",
+      "work-item-activity",
+      "work-item-visits",
+      "work-item-comments",
+      "comments",
+    ],
+  };
+}
+
+export function createJobsWorkspaceJobsElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "jobs",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "jobs",
+    }),
+    getKey: (job: JobsWorkspaceJobRow) => job.id,
+    id: `${jobsWorkspaceCollectionId(scope, "jobs")}:electric`,
+    schema: Schema.toStandardSchemaV1(JobsWorkspaceJobRowSchema),
+    shapeName: "jobs",
+    shapeOptions: {
+      transformer: toJobsWorkspaceJobRow,
+    },
+  });
+}
+
+export function createJobsWorkspaceLabelsElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "labels",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "labels",
+    }),
+    getKey: (label: Label) => label.id,
+    id: `${jobsWorkspaceCollectionId(scope, "labels")}:electric`,
+    schema: Schema.toStandardSchemaV1(LabelSchema),
+    shapeName: "labels",
+    shapeOptions: {
+      transformer: toJobsWorkspaceLabelRow,
+    },
+  });
+}
+
+export function createJobLabelAssignmentsElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "job-label-assignments",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "work-item-labels",
+    }),
+    getKey: (assignment: JobLabelAssignmentRow) => assignment.id,
+    id: `${jobsWorkspaceCollectionId(scope, "job-label-assignments")}:electric`,
+    schema: Schema.toStandardSchemaV1(JobLabelAssignmentRowSchema),
+    shapeName: "work-item-labels",
+    shapeOptions: {
+      transformer: toJobLabelAssignmentRow,
+    },
+  });
+}
+
+export function createJobSiteSummariesElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "job-sites",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "sites",
+    }),
+    getKey: (site: JobSiteSummaryRow) => site.id,
+    id: `${jobsWorkspaceCollectionId(scope, "job-sites")}:electric`,
+    schema: Schema.toStandardSchemaV1(JobSiteSummaryRowSchema),
+    shapeName: "sites",
+    shapeOptions: {
+      transformer: toJobSiteSummaryRow,
+    },
+  });
+}
+
+export function createJobContactSummariesElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "job-contacts",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "contacts",
+    }),
+    getKey: (contact: JobContactSummaryRow) => contact.id,
+    id: `${jobsWorkspaceCollectionId(scope, "job-contacts")}:electric`,
+    schema: Schema.toStandardSchemaV1(JobContactSummaryRowSchema),
+    shapeName: "contacts",
+    shapeOptions: {
+      transformer: toJobContactSummaryRow,
+    },
+  });
+}
+
+export function createJobCollaboratorsElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "job-collaborators",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "work-item-collaborators",
+    }),
+    getKey: (collaborator: JobCollaborator) => collaborator.id,
+    id: `${jobsWorkspaceCollectionId(scope, "job-collaborators")}:electric`,
+    schema: Schema.toStandardSchemaV1(JobCollaboratorSchema),
+    shapeName: "work-item-collaborators",
+    shapeOptions: {
+      transformer: toJobCollaboratorElectricRow,
+    },
+  });
+}
+
+export function createJobActivityElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "job-activity",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "work-item-activity",
+    }),
+    getKey: (activity: JobsWorkspaceActivityRow) => activity.id,
+    id: `${jobsWorkspaceCollectionId(scope, "job-activity")}:electric`,
+    schema: Schema.toStandardSchemaV1(JobsWorkspaceActivityRowSchema),
+    shapeName: "work-item-activity",
+    shapeOptions: {
+      transformer: toJobActivityElectricRow,
+    },
+  });
+}
+
+export function createJobVisitsElectricContract(scope: OrganizationDataScope) {
+  return defineElectricCollectionContract({
+    collection: "job-visits",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "work-item-visits",
+    }),
+    getKey: (visit: Schema.Schema.Type<typeof JobVisitSchema>) => visit.id,
+    id: `${jobsWorkspaceCollectionId(scope, "job-visits")}:electric`,
+    schema: Schema.toStandardSchemaV1(JobVisitSchema),
+    shapeName: "work-item-visits",
+    shapeOptions: {
+      transformer: toJobVisitElectricRow,
+    },
+  });
+}
+
+export function createJobCommentEdgesElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "job-comments",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "work-item-comments",
+    }),
+    getKey: (edge: JobCommentEdgeRow) => edge.id,
+    id: `${jobsWorkspaceCollectionId(scope, "job-comments")}:electric`,
+    schema: Schema.toStandardSchemaV1(JobCommentEdgeRowSchema),
+    shapeName: "work-item-comments",
+    shapeOptions: {
+      transformer: toJobCommentEdgeRow,
+    },
+  });
+}
+
+export function createJobCommentsElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "job-comment-bodies",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "comments",
+    }),
+    getKey: (comment: JobsWorkspaceCommentRow) => comment.id,
+    id: `${jobsWorkspaceCollectionId(scope, "comments")}:electric`,
+    schema: Schema.toStandardSchemaV1(JobsWorkspaceCommentRowSchema),
+    shapeName: "comments",
+    shapeOptions: {
+      transformer: toJobCommentElectricRow,
+    },
+  });
+}
+
 function createJobsCollection({
   initialJobs,
   listScope,
@@ -739,12 +1226,195 @@ function toJobListItemElectricRow(row: Record<string, unknown>) {
   return item;
 }
 
+export function toJobsWorkspaceJobRow(
+  row: Record<string, unknown>
+): JobsWorkspaceJobRow {
+  const item: JobsElectricRow = {
+    createdAt: String(row.createdAt),
+    createdByUserId: String(row.createdByUserId),
+    id: String(row.id),
+    kind: String(row.kind),
+    priority: String(row.priority),
+    status: String(row.status),
+    title: String(row.title),
+    updatedAt: String(row.updatedAt),
+  };
+
+  addOptionalString(item, "assigneeId", row.assigneeId);
+  addOptionalString(item, "blockedReason", row.blockedReason);
+  addOptionalString(item, "completedAt", row.completedAt);
+  addOptionalString(item, "completedByUserId", row.completedByUserId);
+  addOptionalString(item, "contactId", row.contactId);
+  addOptionalString(item, "coordinatorId", row.coordinatorId);
+  addOptionalString(item, "siteId", row.siteId);
+
+  return Schema.decodeUnknownSync(JobsWorkspaceJobRowSchema)(item);
+}
+
+export function toJobLabelAssignmentRow(
+  row: Record<string, unknown>
+): JobLabelAssignmentRow {
+  const workItemId = String(row.workItemId);
+  const labelId = String(row.labelId);
+
+  return Schema.decodeUnknownSync(JobLabelAssignmentRowSchema)({
+    createdAt: String(row.createdAt),
+    id: `${workItemId}:${labelId}`,
+    labelId,
+    workItemId,
+  });
+}
+
+export function toJobSiteSummaryRow(
+  row: Record<string, unknown>
+): JobSiteSummaryRow {
+  const item: JobsElectricRow = {
+    displayLocation: String(row.displayLocation),
+    hasUsableCoordinates:
+      row.latitude !== null &&
+      row.latitude !== undefined &&
+      row.longitude !== null &&
+      row.longitude !== undefined,
+    id: String(row.id),
+    locationStatus: String(row.locationStatus),
+    name: String(row.name),
+    updatedAt: String(row.updatedAt),
+  };
+
+  addOptionalString(item, "accessNotes", row.accessNotes);
+  addOptionalString(item, "formattedAddress", row.formattedAddress);
+  addOptionalNumber(item, "latitude", row.latitude);
+  addOptionalString(item, "locationProvider", row.locationProvider);
+  addOptionalNumber(item, "longitude", row.longitude);
+
+  return Schema.decodeUnknownSync(JobSiteSummaryRowSchema)(item);
+}
+
+export function toJobContactSummaryRow(
+  row: Record<string, unknown>
+): JobContactSummaryRow {
+  const item: JobsElectricRow = {
+    id: String(row.id),
+    name: String(row.name),
+    updatedAt: String(row.updatedAt),
+  };
+
+  addOptionalString(item, "email", row.email);
+  addOptionalString(item, "notes", row.notes);
+  addOptionalString(item, "phone", row.phone);
+
+  return Schema.decodeUnknownSync(JobContactSummaryRowSchema)(item);
+}
+
+export function toJobsWorkspaceLabelRow(row: Record<string, unknown>): Label {
+  return Schema.decodeUnknownSync(LabelSchema)({
+    createdAt: String(row.createdAt),
+    id: String(row.id),
+    name: String(row.name),
+    updatedAt: String(row.updatedAt),
+  });
+}
+
+export function toJobCollaboratorElectricRow(
+  row: Record<string, unknown>
+): JobCollaborator {
+  const item: JobsElectricRow = {
+    accessLevel: String(row.accessLevel),
+    createdAt: String(row.createdAt),
+    id: String(row.id),
+    roleLabel: String(row.roleLabel),
+    subjectType: String(row.subjectType),
+    updatedAt: String(row.updatedAt),
+    workItemId: String(row.workItemId),
+  };
+
+  addOptionalString(item, "userId", row.userId);
+
+  return Schema.decodeUnknownSync(JobCollaboratorSchema)(item);
+}
+
+export function toJobActivityElectricRow(
+  row: Record<string, unknown>
+): JobsWorkspaceActivityRow {
+  const item: JobsElectricRow = {
+    createdAt: String(row.createdAt),
+    eventType: String(row.eventType),
+    id: String(row.id),
+    payload: parseJsonColumn(row.payload) as JobsElectricRowValue,
+    workItemId: String(row.workItemId),
+  };
+
+  addOptionalString(item, "actorUserId", row.actorUserId);
+
+  return Schema.decodeUnknownSync(JobsWorkspaceActivityRowSchema)(item);
+}
+
+export function toJobVisitElectricRow(
+  row: Record<string, unknown>
+): Schema.Schema.Type<typeof JobVisitSchema> {
+  return Schema.decodeUnknownSync(JobVisitSchema)({
+    authorUserId: String(row.authorUserId),
+    createdAt: String(row.createdAt),
+    durationMinutes: Number(row.durationMinutes),
+    id: String(row.id),
+    note: String(row.note),
+    visitDate: String(row.visitDate),
+    workItemId: String(row.workItemId),
+  });
+}
+
+export function toJobCommentEdgeRow(
+  row: Record<string, unknown>
+): JobCommentEdgeRow {
+  const workItemId = String(row.workItemId);
+  const commentId = String(row.commentId);
+
+  return Schema.decodeUnknownSync(JobCommentEdgeRowSchema)({
+    commentId,
+    createdAt: String(row.createdAt),
+    id: `${workItemId}:${commentId}`,
+    workItemId,
+  });
+}
+
+export function toJobCommentElectricRow(
+  row: Record<string, unknown>
+): JobsWorkspaceCommentRow {
+  const item: JobsElectricRow = {
+    authorUserId: String(row.authorUserId),
+    body: String(row.body),
+    createdAt: String(row.createdAt),
+    id: String(row.id),
+    updatedAt: String(row.updatedAt),
+  };
+
+  addOptionalString(item, "updatedByUserId", row.updatedByUserId);
+
+  return Schema.decodeUnknownSync(JobsWorkspaceCommentRowSchema)(item);
+}
+
 function addOptionalString(item: JobsElectricRow, key: string, value: unknown) {
   if (value === null || value === undefined) {
     return;
   }
 
   item[key] = String(value);
+}
+
+function addOptionalNumber(item: JobsElectricRow, key: string, value: unknown) {
+  if (value === null || value === undefined) {
+    return;
+  }
+
+  item[key] = Number(value);
+}
+
+function parseJsonColumn(value: unknown) {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  return JSON.parse(value) as unknown;
 }
 
 function normalizeJobsListQuery(query: JobListQuery): JobListQuery {
@@ -774,6 +1444,22 @@ function jobsListCompleteness(
       type: "cursor",
     },
     queryName: "jobs.list",
+  });
+}
+
+function jobsWorkspaceListCompleteness() {
+  return syncBackedCollectionCompleteness({
+    covers: COMPLETE_TENANT_COLLECTION,
+    source: "electric",
+    subscriptionName: JOBS_WORKSPACE_READ_MODEL_QUERY_NAME,
+  });
+}
+
+function jobsWorkspaceDetailCompleteness() {
+  return syncBackedCollectionCompleteness({
+    covers: COMPLETE_TENANT_COLLECTION,
+    source: "electric",
+    subscriptionName: JOBS_WORKSPACE_DETAIL_QUERY_NAME,
   });
 }
 

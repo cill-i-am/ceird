@@ -14,26 +14,27 @@ layout and organization context without adding URL segments.
 
 Current visible routes:
 
-| URL                                | Route file                            | Purpose                                                         |
-| ---------------------------------- | ------------------------------------- | --------------------------------------------------------------- |
-| `/`                                | `_app._org.index.tsx`                 | Authenticated organization home.                                |
-| `/login`                           | `login.tsx`                           | Sign in.                                                        |
-| `/signup`                          | `signup.tsx`                          | Create account.                                                 |
-| `/forgot-password`                 | `forgot-password.tsx`                 | Request password reset.                                         |
-| `/reset-password`                  | `reset-password.tsx`                  | Complete password reset.                                        |
-| `/verify-email`                    | `verify-email.tsx`                    | Show email verification result.                                 |
-| `/accept-invitation/$invitationId` | `accept-invitation.$invitationId.tsx` | Accept organization invitation.                                 |
-| `/location-access`                 | `location-access.tsx`                 | Authenticated, shellless, skippable location-access onboarding. |
-| `/create-organization`             | `create-organization.tsx`             | Create a team and optionally invite initial members.            |
-| `/settings`                        | `_app.settings.tsx`                   | User profile, email, password, and account security settings.   |
-| `/activity`                        | `_app._org.activity.tsx`              | Organization activity feed.                                     |
-| `/jobs`                            | `_app._org.jobs.tsx`                  | Jobs list and saved views.                                      |
-| `/jobs-workspace`                  | `_app._org.jobs-workspace.tsx`        | Electric-native Jobs workspace preview shell.                   |
-| `/members`                         | `_app._org.members.tsx`               | Organization members and invitations.                           |
-| `/organization/security`           | `_app._org.organization.security.tsx` | Owner/admin security activity review.                           |
-| `/organization/settings`           | `_app._org.organization.settings.tsx` | Organization settings and labels.                               |
-| `/sites`                           | `_app._org.sites.tsx`                 | Sites list.                                                     |
-| `/health`                          | `health.ts`                           | App stack/stage health response for Alchemy and Worker checks.  |
+| URL                                | Route file                                   | Purpose                                                                      |
+| ---------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------- |
+| `/`                                | `_app._org.index.tsx`                        | Authenticated organization home.                                             |
+| `/login`                           | `login.tsx`                                  | Sign in.                                                                     |
+| `/signup`                          | `signup.tsx`                                 | Create account.                                                              |
+| `/forgot-password`                 | `forgot-password.tsx`                        | Request password reset.                                                      |
+| `/reset-password`                  | `reset-password.tsx`                         | Complete password reset.                                                     |
+| `/verify-email`                    | `verify-email.tsx`                           | Show email verification result.                                              |
+| `/accept-invitation/$invitationId` | `accept-invitation.$invitationId.tsx`        | Accept organization invitation.                                              |
+| `/location-access`                 | `location-access.tsx`                        | Authenticated, shellless, skippable location-access onboarding.              |
+| `/create-organization`             | `create-organization.tsx`                    | Create a team and optionally invite initial members.                         |
+| `/settings`                        | `_app.settings.tsx`                          | User profile, email, password, and account security settings.                |
+| `/activity`                        | `_app._org.activity.tsx`                     | Organization activity feed.                                                  |
+| `/jobs`                            | `_app._org.jobs.tsx`                         | Jobs list and saved views.                                                   |
+| `/jobs-workspace`                  | `_app._org.jobs-workspace.tsx`               | Electric-native Jobs workspace preview shell.                                |
+| `/members`                         | `_app._org.members.tsx`                      | Organization members and invitations.                                        |
+| `/organization/security`           | `_app._org.organization.security.tsx`        | Owner/admin security activity review.                                        |
+| `/organization/settings`           | `_app._org.organization.settings.tsx`        | Organization settings and labels.                                            |
+| `/organization/settings/labels`    | `_app._org.organization.settings.labels.tsx` | Dedicated Labels settings shell for the Electric-native replacement surface. |
+| `/sites`                           | `_app._org.sites.tsx`                        | Sites list.                                                                  |
+| `/health`                          | `health.ts`                                  | App stack/stage health response for Alchemy and Worker checks.               |
 
 `apps/app/src/router.tsx` configures scroll restoration, intent preloading, the
 router-scoped TanStack Query client, SSR Query dehydration/hydration, and typed
@@ -435,6 +436,11 @@ an explicit SSR strategy. The current migrated slices are:
   real data-plane root, plus a Settings Labels helper that consumes the active
   `labels` Electric shape directly and surfaces disabled/unavailable sync
   health without API fallback.
+- `features/organizations/organization-labels-settings-page.tsx`, where the
+  dedicated Labels settings route owns only the route shell, navigation entry,
+  and realtime-ready loading/empty/unavailable/permission states until the
+  Electric-backed collection and label writes land in later slices. The old
+  API-backed labels panel in organization settings remains during rollout.
 - `features/jobs/jobs-detail-state.ts`, which is now a detail-sheet facade over
   job detail and collaborator collections plus command mutation feedback.
 

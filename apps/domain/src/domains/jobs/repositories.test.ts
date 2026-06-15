@@ -593,6 +593,87 @@ describe("jobs repository", () => {
       },
     });
   });
+
+  it("upserts site active-job summaries for concurrent first active jobs", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "jobs_projection_concurrency",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping repository projection concurrency coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    const organizationId = decodeOrganizationId(randomUUID());
+    const creatorUserId = decodeUserId(
+      `jobs_projection_concurrent_${Date.now()}`
+    );
+    const siteId = decodeSiteId(randomUUID());
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Jobs Projection Concurrency",
+      });
+      await seedUser(pool, {
+        id: creatorUserId,
+        name: "Projection Concurrent Creator",
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "admin",
+        userId: creatorUserId,
+      });
+      await seedSite(pool, {
+        id: siteId,
+        name: "Concurrent Projection Site",
+        organizationId,
+      });
+    });
+
+    await expect(
+      Promise.all([
+        runJobsRepositoryEffect(
+          testDatabase.url,
+          JobsRepository.create({
+            createdByUserId: creatorUserId,
+            organizationId,
+            priority: "low",
+            siteId,
+            title: "Concurrent first active job",
+          })
+        ),
+        runJobsRepositoryEffect(
+          testDatabase.url,
+          JobsRepository.create({
+            createdByUserId: creatorUserId,
+            organizationId,
+            priority: "urgent",
+            siteId,
+            title: "Concurrent second active job",
+          })
+        ),
+      ])
+    ).resolves.toHaveLength(2);
+
+    await expectSiteActiveJobSummaries(testDatabase.url, {
+      [siteId]: {
+        activeJobCount: 2,
+        highestActiveJobPriority: "urgent",
+      },
+    });
+  });
 });
 
 async function expectSiteActiveJobSummaries(

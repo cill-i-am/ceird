@@ -66,7 +66,11 @@ function getBaseShortcutScopes(
     return ["global"];
   }
 
-  if (pathname === "/settings" || pathname === "/organization/settings") {
+  if (
+    pathname === "/settings" ||
+    pathname === "/organization/settings" ||
+    pathname === "/organization/settings/labels"
+  ) {
     return ["global", "settings"];
   }
 

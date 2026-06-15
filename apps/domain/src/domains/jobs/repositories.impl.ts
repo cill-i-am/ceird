@@ -100,7 +100,6 @@ import {
   label as labelTable,
   member,
   site as siteTable,
-  siteActiveJobSummary,
   siteContact,
   user as userTable,
   workItem,
@@ -950,16 +949,6 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
           return;
         }
 
-        yield* db
-          .delete(siteActiveJobSummary)
-          .where(
-            and(
-              eq(siteActiveJobSummary.organizationId, organizationId),
-              inArray(siteActiveJobSummary.siteId, impactedSiteIds)
-            )
-          )
-          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
-
         yield* sql`
           insert into site_active_job_summaries (
             site_id,
@@ -994,6 +983,23 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
             and work_items.site_id in ${sql.in(impactedSiteIds)}
             and work_items.status not in ${sql.in(TERMINAL_JOB_STATUSES)}
           group by work_items.site_id, work_items.organization_id
+          on conflict (site_id, organization_id) do update set
+            active_job_count = excluded.active_job_count,
+            highest_active_job_priority = excluded.highest_active_job_priority,
+            updated_at = excluded.updated_at
+        `;
+
+        yield* sql`
+          delete from site_active_job_summaries
+          where organization_id = ${organizationId}
+            and site_id in ${sql.in(impactedSiteIds)}
+            and not exists (
+              select 1
+              from work_items
+              where work_items.organization_id = site_active_job_summaries.organization_id
+                and work_items.site_id = site_active_job_summaries.site_id
+                and work_items.status not in ${sql.in(TERMINAL_JOB_STATUSES)}
+            )
         `;
       });
 

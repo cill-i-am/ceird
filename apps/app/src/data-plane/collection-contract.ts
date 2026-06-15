@@ -5,9 +5,16 @@ import { createCollection } from "@tanstack/react-db";
 
 export const DATA_PLANE_COLLECTION_NAMES = [
   "jobs",
+  "job-activity",
+  "job-comment-bodies",
+  "job-comments",
+  "job-contacts",
   "job-options",
+  "job-label-assignments",
   "job-details",
   "job-collaborators",
+  "job-sites",
+  "job-visits",
   "sites",
   "site-active-job-summaries",
   "site-comments",

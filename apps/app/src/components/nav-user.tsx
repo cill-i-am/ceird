@@ -155,10 +155,20 @@ export function NavUser({
             <DropdownMenuGroup>
               {currentOrganizationRole !== undefined &&
               isAdministrativeOrganizationRole(currentOrganizationRole) ? (
-                <DropdownMenuItem render={<Link to="/organization/settings" />}>
-                  <HugeiconsIcon icon={Settings02Icon} strokeWidth={2} />
-                  Organization settings
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem
+                    render={<Link to="/organization/settings" />}
+                  >
+                    <HugeiconsIcon icon={Settings02Icon} strokeWidth={2} />
+                    Organization settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    render={<Link to="/organization/settings/labels" />}
+                  >
+                    <HugeiconsIcon icon={Settings02Icon} strokeWidth={2} />
+                    Labels settings
+                  </DropdownMenuItem>
+                </>
               ) : null}
               <DropdownMenuItem
                 render={
