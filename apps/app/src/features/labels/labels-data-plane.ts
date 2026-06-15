@@ -20,6 +20,7 @@ import {
   defineQueryCollectionContract,
   syncBackedCollectionCompleteness,
 } from "#/data-plane/collection-contract";
+import type { DataPlaneCollectionHealth } from "#/data-plane/collection-health";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
   reconcileQueryCollectionDataAfterConcurrentWrite,
@@ -29,8 +30,15 @@ import type {
   DataPlaneCollectionSnapshot,
   DataPlaneCollectionWriteVersionRef,
 } from "#/data-plane/collection-write";
-import { defineElectricCollectionContract } from "#/data-plane/electric-collection";
-import type { DataPlaneElectricMutationHandlers } from "#/data-plane/electric-collection";
+import {
+  createElectricCollectionFromContract,
+  defineElectricCollectionContract,
+} from "#/data-plane/electric-collection";
+import type {
+  CreateDataPlaneElectricCollectionOptions,
+  DataPlaneElectricCollectionContract,
+  DataPlaneElectricMutationHandlers,
+} from "#/data-plane/electric-collection";
 import { createCollectionWithQueryFallback } from "#/data-plane/query-fallback-collection";
 import type {
   CreateDataPlaneFallbackCollectionOptions,
@@ -98,12 +106,21 @@ export interface LabelsCollectionState {
   readonly writeVersionRef: DataPlaneCollectionWriteVersionRef;
 }
 
+export interface SettingsLabelsCollectionState {
+  readonly collection: LabelsCollection | null;
+  readonly health: DataPlaneCollectionHealth;
+}
+
 function labelsCollectionKey(scope: OrganizationDataScope) {
   return organizationDataQueryKey("labels", scope);
 }
 
 function labelsCollectionId(scope: OrganizationDataScope) {
   return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:labels`;
+}
+
+function settingsLabelsCollectionId(scope: OrganizationDataScope) {
+  return `${labelsCollectionId(scope)}:settings:electric`;
 }
 
 export function getOrCreateLabelsCollectionState({
@@ -167,6 +184,36 @@ export async function upsertLabelCollectionItem(
   });
 }
 
+export function getOrCreateSettingsLabelsCollectionState({
+  scope,
+  session,
+  sync,
+}: {
+  readonly scope: OrganizationDataScope;
+  readonly session?: DataPlaneSession | undefined;
+  readonly sync?: CreateDataPlaneElectricCollectionOptions | undefined;
+}): SettingsLabelsCollectionState {
+  const registryKey = settingsLabelsCollectionId(scope);
+  const existing = session?.registry.get(registryKey);
+
+  if (existing) {
+    return existing as SettingsLabelsCollectionState;
+  }
+
+  const contract = createLabelsElectricCollectionContract({
+    id: registryKey,
+  });
+  const result = createElectricCollectionFromContract(contract, sync);
+  const created = {
+    collection: result.collection as LabelsCollection | null,
+    health: result.health,
+  } satisfies SettingsLabelsCollectionState;
+
+  session?.registry.set(registryKey, created);
+
+  return created;
+}
+
 function createLabelsCollection({
   initialLabels,
   queryClient,
@@ -186,21 +233,9 @@ function createLabelsCollection({
 }) {
   const queryKey = labelsCollectionKey(scope);
   seedQueryCollectionInitialData(queryClient, queryKey, [...initialLabels]);
-  const electricContract = defineElectricCollectionContract({
-    collection: "labels",
-    completeness: syncBackedCollectionCompleteness({
-      covers: COMPLETE_TENANT_COLLECTION,
-      source: "electric",
-      subscriptionName: "labels",
-    }),
-    getKey: (label: Label) => label.id,
+  const electricContract = createLabelsElectricCollectionContract({
     id: `${labelsCollectionId(scope)}:electric`,
     mutationHandlers: createLabelElectricMutationHandlers(),
-    schema: LabelStandardSchema,
-    shapeName: "labels",
-    shapeOptions: {
-      transformer: toLabelElectricRow,
-    },
   });
   const queryContract = defineQueryCollectionContract({
     collection: "labels",
@@ -239,6 +274,34 @@ function createLabelsCollection({
     },
     { ...sync, electricEnabled: sync?.electricEnabled === true }
   );
+}
+
+function createLabelsElectricCollectionContract({
+  id,
+  mutationHandlers,
+}: {
+  readonly id: string;
+  readonly mutationHandlers?: LabelElectricMutationHandlers | undefined;
+}): DataPlaneElectricCollectionContract<
+  typeof LabelStandardSchema,
+  Label["id"]
+> {
+  return defineElectricCollectionContract({
+    collection: "labels",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "labels",
+    }),
+    getKey: (label: Label) => label.id,
+    id,
+    ...(mutationHandlers === undefined ? {} : { mutationHandlers }),
+    schema: LabelStandardSchema,
+    shapeName: "labels",
+    shapeOptions: {
+      transformer: toLabelElectricRow,
+    },
+  });
 }
 
 export function createLabelElectricMutationHandlers(
