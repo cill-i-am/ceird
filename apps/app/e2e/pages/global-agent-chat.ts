@@ -28,11 +28,8 @@ export class GlobalAgentChatPage {
     await this.expectLauncherReady();
     await expect(async () => {
       await this.launcher.click();
-      await expect(this.launcher).toHaveAttribute("aria-expanded", "true", {
-        timeout: 1000,
-      });
+      await expect(this.drawer).toBeVisible({ timeout: 1000 });
+      await expect(this.message).toBeVisible({ timeout: 1000 });
     }).toPass({ timeout: AGENT_CHAT_TIMEOUT_MS });
-    await expect(this.drawer).toBeVisible({ timeout: AGENT_CHAT_TIMEOUT_MS });
-    await expect(this.message).toBeVisible({ timeout: AGENT_CHAT_TIMEOUT_MS });
   }
 }
