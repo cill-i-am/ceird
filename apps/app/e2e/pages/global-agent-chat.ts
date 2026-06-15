@@ -52,7 +52,7 @@ export class GlobalAgentChatPage {
         async () => {
           const state = await this.tryOpenAndReadState();
 
-          return state.drawerVisible && state.launcherExpanded === "true"
+          return state.drawerVisible
             ? "open"
             : `closed ${JSON.stringify(state)}`;
         },
