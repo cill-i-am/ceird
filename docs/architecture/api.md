@@ -810,7 +810,8 @@ commutative.
 | Drizzle CLI config    | `drizzle.config.ts`                                                   |
 
 `databaseSchema` in `apps/domain/src/platform/database/schema.ts` merges
-authentication, identity preferences, comments, labels, sites, and jobs tables.
+authentication, identity preferences, activity, comments, labels, sites, and
+jobs tables.
 Keep schema changes in the domain that owns the tables, then export through the
 schema barrel. The Alchemy stack also loads this barrel through `Drizzle.Schema`.
 The parent native Neon branch applies `apps/domain/drizzle`, so historical SQL
@@ -824,6 +825,12 @@ same organization on both sides through composite organization foreign keys.
 The `agent_threads` and `agent_action_runs` tables are owned by the agents
 domain and indexed for the common org/user thread listing path and idempotent
 action replay lookups.
+Product activity/comment actor display uses `product_activity_actors`, a
+domain-owned projection safe for Electric sync. The domain Worker updates member
+actor rows from Better Auth user/member data when comments or activity are
+written, but only `product_activity_actors` is shape-authorized. The private
+`product_activity_actor_sources` table keeps user, agent-thread, and system
+lookup keys out of synced product data.
 Route-aware proximity adds indexes for the hot ranking paths: active jobs can
 reuse the existing `work_items_organization_active_updated_at_idx`, site active
 job summaries use `work_items_organization_site_active_priority_idx`, and mapped

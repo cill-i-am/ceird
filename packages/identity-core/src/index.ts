@@ -65,6 +65,11 @@ export const UserId = Schema.NonEmptyString.pipe(
 );
 export type UserId = Schema.Schema.Type<typeof UserId>;
 
+export const ProductActorId = Schema.String.check(Schema.isUUID()).pipe(
+  Schema.brand("@ceird/identity-core/ProductActorId")
+);
+export type ProductActorId = Schema.Schema.Type<typeof ProductActorId>;
+
 export const SessionId = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/identity-core/SessionId")
 );
@@ -143,6 +148,47 @@ export const InvitableOrganizationRole = Schema.Literals(
 export type InvitableOrganizationRole = Schema.Schema.Type<
   typeof InvitableOrganizationRole
 >;
+
+export const PRODUCT_ACTOR_KINDS = ["member", "agent", "system"] as const;
+export const ProductActorKind = Schema.Literals(PRODUCT_ACTOR_KINDS);
+export type ProductActorKind = Schema.Schema.Type<typeof ProductActorKind>;
+
+export const ProductActorDisplayName = Schema.String.pipe(
+  Schema.check(Schema.isMinLength(1), Schema.isMaxLength(120))
+);
+export type ProductActorDisplayName = Schema.Schema.Type<
+  typeof ProductActorDisplayName
+>;
+
+export const ProductActorDisplayDetail = Schema.String.pipe(
+  Schema.check(Schema.isMinLength(1), Schema.isMaxLength(160))
+);
+export type ProductActorDisplayDetail = Schema.Schema.Type<
+  typeof ProductActorDisplayDetail
+>;
+
+export const ProductActorRoute = Schema.Struct({
+  href: Schema.String.pipe(
+    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(512))
+  ),
+  label: Schema.String.pipe(
+    Schema.check(Schema.isMinLength(1), Schema.isMaxLength(80))
+  ),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type ProductActorRoute = Schema.Schema.Type<typeof ProductActorRoute>;
+
+export const ProductActorSchema = Schema.Struct({
+  displayDetail: Schema.optional(ProductActorDisplayDetail),
+  displayName: ProductActorDisplayName,
+  id: ProductActorId,
+  kind: ProductActorKind,
+  route: Schema.optional(ProductActorRoute),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type ProductActor = Schema.Schema.Type<typeof ProductActorSchema>;
 
 export const OrganizationMemberRoleResponseSchema = Schema.Struct({
   role: OrganizationRole,

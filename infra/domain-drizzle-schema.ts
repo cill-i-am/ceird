@@ -2,6 +2,7 @@ import { tsImport } from "tsx/esm/api";
 
 const schemaExportNames = [
   "account",
+  "activitySchema",
   "agentActionRun",
   "agentsSchema",
   "agentThread",
@@ -23,6 +24,8 @@ const schemaExportNames = [
   "oauthConsent",
   "oauthRefreshToken",
   "organization",
+  "productActivityActor",
+  "productActivityActorSource",
   "rateLimit",
   "session",
   "site",
@@ -64,6 +67,7 @@ function requireSchemaExport(name: SchemaExportName) {
 }
 
 export const account = requireSchemaExport("account");
+export const activitySchema = requireSchemaExport("activitySchema");
 export const agentActionRun = requireSchemaExport("agentActionRun");
 export const agentsSchema = requireSchemaExport("agentsSchema");
 export const agentThread = requireSchemaExport("agentThread");
@@ -89,6 +93,10 @@ export const oauthClient = requireSchemaExport("oauthClient");
 export const oauthConsent = requireSchemaExport("oauthConsent");
 export const oauthRefreshToken = requireSchemaExport("oauthRefreshToken");
 export const organization = requireSchemaExport("organization");
+export const productActivityActor = requireSchemaExport("productActivityActor");
+export const productActivityActorSource = requireSchemaExport(
+  "productActivityActorSource"
+);
 export const rateLimit = requireSchemaExport("rateLimit");
 export const session = requireSchemaExport("session");
 export const site = requireSchemaExport("site");

@@ -24,6 +24,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { productActivityActor } from "../activity/schema.js";
 import {
   member,
   organization,
@@ -337,6 +338,7 @@ export const workItemActivity = pgTable(
     actorUserId: text("actor_user_id").references(() => user.id, {
       onDelete: "set null",
     }),
+    actorId: uuid("actor_id"),
     payload: jsonb("payload").$type<JobActivityPayload>().notNull(),
     createdAt: jobsTimestamp("created_at"),
   },
@@ -350,6 +352,14 @@ export const workItemActivity = pgTable(
       foreignColumns: [workItem.id, workItem.organizationId],
       name: "work_item_activity_work_item_organization_fk",
     }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.actorId, table.organizationId],
+      foreignColumns: [
+        productActivityActor.id,
+        productActivityActor.organizationId,
+      ],
+      name: "work_item_activity_actor_org_fk",
+    }),
     index("work_item_activity_work_item_created_at_idx").on(
       table.workItemId,
       table.createdAt.desc(),
@@ -363,6 +373,12 @@ export const workItemActivity = pgTable(
     index("work_item_activity_organization_actor_created_at_idx").on(
       table.organizationId,
       table.actorUserId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("work_item_activity_organization_actor_id_created_at_idx").on(
+      table.organizationId,
+      table.actorId,
       table.createdAt.desc(),
       table.id.desc()
     ),

@@ -10,10 +10,16 @@ import type { SiteComment, SiteIdType as SiteId } from "@ceird/sites-core";
 import { Layer, Context, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
+import { ProductActivityActorsRepository } from "../activity/repository.js";
 import { generateCommentId } from "./id-generation.js";
 
 interface WorkItemCommentRow {
-  readonly author_name?: string | null;
+  readonly actor_display_detail: string | null;
+  readonly actor_display_name: string | null;
+  readonly actor_id: string | null;
+  readonly actor_kind: string | null;
+  readonly actor_route_href: string | null;
+  readonly actor_route_label: string | null;
   readonly author_user_id: string;
   readonly body: string;
   readonly created_at: Date;
@@ -22,7 +28,12 @@ interface WorkItemCommentRow {
 }
 
 interface SiteCommentRow {
-  readonly author_name?: string | null;
+  readonly actor_display_detail: string | null;
+  readonly actor_display_name: string | null;
+  readonly actor_id: string | null;
+  readonly actor_kind: string | null;
+  readonly actor_route_href: string | null;
+  readonly actor_route_label: string | null;
   readonly author_user_id: string;
   readonly body: string;
   readonly created_at: Date;
@@ -31,7 +42,12 @@ interface SiteCommentRow {
 }
 
 interface SiteCommentTargetRow {
-  readonly author_name?: string | null;
+  readonly actor_display_detail: string | null;
+  readonly actor_display_name: string | null;
+  readonly actor_id: string | null;
+  readonly actor_kind: string | null;
+  readonly actor_route_href: string | null;
+  readonly actor_route_label: string | null;
   readonly author_user_id: string | null;
   readonly body: string | null;
   readonly created_at: Date | null;
@@ -62,6 +78,7 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
   {
     make: Effect.gen(function* CommentsRepositoryLive() {
       const sql = yield* SqlClient.SqlClient;
+      const actors = yield* ProductActivityActorsRepository;
 
       const withTransaction = Effect.fn("CommentsRepository.withTransaction")(
         <Value, Error, Requirements>(
@@ -81,13 +98,19 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
             comments.body,
             comments.created_at,
             work_item_comments.work_item_id,
-            "user".name as author_name
+            product_activity_actors.id as actor_id,
+            product_activity_actors.kind as actor_kind,
+            product_activity_actors.display_name as actor_display_name,
+            product_activity_actors.display_detail as actor_display_detail,
+            product_activity_actors.route_href as actor_route_href,
+            product_activity_actors.route_label as actor_route_label
           from work_item_comments
           inner join comments
             on comments.id = work_item_comments.comment_id
             and comments.organization_id = work_item_comments.organization_id
-          inner join "user"
-            on "user".id = comments.author_user_id
+          left join product_activity_actors
+            on product_activity_actors.id = comments.actor_id
+            and product_activity_actors.organization_id = comments.organization_id
           where work_item_comments.organization_id = ${organizationId}
             and work_item_comments.work_item_id = ${workItemId}
           order by work_item_comments.created_at asc, work_item_comments.comment_id asc
@@ -107,11 +130,16 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
           );
           yield* Effect.annotateCurrentSpan("workItemId", input.workItemId);
           yield* Effect.annotateCurrentSpan("authorUserId", input.authorUserId);
+          const { actor } = yield* actors.ensureMemberActor({
+            organizationId: input.organizationId,
+            userId: input.authorUserId,
+          });
 
           const rows = yield* sql<WorkItemCommentRow>`
           with inserted_comment as (
             insert into comments ${sql
               .insert({
+                actor_id: actor.id,
                 author_user_id: input.authorUserId,
                 body: input.body,
                 id: generateCommentId(),
@@ -138,12 +166,18 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
             inserted_comment.body,
             inserted_comment.created_at,
             inserted_ownership.work_item_id,
-            "user".name as author_name
+            product_activity_actors.id as actor_id,
+            product_activity_actors.kind as actor_kind,
+            product_activity_actors.display_name as actor_display_name,
+            product_activity_actors.display_detail as actor_display_detail,
+            product_activity_actors.route_href as actor_route_href,
+            product_activity_actors.route_label as actor_route_label
           from inserted_comment
           inner join inserted_ownership
             on inserted_ownership.comment_id = inserted_comment.id
-          inner join "user"
-            on "user".id = inserted_comment.author_user_id
+          left join product_activity_actors
+            on product_activity_actors.id = inserted_comment.actor_id
+            and product_activity_actors.organization_id = inserted_comment.organization_id
         `;
 
           const row = yield* getRequiredRow(rows, "inserted work item comment");
@@ -165,13 +199,19 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
               comments.body,
               comments.created_at,
               site_comments.site_id,
-              "user".name as author_name
+              product_activity_actors.id as actor_id,
+              product_activity_actors.kind as actor_kind,
+              product_activity_actors.display_name as actor_display_name,
+              product_activity_actors.display_detail as actor_display_detail,
+              product_activity_actors.route_href as actor_route_href,
+              product_activity_actors.route_label as actor_route_label
             from site_comments
             inner join comments
               on comments.id = site_comments.comment_id
               and comments.organization_id = site_comments.organization_id
-            inner join "user"
-              on "user".id = comments.author_user_id
+            left join product_activity_actors
+              on product_activity_actors.id = comments.actor_id
+              and product_activity_actors.organization_id = comments.organization_id
             where site_comments.organization_id = ${organizationId}
               and site_comments.site_id = ${siteId}
             order by site_comments.created_at asc, site_comments.comment_id asc
@@ -204,7 +244,12 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
             comments.body,
             comments.created_at,
             site_comments.site_id,
-            "user".name as author_name
+            product_activity_actors.id as actor_id,
+            product_activity_actors.kind as actor_kind,
+            product_activity_actors.display_name as actor_display_name,
+            product_activity_actors.display_detail as actor_display_detail,
+            product_activity_actors.route_href as actor_route_href,
+            product_activity_actors.route_label as actor_route_label
           from requested_site
           left join site_comments
             on site_comments.organization_id = ${organizationId}
@@ -212,8 +257,9 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
           left join comments
             on comments.id = site_comments.comment_id
             and comments.organization_id = site_comments.organization_id
-          left join "user"
-            on "user".id = comments.author_user_id
+          left join product_activity_actors
+            on product_activity_actors.id = comments.actor_id
+            and product_activity_actors.organization_id = comments.organization_id
           order by site_comments.created_at asc nulls last,
             site_comments.comment_id asc nulls last
         `;
@@ -247,6 +293,10 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
         );
         yield* Effect.annotateCurrentSpan("siteId", input.siteId);
         yield* Effect.annotateCurrentSpan("authorUserId", input.authorUserId);
+        const { actor } = yield* actors.ensureMemberActor({
+          organizationId: input.organizationId,
+          userId: input.authorUserId,
+        });
 
         const commentId = generateCommentId();
         const rows = yield* sql<SiteCommentRow>`
@@ -262,12 +312,14 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
             insert into comments (
               id,
               organization_id,
+              actor_id,
               author_user_id,
               body
             )
             select
               ${commentId},
               active_site.organization_id,
+              ${actor.id},
               ${input.authorUserId},
               ${input.body}
             from active_site
@@ -292,12 +344,18 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
             inserted_comment.body,
             inserted_comment.created_at,
             inserted_ownership.site_id,
-            "user".name as author_name
+            product_activity_actors.id as actor_id,
+            product_activity_actors.kind as actor_kind,
+            product_activity_actors.display_name as actor_display_name,
+            product_activity_actors.display_detail as actor_display_detail,
+            product_activity_actors.route_href as actor_route_href,
+            product_activity_actors.route_label as actor_route_label
           from inserted_comment
           inner join inserted_ownership
             on inserted_ownership.comment_id = inserted_comment.id
-          inner join "user"
-            on "user".id = inserted_comment.author_user_id
+          left join product_activity_actors
+            on product_activity_actors.id = inserted_comment.actor_id
+            and product_activity_actors.organization_id = inserted_comment.organization_id
         `;
 
         const [row] = rows;
@@ -349,12 +407,16 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
     CommentsRepository,
     CommentsRepository.make
   );
-  static readonly Default = CommentsRepository.DefaultWithoutDependencies;
+  static readonly Default = CommentsRepository.DefaultWithoutDependencies.pipe(
+    Layer.provide(ProductActivityActorsRepository.Default)
+  );
 }
 
 function mapWorkItemCommentRow(row: WorkItemCommentRow): JobComment {
+  const actor = mapProductActorProjection(row);
   return decodeJobComment({
-    authorName: nullableToUndefined(row.author_name ?? null),
+    actor,
+    authorName: actor?.displayName,
     authorUserId: row.author_user_id,
     body: row.body,
     createdAt: row.created_at.toISOString(),
@@ -364,8 +426,10 @@ function mapWorkItemCommentRow(row: WorkItemCommentRow): JobComment {
 }
 
 function mapSiteCommentRow(row: SiteCommentRow): SiteComment {
+  const actor = mapProductActorProjection(row);
   return decodeSiteComment({
-    authorName: nullableToUndefined(row.author_name ?? null),
+    actor,
+    authorName: actor?.displayName,
     authorUserId: row.author_user_id,
     body: row.body,
     createdAt: row.created_at.toISOString(),
@@ -389,7 +453,12 @@ function mapNullableSiteCommentRow(
 
   return Option.some(
     mapSiteCommentRow({
-      author_name: row.author_name,
+      actor_display_detail: row.actor_display_detail,
+      actor_display_name: row.actor_display_name,
+      actor_id: row.actor_id,
+      actor_kind: row.actor_kind,
+      actor_route_href: row.actor_route_href,
+      actor_route_label: row.actor_route_label,
       author_user_id: row.author_user_id,
       body: row.body,
       created_at: row.created_at,
@@ -397,6 +466,50 @@ function mapNullableSiteCommentRow(
       site_id: row.site_id,
     })
   );
+}
+
+function mapProductActorProjection(
+  row:
+    | Pick<
+        WorkItemCommentRow,
+        | "actor_display_detail"
+        | "actor_display_name"
+        | "actor_id"
+        | "actor_kind"
+        | "actor_route_href"
+        | "actor_route_label"
+      >
+    | Pick<
+        SiteCommentRow,
+        | "actor_display_detail"
+        | "actor_display_name"
+        | "actor_id"
+        | "actor_kind"
+        | "actor_route_href"
+        | "actor_route_label"
+      >
+) {
+  if (
+    row.actor_id === null ||
+    row.actor_kind === null ||
+    row.actor_display_name === null
+  ) {
+    return;
+  }
+
+  return {
+    displayDetail: nullableToUndefined(row.actor_display_detail),
+    displayName: row.actor_display_name,
+    id: row.actor_id,
+    kind: row.actor_kind,
+    route:
+      row.actor_route_href === null || row.actor_route_label === null
+        ? undefined
+        : {
+            href: row.actor_route_href,
+            label: row.actor_route_label,
+          },
+  };
 }
 
 function nullableToUndefined<Value>(value: Value | null): Value | undefined {

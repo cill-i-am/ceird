@@ -46,6 +46,12 @@ describe("@ceird/comments-core", () => {
   it("decodes shared comment DTOs", () => {
     expect(
       decodeComment({
+        actor: {
+          displayDetail: "Team member",
+          displayName: "Ciara",
+          id: "88888888-8888-4888-8888-888888888888",
+          kind: "member",
+        },
         id: "77777777-7777-4777-8777-777777777777",
         authorUserId: "user_123",
         authorName: "Ciara",
@@ -58,6 +64,12 @@ describe("@ceird/comments-core", () => {
       >,
       authorUserId: "user_123",
       authorName: "Ciara",
+      actor: {
+        displayDetail: "Team member",
+        displayName: "Ciara",
+        id: "88888888-8888-4888-8888-888888888888",
+        kind: "member",
+      },
       body: "Gate code changed.",
       createdAt: "2026-05-16T09:30:00.000Z",
     });
