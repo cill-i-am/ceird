@@ -1301,6 +1301,16 @@ describe("global agent chat", () => {
       within(drawer).getByText("Destructive action against label.")
     ).toBeVisible();
     expect(within(drawer).getByText(/review before ceird acts/i)).toBeVisible();
+    expect(within(drawer).getByText("Review details")).toBeVisible();
+    expect(within(drawer).getByText("Label ID")).toBeVisible();
+    expect(within(drawer).getByText("label_123")).toBeVisible();
+
+    const technicalPayloadSummary =
+      within(drawer).getByText("Technical payload");
+    expect(technicalPayloadSummary).toBeVisible();
+    expect(technicalPayloadSummary.closest("details")).not.toHaveAttribute(
+      "open"
+    );
 
     await user.click(within(drawer).getByRole("button", { name: /approve/i }));
     expect(mockedAddToolApprovalResponse).toHaveBeenCalledWith({
@@ -1313,6 +1323,129 @@ describe("global agent chat", () => {
       approved: false,
       id: "approval-delete-label",
     });
+  });
+
+  it("renders approval input as readable review details before technical JSON", async () => {
+    const longBody = `${"Schedule follow-up ".repeat(18)}after inspection.`;
+    mockedUseAgentChat.mockReturnValue({
+      clearHistory: () => {},
+      error: undefined,
+      isStreaming: false,
+      messages: [
+        {
+          id: "message-readable-approval",
+          parts: [
+            {
+              approval: { id: "approval-update-work-item" },
+              input: {
+                input: {
+                  body: longBody,
+                  comment: "First line\nSecond line",
+                  priority: "high",
+                  siteId: "site_123",
+                  status: "scheduled",
+                  title: "Replace pump",
+                  workItemId: "work_123",
+                },
+                requestId: "request_123",
+              },
+              state: "approval-requested",
+              toolName: "updateWorkItem",
+              type: "tool-updateWorkItem",
+            },
+          ],
+          role: "assistant",
+        },
+      ],
+      addToolApprovalResponse: mockedAddToolApprovalResponse,
+      sendMessage: mockedSendMessage,
+      status: "ready",
+    } as unknown as ReturnType<typeof AiChatReactModule.useAgentChat>);
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
+      />
+    );
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    await expect(within(drawer).findByText("Title")).resolves.toBeVisible();
+    expect(within(drawer).getByText("Replace pump")).toBeVisible();
+    expect(within(drawer).getByText("Status")).toBeVisible();
+    expect(within(drawer).getByText("scheduled")).toBeVisible();
+    expect(within(drawer).getByText("Priority")).toBeVisible();
+    expect(within(drawer).getByText("high")).toBeVisible();
+    expect(within(drawer).getByText("Comment")).toBeVisible();
+    const commentValue = within(drawer).getByText(
+      (_, element) => element?.textContent === "First line\nSecond line"
+    );
+    expect(commentValue).toBeVisible();
+    expect(within(drawer).getByText("Body")).toBeVisible();
+    expect(
+      within(drawer)
+        .getAllByText(/Schedule follow-up/)
+        .some((element) => element.textContent?.endsWith("..."))
+    ).toBeTruthy();
+    expect(within(drawer).getByText("Work item ID")).toBeVisible();
+    expect(within(drawer).getByText("work_123")).toBeVisible();
+    expect(within(drawer).getByText("Site ID")).toBeVisible();
+    expect(within(drawer).getByText("site_123")).toBeVisible();
+
+    const technicalPayloadSummary =
+      within(drawer).getByText("Technical payload");
+    const technicalPayload = technicalPayloadSummary.closest("details");
+    expect(technicalPayload).not.toHaveAttribute("open");
+    expect(
+      within(technicalPayload as HTMLElement).getByText(/requestId/)
+    ).toBeInTheDocument();
+  });
+
+  it("summarizes unknown approval payloads without making raw JSON primary", async () => {
+    mockedUseAgentChat.mockReturnValue({
+      clearHistory: () => {},
+      error: undefined,
+      isStreaming: false,
+      messages: [
+        {
+          id: "message-unknown-approval",
+          parts: [
+            {
+              approval: { id: "approval-unknown" },
+              input: {
+                filters: { archived: false, query: "pump" },
+                ids: ["one", "two"],
+              },
+              state: "approval-requested",
+              toolName: "unknownTool",
+              type: "tool-unknownTool",
+            },
+          ],
+          role: "assistant",
+        },
+      ],
+      addToolApprovalResponse: mockedAddToolApprovalResponse,
+      sendMessage: mockedSendMessage,
+      status: "ready",
+    } as unknown as ReturnType<typeof AiChatReactModule.useAgentChat>);
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
+      />
+    );
+
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+    await expect(within(drawer).findByText("Filters")).resolves.toBeVisible();
+    expect(
+      within(drawer).getByText("Object with 2 keys: archived, query")
+    ).toBeVisible();
+    expect(within(drawer).getByText("Ids")).toBeVisible();
+    expect(within(drawer).getByText("2 items")).toBeVisible();
+    expect(within(drawer).getByText("Technical payload")).toBeVisible();
   });
 
   it("does not show approval controls without an approval decision id", async () => {

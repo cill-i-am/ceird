@@ -1211,6 +1211,12 @@ function ApprovalReview({
   readonly toolName: string;
   readonly onToolApprovalResponse: (response: ToolApprovalResponse) => void;
 }) {
+  const reviewDetails = React.useMemo(
+    () => buildApprovalReviewDetails(input),
+    [input]
+  );
+  const technicalPayload = formatPayload(input);
+
   return (
     <div className="flex flex-col gap-3 rounded-md border bg-background p-3">
       <div className="flex flex-col gap-1">
@@ -1220,11 +1226,36 @@ function ApprovalReview({
           {action?.display.target ?? toolName}.
         </span>
       </div>
-      <ToolPayloadPreview
-        input={input}
-        output={undefined}
-        toolName={toolName}
-      />
+      {reviewDetails.length === 0 ? null : (
+        <div className="flex flex-col gap-2 rounded-md border bg-muted/20 p-2">
+          <span className="text-xs font-medium text-muted-foreground">
+            Review details
+          </span>
+          <dl className="grid grid-cols-1 gap-2">
+            {reviewDetails.map((detail) => (
+              <div
+                className="grid grid-cols-[minmax(6rem,0.42fr)_1fr] gap-2"
+                key={detail.key}
+              >
+                <dt className="text-xs font-medium text-muted-foreground">
+                  {detail.label}
+                </dt>
+                <dd className="min-w-0 text-xs break-words whitespace-pre-wrap text-foreground">
+                  {detail.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+      <details className="rounded-md border bg-background p-2 text-xs">
+        <summary className="cursor-pointer font-medium text-muted-foreground">
+          Technical payload
+        </summary>
+        <code className="mt-2 block max-h-32 overflow-auto break-words whitespace-pre-wrap text-foreground">
+          {technicalPayload}
+        </code>
+      </details>
       <Separator />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">
@@ -1310,6 +1341,167 @@ function PayloadBlock({
         {value}
       </code>
     </div>
+  );
+}
+
+interface ApprovalReviewDetail {
+  readonly key: string;
+  readonly label: string;
+  readonly value: string;
+}
+
+const APPROVAL_REVIEW_LABELS = {
+  body: "Body",
+  comment: "Comment",
+  labelId: "Label ID",
+  name: "Name",
+  priority: "Priority",
+  siteId: "Site ID",
+  status: "Status",
+  title: "Title",
+  workItemId: "Work item ID",
+} as const satisfies Record<string, string>;
+
+const MAX_APPROVAL_REVIEW_VALUE_LENGTH = 240;
+const MAX_APPROVAL_REVIEW_DETAILS = 8;
+
+function buildApprovalReviewDetails(
+  input: unknown
+): readonly ApprovalReviewDetail[] {
+  const flattenedInput = flattenApprovalInput(input);
+
+  if (flattenedInput === null) {
+    const value = formatReviewValue(input);
+
+    return value === null
+      ? []
+      : [
+          {
+            key: "payload",
+            label: "Payload",
+            value,
+          },
+        ];
+  }
+
+  const knownDetails = Object.entries(APPROVAL_REVIEW_LABELS).flatMap(
+    ([key, label]) => {
+      const value = flattenedInput[key];
+      const formattedValue = formatReviewValue(value);
+
+      return formattedValue === null
+        ? []
+        : [
+            {
+              key,
+              label,
+              value: formattedValue,
+            },
+          ];
+    }
+  );
+
+  if (knownDetails.length > 0) {
+    return knownDetails;
+  }
+
+  return Object.entries(flattenedInput)
+    .slice(0, MAX_APPROVAL_REVIEW_DETAILS)
+    .flatMap(([key, value]) => {
+      const formattedValue = formatReviewValue(value);
+
+      return formattedValue === null
+        ? []
+        : [
+            {
+              key,
+              label: readableReviewLabel(key),
+              value: formattedValue,
+            },
+          ];
+    });
+}
+
+function flattenApprovalInput(input: unknown): Record<string, unknown> | null {
+  if (!isPlainRecord(input)) {
+    return null;
+  }
+
+  const nestedInput = input.input;
+
+  if (!isPlainRecord(nestedInput)) {
+    return input;
+  }
+
+  const { input: _nestedInput, ...outerInput } = input;
+
+  return {
+    ...outerInput,
+    ...nestedInput,
+  };
+}
+
+function formatReviewValue(value: unknown): string | null {
+  if (value === undefined || typeof value === "function") {
+    return null;
+  }
+
+  if (value === null) {
+    return "None";
+  }
+
+  if (typeof value === "string") {
+    return truncateReviewValue(value);
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return truncateReviewValue(
+      `${value.length} item${value.length === 1 ? "" : "s"}`
+    );
+  }
+
+  if (isPlainRecord(value)) {
+    const keys = Object.keys(value);
+
+    return truncateReviewValue(
+      keys.length === 0
+        ? "Empty object"
+        : `Object with ${keys.length} key${keys.length === 1 ? "" : "s"}: ${keys
+            .slice(0, 4)
+            .join(", ")}${keys.length > 4 ? ", ..." : ""}`
+    );
+  }
+
+  return truncateReviewValue(String(value));
+}
+
+function truncateReviewValue(value: string) {
+  return value.length > MAX_APPROVAL_REVIEW_VALUE_LENGTH
+    ? `${value.slice(0, MAX_APPROVAL_REVIEW_VALUE_LENGTH - 3)}...`
+    : value;
+}
+
+function readableReviewLabel(key: string) {
+  const spaced = key
+    .replaceAll(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll(/[_-]+/g, " ")
+    .trim();
+
+  return spaced.length === 0
+    ? "Field"
+    : `${spaced.charAt(0).toUpperCase()}${spaced.slice(1)}`;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype
   );
 }
 
