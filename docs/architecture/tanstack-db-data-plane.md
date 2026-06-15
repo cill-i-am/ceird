@@ -21,14 +21,16 @@ route components or view state files. A collection contract must declare:
 - query function
 - stale and garbage-collection behavior
 
-Current collection roots are `jobs`, `job-options`, `job-details`,
-`job-collaborators`, `sites`, `site-comments`, `site-related-jobs`, and
-`labels`. The jobs primary route collection and Sites route collection are
-eager bounded Query Collections for their first cursor pages. Site-related jobs
-are the first cursor page filtered by `siteId`. Job options remain an eager
-complete-tenant option collection. Labels are a scoped option index. Job
-details, collaborators, and site comments are lazy per-record collections that
-request snapshots from their mounted subscribers rather than from Start loaders.
+Current collection roots are `jobs`, `job-activity`, `job-comment-bodies`,
+`job-comments`, `job-contacts`, `job-options`, `job-label-assignments`,
+`job-details`, `job-collaborators`, `job-sites`, `job-visits`, `sites`,
+`site-comments`, `site-related-jobs`, and `labels`. The legacy jobs primary
+route collection and Sites route collection are eager bounded Query Collections
+for their first cursor pages. Site-related jobs are the first cursor page
+filtered by `siteId`. Job options remain an eager complete-tenant option
+collection. Labels are a scoped option index. Job details, collaborators, and
+site comments are lazy per-record collections that request snapshots from their
+mounted subscribers rather than from Start loaders.
 ElectricSQL integration starts at this same boundary. Raw
 `@tanstack/electric-db-collection` and `@electric-sql/client` usage belongs only
 in `apps/app/src/data-plane/electric-collection.ts`, which standardizes
@@ -45,14 +47,21 @@ The initial factory supports eager full-shape sync only. Electric
 `on-demand`/`progressive` subset loading remains a future extension because the
 current sync Worker intentionally accepts named shape requests and protocol-safe
 resume/live parameters, not caller-supplied subset predicates.
-The jobs primary route collection has a conservative Electric read canary behind
-that same fallback wrapper. It is disabled by default and must be opted in
-through the jobs data-plane sync options, so a configured `VITE_SYNC_ORIGIN`
-alone does not migrate the visible jobs list. When enabled, it requests the
-public sync Worker `jobs` shape and maps `work_items` rows into the narrow jobs
-list item shape with joined fields such as labels left empty; Query Collection
-fallback remains the default and fallback path for route-visible first-paint
-data.
+The existing jobs route collection still uses a fallback wrapper so current
+route-visible first-paint data remains API-backed unless a caller explicitly
+opts into Electric. The Electric-native Jobs workspace contract is separate and
+explicit in `apps/app/src/features/jobs/jobs-data-plane.ts` through
+`createJobsWorkspaceReadModelContracts(...)`. Its list graph derives from the
+domain-approved `jobs`, `work-item-labels`, `labels`, `sites`, and `contacts`
+shapes. Its detail graph adds `work-item-collaborators`,
+`work-item-activity`, `work-item-visits`, `work-item-comments`, and `comments`.
+Each shape is a complete-tenant, organization/viewer/role-scoped Electric
+collection with shared health state; local live queries can join job rows,
+label assignments, label definitions, site summaries, contact summaries,
+collaborators, activity, visits, comment edges, and comment bodies without
+constructing raw Electric streams in feature UI. Member/actor display names and
+site-level active job rollups remain domain-owned projection follow-ups rather
+than browser business-rule recomputation.
 
 ## Collection Health
 
