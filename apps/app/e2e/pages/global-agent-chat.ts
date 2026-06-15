@@ -6,18 +6,6 @@ import { waitForLocatorHydration } from "./wait-for-submit-hydration";
 const AGENT_CHAT_TIMEOUT_MS = 30_000;
 const GLOBAL_AGENT_CHAT_OPEN_EVENT = "ceird:agent-chat-open";
 
-interface AgentChatOpenState {
-  readonly clickError?: string;
-  readonly drawerCount: number;
-  readonly drawerVisible: boolean;
-  readonly elementsAtLauncherCenter: readonly string[];
-  readonly launcherEnabled: boolean;
-  readonly launcherExpanded: string | null;
-  readonly launcherHydrated: boolean;
-  readonly launcherVisible: boolean;
-  readonly preparingTextVisible: boolean;
-}
-
 export class GlobalAgentChatPage {
   readonly drawer: Locator;
   readonly launcher: Locator;
@@ -47,20 +35,11 @@ export class GlobalAgentChatPage {
 
   async open() {
     await this.expectLauncherReady();
-    await expect
-      .poll(
-        async () => {
-          const state = await this.tryOpenAndReadState();
 
-          return state.drawerVisible
-            ? "open"
-            : `closed ${JSON.stringify(state)}`;
-        },
-        {
-          timeout: AGENT_CHAT_TIMEOUT_MS,
-        }
-      )
-      .toBe("open");
+    await this.launcher.click({ timeout: 2500 }).catch(() => null);
+
+    await this.openThroughSharedShellEventIfClosed();
+    await expect(this.drawer).toBeVisible({ timeout: AGENT_CHAT_TIMEOUT_MS });
   }
 
   async expectComposerReady() {
@@ -75,70 +54,5 @@ export class GlobalAgentChatPage {
     await this.page.evaluate((eventName) => {
       window.dispatchEvent(new CustomEvent(eventName));
     }, GLOBAL_AGENT_CHAT_OPEN_EVENT);
-  }
-
-  private async tryOpenAndReadState() {
-    let clickError: string | undefined;
-
-    try {
-      await this.launcher.click({ timeout: 2500 });
-    } catch (error: unknown) {
-      clickError = error instanceof Error ? error.message : String(error);
-    }
-
-    await this.openThroughSharedShellEventIfClosed();
-
-    return await this.readOpenState(clickError);
-  }
-
-  private async readOpenState(
-    clickError: string | undefined
-  ): Promise<AgentChatOpenState> {
-    const launcherBox = await this.launcher.boundingBox();
-    const elementsAtLauncherCenter =
-      launcherBox === null
-        ? []
-        : await this.page.evaluate(
-            ({ x, y }) =>
-              document
-                .elementsFromPoint(x, y)
-                .slice(0, 5)
-                .map((element) =>
-                  [
-                    element.tagName.toLowerCase(),
-                    element.getAttribute("role"),
-                    element.getAttribute("aria-label"),
-                    element.textContent
-                      ?.trim()
-                      .replaceAll(/\s+/g, " ")
-                      .slice(0, 80),
-                  ]
-                    .filter(Boolean)
-                    .join(":")
-                ),
-            {
-              x: launcherBox.x + launcherBox.width / 2,
-              y: launcherBox.y + launcherBox.height / 2,
-            }
-          );
-
-    return {
-      ...(clickError === undefined ? {} : { clickError }),
-      drawerCount: await this.drawer.count(),
-      drawerVisible: await this.drawer.isVisible(),
-      elementsAtLauncherCenter,
-      launcherEnabled: await this.launcher.isEnabled(),
-      launcherExpanded: await this.launcher.getAttribute("aria-expanded"),
-      launcherHydrated: await this.launcher.evaluate((element) =>
-        Object.keys(element).some(
-          (key) =>
-            key.startsWith("__reactFiber$") || key.startsWith("__reactProps$")
-        )
-      ),
-      launcherVisible: await this.launcher.isVisible(),
-      preparingTextVisible: await this.page
-        .getByText("Preparing workspace context")
-        .isVisible(),
-    };
   }
 }
