@@ -26,6 +26,7 @@ const schemaExportNames = [
   "rateLimit",
   "session",
   "site",
+  "siteActiveJobSummary",
   "siteComment",
   "siteContact",
   "siteLabel",
@@ -92,6 +93,9 @@ export const organization = requireSchemaExport("organization");
 export const rateLimit = requireSchemaExport("rateLimit");
 export const session = requireSchemaExport("session");
 export const site = requireSchemaExport("site");
+export const siteActiveJobSummary = requireSchemaExport(
+  "siteActiveJobSummary"
+);
 export const siteComment = requireSchemaExport("siteComment");
 export const siteContact = requireSchemaExport("siteContact");
 export const siteLabel = requireSchemaExport("siteLabel");
