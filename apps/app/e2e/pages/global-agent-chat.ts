@@ -25,6 +25,7 @@ export class GlobalAgentChatPage {
 
   async expectLauncherReady() {
     await expect(this.launcher).toBeVisible({ timeout: AGENT_CHAT_TIMEOUT_MS });
+    await expect(this.launcher).toBeEnabled({ timeout: AGENT_CHAT_TIMEOUT_MS });
   }
 
   async open() {
@@ -32,6 +33,9 @@ export class GlobalAgentChatPage {
     await expect(async () => {
       await this.launcher.click();
       await this.openThroughSharedShellEventIfClosed();
+      await expect(this.launcher).toHaveAttribute("aria-expanded", "true", {
+        timeout: 2500,
+      });
       await expect(this.drawer).toBeVisible({ timeout: 2500 });
       await expect(this.message).toBeVisible({ timeout: 2500 });
     }).toPass({ timeout: AGENT_CHAT_TIMEOUT_MS });
