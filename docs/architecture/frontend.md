@@ -169,7 +169,12 @@ right-side drawer and mobile uses the existing bottom drawer behavior. The
 first-open drawer state presents read capabilities as usable, frames write and
 destructive manifest entries conservatively as approval-gated metadata unless a
 runtime availability signal proves otherwise, and offers prompt starter buttons
-that fill the composer draft without sending. The browser app prepares or
+that fill the composer draft without sending. While an Agent turn is submitted,
+streaming, or recovering, the composer exposes a Stop action wired to the
+installed chat hook `stop()` control, surfaces recovery as `Recovering response`
+instead of ordinary streaming, and registers the context-aware `Mod+.`
+`agentStop` shortcut through the shared hotkey layer only while the stop action
+is available. The browser app prepares or
 reuses the current user's active thread through
 `POST /agent/session/prepare`, which returns the thread, public action
 manifest, and initial short-lived connect token before the drawer connects to

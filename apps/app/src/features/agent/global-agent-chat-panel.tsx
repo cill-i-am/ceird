@@ -523,12 +523,16 @@ function AgentConversation({
   const {
     addToolApprovalResponse,
     error,
+    isRecovering,
     isStreaming,
     messages,
     sendMessage,
     status,
+    stop,
   } = useAgentChat({ agent, prepareSendMessagesRequest });
-  const busy = status === "submitted" || status === "streaming" || isStreaming;
+  const turnActive =
+    status === "submitted" || status === "streaming" || isStreaming;
+  const busy = turnActive || isRecovering;
   const actionLookup = React.useMemo(
     () => buildActionLookup(actions),
     [actions]
@@ -702,6 +706,7 @@ function AgentConversation({
             <ConversationMeta
               actions={actions}
               busy={busy}
+              recovering={isRecovering}
               threadTitle={threadTitle}
             />
             <AgentConversationContext.Provider value={conversationContext}>
@@ -725,6 +730,8 @@ function AgentConversation({
         busy={busy}
         locationNotice={locationNotice}
         sendMessage={sendMessageWithRouteContext}
+        stop={stop}
+        turnActive={busy}
       />
     </>
   );
@@ -733,12 +740,22 @@ function AgentConversation({
 function ConversationMeta({
   actions,
   busy,
+  recovering,
   threadTitle,
 }: {
   readonly actions: readonly AgentActionManifestItem[];
   readonly busy: boolean;
+  readonly recovering: boolean;
   readonly threadTitle: string;
 }) {
+  let statusBadgeLabel: string | null = null;
+
+  if (recovering) {
+    statusBadgeLabel = "Recovering response";
+  } else if (busy) {
+    statusBadgeLabel = "Working";
+  }
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
       <div className="flex min-w-0 items-center gap-2">
@@ -747,9 +764,9 @@ function ConversationMeta({
       </div>
       <div className="flex items-center gap-2">
         <span>{actions.length} registered actions</span>
-        {busy ? (
+        {statusBadgeLabel ? (
           <Badge variant="secondary" render={<output aria-live="polite" />}>
-            Working
+            {statusBadgeLabel}
           </Badge>
         ) : null}
       </div>
@@ -857,13 +874,19 @@ const AgentComposer = React.forwardRef<
       message: { readonly text: string },
       options?: AgentSendMessageOptions
     ) => Promise<boolean>;
+    readonly stop: () => void;
+    readonly turnActive: boolean;
   }
->(function AgentComposer({ busy, locationNotice, sendMessage }, ref) {
+>(function AgentComposer(
+  { busy, locationNotice, sendMessage, stop, turnActive },
+  ref
+) {
   const [draft, setDraft] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const composerRef = React.useRef<HTMLDivElement | null>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const pendingOriginMessageRef = React.useRef<string | null>(null);
+  const stopRequestedRef = React.useRef(false);
   const isBusy = busy || submitting;
   const originDialog = useProximityOriginDialogController({
     autocompleteFailureMessage: "Ceird could not search origins. Try again.",
@@ -920,6 +943,20 @@ const AgentComposer = React.forwardRef<
       void submitDraft();
     }
   });
+  const stopActiveTurn = React.useCallback(() => {
+    if (!turnActive || stopRequestedRef.current) {
+      return;
+    }
+
+    stopRequestedRef.current = true;
+    stop();
+  }, [stop, turnActive]);
+
+  React.useEffect(() => {
+    if (!turnActive) {
+      stopRequestedRef.current = false;
+    }
+  }, [turnActive]);
 
   React.useImperativeHandle(
     ref,
@@ -965,23 +1002,49 @@ const AgentComposer = React.forwardRef<
             hotkey={HOTKEYS.agentSubmit.hotkey}
             label={HOTKEYS.agentSubmit.label}
           />
-          <Button
-            type="button"
-            size="sm"
-            aria-label="Send"
-            disabled={!draft.trim() || isBusy}
-            loading={submitting}
-            onClick={() => {
-              void submitDraft();
-            }}
-          >
-            <AgentIcon
-              icon={SentIcon}
-              strokeWidth={2}
-              data-icon="inline-start"
-            />
-            Send
-          </Button>
+          <div className="flex items-center gap-2">
+            {turnActive ? (
+              <>
+                <AgentStopHotkey onStop={stopActiveTurn} />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={stopActiveTurn}
+                >
+                  <AgentIcon
+                    icon={Cancel01Icon}
+                    strokeWidth={2}
+                    data-icon="inline-start"
+                  />
+                  Stop
+                  <ShortcutHint
+                    decorative
+                    surface="button"
+                    hotkey={HOTKEYS.agentStop.hotkey}
+                    label={HOTKEYS.agentStop.label}
+                  />
+                </Button>
+              </>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              aria-label="Send"
+              disabled={!draft.trim() || isBusy}
+              loading={submitting}
+              onClick={() => {
+                void submitDraft();
+              }}
+            >
+              <AgentIcon
+                icon={SentIcon}
+                strokeWidth={2}
+                data-icon="inline-start"
+              />
+              Send
+            </Button>
+          </div>
         </div>
         <ProximityOriginDialog
           error={originDialog.error}
@@ -1017,6 +1080,12 @@ const AgentComposer = React.forwardRef<
     </DrawerFooter>
   );
 });
+
+function AgentStopHotkey({ onStop }: { readonly onStop: () => void }) {
+  useAppHotkey("agentStop", onStop);
+
+  return null;
+}
 
 function AgentLocationNotice({
   busy,

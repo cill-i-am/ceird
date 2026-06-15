@@ -77,6 +77,14 @@ export const HOTKEYS = {
     scope: "global",
     when: "Agent composer is focused",
   },
+  agentStop: {
+    group: "Agent",
+    hotkey: "Mod+.",
+    id: "agentStop",
+    label: "Stop agent response",
+    scope: "global",
+    when: "Agent turn is active",
+  },
   goHome: {
     group: "Navigation",
     hotkey: "G H",

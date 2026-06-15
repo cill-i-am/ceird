@@ -179,6 +179,7 @@ const {
   mockedResolveAgentHost,
   mockedResolveProximityOriginPlace,
   mockedSendMessage,
+  mockedStop,
   mockedUpdateCurrentUserPreferences,
   mockedUseAgent,
   mockedUseAgentChat,
@@ -209,6 +210,7 @@ const {
     vi.fn<typeof ProximityApiModule.resolveProximityOriginPlace>(),
   mockedSendMessage:
     vi.fn<(message: { readonly text: string }) => Promise<void>>(),
+  mockedStop: vi.fn<() => void>(),
   mockedUpdateCurrentUserPreferences:
     vi.fn<typeof UserPreferencesApiModule.updateCurrentUserPreferences>(),
   mockedUseAgent: vi.fn<typeof AgentsReactModule.useAgent>(),
@@ -371,6 +373,7 @@ describe("global agent chat", () => {
     mockedUseAgentChat.mockReturnValue({
       clearHistory: () => {},
       error: undefined,
+      isRecovering: false,
       isStreaming: false,
       messages: [
         {
@@ -390,6 +393,7 @@ describe("global agent chat", () => {
       addToolApprovalResponse: mockedAddToolApprovalResponse,
       sendMessage: mockedSendMessage,
       status: "ready",
+      stop: mockedStop,
     } as unknown as ReturnType<typeof AiChatReactModule.useAgentChat>);
   });
 
@@ -1007,6 +1011,115 @@ describe("global agent chat", () => {
     expect(textbox).toHaveValue("");
   });
 
+  it("shows Stop only while an agent turn is active and stops the active turn once", async () => {
+    const user = userEvent.setup();
+    mockedUseAgentChat.mockReturnValue({
+      clearHistory: () => {},
+      error: undefined,
+      isRecovering: false,
+      isStreaming: true,
+      messages: [
+        {
+          id: "message-1",
+          parts: [{ text: "Show open jobs", type: "text" }],
+          role: "user",
+        },
+      ],
+      addToolApprovalResponse: mockedAddToolApprovalResponse,
+      sendMessage: mockedSendMessage,
+      status: "ready",
+      stop: mockedStop,
+    } as unknown as ReturnType<typeof AiChatReactModule.useAgentChat>);
+    const { rerender } = render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
+      />
+    );
+
+    const stopButton = await screen.findByRole("button", { name: /stop/i });
+
+    expect(stopButton).toBeVisible();
+    expect(within(stopButton).getByText(/cmd|ctrl/i)).toBeVisible();
+    expect(within(stopButton).getByText("Period")).toBeVisible();
+
+    await user.click(stopButton);
+    await user.click(stopButton);
+
+    expect(mockedStop).toHaveBeenCalledOnce();
+
+    mockedUseAgentChat.mockReturnValue({
+      clearHistory: () => {},
+      error: undefined,
+      isRecovering: false,
+      isStreaming: false,
+      messages: [
+        {
+          id: "message-1",
+          parts: [{ text: "Show open jobs", type: "text" }],
+          role: "user",
+        },
+      ],
+      addToolApprovalResponse: mockedAddToolApprovalResponse,
+      sendMessage: mockedSendMessage,
+      status: "ready",
+      stop: mockedStop,
+    } as unknown as ReturnType<typeof AiChatReactModule.useAgentChat>);
+    rerender(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
+      />
+    );
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("agent-chat-drawer")).queryByRole("button", {
+          name: /stop/i,
+        })
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("surfaces recovery separately from ordinary streaming", async () => {
+    mockedUseAgentChat.mockReturnValue({
+      clearHistory: () => {},
+      error: undefined,
+      isRecovering: true,
+      isStreaming: false,
+      messages: [
+        {
+          id: "message-1",
+          parts: [{ text: "Show open jobs", type: "text" }],
+          role: "user",
+        },
+      ],
+      addToolApprovalResponse: mockedAddToolApprovalResponse,
+      sendMessage: mockedSendMessage,
+      status: "ready",
+      stop: mockedStop,
+    } as unknown as ReturnType<typeof AiChatReactModule.useAgentChat>);
+    render(
+      <GlobalAgentChat
+        activeOrganizationId={"org_123" as never}
+        currentOrganizationRole="owner"
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        open
+      />
+    );
+
+    await screen.findByText("Recovering response");
+    const drawer = await screen.findByTestId("agent-chat-drawer");
+
+    expect(within(drawer).getByText("Recovering response")).toBeVisible();
+    expect(within(drawer).queryByText("Working")).not.toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: /stop/i })).toBeVisible();
+  });
+
   it("does not send stale near-me prompts after the chat unmounts during geolocation", async () => {
     const user = userEvent.setup();
     const geolocation = mockGeolocationDeferredSuccess({
@@ -1369,11 +1482,13 @@ function makeChatReturnValue(
   return {
     clearHistory: () => {},
     error: undefined,
+    isRecovering: false,
     isStreaming: false,
     messages,
     addToolApprovalResponse: mockedAddToolApprovalResponse,
     sendMessage: mockedSendMessage,
     status: "ready",
+    stop: mockedStop,
   } as unknown as ReturnType<typeof AiChatReactModule.useAgentChat>;
 }
 
