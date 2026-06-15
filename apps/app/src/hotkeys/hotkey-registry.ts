@@ -151,6 +151,14 @@ export const HOTKEYS = {
     scope: "global",
     when: "Viewer can administer organization",
   },
+  goOrganizationLabels: {
+    group: "Navigation",
+    hotkey: "G L",
+    id: "goOrganizationLabels",
+    label: "Go to Labels settings",
+    scope: "global",
+    when: "Viewer can administer organization",
+  },
   goMap: {
     group: "Navigation",
     hotkey: "G P",

@@ -58,6 +58,9 @@ describe("active shortcut scopes", () => {
       "global",
       "settings",
     ]);
+    expect(
+      getActiveShortcutScopes("/organization/settings/labels")
+    ).toStrictEqual(["global", "settings"]);
     expect(getActiveShortcutScopes("/jobs", { view: "map" })).toStrictEqual([
       "global",
       "jobs",

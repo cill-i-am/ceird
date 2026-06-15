@@ -54,6 +54,7 @@ describe("route hotkeys", () => {
       expect(
         within(dialog).getByText("Go to organization settings")
       ).toBeVisible();
+      expect(within(dialog).getByText("Go to Labels settings")).toBeVisible();
       expect(within(dialog).getByText("Go to user settings")).toBeVisible();
       expect(within(dialog).getByText("Go to Map")).toBeVisible();
     },
@@ -92,6 +93,9 @@ describe("route hotkeys", () => {
     expect(within(dialog).queryByText("Go to Members")).not.toBeInTheDocument();
     expect(
       within(dialog).queryByText("Go to organization settings")
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Go to Labels settings")
     ).not.toBeInTheDocument();
     expect(within(dialog).getByText("Go to user settings")).toBeVisible();
     expect(within(dialog).getByText("Go to Map")).toBeVisible();
@@ -138,6 +142,9 @@ describe("route hotkeys", () => {
       expect(
         within(dialog).queryByText("Go to organization settings")
       ).not.toBeInTheDocument();
+      expect(
+        within(dialog).queryByText("Go to Labels settings")
+      ).not.toBeInTheDocument();
       expect(within(dialog).getByText("Go to user settings")).toBeVisible();
       expect(within(dialog).queryByText("Go to Map")).not.toBeInTheDocument();
     },
@@ -173,6 +180,7 @@ describe("route hotkeys", () => {
     expect(
       within(dialog).getByText("Go to organization settings")
     ).toBeVisible();
+    expect(within(dialog).getByText("Go to Labels settings")).toBeVisible();
     expect(within(dialog).getByText("Go to user settings")).toBeVisible();
     expect(within(dialog).getByText("Go to Map")).toBeVisible();
   }, 10_000);
@@ -197,6 +205,7 @@ describe("route hotkeys", () => {
       await user.keyboard("gy");
       await user.keyboard("gm");
       await user.keyboard("gw");
+      await user.keyboard("gl");
       await user.keyboard("gt");
       await user.keyboard("gp");
 
@@ -234,8 +243,11 @@ describe("route hotkeys", () => {
       expect(mockedNavigate).toHaveBeenNthCalledWith(9, {
         to: "/organization/settings",
       });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(10, { to: "/settings" });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(11, {
+      expect(mockedNavigate).toHaveBeenNthCalledWith(10, {
+        to: "/organization/settings/labels",
+      });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(11, { to: "/settings" });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(12, {
         search: { view: "map" },
         to: "/jobs",
       });
@@ -257,6 +269,7 @@ describe("route hotkeys", () => {
     await user.keyboard("gm");
     await user.keyboard("gw");
     await user.keyboard("gx");
+    await user.keyboard("gl");
     await user.keyboard("gh");
     await user.keyboard("gj");
     await user.keyboard("gr");
@@ -287,6 +300,7 @@ describe("route hotkeys", () => {
       await user.keyboard("gm");
       await user.keyboard("gw");
       await user.keyboard("gx");
+      await user.keyboard("gl");
       await user.keyboard("gh");
       await user.keyboard("gj");
       await user.keyboard("gr");

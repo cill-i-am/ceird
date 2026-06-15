@@ -136,6 +136,17 @@ export function AppOrganizationCommandActions({
               shortcut: HOTKEYS.goOrganizationSettings,
               title: "Open organization settings",
             },
+            {
+              group: "Settings",
+              icon: Settings02Icon,
+              id: "global-go-organization-labels",
+              keywords: ["organization", "labels", "tags", "realtime"],
+              priority: 29,
+              run: () => navigate({ to: "/organization/settings/labels" }),
+              scope: "org" as const,
+              shortcut: HOTKEYS.goOrganizationLabels,
+              title: "Open Labels settings",
+            },
           ]
         : []),
     ],

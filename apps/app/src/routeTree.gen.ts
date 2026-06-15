@@ -32,6 +32,7 @@ import { Route as AppOrgJobsRouteImport } from './routes/_app._org.jobs'
 import { Route as AppOrgActivityRouteImport } from './routes/_app._org.activity'
 import { Route as AppOrgOrganizationSettingsRouteImport } from './routes/_app._org.organization.settings'
 import { Route as AppOrgOrganizationSecurityRouteImport } from './routes/_app._org.organization.security'
+import { Route as AppOrgOrganizationSettingsLabelsRouteImport } from './routes/_app._org.organization.settings.labels'
 
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
@@ -149,6 +150,12 @@ const AppOrgOrganizationSecurityRoute =
     path: '/organization/security',
     getParentRoute: () => AppOrgRoute,
   } as any)
+const AppOrgOrganizationSettingsLabelsRoute =
+  AppOrgOrganizationSettingsLabelsRouteImport.update({
+    id: '/labels',
+    path: '/labels',
+    getParentRoute: () => AppOrgOrganizationSettingsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppOrgIndexRoute
@@ -171,7 +178,8 @@ export interface FileRoutesByFullPath {
   '/sites': typeof AppOrgSitesRoute
   '/sites-workspace': typeof AppOrgSitesWorkspaceRoute
   '/organization/security': typeof AppOrgOrganizationSecurityRoute
-  '/organization/settings': typeof AppOrgOrganizationSettingsRoute
+  '/organization/settings': typeof AppOrgOrganizationSettingsRouteWithChildren
+  '/organization/settings/labels': typeof AppOrgOrganizationSettingsLabelsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof AppOrgIndexRoute
@@ -194,7 +202,8 @@ export interface FileRoutesByTo {
   '/sites': typeof AppOrgSitesRoute
   '/sites-workspace': typeof AppOrgSitesWorkspaceRoute
   '/organization/security': typeof AppOrgOrganizationSecurityRoute
-  '/organization/settings': typeof AppOrgOrganizationSettingsRoute
+  '/organization/settings': typeof AppOrgOrganizationSettingsRouteWithChildren
+  '/organization/settings/labels': typeof AppOrgOrganizationSettingsLabelsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -220,7 +229,8 @@ export interface FileRoutesById {
   '/_app/_org/sites-workspace': typeof AppOrgSitesWorkspaceRoute
   '/_app/_org/': typeof AppOrgIndexRoute
   '/_app/_org/organization/security': typeof AppOrgOrganizationSecurityRoute
-  '/_app/_org/organization/settings': typeof AppOrgOrganizationSettingsRoute
+  '/_app/_org/organization/settings': typeof AppOrgOrganizationSettingsRouteWithChildren
+  '/_app/_org/organization/settings/labels': typeof AppOrgOrganizationSettingsLabelsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -246,6 +256,7 @@ export interface FileRouteTypes {
     | '/sites-workspace'
     | '/organization/security'
     | '/organization/settings'
+    | '/organization/settings/labels'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -269,6 +280,7 @@ export interface FileRouteTypes {
     | '/sites-workspace'
     | '/organization/security'
     | '/organization/settings'
+    | '/organization/settings/labels'
   id:
     | '__root__'
     | '/_app'
@@ -294,6 +306,7 @@ export interface FileRouteTypes {
     | '/_app/_org/'
     | '/_app/_org/organization/security'
     | '/_app/_org/organization/settings'
+    | '/_app/_org/organization/settings/labels'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -474,8 +487,30 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrgOrganizationSecurityRouteImport
       parentRoute: typeof AppOrgRoute
     }
+    '/_app/_org/organization/settings/labels': {
+      id: '/_app/_org/organization/settings/labels'
+      path: '/labels'
+      fullPath: '/organization/settings/labels'
+      preLoaderRoute: typeof AppOrgOrganizationSettingsLabelsRouteImport
+      parentRoute: typeof AppOrgOrganizationSettingsRoute
+    }
   }
 }
+
+interface AppOrgOrganizationSettingsRouteChildren {
+  AppOrgOrganizationSettingsLabelsRoute: typeof AppOrgOrganizationSettingsLabelsRoute
+}
+
+const AppOrgOrganizationSettingsRouteChildren: AppOrgOrganizationSettingsRouteChildren =
+  {
+    AppOrgOrganizationSettingsLabelsRoute:
+      AppOrgOrganizationSettingsLabelsRoute,
+  }
+
+const AppOrgOrganizationSettingsRouteWithChildren =
+  AppOrgOrganizationSettingsRoute._addFileChildren(
+    AppOrgOrganizationSettingsRouteChildren,
+  )
 
 interface AppOrgRouteChildren {
   AppOrgActivityRoute: typeof AppOrgActivityRoute
@@ -486,7 +521,7 @@ interface AppOrgRouteChildren {
   AppOrgSitesWorkspaceRoute: typeof AppOrgSitesWorkspaceRoute
   AppOrgIndexRoute: typeof AppOrgIndexRoute
   AppOrgOrganizationSecurityRoute: typeof AppOrgOrganizationSecurityRoute
-  AppOrgOrganizationSettingsRoute: typeof AppOrgOrganizationSettingsRoute
+  AppOrgOrganizationSettingsRoute: typeof AppOrgOrganizationSettingsRouteWithChildren
 }
 
 const AppOrgRouteChildren: AppOrgRouteChildren = {
@@ -498,7 +533,7 @@ const AppOrgRouteChildren: AppOrgRouteChildren = {
   AppOrgSitesWorkspaceRoute: AppOrgSitesWorkspaceRoute,
   AppOrgIndexRoute: AppOrgIndexRoute,
   AppOrgOrganizationSecurityRoute: AppOrgOrganizationSecurityRoute,
-  AppOrgOrganizationSettingsRoute: AppOrgOrganizationSettingsRoute,
+  AppOrgOrganizationSettingsRoute: AppOrgOrganizationSettingsRouteWithChildren,
 }
 
 const AppOrgRouteWithChildren =

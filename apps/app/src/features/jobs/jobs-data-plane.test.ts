@@ -14,11 +14,21 @@ import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { getDataPlaneSessionKey } from "#/data-plane/session";
 
 import {
+  createJobsWorkspaceReadModelContracts,
   createJobsListSeed,
   createJobsListScope,
   getOrCreateJobsCollectionState,
   jobsCollectionId,
   jobsCollectionKey,
+  toJobActivityElectricRow,
+  toJobCollaboratorElectricRow,
+  toJobCommentEdgeRow,
+  toJobCommentElectricRow,
+  toJobContactSummaryRow,
+  toJobLabelAssignmentRow,
+  toJobSiteSummaryRow,
+  toJobVisitElectricRow,
+  toJobsWorkspaceJobRow,
 } from "./jobs-data-plane";
 
 describe("jobs data plane", () => {
@@ -335,6 +345,257 @@ describe("jobs data plane", () => {
       initialReadyLatencyMs: 10_000,
       lastStatusChangeAtMs: 11_000,
       status: "ready",
+    });
+  });
+
+  it("defines the Electric-native jobs workspace collection graph", () => {
+    const graph = createJobsWorkspaceReadModelContracts(scope);
+
+    expect(graph.list).toMatchObject({
+      derivesFromCollections: [
+        "jobs",
+        "job-label-assignments",
+        "labels",
+        "job-sites",
+        "job-contacts",
+      ],
+      healthCollection: "jobs",
+      requiredShapes: [
+        "jobs",
+        "work-item-labels",
+        "labels",
+        "sites",
+        "contacts",
+      ],
+    });
+    expect(graph.detail).toMatchObject({
+      requiredShapes: [
+        "jobs",
+        "work-item-labels",
+        "labels",
+        "sites",
+        "contacts",
+        "work-item-collaborators",
+        "work-item-activity",
+        "work-item-visits",
+        "work-item-comments",
+        "comments",
+      ],
+    });
+    expect(graph.detail.projectionFollowUps).toStrictEqual(
+      expect.arrayContaining([
+        expect.stringContaining("domain-owned product projection"),
+        expect.stringContaining("site-level rollups"),
+      ])
+    );
+    expect(graph.jobs).toMatchObject({
+      collection: "jobs",
+      id: "organization:org_123:user:user_123:role:owner:jobs-workspace:jobs:electric",
+      shapeName: "jobs",
+    });
+    expect(graph.jobLabelAssignments).toMatchObject({
+      collection: "job-label-assignments",
+      shapeName: "work-item-labels",
+    });
+    expect(graph.siteSummaries).toMatchObject({
+      collection: "job-sites",
+      shapeName: "sites",
+    });
+    expect(graph.contactSummaries).toMatchObject({
+      collection: "job-contacts",
+      shapeName: "contacts",
+    });
+    expect(graph.collaborators).toMatchObject({
+      collection: "job-collaborators",
+      shapeName: "work-item-collaborators",
+    });
+    expect(graph.activity).toMatchObject({
+      collection: "job-activity",
+      shapeName: "work-item-activity",
+    });
+    expect(graph.visits).toMatchObject({
+      collection: "job-visits",
+      shapeName: "work-item-visits",
+    });
+    expect(graph.jobComments).toMatchObject({
+      collection: "job-comments",
+      shapeName: "work-item-comments",
+    });
+    expect(graph.comments).toMatchObject({
+      collection: "job-comment-bodies",
+      shapeName: "comments",
+    });
+    for (const contract of [
+      graph.activity,
+      graph.collaborators,
+      graph.comments,
+      graph.contactSummaries,
+      graph.jobComments,
+      graph.jobLabelAssignments,
+      graph.jobs,
+      graph.labels,
+      graph.siteSummaries,
+      graph.visits,
+    ]) {
+      expect(contract.completeness).toMatchObject({
+        covers: { mode: "complete-tenant" },
+        mode: "sync-backed",
+        source: "electric",
+      });
+      expect(contract.shapeOptions?.params).toBeUndefined();
+    }
+  });
+
+  it("maps product-safe Electric rows for the jobs workspace graph", () => {
+    const workItemId = "11111111-1111-4111-8111-111111111111";
+    const labelId = "22222222-2222-4222-8222-222222222222";
+    const siteId = "33333333-3333-4333-8333-333333333333";
+    const contactId = "44444444-4444-4444-8444-444444444444";
+    const commentId = "55555555-5555-4555-8555-555555555555";
+    const userId = "user_123";
+
+    expect(
+      toJobsWorkspaceJobRow({
+        assigneeId: userId,
+        blockedReason: null,
+        completedAt: null,
+        completedByUserId: null,
+        contactId,
+        coordinatorId: "user_456",
+        createdAt: "2026-06-15T10:00:00.000Z",
+        createdByUserId: userId,
+        id: workItemId,
+        kind: "job",
+        priority: "high",
+        siteId,
+        status: "in_progress",
+        title: "Fit heat pump",
+        updatedAt: "2026-06-15T11:00:00.000Z",
+      })
+    ).toMatchObject({
+      assigneeId: userId,
+      contactId,
+      coordinatorId: "user_456",
+      id: workItemId,
+      priority: "high",
+      siteId,
+      status: "in_progress",
+    });
+    expect(
+      toJobLabelAssignmentRow({
+        createdAt: "2026-06-15T10:05:00.000Z",
+        labelId,
+        workItemId,
+      })
+    ).toStrictEqual({
+      createdAt: "2026-06-15T10:05:00.000Z",
+      id: `${workItemId}:${labelId}`,
+      labelId,
+      workItemId,
+    });
+    expect(
+      toJobSiteSummaryRow({
+        accessNotes: "Gate code 1234",
+        displayLocation: "Dublin",
+        formattedAddress: "Dublin, Ireland",
+        id: siteId,
+        latitude: 53.3498,
+        locationProvider: "google_places",
+        locationStatus: "google_resolved",
+        longitude: -6.2603,
+        name: "Warehouse",
+        updatedAt: "2026-06-15T10:10:00.000Z",
+      })
+    ).toMatchObject({
+      hasUsableCoordinates: true,
+      id: siteId,
+      name: "Warehouse",
+    });
+    expect(
+      toJobContactSummaryRow({
+        email: "ops@example.com",
+        id: contactId,
+        name: "Operations",
+        notes: null,
+        phone: "+3531000000",
+        updatedAt: "2026-06-15T10:15:00.000Z",
+      })
+    ).toMatchObject({
+      email: "ops@example.com",
+      id: contactId,
+      name: "Operations",
+      phone: "+3531000000",
+    });
+    expect(
+      toJobCollaboratorElectricRow({
+        accessLevel: "comment",
+        createdAt: "2026-06-15T10:20:00.000Z",
+        id: "66666666-6666-4666-8666-666666666666",
+        roleLabel: "Facilities",
+        subjectType: "user",
+        updatedAt: "2026-06-15T10:20:00.000Z",
+        userId,
+        workItemId,
+      })
+    ).toMatchObject({ accessLevel: "comment", userId, workItemId });
+    expect(
+      toJobActivityElectricRow({
+        actorUserId: userId,
+        createdAt: "2026-06-15T10:25:00.000Z",
+        eventType: "priority_changed",
+        id: "77777777-7777-4777-8777-777777777777",
+        payload: JSON.stringify({
+          eventType: "priority_changed",
+          fromPriority: "medium",
+          toPriority: "high",
+        }),
+        workItemId,
+      })
+    ).toMatchObject({
+      actorUserId: userId,
+      eventType: "priority_changed",
+      payload: {
+        eventType: "priority_changed",
+        fromPriority: "medium",
+        toPriority: "high",
+      },
+    });
+    expect(
+      toJobVisitElectricRow({
+        authorUserId: userId,
+        createdAt: "2026-06-15T10:30:00.000Z",
+        durationMinutes: 60,
+        id: "88888888-8888-4888-8888-888888888888",
+        note: "Initial survey",
+        visitDate: "2026-06-15",
+        workItemId,
+      })
+    ).toMatchObject({ durationMinutes: 60, visitDate: "2026-06-15" });
+    expect(
+      toJobCommentEdgeRow({
+        commentId,
+        createdAt: "2026-06-15T10:35:00.000Z",
+        workItemId,
+      })
+    ).toStrictEqual({
+      commentId,
+      createdAt: "2026-06-15T10:35:00.000Z",
+      id: `${workItemId}:${commentId}`,
+      workItemId,
+    });
+    expect(
+      toJobCommentElectricRow({
+        authorUserId: userId,
+        body: "Ready for dispatch",
+        createdAt: "2026-06-15T10:40:00.000Z",
+        id: commentId,
+        updatedAt: "2026-06-15T10:40:00.000Z",
+        updatedByUserId: null,
+      })
+    ).toMatchObject({
+      authorUserId: userId,
+      body: "Ready for dispatch",
+      id: commentId,
     });
   });
 });
