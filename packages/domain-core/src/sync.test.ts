@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 
 import {
+  ACTIVE_LABELS_SYNC_WHERE,
   isSyncInternalPath,
   makeSyncShapeAuthorizationPath,
   SyncShapeAuthorizationSchema,
@@ -18,6 +19,34 @@ describe("domain sync boundary contracts", () => {
     ).toBeTruthy();
     expect(isSyncInternalPath("/sync/internal/shapes")).toBeTruthy();
     expect(isSyncInternalPath("/jobs")).toBeFalsy();
+  });
+
+  it("decodes the active labels Electric shape definition", () => {
+    const authorization = Schema.decodeUnknownSync(
+      SyncShapeAuthorizationSchema
+    )({
+      organizationId: "org_123",
+      params: {
+        "1": "org_123",
+      },
+      shape: "labels",
+      scope: "organization",
+      table: "labels",
+      userId: "user_123",
+      where: ACTIVE_LABELS_SYNC_WHERE,
+    });
+
+    expect(authorization).toStrictEqual({
+      organizationId: "org_123",
+      params: {
+        "1": "org_123",
+      },
+      shape: "labels",
+      scope: "organization",
+      table: "labels",
+      userId: "user_123",
+      where: "organization_id = $1 AND archived_at IS NULL",
+    });
   });
 
   it("decodes authorized Electric shape definitions", () => {

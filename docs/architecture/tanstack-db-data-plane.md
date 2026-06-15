@@ -31,7 +31,9 @@ site-label assignments, tenant-complete domain-owned active-job summaries, and
 jobs rows that can be locally filtered into related-job detail state.
 Site-related jobs in the legacy route remain the first cursor page filtered by
 `siteId`. Job options remain an eager complete-tenant option collection. Labels
-are a scoped option index. Job details, collaborators, and site comments are lazy
+are a scoped option index, and the Settings Labels surface uses a separate
+Electric-primary helper for active organization labels. Job details,
+collaborators, and site comments are lazy
 per-record collections that request snapshots from their mounted subscribers
 rather than from Start loaders.
 ElectricSQL integration starts at this same boundary. Raw
@@ -57,10 +59,14 @@ alone does not migrate the visible jobs list. When enabled, it requests the
 public sync Worker `jobs` shape and maps `work_items` rows into the narrow jobs
 list item shape with joined fields such as labels left empty; Query Collection
 fallback remains the default and fallback path for route-visible first-paint
-data. The Electric-native Sites read-model contracts do not introduce a legacy
-Query Collection fallback; callers consume shared health from the Electric
-collection factory and can show an explicit unavailable/degraded state when sync
-is disabled or unavailable.
+data. Settings Labels is intentionally different: it requests the named
+`labels` Electric shape directly through
+`getOrCreateSettingsLabelsCollectionState(...)` and exposes disabled or
+unavailable collection health to the route instead of silently activating an API
+fallback. The Electric-native Sites read-model contracts likewise do not
+introduce a legacy Query Collection fallback; callers consume shared health from
+the Electric collection factory and can show an explicit unavailable/degraded
+state when sync is disabled or unavailable.
 
 ## Collection Health
 

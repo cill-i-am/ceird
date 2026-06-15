@@ -135,7 +135,8 @@ injects the domain-approved Electric table, `where` clause, positional
 parameters, and source secret before forwarding to Electric SQL in a Cloudflare
 Container. Auth-owned tables are intentionally excluded from the sync shape
 registry; identity and session behavior stay behind Better Auth and the domain
-Worker.
+Worker. The named `labels` shape is active labels only, using the
+domain-approved `organization_id = $1 AND archived_at IS NULL` predicate.
 
 ## Persistence Model
 

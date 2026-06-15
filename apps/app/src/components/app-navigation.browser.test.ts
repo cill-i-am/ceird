@@ -9,6 +9,7 @@ describe("app navigation", () => {
       ).toStrictEqual([
         "/",
         "/jobs",
+        "/jobs-workspace",
         "/sites",
         "/activity",
         "/organization/security",
@@ -21,7 +22,7 @@ describe("app navigation", () => {
   it("shows internal navigation items for member users", () => {
     expect(
       getPrimaryNavItemsForRole("member").map((item) => item.url)
-    ).toStrictEqual(["/", "/jobs", "/sites"]);
+    ).toStrictEqual(["/", "/jobs", "/jobs-workspace", "/sites"]);
   }, 1000);
 
   it("shows only jobs navigation for external users", () => {
