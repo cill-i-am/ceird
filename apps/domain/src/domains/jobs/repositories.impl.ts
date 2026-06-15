@@ -100,6 +100,7 @@ import {
   label as labelTable,
   member,
   site as siteTable,
+  siteActiveJobSummary,
   siteContact,
   user as userTable,
   workItem,
@@ -935,6 +936,65 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         if (input.coordinatorId !== undefined && input.coordinatorId !== null) {
           yield* ensureOrganizationMember(organizationId, input.coordinatorId);
         }
+      });
+
+      const refreshActiveJobSummaryForSites = Effect.fn(
+        "JobsRepository.refreshActiveJobSummaryForSites"
+      )(function* (
+        organizationId: OrganizationId,
+        siteIds: readonly (SiteId | undefined)[]
+      ) {
+        const impactedSiteIds = [...new Set(siteIds.filter(isDefined))];
+
+        if (impactedSiteIds.length === 0) {
+          return;
+        }
+
+        yield* db
+          .delete(siteActiveJobSummary)
+          .where(
+            and(
+              eq(siteActiveJobSummary.organizationId, organizationId),
+              inArray(siteActiveJobSummary.siteId, impactedSiteIds)
+            )
+          )
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", Effect.fail));
+
+        yield* sql`
+          insert into site_active_job_summaries (
+            site_id,
+            organization_id,
+            active_job_count,
+            highest_active_job_priority,
+            updated_at
+          )
+          select
+            work_items.site_id,
+            work_items.organization_id,
+            count(*)::integer as active_job_count,
+            case max(
+              case work_items.priority
+                when 'urgent' then 4
+                when 'high' then 3
+                when 'medium' then 2
+                when 'low' then 1
+                else 0
+              end
+            )
+              when 4 then 'urgent'
+              when 3 then 'high'
+              when 2 then 'medium'
+              when 1 then 'low'
+              when 0 then case when count(*) > 0 then 'none' else null end
+              else null
+            end as highest_active_job_priority,
+            now()
+          from work_items
+          where work_items.organization_id = ${organizationId}
+            and work_items.site_id in ${sql.in(impactedSiteIds)}
+            and work_items.status not in ${sql.in(TERMINAL_JOB_STATUSES)}
+          group by work_items.site_id, work_items.organization_id
+        `;
       });
 
       const listLabelsForWorkItems = Effect.fn(
@@ -2238,6 +2298,9 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         `;
 
         const row = yield* getRequiredRow(rows, "inserted work item");
+        yield* refreshActiveJobSummaryForSites(input.organizationId, [
+          input.siteId,
+        ]);
 
         return mapJobRow(row);
       });
@@ -2248,6 +2311,21 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         input: PatchJobRecordInput
       ) {
         yield* validateLinkedJobReferences(organizationId, input);
+
+        const existingSiteRows = yield* sql<{
+          readonly site_id: string | null;
+        }>`
+          select site_id
+          from work_items
+          where organization_id = ${organizationId}
+            and id = ${workItemId}
+          for update
+        `;
+        const previousSiteId =
+          existingSiteRows[0]?.site_id === null ||
+          existingSiteRows[0]?.site_id === undefined
+            ? undefined
+            : decodeSiteId(existingSiteRows[0].site_id);
 
         const values: Record<string, unknown> = {
           updated_at: new Date(),
@@ -2287,9 +2365,16 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
 
         const [row] = rows;
 
-        return row === undefined
-          ? Option.none<Job>()
-          : Option.some(yield* mapJobRowWithLabels(organizationId, row));
+        if (row === undefined) {
+          return Option.none<Job>();
+        }
+
+        yield* refreshActiveJobSummaryForSites(organizationId, [
+          previousSiteId,
+          row.site_id === null ? undefined : decodeSiteId(row.site_id),
+        ]);
+
+        return Option.some(yield* mapJobRowWithLabels(organizationId, row));
       });
 
       const transition = Effect.fn("JobsRepository.transition")(function* (
@@ -2337,9 +2422,15 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
 
         const [row] = rows;
 
-        return row === undefined
-          ? Option.none<Job>()
-          : Option.some(yield* mapJobRowWithLabels(organizationId, row));
+        if (row === undefined) {
+          return Option.none<Job>();
+        }
+
+        yield* refreshActiveJobSummaryForSites(organizationId, [
+          row.site_id === null ? undefined : decodeSiteId(row.site_id),
+        ]);
+
+        return Option.some(yield* mapJobRowWithLabels(organizationId, row));
       });
 
       const reopen = Effect.fn("JobsRepository.reopen")(function* (
@@ -2362,9 +2453,15 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
 
         const [row] = rows;
 
-        return row === undefined
-          ? Option.none<Job>()
-          : Option.some(yield* mapJobRowWithLabels(organizationId, row));
+        if (row === undefined) {
+          return Option.none<Job>();
+        }
+
+        yield* refreshActiveJobSummaryForSites(organizationId, [
+          row.site_id === null ? undefined : decodeSiteId(row.site_id),
+        ]);
+
+        return Option.some(yield* mapJobRowWithLabels(organizationId, row));
       });
 
       const addComment = Effect.fn("JobsRepository.addComment")(function* (
@@ -3242,6 +3339,10 @@ function nullableToUndefined<Value>(
   value: Value | null | undefined
 ): Value | undefined {
   return value === null ? undefined : value;
+}
+
+function isDefined<Value>(value: Value | undefined): value is Value {
+  return value !== undefined;
 }
 
 function normalizeOptionName(value: string | null, fallback: string): string {

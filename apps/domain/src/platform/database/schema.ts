@@ -50,7 +50,12 @@ export {
   workItemVisit,
 } from "../../domains/jobs/schema.js";
 export { label, labelsSchema } from "../../domains/labels/schema.js";
-export { site, siteLabel, sitesSchema } from "../../domains/sites/schema.js";
+export {
+  site,
+  siteActiveJobSummary,
+  siteLabel,
+  sitesSchema,
+} from "../../domains/sites/schema.js";
 
 export const databaseSchema = {
   ...agentsSchema,

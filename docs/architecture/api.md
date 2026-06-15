@@ -815,6 +815,11 @@ generated and applied migration directories.
 
 The `site_labels` table joins `sites` to organization `labels` and enforces the
 same organization on both sides through composite organization foreign keys.
+The `site_active_job_summaries` table is a domain-owned projection keyed by
+`(site_id, organization_id)`. Job create, patch, transition, and reopen writes
+refresh affected site rows, and the schema migration backfills existing
+non-terminal jobs. Sites read paths consume this projection so active job count
+and highest active priority are not recomputed in route-local UI code.
 The `agent_threads` and `agent_action_runs` tables are owned by the agents
 domain and indexed for the common org/user thread listing path and idempotent
 action replay lookups.

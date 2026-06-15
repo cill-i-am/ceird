@@ -1,6 +1,8 @@
 import type { JobListItem } from "@ceird/jobs-core";
 import { JobListItemSchema } from "@ceird/jobs-core";
+import type { Label } from "@ceird/labels-core";
 import type {
+  SiteActiveJobPriority,
   SiteComment,
   SiteCommentsResponse,
   SiteIdType,
@@ -8,7 +10,12 @@ import type {
   SiteListResponse,
   SiteOption,
 } from "@ceird/sites-core";
-import { SiteCommentSchema, SiteOptionSchema } from "@ceird/sites-core";
+import {
+  SiteActiveJobPrioritySchema,
+  SiteCommentSchema,
+  SiteOptionSchema,
+} from "@ceird/sites-core";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { QueryClient } from "@tanstack/query-core";
 import { Effect, Schema } from "effect";
 
@@ -22,6 +29,7 @@ import {
   defineQueryCollectionContract,
   entityDetailCollectionCompleteness,
   pagedQueryCollectionCompleteness,
+  syncBackedCollectionCompleteness,
 } from "#/data-plane/collection-contract";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
@@ -36,6 +44,10 @@ import type {
   DataPlaneCollectionSnapshot,
   DataPlaneCollectionWriteVersionRef,
 } from "#/data-plane/collection-write";
+import {
+  createElectricCollectionFromContract,
+  defineElectricCollectionContract,
+} from "#/data-plane/electric-collection";
 import { organizationDataQueryKey } from "#/data-plane/query-scope";
 import type { OrganizationDataScope } from "#/data-plane/query-scope";
 import type { DataPlaneSession } from "#/data-plane/session";
@@ -53,6 +65,79 @@ type SiteRelatedJobsCollection = ReturnType<
 
 export const SITES_LIST_PAGE_LIMIT = 50;
 export const SITE_RELATED_JOBS_PAGE_LIMIT = 25;
+
+type SitesElectricRowValue =
+  | bigint
+  | boolean
+  | null
+  | number
+  | string
+  | SitesElectricRowValue[]
+  | { readonly [key: string]: SitesElectricRowValue };
+type SitesElectricRow = Record<string, SitesElectricRowValue>;
+
+const SiteActiveJobSummaryElectricRowSchema = Schema.Struct({
+  activeJobCount: Schema.Number,
+  highestActiveJobPriority: Schema.optional(
+    Schema.NullOr(SiteActiveJobPrioritySchema)
+  ),
+  organizationId: Schema.String,
+  siteId: Schema.String,
+  updatedAt: Schema.String,
+});
+const SiteLabelAssignmentElectricRowSchema = Schema.Struct({
+  createdAt: Schema.String,
+  labelId: Schema.String,
+  organizationId: Schema.String,
+  siteId: Schema.String,
+});
+const SiteOptionElectricStandardSchema = Schema.toStandardSchemaV1(
+  SiteOptionSchema
+) as unknown as StandardSchemaV1<unknown, SitesElectricRow>;
+const SiteActiveJobSummaryElectricStandardSchema = Schema.toStandardSchemaV1(
+  SiteActiveJobSummaryElectricRowSchema
+) as unknown as StandardSchemaV1<unknown, SitesElectricRow>;
+const SiteLabelAssignmentElectricStandardSchema = Schema.toStandardSchemaV1(
+  SiteLabelAssignmentElectricRowSchema
+) as unknown as StandardSchemaV1<unknown, SitesElectricRow>;
+const SiteRelatedJobElectricStandardSchema = Schema.toStandardSchemaV1(
+  JobListItemSchema
+) as unknown as StandardSchemaV1<unknown, SitesElectricRow>;
+
+export interface SiteActiveJobSummaryElectricRow {
+  readonly activeJobCount: number;
+  readonly highestActiveJobPriority?: SiteActiveJobPriority | undefined;
+  readonly organizationId: string;
+  readonly siteId: SiteIdType;
+  readonly updatedAt: string;
+}
+
+export interface SiteLabelAssignmentElectricRow {
+  readonly createdAt: string;
+  readonly labelId: Label["id"];
+  readonly organizationId: string;
+  readonly siteId: SiteIdType;
+}
+
+export interface SitesElectricReadModelRows {
+  readonly activeJobSummaries: readonly SiteActiveJobSummaryElectricRow[];
+  readonly labels: readonly Label[];
+  readonly siteLabelAssignments: readonly SiteLabelAssignmentElectricRow[];
+  readonly sites: readonly SiteOption[];
+}
+
+export interface SitesElectricReadModelContracts {
+  readonly activeJobSummaries: ReturnType<
+    typeof createSiteActiveJobSummariesElectricContract
+  >;
+  readonly relatedJobs: ReturnType<
+    typeof createSiteRelatedJobsElectricContract
+  >;
+  readonly siteLabelAssignments: ReturnType<
+    typeof createSiteLabelAssignmentsElectricContract
+  >;
+  readonly sites: ReturnType<typeof createSitesElectricContract>;
+}
 
 interface SitesListPageScope {
   readonly cursor?: SiteListCursorType | undefined;
@@ -100,7 +185,19 @@ export function siteCommentsCollectionKey(
   return [...organizationDataQueryKey("site-comments", scope), "site", siteId];
 }
 
-function siteRelatedJobsCollectionKey(
+export function siteActiveJobSummariesCollectionKey(
+  scope: OrganizationDataScope
+) {
+  return organizationDataQueryKey("site-active-job-summaries", scope);
+}
+
+export function siteLabelAssignmentsCollectionKey(
+  scope: OrganizationDataScope
+) {
+  return organizationDataQueryKey("site-label-assignments", scope);
+}
+
+export function siteRelatedJobsCollectionKey(
   scope: OrganizationDataScope,
   siteId: SiteIdType
 ) {
@@ -122,7 +219,17 @@ export function siteCommentsCollectionId(
   return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:site:${siteId}:comments`;
 }
 
-function siteRelatedJobsCollectionId(
+export function siteActiveJobSummariesCollectionId(
+  scope: OrganizationDataScope
+) {
+  return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:site-active-job-summaries`;
+}
+
+export function siteLabelAssignmentsCollectionId(scope: OrganizationDataScope) {
+  return `organization:${scope.organizationId}:user:${scope.userId ?? "unknown"}:role:${scope.role ?? "unknown"}:site-label-assignments`;
+}
+
+export function siteRelatedJobsCollectionId(
   scope: OrganizationDataScope,
   siteId: SiteIdType
 ) {
@@ -165,6 +272,195 @@ export function createSiteCommentsSeed(
     data: sortSiteComments(response.comments),
     queryKey: siteCommentsCollectionKey(scope, siteId),
     requestStartedAt,
+  });
+}
+
+export function createSitesElectricReadModelContracts({
+  scope,
+  siteId,
+}: {
+  readonly scope: OrganizationDataScope;
+  readonly siteId?: SiteIdType | undefined;
+}): SitesElectricReadModelContracts {
+  return {
+    activeJobSummaries: createSiteActiveJobSummariesElectricContract(scope),
+    relatedJobs: createSiteRelatedJobsElectricContract({ scope, siteId }),
+    siteLabelAssignments: createSiteLabelAssignmentsElectricContract(scope),
+    sites: createSitesElectricContract(scope),
+  };
+}
+
+export function createSitesElectricReadModelCollections({
+  scope,
+  siteId,
+}: {
+  readonly scope: OrganizationDataScope;
+  readonly siteId?: SiteIdType | undefined;
+}) {
+  const contracts = createSitesElectricReadModelContracts({ scope, siteId });
+
+  return {
+    activeJobSummaries: createElectricCollectionFromContract(
+      contracts.activeJobSummaries
+    ),
+    relatedJobs: createElectricCollectionFromContract(contracts.relatedJobs),
+    siteLabelAssignments: createElectricCollectionFromContract(
+      contracts.siteLabelAssignments
+    ),
+    sites: createElectricCollectionFromContract(contracts.sites),
+  };
+}
+
+export function joinSitesElectricReadModel({
+  activeJobSummaries,
+  labels,
+  siteLabelAssignments,
+  sites,
+}: SitesElectricReadModelRows): readonly SiteOption[] {
+  const labelsById = new Map(labels.map((label) => [label.id, label]));
+  const labelsBySiteId = new Map<SiteIdType, Label[]>();
+
+  for (const assignment of siteLabelAssignments) {
+    const label = labelsById.get(assignment.labelId);
+
+    if (label === undefined) {
+      continue;
+    }
+
+    const siteLabels = labelsBySiteId.get(assignment.siteId) ?? [];
+    siteLabels.push(label);
+    labelsBySiteId.set(assignment.siteId, siteLabels);
+  }
+
+  for (const siteLabels of labelsBySiteId.values()) {
+    siteLabels.sort(compareLabels);
+  }
+
+  const summariesBySiteId = new Map(
+    activeJobSummaries.map((summary) => [summary.siteId, summary])
+  );
+
+  return sortSiteOptions(
+    sites.map((site) => {
+      const summary = summariesBySiteId.get(site.id);
+
+      return {
+        ...site,
+        activeJobCount: summary?.activeJobCount ?? 0,
+        highestActiveJobPriority: summary?.highestActiveJobPriority,
+        labels: labelsBySiteId.get(site.id) ?? [],
+      };
+    })
+  );
+}
+
+export function selectSiteRelatedJobs(
+  jobs: readonly JobListItem[],
+  siteId: SiteIdType
+): readonly JobListItem[] {
+  return jobs
+    .filter((job) => job.siteId === siteId)
+    .toSorted(compareRelatedJobs);
+}
+
+function createSitesElectricContract(scope: OrganizationDataScope) {
+  return defineElectricCollectionContract({
+    collection: "sites",
+    completeness: syncBackedCollectionCompleteness({
+      covers: {
+        mode: "complete-tenant",
+      },
+      source: "electric",
+      subscriptionName: "sites",
+    }),
+    getKey: (site) => String(site.id),
+    id: `${sitesCollectionId(scope)}:electric`,
+    schema: SiteOptionElectricStandardSchema,
+    shapeName: "sites",
+    shapeOptions: {
+      transformer: toSiteOptionElectricRow,
+    },
+  });
+}
+
+function createSiteLabelAssignmentsElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "site-label-assignments",
+    completeness: syncBackedCollectionCompleteness({
+      covers: {
+        mode: "complete-tenant",
+      },
+      source: "electric",
+      subscriptionName: "site-labels",
+    }),
+    getKey: (assignment) =>
+      `${String(assignment.siteId)}:${String(assignment.labelId)}`,
+    id: `${siteLabelAssignmentsCollectionId(scope)}:electric`,
+    schema: SiteLabelAssignmentElectricStandardSchema,
+    shapeName: "site-labels",
+    shapeOptions: {
+      transformer: toSiteLabelAssignmentElectricRow,
+    },
+  });
+}
+
+function createSiteActiveJobSummariesElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "site-active-job-summaries",
+    completeness: syncBackedCollectionCompleteness({
+      covers: {
+        mode: "complete-tenant",
+      },
+      source: "electric",
+      subscriptionName: "site-active-job-summaries",
+    }),
+    getKey: (summary) => String(summary.siteId),
+    id: `${siteActiveJobSummariesCollectionId(scope)}:electric`,
+    schema: SiteActiveJobSummaryElectricStandardSchema,
+    shapeName: "site-active-job-summaries",
+    shapeOptions: {
+      transformer: toSiteActiveJobSummaryElectricRow,
+    },
+  });
+}
+
+function createSiteRelatedJobsElectricContract({
+  scope,
+  siteId,
+}: {
+  readonly scope: OrganizationDataScope;
+  readonly siteId?: SiteIdType | undefined;
+}) {
+  const covers =
+    siteId === undefined
+      ? ({ mode: "complete-tenant" } as const)
+      : ({
+          filters: [{ field: "siteId", operator: "eq", value: siteId }],
+          mode: "filtered-query",
+          queryName: "site-related-jobs",
+        } as const);
+
+  return defineElectricCollectionContract({
+    collection: "site-related-jobs",
+    completeness: syncBackedCollectionCompleteness({
+      covers,
+      source: "electric",
+      subscriptionName: "jobs",
+    }),
+    getKey: (job) => String(job.id),
+    id:
+      siteId === undefined
+        ? `${organizationDataQueryKey("site-related-jobs", scope).join(":")}:electric`
+        : `${siteRelatedJobsCollectionId(scope, siteId)}:electric`,
+    schema: SiteRelatedJobElectricStandardSchema,
+    shapeName: "jobs",
+    shapeOptions: {
+      transformer: toSiteRelatedJobElectricRow,
+    },
   });
 }
 
@@ -614,6 +910,122 @@ function listBrowserSiteComments(siteId: SiteIdType) {
   );
 }
 
+function toSiteOptionElectricRow(
+  row: Record<string, unknown>
+): SitesElectricRow {
+  const site: Record<string, unknown> = {
+    displayLocation: String(row.displayLocation ?? ""),
+    hasUsableCoordinates:
+      row.latitude !== null &&
+      row.latitude !== undefined &&
+      row.longitude !== null &&
+      row.longitude !== undefined &&
+      ["google_resolved", "manually_adjusted", "validated"].includes(
+        String(row.locationStatus)
+      ),
+    id: String(row.id),
+    labels: [],
+    locationStatus: String(row.locationStatus),
+    name: String(row.name),
+    activeJobCount: 0,
+  };
+
+  addOptionalValue(site, "accessNotes", row.accessNotes);
+  addOptionalValue(site, "addressComponents", row.addressComponents);
+  addOptionalValue(site, "addressLine1", row.addressLine1);
+  addOptionalValue(site, "addressLine2", row.addressLine2);
+  addOptionalValue(site, "country", row.country);
+  addOptionalValue(site, "county", row.county);
+  addOptionalValue(site, "eircode", row.eircode);
+  addOptionalValue(site, "formattedAddress", row.formattedAddress);
+  addOptionalValue(site, "googlePlaceId", row.googlePlaceId);
+  addOptionalValue(site, "latitude", row.latitude);
+  addOptionalValue(site, "locationProvider", row.locationProvider);
+  addOptionalValue(site, "locationResolvedAt", row.locationResolvedAt);
+  addOptionalValue(site, "longitude", row.longitude);
+  addOptionalValue(site, "rawLocationInput", row.rawLocationInput);
+  addOptionalValue(site, "town", row.town);
+
+  Schema.decodeUnknownSync(SiteOptionSchema)(site);
+
+  return site as SitesElectricRow;
+}
+
+function toSiteLabelAssignmentElectricRow(
+  row: Record<string, unknown>
+): SitesElectricRow {
+  const assignment = {
+    createdAt: String(row.createdAt),
+    labelId: String(row.labelId),
+    organizationId: String(row.organizationId),
+    siteId: String(row.siteId),
+  };
+
+  Schema.decodeUnknownSync(SiteLabelAssignmentElectricRowSchema)(assignment);
+
+  return assignment;
+}
+
+function toSiteActiveJobSummaryElectricRow(
+  row: Record<string, unknown>
+): SitesElectricRow {
+  const highestActiveJobPriority =
+    row.highestActiveJobPriority === null ||
+    row.highestActiveJobPriority === undefined
+      ? undefined
+      : (String(row.highestActiveJobPriority) as SiteActiveJobPriority);
+
+  const summary = {
+    activeJobCount: Number(row.activeJobCount ?? 0),
+    ...(highestActiveJobPriority === undefined
+      ? {}
+      : { highestActiveJobPriority }),
+    organizationId: String(row.organizationId),
+    siteId: String(row.siteId),
+    updatedAt: String(row.updatedAt),
+  };
+
+  Schema.decodeUnknownSync(SiteActiveJobSummaryElectricRowSchema)(summary);
+
+  return summary;
+}
+
+function toSiteRelatedJobElectricRow(
+  row: Record<string, unknown>
+): SitesElectricRow {
+  const job: Record<string, unknown> = {
+    createdAt: String(row.createdAt),
+    id: String(row.id),
+    kind: String(row.kind),
+    labels: [],
+    priority: String(row.priority),
+    status: String(row.status),
+    title: String(row.title),
+    updatedAt: String(row.updatedAt),
+  };
+
+  addOptionalValue(job, "assigneeId", row.assigneeId);
+  addOptionalValue(job, "contactId", row.contactId);
+  addOptionalValue(job, "coordinatorId", row.coordinatorId);
+  addOptionalValue(job, "siteId", row.siteId);
+
+  Schema.decodeUnknownSync(JobListItemSchema)(job);
+
+  return job as SitesElectricRow;
+}
+
+function addOptionalValue(
+  target: Record<string, unknown>,
+  key: string,
+  value: unknown
+) {
+  if (value === null || value === undefined) {
+    return;
+  }
+
+  target[key] = value;
+}
+
 function sortSiteComments(comments: readonly SiteComment[]) {
   return comments.toSorted(compareSiteComments);
 }
@@ -636,6 +1048,22 @@ function compareSiteComments(left: SiteComment, right: SiteComment) {
   return createdAtComparison === 0
     ? left.id.localeCompare(right.id)
     : createdAtComparison;
+}
+
+function compareLabels(left: Label, right: Label) {
+  const nameComparison = left.name.localeCompare(right.name);
+
+  return nameComparison === 0
+    ? left.id.localeCompare(right.id)
+    : nameComparison;
+}
+
+function compareRelatedJobs(left: JobListItem, right: JobListItem) {
+  const updatedAtComparison = right.updatedAt.localeCompare(left.updatedAt);
+
+  return updatedAtComparison === 0
+    ? right.id.localeCompare(left.id)
+    : updatedAtComparison;
 }
 
 interface DisposableCollectionState {

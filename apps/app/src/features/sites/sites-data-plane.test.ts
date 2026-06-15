@@ -1,4 +1,6 @@
 import type { OrganizationId } from "@ceird/identity-core";
+import type { JobListItem } from "@ceird/jobs-core";
+import type { Label } from "@ceird/labels-core";
 import type {
   SiteComment,
   SiteCommentsResponse,
@@ -15,11 +17,21 @@ import { getDataPlaneSessionKey } from "#/data-plane/session";
 
 import {
   createSiteCommentsSeed,
+  createSitesElectricReadModelCollections,
+  createSitesElectricReadModelContracts,
   createSitesListSeed,
   getOrCreateSiteCommentsCollectionState,
   getOrCreateSitesCollectionState,
+  joinSitesElectricReadModel,
+  selectSiteRelatedJobs,
+  siteActiveJobSummariesCollectionId,
+  siteActiveJobSummariesCollectionKey,
   siteCommentsCollectionId,
   siteCommentsCollectionKey,
+  siteLabelAssignmentsCollectionId,
+  siteLabelAssignmentsCollectionKey,
+  siteRelatedJobsCollectionId,
+  siteRelatedJobsCollectionKey,
   sitesCollectionId,
   sitesCollectionKey,
 } from "./sites-data-plane";
@@ -49,6 +61,12 @@ describe("sites data plane", () => {
     id: "77777777-7777-4777-8777-777777777777",
     siteId: site.id,
   } as unknown as SiteComment;
+  const urgentLabel = {
+    createdAt: "2026-05-30T00:00:00.000Z",
+    id: "33333333-3333-4333-8333-333333333333",
+    name: "Urgent Access",
+    updatedAt: "2026-05-30T00:00:00.000Z",
+  } as unknown as Label;
 
   it("uses organization scoped sites collection identity", () => {
     expect(sitesCollectionKey(scope)).toStrictEqual([
@@ -85,6 +103,119 @@ describe("sites data plane", () => {
     expect(siteCommentsCollectionId(scope, site.id)).toBe(
       `organization:org_123:user:user_123:role:owner:site:${site.id}:comments`
     );
+  });
+
+  it("uses organization scoped Electric read model collection identities", () => {
+    expect(siteActiveJobSummariesCollectionKey(scope)).toStrictEqual([
+      "site-active-job-summaries",
+      "organization",
+      "org_123",
+      "user",
+      "user_123",
+      "role",
+      "owner",
+    ]);
+    expect(siteLabelAssignmentsCollectionKey(scope)).toStrictEqual([
+      "site-label-assignments",
+      "organization",
+      "org_123",
+      "user",
+      "user_123",
+      "role",
+      "owner",
+    ]);
+    expect(siteRelatedJobsCollectionKey(scope, site.id)).toStrictEqual([
+      "site-related-jobs",
+      "organization",
+      "org_123",
+      "user",
+      "user_123",
+      "role",
+      "owner",
+      "site",
+      site.id,
+    ]);
+    expect(siteActiveJobSummariesCollectionId(scope)).toBe(
+      "organization:org_123:user:user_123:role:owner:site-active-job-summaries"
+    );
+    expect(siteLabelAssignmentsCollectionId(scope)).toBe(
+      "organization:org_123:user:user_123:role:owner:site-label-assignments"
+    );
+    expect(siteRelatedJobsCollectionId(scope, site.id)).toBe(
+      `organization:org_123:user:user_123:role:owner:site:${site.id}:related-jobs`
+    );
+  });
+
+  it("defines named Electric contracts for the Sites read model graph", () => {
+    const contracts = createSitesElectricReadModelContracts({
+      scope,
+      siteId: site.id,
+    });
+
+    expect(contracts.sites).toMatchObject({
+      collection: "sites",
+      completeness: {
+        covers: { mode: "complete-tenant" },
+        mode: "sync-backed",
+        source: "electric",
+        subscriptionName: "sites",
+      },
+      shapeName: "sites",
+    });
+    expect(contracts.siteLabelAssignments).toMatchObject({
+      collection: "site-label-assignments",
+      completeness: {
+        covers: { mode: "complete-tenant" },
+        mode: "sync-backed",
+        source: "electric",
+        subscriptionName: "site-labels",
+      },
+      shapeName: "site-labels",
+    });
+    expect(contracts.activeJobSummaries).toMatchObject({
+      collection: "site-active-job-summaries",
+      completeness: {
+        covers: { mode: "complete-tenant" },
+        mode: "sync-backed",
+        source: "electric",
+        subscriptionName: "site-active-job-summaries",
+      },
+      shapeName: "site-active-job-summaries",
+    });
+    expect(contracts.relatedJobs).toMatchObject({
+      collection: "site-related-jobs",
+      completeness: {
+        covers: {
+          filters: [{ field: "siteId", operator: "eq", value: site.id }],
+          mode: "filtered-query",
+          queryName: "site-related-jobs",
+        },
+        mode: "sync-backed",
+        source: "electric",
+        subscriptionName: "jobs",
+      },
+      shapeName: "jobs",
+    });
+  });
+
+  it("surfaces shared Electric health for every Sites read model collection", () => {
+    const collections = createSitesElectricReadModelCollections({
+      scope,
+      siteId: site.id,
+    });
+
+    expect(collections.sites.status).toBe("disabled");
+    expect(collections.sites.health.current).toMatchObject({
+      collection: "sites",
+      source: "electric",
+      status: "disabled",
+      subscriptionName: "sites",
+    });
+    expect(collections.activeJobSummaries.health.current).toMatchObject({
+      collection: "site-active-job-summaries",
+      status: "disabled",
+      subscriptionName: "site-active-job-summaries",
+    });
   });
 
   it("creates page-aware seed envelopes for sites and comments", () => {
@@ -190,5 +321,64 @@ describe("sites data plane", () => {
       },
       queryName: "sites-list",
     });
+  });
+
+  it("joins sites, labels, assignments, and domain-owned active summaries locally", () => {
+    const [joined] = joinSitesElectricReadModel({
+      activeJobSummaries: [
+        {
+          activeJobCount: 2,
+          highestActiveJobPriority: "urgent",
+          organizationId: "org_123",
+          siteId: site.id,
+          updatedAt: "2026-05-30T00:00:00.000Z",
+        },
+      ],
+      labels: [urgentLabel],
+      siteLabelAssignments: [
+        {
+          createdAt: "2026-05-30T00:00:00.000Z",
+          labelId: urgentLabel.id,
+          organizationId: "org_123",
+          siteId: site.id,
+        },
+      ],
+      sites: [site],
+    });
+
+    expect(joined).toMatchObject({
+      activeJobCount: 2,
+      highestActiveJobPriority: "urgent",
+      labels: [urgentLabel],
+    });
+  });
+
+  it("selects related jobs from the synced jobs row set without redefining active-job meaning", () => {
+    const jobs = [
+      {
+        createdAt: "2026-05-30T00:00:00.000Z",
+        id: "44444444-4444-4444-8444-444444444444",
+        kind: "job",
+        labels: [],
+        priority: "medium",
+        siteId: site.id,
+        status: "new",
+        title: "Gate repair",
+        updatedAt: "2026-05-31T00:00:00.000Z",
+      },
+      {
+        createdAt: "2026-05-30T00:00:00.000Z",
+        id: "55555555-5555-4555-8555-555555555555",
+        kind: "job",
+        labels: [],
+        priority: "low",
+        status: "new",
+        title: "No site job",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ] as unknown as readonly JobListItem[];
+    const related = selectSiteRelatedJobs(jobs, site.id);
+
+    expect(related.map((job) => job.title)).toStrictEqual(["Gate repair"]);
   });
 });

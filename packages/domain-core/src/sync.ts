@@ -17,6 +17,7 @@ export const SYNC_SHAPE_NAMES = [
   "contacts",
   "jobs",
   "labels",
+  "site-active-job-summaries",
   "site-comments",
   "site-contacts",
   "site-labels",
@@ -72,6 +73,10 @@ export const SYNC_SHAPE_AUTHORIZATION_DEFINITIONS = {
   labels: {
     scope: "organization",
     table: "labels",
+  },
+  "site-active-job-summaries": {
+    scope: "organization",
+    table: "site_active_job_summaries",
   },
   "site-comments": {
     scope: "organization",
@@ -163,6 +168,10 @@ export const OrganizationSyncShapeAuthorizationSchema = Schema.Union([
   makeOrganizationShapeAuthorizationSchema("contacts", "contacts"),
   makeOrganizationShapeAuthorizationSchema("jobs", "work_items"),
   makeOrganizationShapeAuthorizationSchema("labels", "labels"),
+  makeOrganizationShapeAuthorizationSchema(
+    "site-active-job-summaries",
+    "site_active_job_summaries"
+  ),
   makeOrganizationShapeAuthorizationSchema("site-comments", "site_comments"),
   makeOrganizationShapeAuthorizationSchema("site-contacts", "site_contacts"),
   makeOrganizationShapeAuthorizationSchema("site-labels", "site_labels"),

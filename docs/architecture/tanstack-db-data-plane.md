@@ -22,13 +22,18 @@ route components or view state files. A collection contract must declare:
 - stale and garbage-collection behavior
 
 Current collection roots are `jobs`, `job-options`, `job-details`,
-`job-collaborators`, `sites`, `site-comments`, `site-related-jobs`, and
-`labels`. The jobs primary route collection and Sites route collection are
-eager bounded Query Collections for their first cursor pages. Site-related jobs
-are the first cursor page filtered by `siteId`. Job options remain an eager
-complete-tenant option collection. Labels are a scoped option index. Job
-details, collaborators, and site comments are lazy per-record collections that
-request snapshots from their mounted subscribers rather than from Start loaders.
+`job-collaborators`, `sites`, `site-active-job-summaries`, `site-comments`,
+`site-label-assignments`, `site-related-jobs`, and `labels`. The jobs primary
+route collection and legacy Sites route collection are eager bounded Query
+Collections for their first cursor pages. The Electric-native Sites read model
+uses named Electric contracts for tenant-complete sites, tenant-complete
+site-label assignments, tenant-complete domain-owned active-job summaries, and
+jobs rows that can be locally filtered into related-job detail state.
+Site-related jobs in the legacy route remain the first cursor page filtered by
+`siteId`. Job options remain an eager complete-tenant option collection. Labels
+are a scoped option index. Job details, collaborators, and site comments are lazy
+per-record collections that request snapshots from their mounted subscribers
+rather than from Start loaders.
 ElectricSQL integration starts at this same boundary. Raw
 `@tanstack/electric-db-collection` and `@electric-sql/client` usage belongs only
 in `apps/app/src/data-plane/electric-collection.ts`, which standardizes
@@ -52,7 +57,10 @@ alone does not migrate the visible jobs list. When enabled, it requests the
 public sync Worker `jobs` shape and maps `work_items` rows into the narrow jobs
 list item shape with joined fields such as labels left empty; Query Collection
 fallback remains the default and fallback path for route-visible first-paint
-data.
+data. The Electric-native Sites read-model contracts do not introduce a legacy
+Query Collection fallback; callers consume shared health from the Electric
+collection factory and can show an explicit unavailable/degraded state when sync
+is disabled or unavailable.
 
 ## Collection Health
 

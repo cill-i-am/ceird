@@ -90,6 +90,10 @@ const expectedShapeDefinitions = {
     scope: "organization",
     table: "labels",
   },
+  "site-active-job-summaries": {
+    scope: "organization",
+    table: "site_active_job_summaries",
+  },
   "site-comments": {
     scope: "organization",
     table: "site_comments",

@@ -462,7 +462,173 @@ describe("jobs repository", () => {
     });
     expect(accessibleWorkItemIds).toStrictEqual([workItemId]);
   });
+
+  it("maintains site active-job summary projection for job writes", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "jobs_projection",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping repository projection coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    const organizationId = decodeOrganizationId(randomUUID());
+    const creatorUserId = decodeUserId(`jobs_projection_${Date.now()}`);
+    const firstSiteId = decodeSiteId(randomUUID());
+    const secondSiteId = decodeSiteId(randomUUID());
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Jobs Projection",
+      });
+      await seedUser(pool, {
+        id: creatorUserId,
+        name: "Projection Creator",
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "admin",
+        userId: creatorUserId,
+      });
+      await seedSite(pool, {
+        id: firstSiteId,
+        name: "First Projection Site",
+        organizationId,
+      });
+      await seedSite(pool, {
+        id: secondSiteId,
+        name: "Second Projection Site",
+        organizationId,
+      });
+    });
+
+    const firstJob = await runJobsRepositoryEffect(
+      testDatabase.url,
+      JobsRepository.create({
+        createdByUserId: creatorUserId,
+        organizationId,
+        priority: "low",
+        siteId: firstSiteId,
+        title: "First active job",
+      })
+    );
+    const secondJob = await runJobsRepositoryEffect(
+      testDatabase.url,
+      JobsRepository.create({
+        createdByUserId: creatorUserId,
+        organizationId,
+        priority: "urgent",
+        siteId: firstSiteId,
+        title: "Urgent active job",
+      })
+    );
+
+    await expectSiteActiveJobSummaries(testDatabase.url, {
+      [firstSiteId]: {
+        activeJobCount: 2,
+        highestActiveJobPriority: "urgent",
+      },
+    });
+
+    await runJobsRepositoryEffect(
+      testDatabase.url,
+      JobsRepository.patch(organizationId, firstJob.id, {
+        priority: "high",
+        siteId: secondSiteId,
+      })
+    );
+
+    await expectSiteActiveJobSummaries(testDatabase.url, {
+      [firstSiteId]: {
+        activeJobCount: 1,
+        highestActiveJobPriority: "urgent",
+      },
+      [secondSiteId]: {
+        activeJobCount: 1,
+        highestActiveJobPriority: "high",
+      },
+    });
+
+    await runJobsRepositoryEffect(
+      testDatabase.url,
+      JobsRepository.transition(organizationId, secondJob.id, {
+        completedByUserId: creatorUserId,
+        status: "completed",
+      })
+    );
+
+    await expectSiteActiveJobSummaries(testDatabase.url, {
+      [secondSiteId]: {
+        activeJobCount: 1,
+        highestActiveJobPriority: "high",
+      },
+    });
+
+    await runJobsRepositoryEffect(
+      testDatabase.url,
+      JobsRepository.reopen(organizationId, secondJob.id)
+    );
+
+    await expectSiteActiveJobSummaries(testDatabase.url, {
+      [firstSiteId]: {
+        activeJobCount: 1,
+        highestActiveJobPriority: "urgent",
+      },
+      [secondSiteId]: {
+        activeJobCount: 1,
+        highestActiveJobPriority: "high",
+      },
+    });
+  });
 });
+
+async function expectSiteActiveJobSummaries(
+  databaseUrl: string,
+  expected: Record<
+    string,
+    {
+      readonly activeJobCount: number;
+      readonly highestActiveJobPriority: string;
+    }
+  >
+) {
+  await withPool(databaseUrl, async (pool) => {
+    const rows = await pool.query<{
+      readonly active_job_count: number;
+      readonly highest_active_job_priority: string | null;
+      readonly site_id: string;
+    }>(
+      `select site_id, active_job_count, highest_active_job_priority
+       from site_active_job_summaries
+       order by site_id asc`
+    );
+
+    expect(
+      Object.fromEntries(
+        rows.rows.map((row) => [
+          row.site_id,
+          {
+            activeJobCount: row.active_job_count,
+            highestActiveJobPriority: row.highest_active_job_priority,
+          },
+        ])
+      )
+    ).toStrictEqual(expected);
+  });
+}
 
 async function seedOrganization(
   pool: Pool,
