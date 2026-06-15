@@ -32,6 +32,7 @@ Current visible routes:
 | `/organization/security`           | `_app._org.organization.security.tsx` | Owner/admin security activity review.                           |
 | `/organization/settings`           | `_app._org.organization.settings.tsx` | Organization settings and labels.                               |
 | `/sites`                           | `_app._org.sites.tsx`                 | Sites list.                                                     |
+| `/sites-workspace`                 | `_app._org.sites-workspace.tsx`       | Gated Electric-native Sites workspace shell.                    |
 | `/health`                          | `health.ts`                           | App stack/stage health response for Alchemy and Worker checks.  |
 
 `apps/app/src/router.tsx` configures scroll restoration, intent preloading, the
@@ -144,6 +145,12 @@ Authenticated layout and navigation live under:
 - `components/nav-main.tsx`
 - `components/nav-user.tsx`
 - `components/app-page-header.tsx`
+
+The Electric-native Sites replacement starts as a separate `/sites-workspace`
+organization route rather than a canary under `/sites`. The shell is
+intentionally absent from primary navigation until realtime evidence passes, is
+marked as a preview route in the UI, and fails closed with explicit placeholder
+states instead of reading the old Sites Query Collection path.
 
 The authenticated app shell also mounts the global Ceird Agent entry point in
 `features/agent/global-agent-chat.tsx`. It is app-level rather than

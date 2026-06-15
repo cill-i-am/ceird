@@ -51,7 +51,8 @@ declare module "@tanstack/react-router" {
         | "/organization/security"
         | "/organization/settings"
         | "/settings"
-        | "/sites";
+        | "/sites"
+        | "/sites-workspace";
     };
   }
 }

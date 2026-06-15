@@ -54,6 +54,10 @@ function getBaseShortcutScopes(
     return ["global", "sites"];
   }
 
+  if (pathname === "/sites-workspace") {
+    return ["global", "sites-workspace"];
+  }
+
   if (pathname === "/members") {
     return ["global", "members"];
   }

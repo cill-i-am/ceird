@@ -147,7 +147,10 @@ describe("app global command actions", () => {
       });
 
       expect(
-        screen.getByRole("option", { name: /go to sites/i })
+        screen.getByRole("option", { name: /^go to sites$/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("option", { name: /^go to sites workspace$/i })
       ).toBeInTheDocument();
       expect(
         screen.getByRole("option", { name: /go to activity/i })
@@ -164,6 +167,7 @@ describe("app global command actions", () => {
       expectCommandShortcut("Go to Home", ["G", "H"]);
       expectCommandShortcut("Go to Jobs", ["G", "J"]);
       expectCommandShortcut("Go to Sites", ["G", "S"]);
+      expectCommandShortcut("Go to Sites workspace", ["G", "X"]);
       expectCommandShortcut("Go to Activity", ["G", "A"]);
       expectCommandShortcut("Go to Security", ["G", "Y"]);
       expectCommandShortcut("Go to Members", ["G", "M"]);
@@ -281,7 +285,10 @@ describe("app global command actions", () => {
         screen.queryByRole("option", { name: /go to home/i })
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("option", { name: /go to sites/i })
+        screen.queryByRole("option", { name: /^go to sites$/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /^go to sites workspace$/i })
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("option", { name: /go to activity/i })

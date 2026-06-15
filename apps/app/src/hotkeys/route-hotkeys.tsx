@@ -51,6 +51,16 @@ export function RouteHotkeys({
     { enabled: canUseInternalHotkeys }
   );
 
+  useAppHotkeySequence(
+    "goSitesWorkspace",
+    () => {
+      React.startTransition(() => {
+        navigate({ to: "/sites-workspace" });
+      });
+    },
+    { enabled: canUseInternalHotkeys }
+  );
+
   useAppHotkeySequence("goSettings", () => {
     React.startTransition(() => {
       navigate({ to: "/settings" });
