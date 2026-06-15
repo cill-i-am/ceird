@@ -298,6 +298,12 @@ instead of emitting unresolved bare Worker imports.
 The `agents` package also hard-imports `cloudflare:email` from its root export;
 root `pnpm.patchedDependencies` removes that eager import because Ceird does
 not route inbound Agent email and local Workerd cannot provide the email module.
+Root `pnpm.patchedDependencies` also carries a version-scoped Alchemy patch for
+Cloudflare Container reconciliation. When Alchemy recreates the Electric SQL
+container application to attach its Durable Object namespace, a transient
+same-name application with a different Durable Object attachment is treated as a
+name-reservation retry instead of an adoptable update target. Remove the patch
+after upstream Alchemy handles stale container application name conflicts.
 
 The domain, API, MCP, Agent, sync, and Cloudflare Vite app share the same typed
 Worker compatibility contract, including `nodejs_compat`, so runtime packages

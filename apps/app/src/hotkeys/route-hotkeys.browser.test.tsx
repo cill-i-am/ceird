@@ -45,6 +45,7 @@ describe("route hotkeys", () => {
 
       expect(within(dialog).getByText("Go to Home")).toBeVisible();
       expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
+      expect(within(dialog).getByText("Go to Jobs Workspace")).toBeVisible();
       expect(within(dialog).getByText("Go to Sites")).toBeVisible();
       expect(within(dialog).getByText("Go to Sites workspace")).toBeVisible();
       expect(within(dialog).getByText("Go to Activity")).toBeVisible();
@@ -78,6 +79,7 @@ describe("route hotkeys", () => {
     });
 
     expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
+    expect(within(dialog).getByText("Go to Jobs Workspace")).toBeVisible();
     expect(within(dialog).getByText("Go to Home")).toBeVisible();
     expect(within(dialog).getByText("Go to Sites")).toBeVisible();
     expect(within(dialog).getByText("Go to Sites workspace")).toBeVisible();
@@ -117,6 +119,9 @@ describe("route hotkeys", () => {
 
       expect(within(dialog).queryByText("Go to Home")).not.toBeInTheDocument();
       expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
+      expect(
+        within(dialog).queryByText("Go to Jobs Workspace")
+      ).not.toBeInTheDocument();
       expect(within(dialog).queryByText("Go to Sites")).not.toBeInTheDocument();
       expect(
         within(dialog).queryByText("Go to Sites workspace")
@@ -159,6 +164,7 @@ describe("route hotkeys", () => {
 
     expect(within(dialog).getByText("Go to Home")).toBeVisible();
     expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
+    expect(within(dialog).getByText("Go to Jobs Workspace")).toBeVisible();
     expect(within(dialog).getByText("Go to Sites")).toBeVisible();
     expect(within(dialog).getByText("Go to Sites workspace")).toBeVisible();
     expect(within(dialog).getByText("Go to Activity")).toBeVisible();
@@ -183,6 +189,7 @@ describe("route hotkeys", () => {
       );
 
       await user.keyboard("gj");
+      await user.keyboard("gr");
       await user.keyboard("gh");
       await user.keyboard("gs");
       await user.keyboard("gx");
@@ -194,12 +201,15 @@ describe("route hotkeys", () => {
       await user.keyboard("gp");
 
       expect(mockedNavigate).toHaveBeenNthCalledWith(1, { to: "/jobs" });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(2, { to: "/" });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(3, { to: "/sites" });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(4, {
+      expect(mockedNavigate).toHaveBeenNthCalledWith(2, {
+        to: "/jobs-workspace",
+      });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(3, { to: "/" });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(4, { to: "/sites" });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(5, {
         to: "/sites-workspace",
       });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(5, {
+      expect(mockedNavigate).toHaveBeenNthCalledWith(6, {
         search: {
           actorUserId: undefined,
           eventType: undefined,
@@ -209,7 +219,7 @@ describe("route hotkeys", () => {
         },
         to: "/activity",
       });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(6, {
+      expect(mockedNavigate).toHaveBeenNthCalledWith(7, {
         search: {
           actorUserId: undefined,
           eventType: undefined,
@@ -220,12 +230,12 @@ describe("route hotkeys", () => {
         },
         to: "/organization/security",
       });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(7, { to: "/members" });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(8, {
+      expect(mockedNavigate).toHaveBeenNthCalledWith(8, { to: "/members" });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(9, {
         to: "/organization/settings",
       });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(9, { to: "/settings" });
-      expect(mockedNavigate).toHaveBeenNthCalledWith(10, {
+      expect(mockedNavigate).toHaveBeenNthCalledWith(10, { to: "/settings" });
+      expect(mockedNavigate).toHaveBeenNthCalledWith(11, {
         search: { view: "map" },
         to: "/jobs",
       });
@@ -249,12 +259,16 @@ describe("route hotkeys", () => {
     await user.keyboard("gx");
     await user.keyboard("gh");
     await user.keyboard("gj");
+    await user.keyboard("gr");
 
     expect(mockedNavigate).toHaveBeenNthCalledWith(1, {
       to: "/sites-workspace",
     });
     expect(mockedNavigate).toHaveBeenNthCalledWith(2, { to: "/" });
     expect(mockedNavigate).toHaveBeenNthCalledWith(3, { to: "/jobs" });
+    expect(mockedNavigate).toHaveBeenNthCalledWith(4, {
+      to: "/jobs-workspace",
+    });
   }, 10_000);
 
   it.each(["external", undefined] as const)(
@@ -275,6 +289,7 @@ describe("route hotkeys", () => {
       await user.keyboard("gx");
       await user.keyboard("gh");
       await user.keyboard("gj");
+      await user.keyboard("gr");
 
       expect(mockedNavigate).toHaveBeenCalledExactlyOnceWith({ to: "/jobs" });
     },

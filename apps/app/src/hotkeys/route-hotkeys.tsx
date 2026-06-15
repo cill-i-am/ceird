@@ -24,12 +24,24 @@ export function RouteHotkeys({
   );
   const canUseAdministratorHotkeys = primaryNavigationUrls.has("/activity");
   const canUseInternalHotkeys = primaryNavigationUrls.has("/");
+  const canUseJobsWorkspaceHotkey =
+    primaryNavigationUrls.has("/jobs-workspace");
 
   useAppHotkeySequence("goJobs", () => {
     React.startTransition(() => {
       navigate({ to: "/jobs" });
     });
   });
+
+  useAppHotkeySequence(
+    "goJobsWorkspace",
+    () => {
+      React.startTransition(() => {
+        navigate({ to: "/jobs-workspace" });
+      });
+    },
+    { enabled: canUseJobsWorkspaceHotkey }
+  );
 
   useAppHotkeySequence(
     "goHome",

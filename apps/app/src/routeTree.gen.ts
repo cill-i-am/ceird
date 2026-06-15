@@ -27,6 +27,7 @@ import { Route as AppOrgIndexRouteImport } from './routes/_app._org.index'
 import { Route as AppOrgSitesWorkspaceRouteImport } from './routes/_app._org.sites-workspace'
 import { Route as AppOrgSitesRouteImport } from './routes/_app._org.sites'
 import { Route as AppOrgMembersRouteImport } from './routes/_app._org.members'
+import { Route as AppOrgJobsWorkspaceRouteImport } from './routes/_app._org.jobs-workspace'
 import { Route as AppOrgJobsRouteImport } from './routes/_app._org.jobs'
 import { Route as AppOrgActivityRouteImport } from './routes/_app._org.activity'
 import { Route as AppOrgOrganizationSettingsRouteImport } from './routes/_app._org.organization.settings'
@@ -121,6 +122,11 @@ const AppOrgMembersRoute = AppOrgMembersRouteImport.update({
   path: '/members',
   getParentRoute: () => AppOrgRoute,
 } as any)
+const AppOrgJobsWorkspaceRoute = AppOrgJobsWorkspaceRouteImport.update({
+  id: '/jobs-workspace',
+  path: '/jobs-workspace',
+  getParentRoute: () => AppOrgRoute,
+} as any)
 const AppOrgJobsRoute = AppOrgJobsRouteImport.update({
   id: '/jobs',
   path: '/jobs',
@@ -160,6 +166,7 @@ export interface FileRoutesByFullPath {
   '/oauth/consent': typeof OauthConsentRoute
   '/activity': typeof AppOrgActivityRoute
   '/jobs': typeof AppOrgJobsRoute
+  '/jobs-workspace': typeof AppOrgJobsWorkspaceRoute
   '/members': typeof AppOrgMembersRoute
   '/sites': typeof AppOrgSitesRoute
   '/sites-workspace': typeof AppOrgSitesWorkspaceRoute
@@ -182,6 +189,7 @@ export interface FileRoutesByTo {
   '/oauth/consent': typeof OauthConsentRoute
   '/activity': typeof AppOrgActivityRoute
   '/jobs': typeof AppOrgJobsRoute
+  '/jobs-workspace': typeof AppOrgJobsWorkspaceRoute
   '/members': typeof AppOrgMembersRoute
   '/sites': typeof AppOrgSitesRoute
   '/sites-workspace': typeof AppOrgSitesWorkspaceRoute
@@ -206,6 +214,7 @@ export interface FileRoutesById {
   '/oauth/consent': typeof OauthConsentRoute
   '/_app/_org/activity': typeof AppOrgActivityRoute
   '/_app/_org/jobs': typeof AppOrgJobsRoute
+  '/_app/_org/jobs-workspace': typeof AppOrgJobsWorkspaceRoute
   '/_app/_org/members': typeof AppOrgMembersRoute
   '/_app/_org/sites': typeof AppOrgSitesRoute
   '/_app/_org/sites-workspace': typeof AppOrgSitesWorkspaceRoute
@@ -231,6 +240,7 @@ export interface FileRouteTypes {
     | '/oauth/consent'
     | '/activity'
     | '/jobs'
+    | '/jobs-workspace'
     | '/members'
     | '/sites'
     | '/sites-workspace'
@@ -253,6 +263,7 @@ export interface FileRouteTypes {
     | '/oauth/consent'
     | '/activity'
     | '/jobs'
+    | '/jobs-workspace'
     | '/members'
     | '/sites'
     | '/sites-workspace'
@@ -276,6 +287,7 @@ export interface FileRouteTypes {
     | '/oauth/consent'
     | '/_app/_org/activity'
     | '/_app/_org/jobs'
+    | '/_app/_org/jobs-workspace'
     | '/_app/_org/members'
     | '/_app/_org/sites'
     | '/_app/_org/sites-workspace'
@@ -427,6 +439,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrgMembersRouteImport
       parentRoute: typeof AppOrgRoute
     }
+    '/_app/_org/jobs-workspace': {
+      id: '/_app/_org/jobs-workspace'
+      path: '/jobs-workspace'
+      fullPath: '/jobs-workspace'
+      preLoaderRoute: typeof AppOrgJobsWorkspaceRouteImport
+      parentRoute: typeof AppOrgRoute
+    }
     '/_app/_org/jobs': {
       id: '/_app/_org/jobs'
       path: '/jobs'
@@ -461,6 +480,7 @@ declare module '@tanstack/react-router' {
 interface AppOrgRouteChildren {
   AppOrgActivityRoute: typeof AppOrgActivityRoute
   AppOrgJobsRoute: typeof AppOrgJobsRoute
+  AppOrgJobsWorkspaceRoute: typeof AppOrgJobsWorkspaceRoute
   AppOrgMembersRoute: typeof AppOrgMembersRoute
   AppOrgSitesRoute: typeof AppOrgSitesRoute
   AppOrgSitesWorkspaceRoute: typeof AppOrgSitesWorkspaceRoute
@@ -472,6 +492,7 @@ interface AppOrgRouteChildren {
 const AppOrgRouteChildren: AppOrgRouteChildren = {
   AppOrgActivityRoute: AppOrgActivityRoute,
   AppOrgJobsRoute: AppOrgJobsRoute,
+  AppOrgJobsWorkspaceRoute: AppOrgJobsWorkspaceRoute,
   AppOrgMembersRoute: AppOrgMembersRoute,
   AppOrgSitesRoute: AppOrgSitesRoute,
   AppOrgSitesWorkspaceRoute: AppOrgSitesWorkspaceRoute,
