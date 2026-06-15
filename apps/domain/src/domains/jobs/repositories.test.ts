@@ -594,7 +594,7 @@ describe("jobs repository", () => {
     });
   });
 
-  it("upserts site active-job summaries for concurrent first active jobs", async (context: {
+  it("serializes site active-job summaries for concurrent transactional first active jobs", async (context: {
     skip: (note?: string) => never;
   }) => {
     const testDatabase = await createTestDatabase({
@@ -646,23 +646,31 @@ describe("jobs repository", () => {
       Promise.all([
         runJobsRepositoryEffect(
           testDatabase.url,
-          JobsRepository.create({
-            createdByUserId: creatorUserId,
-            organizationId,
-            priority: "low",
-            siteId,
-            title: "Concurrent first active job",
-          })
+          JobsRepository.use((repository) =>
+            repository.withTransaction(
+              repository.create({
+                createdByUserId: creatorUserId,
+                organizationId,
+                priority: "low",
+                siteId,
+                title: "Concurrent first active job",
+              })
+            )
+          )
         ),
         runJobsRepositoryEffect(
           testDatabase.url,
-          JobsRepository.create({
-            createdByUserId: creatorUserId,
-            organizationId,
-            priority: "urgent",
-            siteId,
-            title: "Concurrent second active job",
-          })
+          JobsRepository.use((repository) =>
+            repository.withTransaction(
+              repository.create({
+                createdByUserId: creatorUserId,
+                organizationId,
+                priority: "urgent",
+                siteId,
+                title: "Concurrent second active job",
+              })
+            )
+          )
         ),
       ])
     ).resolves.toHaveLength(2);

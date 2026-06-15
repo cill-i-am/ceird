@@ -943,10 +943,25 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
         organizationId: OrganizationId,
         siteIds: readonly (SiteId | undefined)[]
       ) {
-        const impactedSiteIds = [...new Set(siteIds.filter(isDefined))];
+        const impactedSiteIds = [
+          ...new Set(siteIds.filter(isDefined)),
+        ].toSorted();
 
         if (impactedSiteIds.length === 0) {
           return;
+        }
+
+        // Serialize by site before reading the aggregate so concurrent service
+        // transactions cannot overwrite the summary with a stale count.
+        for (const siteId of impactedSiteIds) {
+          yield* sql`
+            select pg_advisory_xact_lock(
+              hashtextextended(
+                ${organizationId}::text || ':' || ${siteId}::text,
+                0
+              )
+            )
+          `;
         }
 
         yield* sql`
