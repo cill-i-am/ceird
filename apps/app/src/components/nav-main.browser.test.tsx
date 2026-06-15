@@ -239,6 +239,7 @@ describe("nav main", () => {
         ).toStrictEqual([
           "/",
           "/jobs",
+          "/jobs-workspace",
           "/sites",
           "/activity",
           "/organization/security",
@@ -248,7 +249,7 @@ describe("nav main", () => {
 
       expect(
         getPrimaryNavItemsForRole("member").map((item) => item.url)
-      ).toStrictEqual(["/", "/jobs", "/sites"]);
+      ).toStrictEqual(["/", "/jobs", "/jobs-workspace", "/sites"]);
       expect(
         getPrimaryNavItemsForRole("external").map((item) => item.url)
       ).toStrictEqual(["/jobs"]);

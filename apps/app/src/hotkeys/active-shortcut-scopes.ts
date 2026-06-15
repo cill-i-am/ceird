@@ -50,6 +50,10 @@ function getBaseShortcutScopes(
       : ["global", "jobs"];
   }
 
+  if (pathname === "/jobs-workspace") {
+    return ["global", "jobs-workspace"];
+  }
+
   if (pathname === "/sites") {
     return ["global", "sites"];
   }
