@@ -27,7 +27,9 @@ export class GlobalAgentChatPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.launcher = page.getByRole("button", { name: "Ask Ceird" });
+    this.launcher = page
+      .locator("header")
+      .getByRole("button", { exact: true, name: "Ask Ceird" });
     this.drawer = page.locator('[data-slot="drawer-content"]').filter({
       has: page.getByRole("button", { name: "Close Ask Ceird" }),
     });
