@@ -5,12 +5,20 @@ import {
 } from "@ceird/labels-core";
 import type {
   CreateLabelInput,
+  Label,
   LabelIdType as LabelId,
+  LabelWriteResponse,
   UpdateLabelInput,
 } from "@ceird/labels-core";
 import { Layer, Context, Effect, Option } from "effect";
 
-import { describeDomainStorageFailure } from "../../platform/database/database.js";
+import {
+  describeDomainStorageFailure,
+  isDomainDrizzleStorageFailure,
+} from "../../platform/database/database.js";
+import type { DomainDrizzleStorageFailure } from "../../platform/database/database.js";
+import { withElectricMutationConfirmation } from "../../platform/database/electric-mutation-confirmation.js";
+import type { ElectricMutationConfirmed } from "../../platform/database/electric-mutation-confirmation.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -59,12 +67,12 @@ export class LabelsService extends Context.Service<LabelsService>()(
           .ensureCanManageLabels(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
 
-        return yield* labelsRepository
-          .create({
+        return yield* withElectricMutationConfirmation(
+          labelsRepository.create({
             name: input.name,
             organizationId: currentActor.organizationId,
           })
-          .pipe(Effect.catchTag("EffectDrizzleQueryError", failLabelStorage));
+        ).pipe(Effect.map(toLabelWriteResponse), catchLabelsStorageError());
       });
 
       const update = Effect.fn("LabelsService.update")(function* (
@@ -76,25 +84,26 @@ export class LabelsService extends Context.Service<LabelsService>()(
           .ensureCanManageLabels(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
 
-        const label = yield* labelsRepository
-          .update(currentActor.organizationId, labelId, {
-            name: input.name,
-          })
-          .pipe(
-            Effect.catchTag("EffectDrizzleQueryError", failLabelStorage),
-            Effect.map(Option.getOrUndefined)
-          );
+        return yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            const label = yield* labelsRepository
+              .update(currentActor.organizationId, labelId, {
+                name: input.name,
+              })
+              .pipe(Effect.map(Option.getOrUndefined));
 
-        if (label !== undefined) {
-          return label;
-        }
+            if (label !== undefined) {
+              return label;
+            }
 
-        return yield* Effect.fail(
-          new LabelNotFoundError({
-            labelId,
-            message: "Label does not exist in the organization",
+            return yield* Effect.fail(
+              new LabelNotFoundError({
+                labelId,
+                message: "Label does not exist in the organization",
+              })
+            );
           })
-        );
+        ).pipe(Effect.map(toLabelWriteResponse), catchLabelsStorageError());
       });
 
       const archive = Effect.fn("LabelsService.archive")(function* (
@@ -105,20 +114,25 @@ export class LabelsService extends Context.Service<LabelsService>()(
           .ensureCanManageLabels(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
 
-        const result = yield* labelsRepository
-          .archive(currentActor.organizationId, labelId)
-          .pipe(Effect.catchTag("EffectDrizzleQueryError", failLabelStorage));
+        return yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            const result = yield* labelsRepository.archive(
+              currentActor.organizationId,
+              labelId
+            );
 
-        if (Option.isSome(result)) {
-          return result.value;
-        }
+            if (Option.isSome(result)) {
+              return result.value;
+            }
 
-        return yield* Effect.fail(
-          new LabelNotFoundError({
-            labelId,
-            message: "Label does not exist in the organization",
+            return yield* Effect.fail(
+              new LabelNotFoundError({
+                labelId,
+                message: "Label does not exist in the organization",
+              })
+            );
           })
-        );
+        ).pipe(Effect.map(toLabelWriteResponse), catchLabelsStorageError());
       });
 
       return {
@@ -163,4 +177,32 @@ function failLabelStorage(error: unknown) {
       message: "Label storage operation failed",
     })
   );
+}
+
+function catchLabelsStorageError<Value, Error, Requirements>(): (
+  effect: Effect.Effect<Value, Error, Requirements>
+) => Effect.Effect<
+  Value,
+  Exclude<Error, DomainDrizzleStorageFailure> | LabelStorageError,
+  Requirements
+> {
+  return ((effect: Effect.Effect<Value, Error, Requirements>) =>
+    effect.pipe(
+      Effect.catchIf(isDomainDrizzleStorageFailure, failLabelStorage)
+    )) as (
+    effect: Effect.Effect<Value, Error, Requirements>
+  ) => Effect.Effect<
+    Value,
+    Exclude<Error, DomainDrizzleStorageFailure> | LabelStorageError,
+    Requirements
+  >;
+}
+
+function toLabelWriteResponse(
+  result: ElectricMutationConfirmed<Label>
+): LabelWriteResponse {
+  return {
+    label: result.value,
+    mutation: result.mutation,
+  };
 }

@@ -677,6 +677,14 @@ Labels live in `apps/domain/src/domains/labels` and are exposed through
 assign those labels through join tables and assignment behavior owned by the
 jobs and sites domains.
 
+`GET /labels` returns `LabelsResponse` unchanged. Label definition write
+endpoints (`POST /labels`, `PATCH /labels/:labelId`, and
+`DELETE /labels/:labelId`) return `LabelWriteResponse`:
+`{ label, mutation: { txid } }`. The `label` field is the canonical
+server-confirmed row. The `mutation.txid` is PostgreSQL/Electric confirmation
+metadata for opt-in Electric collection mutation handlers; non-Electric browser
+commands map the response back to `Label` before reconciling local state.
+
 Core files:
 
 | File               | Responsibility                                                            |

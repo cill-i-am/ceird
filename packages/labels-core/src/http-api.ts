@@ -7,7 +7,7 @@ import {
 
 import {
   CreateLabelInputSchema,
-  LabelResponseSchema,
+  LabelWriteResponseSchema,
   LabelsResponseSchema,
   UpdateLabelInputSchema,
 } from "./dto.js";
@@ -29,7 +29,7 @@ const labelsGroup = HttpApiGroup.make("labels")
   .add(
     HttpApiEndpoint.post("createLabel", "/labels", {
       payload: CreateLabelInputSchema,
-      success: LabelResponseSchema.pipe(HttpApiSchema.status("Created")),
+      success: LabelWriteResponseSchema.pipe(HttpApiSchema.status("Created")),
       error: [
         LabelAccessDeniedError,
         LabelNameConflictError,
@@ -41,7 +41,7 @@ const labelsGroup = HttpApiGroup.make("labels")
     HttpApiEndpoint.patch("updateLabel", "/labels/:labelId", {
       params: { labelId: LabelId },
       payload: UpdateLabelInputSchema,
-      success: LabelResponseSchema,
+      success: LabelWriteResponseSchema,
       error: [
         LabelAccessDeniedError,
         LabelNotFoundError,
@@ -53,7 +53,7 @@ const labelsGroup = HttpApiGroup.make("labels")
   .add(
     HttpApiEndpoint.delete("deleteLabel", "/labels/:labelId", {
       params: { labelId: LabelId },
-      success: LabelResponseSchema,
+      success: LabelWriteResponseSchema,
       error: [LabelAccessDeniedError, LabelNotFoundError, LabelStorageError],
     })
   );

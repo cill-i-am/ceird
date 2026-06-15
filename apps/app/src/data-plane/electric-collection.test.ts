@@ -151,6 +151,61 @@ describe("Ceird Electric collection factory", () => {
     );
   });
 
+  it("waits for txid-aware mutation handlers and surfaces Electric timeouts", async () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+    const onInsert = vi.fn<
+      () => Promise<{ readonly timeout: number; readonly txid: number }>
+    >(() =>
+      Promise.resolve({
+        timeout: 1,
+        txid: 123,
+      })
+    );
+
+    const result = createElectricCollectionFromContract(
+      defineElectricCollectionContract({
+        ...testContract,
+        mutationHandlers: {
+          onInsert,
+        },
+      }),
+      {
+        runtime: {
+          fetch: makeTestFetch(new Response("ok")),
+          isBrowser: true,
+        },
+      }
+    );
+
+    expect(result.status).toBe("enabled");
+    if (result.status !== "enabled") {
+      throw new Error("Expected Electric collection to be enabled");
+    }
+
+    await expect(
+      result.collection.config.onInsert?.({
+        collection: result.collection,
+        transaction: {
+          mutations: [
+            {
+              modified: {
+                createdAt: "2026-06-14T00:00:00.000Z",
+                id: "row_123",
+                name: "Plumbing",
+              },
+            },
+          ],
+        },
+      } as unknown as Parameters<
+        NonNullable<typeof result.collection.config.onInsert>
+      >[0])
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("Timeout waiting for txId: 123"),
+      name: "TimeoutWaitingForTxIdError",
+    });
+    expect(onInsert).toHaveBeenCalledOnce();
+  });
+
   it("records initial readiness latency through the factory collection status bridge", () => {
     vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
     const now = vi

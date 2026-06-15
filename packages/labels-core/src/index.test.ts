@@ -5,6 +5,7 @@ import type { LabelId } from "./index.js";
 import {
   CreateLabelInputSchema,
   LabelAccessDeniedError,
+  LabelWriteResponseSchema,
   LabelNameConflictError,
   LabelNameSchema,
   LabelNotFoundError,
@@ -39,6 +40,16 @@ describe("labels-core", () => {
     expect(
       Schema.decodeUnknownSync(LabelsResponseSchema)({ labels: [label] })
     ).toStrictEqual({ labels: [label] });
+
+    expect(
+      Schema.decodeUnknownSync(LabelWriteResponseSchema)({
+        label,
+        mutation: { txid: 42 },
+      })
+    ).toStrictEqual({
+      label,
+      mutation: { txid: 42 },
+    });
   });
 
   it("keeps label mutation inputs strict", () => {
@@ -59,6 +70,30 @@ describe("labels-core", () => {
         name: "Access issue",
       })
     ).toThrow(/[Uu]nexpected/);
+
+    expect(() =>
+      Schema.decodeUnknownSync(LabelWriteResponseSchema)({
+        label: {
+          createdAt: "2026-04-28T10:00:00.000Z",
+          id: "11111111-1111-4111-8111-111111111111",
+          name: "Access issue",
+          updatedAt: "2026-04-28T10:00:00.000Z",
+        },
+        mutation: { txid: -1 },
+      })
+    ).toThrow(/greater than or equal to 0/);
+
+    expect(() =>
+      Schema.decodeUnknownSync(LabelWriteResponseSchema)({
+        label: {
+          createdAt: "2026-04-28T10:00:00.000Z",
+          id: "11111111-1111-4111-8111-111111111111",
+          name: "Access issue",
+          updatedAt: "2026-04-28T10:00:00.000Z",
+        },
+        mutation: { txid: 4_294_967_296 },
+      })
+    ).toThrow(/less than or equal to 4294967295/);
   });
 
   it("exports labels API group and typed errors", () => {

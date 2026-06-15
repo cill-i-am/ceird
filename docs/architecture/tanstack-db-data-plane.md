@@ -139,6 +139,20 @@ data-plane helpers. Failures are recorded in the session mutation journal and
 leave collection state unchanged. Optimistic commands can be added later by
 widening the command implementation, not by bypassing the data plane.
 
+Electric-backed mutation handlers are only enabled for the first narrow write
+slice that needs replication confirmation: organization label definition
+create, update, and archive. Labels were chosen because their Electric shape is
+a direct `labels` table DTO and the app already has an opt-in label collection
+contract; derived jobs, sites, comments, and assignment writes still use the
+server-confirmed command path without Electric mutation handlers. Label
+handlers call the typed Effect HTTP label API, receive `{ label, mutation:
+{ txid } }`, and return `{ txid, timeout }` to
+`@tanstack/electric-db-collection` so the client waits for the corresponding
+Electric signal. The public label helpers still map successful write responses
+back to `Label`, so existing command reconciliation and mutation journal
+semantics stay unchanged. Read-only Electric adoption, including the jobs
+canary, does not require mutation confirmation and remains opt-in/test-gated.
+
 ## Enforcement
 
 `apps/app/src/test/data-plane-boundaries.test.ts` prevents product views from
