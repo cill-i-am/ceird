@@ -1,0 +1,468 @@
+diff --git a/lib/Cloudflare/Container/ContainerApplication.js b/lib/Cloudflare/Container/ContainerApplication.js
+index cf14c2be7ec4903c0b2c4809ebb89cd09daa1e92..5fcaf688759e25221058ec26a46eda1036793f73 100644
+--- a/lib/Cloudflare/Container/ContainerApplication.js
++++ b/lib/Cloudflare/Container/ContainerApplication.js
+@@ -38,17 +38,38 @@ const resolveDurableObjectApplicationRecovery = ({ namespaceId, expectedName, ex
+         canAdopt: true,
+     };
+ };
++class ContainerApplicationNameReserved extends Error {
++    _tag = "ContainerApplicationNameReserved";
++    constructor(input) {
++        super(`Container application "${input.applicationName}" is still reserved by an application with a different Durable Object attachment.`);
++        this.name = "ContainerApplicationNameReserved";
++        this.applicationId = input.applicationId;
++        this.applicationName = input.applicationName;
++        this.existingDurableObjects = input.existingDurableObjects;
++        this.expectedDurableObjects = input.expectedDurableObjects;
++    }
++}
+ const containerApplicationReadinessSchedule = Schedule.exponential(150).pipe(Schedule.both(Schedule.recurs(10)));
+ const isContainerApplicationNotFound = (error) => typeof error === "object" &&
+     error !== null &&
+     "_tag" in error &&
+     error._tag === "ContainerApplicationNotFound";
++const isContainerApplicationNameReserved = (error) => typeof error === "object" &&
++    error !== null &&
++    "_tag" in error &&
++    error._tag === "ContainerApplicationNameReserved";
+ export const retryForContainerApplicationReadiness = (operation, applicationId, effect) => effect.pipe(Effect.tapError((error) => isContainerApplicationNotFound(error)
+     ? Effect.logDebug(`Cloudflare Container ${operation}: application ${applicationId} not found yet, retrying`)
+     : Effect.void), Effect.retry({
+     while: isContainerApplicationNotFound,
+     schedule: containerApplicationReadinessSchedule,
+ }));
++const retryForContainerApplicationNameRelease = (applicationName, effect) => effect.pipe(Effect.tapError((error) => isContainerApplicationNameReserved(error)
++    ? Effect.logDebug(`Cloudflare Container create: application ${applicationName} still has a stale Durable Object attachment, retrying`)
++    : Effect.void), Effect.retry({
++    while: isContainerApplicationNameReserved,
++    schedule: containerApplicationReadinessSchedule,
++}));
+ export const ContainerProvider = () => Provider.effect(Container, Effect.gen(function* () {
+     const stack = yield* Stack;
+     const { dotAlchemy } = yield* AlchemyContext;
+@@ -316,67 +337,82 @@ await Effect.runPromise(serverEffect).catch((err) => {
+             }
+             return String(error);
+         };
+-        // Engine has cleared us via `read` (foreign-named applications are
+-        // surfaced as `Unowned`). Re-fetch the existing application to fold
+-        // it into the upsert path.
+-        const existingByName = yield* findApplicationByName(name);
+-        if (existingByName) {
+-            yield* Effect.logInfo(`Cloudflare Container create: adopting existing application ${name}`);
+-            return yield* upsertApplication({
+-                id,
+-                news,
+-                existing: toAttributes(existingByName),
+-                session,
+-            });
+-        }
+-        yield* Effect.logInfo(`Cloudflare Container create: creating application ${name}`);
+-        yield* session.note(`Creating container application ${name}...`);
+-        const adoptExistingByName = Effect.gen(function* () {
+-            yield* Effect.logInfo(`Cloudflare Container create: application ${name} already exists, adopting`);
+-            const existing = yield* findApplicationByName(name);
+-            if (!existing) {
+-                return yield* Effect.fail(new Error(`Container application "${name}" already exists but could not be found for adoption.`));
+-            }
+-            return yield* upsertApplication({
+-                id,
+-                news,
+-                existing: toAttributes(existing),
+-                session,
+-            });
+-        });
+-        const application = yield* Containers.createContainerApplication({
+-            accountId,
+-            name,
+-            instances: news.instances ?? 1,
+-            maxInstances: news.maxInstances ?? 1,
+-            schedulingPolicy: news.schedulingPolicy ?? "default",
+-            constraints: news.constraints ?? {},
+-            affinities: news.affinities,
+-            configuration,
+-            durableObjects,
+-        }).pipe(Effect.catchTag("DurableObjectAlreadyHasApplication", () => durableObjects
+-            ? Effect.gen(function* () {
+-                const existing = yield* findApplicationByNamespace(durableObjects.namespaceId);
+-                const recovery = resolveDurableObjectApplicationRecovery({
+-                    namespaceId: durableObjects.namespaceId,
+-                    expectedName: name,
+-                    existingName: existing?.name,
++        const rejectMismatchedDurableObjects = (existing) => deepEqual(existing.durableObjects, durableObjects)
++            ? Effect.void
++            : Effect.fail(new ContainerApplicationNameReserved({
++                applicationId: existing.applicationId,
++                applicationName: name,
++                existingDurableObjects: existing.durableObjects,
++                expectedDurableObjects: durableObjects,
++            }));
++        const createOrAdoptApplication = Effect.gen(function* () {
++            // Engine has cleared us via `read` (foreign-named applications are
++            // surfaced as `Unowned`). Re-fetch the existing application to fold
++            // it into the upsert path.
++            const existingByName = yield* findApplicationByName(name);
++            if (existingByName) {
++                const existing = toAttributes(existingByName);
++                yield* rejectMismatchedDurableObjects(existing);
++                yield* Effect.logInfo(`Cloudflare Container create: adopting existing application ${name}`);
++                return yield* upsertApplication({
++                    id,
++                    news,
++                    existing,
++                    session,
+                 });
+-                if (!recovery.canAdopt) {
+-                    return yield* Effect.fail(new Error(recovery.message));
+-                }
++            }
++            yield* Effect.logInfo(`Cloudflare Container create: creating application ${name}`);
++            yield* session.note(`Creating container application ${name}...`);
++            const adoptExistingByName = Effect.gen(function* () {
++                yield* Effect.logInfo(`Cloudflare Container create: application ${name} already exists, adopting`);
++                const existing = yield* findApplicationByName(name);
+                 if (!existing) {
+-                    return yield* Effect.fail(new Error(`Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`));
++                    return yield* Effect.fail(new Error(`Container application "${name}" already exists but could not be found for adoption.`));
+                 }
++                const attributes = toAttributes(existing);
++                yield* rejectMismatchedDurableObjects(attributes);
+                 return yield* upsertApplication({
+                     id,
+                     news,
+-                    existing: toAttributes(existing),
++                    existing: attributes,
+                     session,
+                 });
+-            })
+-            : Effect.fail(new Error("Durable Object namespace already has a container application. Set AdoptPolicy to adopt it."))), Effect.catchIf((e) => "message" in e &&
+-            String(e.message).includes("already exists"), () => adoptExistingByName), Effect.tapError((error) => Effect.logError(`Cloudflare Container create error: ${describeError(error)}`)));
++            });
++            return yield* Containers.createContainerApplication({
++                accountId,
++                name,
++                instances: news.instances ?? 1,
++                maxInstances: news.maxInstances ?? 1,
++                schedulingPolicy: news.schedulingPolicy ?? "default",
++                constraints: news.constraints ?? {},
++                affinities: news.affinities,
++                configuration,
++                durableObjects,
++            }).pipe(Effect.catchTag("DurableObjectAlreadyHasApplication", () => durableObjects
++                ? Effect.gen(function* () {
++                    const existing = yield* findApplicationByNamespace(durableObjects.namespaceId);
++                    const recovery = resolveDurableObjectApplicationRecovery({
++                        namespaceId: durableObjects.namespaceId,
++                        expectedName: name,
++                        existingName: existing?.name,
++                    });
++                    if (!recovery.canAdopt) {
++                        return yield* Effect.fail(new Error(recovery.message));
++                    }
++                    if (!existing) {
++                        return yield* Effect.fail(new Error(`Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`));
++                    }
++                    return yield* upsertApplication({
++                        id,
++                        news,
++                        existing: toAttributes(existing),
++                        session,
++                    });
++                })
++                : Effect.fail(new Error("Durable Object namespace already has a container application. Set AdoptPolicy to adopt it."))), Effect.catchIf((e) => "message" in e &&
++                String(e.message).includes("already exists"), () => adoptExistingByName));
++        });
++        const application = yield* retryForContainerApplicationNameRelease(name, createOrAdoptApplication).pipe(Effect.tapError((error) => Effect.logError(`Cloudflare Container create error: ${describeError(error)}`)));
+         return "applicationId" in application
+             ? application
+             : toAttributes(application);
+diff --git a/src/Cloudflare/Container/ContainerApplication.ts b/src/Cloudflare/Container/ContainerApplication.ts
+index 0abf655377211c636840b5de30f35e70dded76d6..51833d82d0c9eaa8182c1843930456ca4fede5e9 100644
+--- a/src/Cloudflare/Container/ContainerApplication.ts
++++ b/src/Cloudflare/Container/ContainerApplication.ts
+@@ -318,6 +318,36 @@ const resolveDurableObjectApplicationRecovery = ({
+   };
+ };
+ 
++type ContainerApplicationDurableObjects =
++  | {
++      readonly namespaceId: string;
++    }
++  | undefined;
++
++class ContainerApplicationNameReserved extends Error {
++  readonly _tag = "ContainerApplicationNameReserved";
++  readonly applicationId: string | undefined;
++  readonly applicationName: string;
++  readonly existingDurableObjects: ContainerApplicationDurableObjects;
++  readonly expectedDurableObjects: ContainerApplicationDurableObjects;
++
++  constructor(input: {
++    readonly applicationId: string | undefined;
++    readonly applicationName: string;
++    readonly existingDurableObjects: ContainerApplicationDurableObjects;
++    readonly expectedDurableObjects: ContainerApplicationDurableObjects;
++  }) {
++    super(
++      `Container application "${input.applicationName}" is still reserved by an application with a different Durable Object attachment.`,
++    );
++    this.name = "ContainerApplicationNameReserved";
++    this.applicationId = input.applicationId;
++    this.applicationName = input.applicationName;
++    this.existingDurableObjects = input.existingDurableObjects;
++    this.expectedDurableObjects = input.expectedDurableObjects;
++  }
++}
++
+ const containerApplicationReadinessSchedule = Schedule.exponential(150).pipe(
+   Schedule.both(Schedule.recurs(10)),
+ );
+@@ -330,6 +360,14 @@ const isContainerApplicationNotFound = (
+   "_tag" in error &&
+   error._tag === "ContainerApplicationNotFound";
+ 
++const isContainerApplicationNameReserved = (
++  error: unknown,
++): error is ContainerApplicationNameReserved =>
++  typeof error === "object" &&
++  error !== null &&
++  "_tag" in error &&
++  error._tag === "ContainerApplicationNameReserved";
++
+ export const retryForContainerApplicationReadiness = <A, E, R>(
+   operation: string,
+   applicationId: string,
+@@ -349,6 +387,24 @@ export const retryForContainerApplicationReadiness = <A, E, R>(
+     }),
+   );
+ 
++const retryForContainerApplicationNameRelease = <A, E, R>(
++  applicationName: string,
++  effect: Effect.Effect<A, E, R>,
++) =>
++  effect.pipe(
++    Effect.tapError((error) =>
++      isContainerApplicationNameReserved(error)
++        ? Effect.logDebug(
++            `Cloudflare Container create: application ${applicationName} still has a stale Durable Object attachment, retrying`,
++          )
++        : Effect.void,
++    ),
++    Effect.retry({
++      while: isContainerApplicationNameReserved,
++      schedule: containerApplicationReadinessSchedule,
++    }),
++  );
++
+ export const ContainerProvider = () =>
+   Provider.effect(
+     Container,
+@@ -775,98 +831,124 @@ await Effect.runPromise(serverEffect).catch((err) => {
+           return String(error);
+         };
+ 
+-        // Engine has cleared us via `read` (foreign-named applications are
+-        // surfaced as `Unowned`). Re-fetch the existing application to fold
+-        // it into the upsert path.
+-        const existingByName = yield* findApplicationByName(name);
++        const rejectMismatchedDurableObjects = (
++          existing: ContainerApplication["Attributes"],
++        ) =>
++          deepEqual(existing.durableObjects, durableObjects)
++            ? Effect.void
++            : Effect.fail(
++                new ContainerApplicationNameReserved({
++                  applicationId: existing.applicationId,
++                  applicationName: name,
++                  existingDurableObjects: existing.durableObjects,
++                  expectedDurableObjects: durableObjects,
++                }),
++              );
+ 
+-        if (existingByName) {
+-          yield* Effect.logInfo(
+-            `Cloudflare Container create: adopting existing application ${name}`,
+-          );
+-          return yield* upsertApplication({
+-            id,
+-            news,
+-            existing: toAttributes(existingByName),
+-            session,
+-          });
+-        }
++        const createOrAdoptApplication = Effect.gen(function* () {
++          // Engine has cleared us via `read` (foreign-named applications are
++          // surfaced as `Unowned`). Re-fetch the existing application to fold
++          // it into the upsert path.
++          const existingByName = yield* findApplicationByName(name);
++
++          if (existingByName) {
++            const existing = toAttributes(existingByName);
++            yield* rejectMismatchedDurableObjects(existing);
++            yield* Effect.logInfo(
++              `Cloudflare Container create: adopting existing application ${name}`,
++            );
++            return yield* upsertApplication({
++              id,
++              news,
++              existing,
++              session,
++            });
++          }
+ 
+-        yield* Effect.logInfo(
+-          `Cloudflare Container create: creating application ${name}`,
+-        );
+-        yield* session.note(`Creating container application ${name}...`);
+-        const adoptExistingByName = Effect.gen(function* () {
+           yield* Effect.logInfo(
+-            `Cloudflare Container create: application ${name} already exists, adopting`,
++            `Cloudflare Container create: creating application ${name}`,
+           );
+-          const existing = yield* findApplicationByName(name);
+-          if (!existing) {
+-            return yield* Effect.fail(
+-              new Error(
+-                `Container application "${name}" already exists but could not be found for adoption.`,
+-              ),
++          yield* session.note(`Creating container application ${name}...`);
++          const adoptExistingByName = Effect.gen(function* () {
++            yield* Effect.logInfo(
++              `Cloudflare Container create: application ${name} already exists, adopting`,
+             );
+-          }
+-          return yield* upsertApplication({
+-            id,
+-            news,
+-            existing: toAttributes(existing),
+-            session,
++            const existing = yield* findApplicationByName(name);
++            if (!existing) {
++              return yield* Effect.fail(
++                new Error(
++                  `Container application "${name}" already exists but could not be found for adoption.`,
++                ),
++              );
++            }
++            const attributes = toAttributes(existing);
++            yield* rejectMismatchedDurableObjects(attributes);
++            return yield* upsertApplication({
++              id,
++              news,
++              existing: attributes,
++              session,
++            });
+           });
+-        });
+ 
+-        const application = yield* Containers.createContainerApplication({
+-          accountId,
+-          name,
+-          instances: news.instances ?? 1,
+-          maxInstances: news.maxInstances ?? 1,
+-          schedulingPolicy: news.schedulingPolicy ?? "default",
+-          constraints: news.constraints ?? {},
+-          affinities: news.affinities,
+-          configuration,
+-          durableObjects,
+-        }).pipe(
+-          Effect.catchTag("DurableObjectAlreadyHasApplication", () =>
+-            durableObjects
+-              ? Effect.gen(function* () {
+-                  const existing = yield* findApplicationByNamespace(
+-                    durableObjects.namespaceId,
+-                  );
+-                  const recovery = resolveDurableObjectApplicationRecovery({
+-                    namespaceId: durableObjects.namespaceId,
+-                    expectedName: name,
+-                    existingName: existing?.name,
+-                  });
+-                  if (!recovery.canAdopt) {
+-                    return yield* Effect.fail(new Error(recovery.message));
+-                  }
+-                  if (!existing) {
+-                    return yield* Effect.fail(
+-                      new Error(
+-                        `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
+-                      ),
++          return yield* Containers.createContainerApplication({
++            accountId,
++            name,
++            instances: news.instances ?? 1,
++            maxInstances: news.maxInstances ?? 1,
++            schedulingPolicy: news.schedulingPolicy ?? "default",
++            constraints: news.constraints ?? {},
++            affinities: news.affinities,
++            configuration,
++            durableObjects,
++          }).pipe(
++            Effect.catchTag("DurableObjectAlreadyHasApplication", () =>
++              durableObjects
++                ? Effect.gen(function* () {
++                    const existing = yield* findApplicationByNamespace(
++                      durableObjects.namespaceId,
+                     );
+-                  }
+-                  return yield* upsertApplication({
+-                    id,
+-                    news,
+-                    existing: toAttributes(existing),
+-                    session,
+-                  });
+-                })
+-              : Effect.fail(
+-                  new Error(
+-                    "Durable Object namespace already has a container application. Set AdoptPolicy to adopt it.",
++                    const recovery = resolveDurableObjectApplicationRecovery({
++                      namespaceId: durableObjects.namespaceId,
++                      expectedName: name,
++                      existingName: existing?.name,
++                    });
++                    if (!recovery.canAdopt) {
++                      return yield* Effect.fail(new Error(recovery.message));
++                    }
++                    if (!existing) {
++                      return yield* Effect.fail(
++                        new Error(
++                          `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
++                        ),
++                      );
++                    }
++                    return yield* upsertApplication({
++                      id,
++                      news,
++                      existing: toAttributes(existing),
++                      session,
++                    });
++                  })
++                : Effect.fail(
++                    new Error(
++                      "Durable Object namespace already has a container application. Set AdoptPolicy to adopt it.",
++                    ),
+                   ),
+-                ),
+-          ),
+-          Effect.catchIf(
+-            (e) =>
+-              "message" in (e as any) &&
+-              String((e as any).message).includes("already exists"),
+-            () => adoptExistingByName,
+-          ),
++            ),
++            Effect.catchIf(
++              (e) =>
++                "message" in (e as any) &&
++                String((e as any).message).includes("already exists"),
++              () => adoptExistingByName,
++            ),
++          );
++        });
++
++        const application = yield* retryForContainerApplicationNameRelease(
++          name,
++          createOrAdoptApplication,
++        ).pipe(
+           Effect.tapError((error) =>
+             Effect.logError(
+               `Cloudflare Container create error: ${describeError(error)}`,

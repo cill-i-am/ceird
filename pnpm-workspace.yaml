@@ -37,4 +37,5 @@ patchedDependencies:
   ajv@8.20.0: patches/ajv@8.20.0.patch
   ajv-formats@3.0.1: patches/ajv-formats@3.0.1.patch
   agents@0.16.0: patches/agents@0.16.0.patch
+  alchemy@2.0.0-beta.55: patches/alchemy@2.0.0-beta.55.patch
   workers-ai-provider@3.1.14: patches/workers-ai-provider@3.1.14.patch
