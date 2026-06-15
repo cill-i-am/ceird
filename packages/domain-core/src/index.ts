@@ -3,6 +3,7 @@ export {
   makeDomainServiceClient,
 } from "./service-binding.js";
 export {
+  ACTIVE_LABELS_SYNC_WHERE,
   isSyncInternalPath,
   makeSyncShapeAuthorizationPath,
   ORGANIZATION_SYNC_WHERE,
