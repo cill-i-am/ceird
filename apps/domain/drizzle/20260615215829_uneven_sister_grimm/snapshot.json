@@ -1,8 +1,15 @@
 {
-  "dialect": "postgres",
-  "id": "612f5ce3-2684-47a8-a55a-ace691a31611",
-  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "version": "8",
+  "dialect": "postgres",
+  "id": "7cdd21f3-9f53-4436-9e75-d6d3c5dc51d5",
+  "prevIds": [
+    "25f36a63-7647-44ba-b18c-c7db851e5310",
+    "2787c5fb-68b9-4d37-94eb-36756035af00",
+    "421f32f5-5bb2-47d9-b78c-6e0ecd615559",
+    "b8414801-d66f-4622-8a96-6a1b5db60aa6",
+    "c0c29aa4-fa3f-4785-8fd9-9ac1a78576f0",
+    "cb66f208-b837-4b70-9bd1-edfda7f0a2cd"
+  ],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -91,18 +98,6 @@
     {
       "isRlsEnabled": false,
       "name": "organization",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "product_activity_actors",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "product_activity_actor_sources",
       "entityType": "tables",
       "schema": "public"
     },
@@ -854,19 +849,6 @@
       "generated": null,
       "identity": null,
       "name": "author_user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_id",
       "entityType": "columns",
       "schema": "public",
       "table": "comments"
@@ -2198,227 +2180,6 @@
       "table": "organization"
     },
     {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "display_name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "display_detail",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "route_href",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "route_label",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "agent_thread_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "system_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -3693,19 +3454,6 @@
       "table": "work_item_activity"
     },
     {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
       "type": "jsonb",
       "typeSchema": null,
       "notNull": true,
@@ -4577,34 +4325,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "actor_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "comments_actor_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "updated_by_user_id",
           "isExpression": false,
           "asc": true,
@@ -5342,160 +5062,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "organization"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "product_activity_actors_id_org_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "kind",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "updated_at",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "product_activity_actors_org_kind_updated_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"kind\" = 'member'",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "product_activity_actor_sources_member_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "agent_thread_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"kind\" = 'agent'",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "product_activity_actor_sources_agent_thread_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "system_key",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"kind\" = 'system'",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "product_activity_actor_sources_system_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
     },
     {
       "nameExplicit": true,
@@ -6505,48 +6071,6 @@
           "opclass": null
         },
         {
-          "value": "actor_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "work_item_activity_organization_actor_id_created_at_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
           "value": "event_type",
           "isExpression": false,
           "asc": true,
@@ -6915,19 +6439,6 @@
       "table": "comments"
     },
     {
-      "nameExplicit": true,
-      "columns": ["actor_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "product_activity_actors",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "comments_actor_org_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
       "nameExplicit": false,
       "columns": ["organization_id"],
       "schemaTo": "public",
@@ -7134,71 +6645,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "oauth_refresh_token"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["organization_id"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "product_activity_actors_organization_id_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["organization_id"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "product_activity_actor_sources_maep6qoXJmr4_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "product_activity_actor_sources_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["actor_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "product_activity_actors",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "product_activity_actor_sources_actor_org_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["agent_thread_id", "organization_id", "user_id"],
-      "schemaTo": "public",
-      "tableTo": "agent_threads",
-      "columnsTo": ["id", "organization_id", "user_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "product_activity_actor_sources_agent_thread_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
     },
     {
       "nameExplicit": false,
@@ -7521,19 +6967,6 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "work_item_activity_work_item_organization_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["actor_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "product_activity_actors",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "work_item_activity_actor_org_fk",
       "entityType": "fks",
       "schema": "public",
       "table": "work_item_activity"
@@ -7862,22 +7295,6 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "product_activity_actors_pkey",
-      "schema": "public",
-      "table": "product_activity_actors",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["actor_id"],
-      "nameExplicit": false,
-      "name": "product_activity_actor_sources_pkey",
-      "schema": "public",
-      "table": "product_activity_actor_sources",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
       "name": "rate_limit_pkey",
       "schema": "public",
       "table": "rate_limit",
@@ -8135,41 +7552,6 @@
       "entityType": "checks",
       "schema": "public",
       "table": "organization"
-    },
-    {
-      "value": "\"kind\" in ('member', 'agent', 'system')",
-      "name": "product_activity_actors_kind_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "value": "length(trim(\"display_name\")) > 0",
-      "name": "product_activity_actors_display_name_not_empty_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "value": "(\"route_href\" is null and \"route_label\" is null) or (\"route_href\" is not null and \"route_label\" is not null)",
-      "name": "product_activity_actors_route_consistent_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "value": "\"kind\" in ('member', 'agent', 'system')",
-      "name": "product_activity_actor_sources_kind_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "value": "(\n        \"kind\" = 'member'\n        and \"user_id\" is not null\n        and \"agent_thread_id\" is null\n        and \"system_key\" is null\n      ) or (\n        \"kind\" = 'agent'\n        and \"user_id\" is not null\n        and \"agent_thread_id\" is not null\n        and \"system_key\" is null\n      ) or (\n        \"kind\" = 'system'\n        and \"user_id\" is null\n        and \"agent_thread_id\" is null\n        and \"system_key\" is not null\n      )",
-      "name": "product_activity_actor_sources_one_source_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
     },
     {
       "value": "\"country\" is null or \"country\" in ('IE', 'GB')",

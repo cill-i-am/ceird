@@ -19,6 +19,7 @@ import {
   doublePrecision,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -174,7 +175,46 @@ export const siteLabel = pgTable(
   ]
 );
 
+export const siteActiveJobSummary = pgTable(
+  "site_active_job_summaries",
+  {
+    siteId: uuid("site_id").notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    activeJobCount: integer("active_job_count").notNull().default(0),
+    highestActiveJobPriority: text("highest_active_job_priority"),
+    updatedAt: sitesTimestamp("updated_at"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.siteId, table.organizationId] }),
+    foreignKey({
+      columns: [table.siteId, table.organizationId],
+      foreignColumns: [site.id, site.organizationId],
+      name: "site_active_job_summaries_site_org_fk",
+    }).onDelete("cascade"),
+    index("site_active_job_summaries_organization_updated_at_idx").on(
+      table.organizationId,
+      table.updatedAt.desc(),
+      table.siteId.asc()
+    ),
+    check(
+      "site_active_job_summaries_count_non_negative_chk",
+      sql`${table.activeJobCount} >= 0`
+    ),
+    check(
+      "site_active_job_summaries_priority_chk",
+      sql`${table.highestActiveJobPriority} is null or ${table.highestActiveJobPriority} in ('none', 'low', 'medium', 'high', 'urgent')`
+    ),
+    check(
+      "site_active_job_summaries_priority_count_consistency_chk",
+      sql`(${table.activeJobCount} = 0 and ${table.highestActiveJobPriority} is null) or (${table.activeJobCount} > 0 and ${table.highestActiveJobPriority} is not null)`
+    ),
+  ]
+);
+
 export const sitesSchema = {
   site,
+  siteActiveJobSummary,
   siteLabel,
 };

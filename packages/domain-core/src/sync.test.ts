@@ -118,6 +118,7 @@ describe("domain sync boundary contracts", () => {
 
   it("keeps shape names explicit for the public sync API", () => {
     expect(SYNC_SHAPE_NAMES).toContain("jobs");
+    expect(SYNC_SHAPE_NAMES).toContain("site-active-job-summaries");
     expect(SYNC_SHAPE_NAMES).toContain("sites");
     expect(SYNC_SHAPE_NAMES).toContain("agent-action-runs");
     expect(SYNC_SHAPE_NAMES).toContain("product-activity-actors");

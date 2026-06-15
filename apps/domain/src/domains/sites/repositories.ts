@@ -33,7 +33,16 @@ import type {
   SiteOption,
   SiteProximityFilters,
 } from "@ceird/sites-core";
-import { and, asc, eq, gt, isNull, or, sql as drizzleSql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  or,
+  sql as drizzleSql,
+} from "drizzle-orm";
 import {
   Array as Arr,
   Context,
@@ -48,7 +57,7 @@ import { SqlClient } from "effect/unstable/sql";
 import { DomainDrizzle } from "../../platform/database/database.js";
 import { decodeJsonCursor, encodeJsonCursor } from "../json-cursor.js";
 import { generateSiteId } from "./id-generation.js";
-import { site } from "./schema.js";
+import { site, siteActiveJobSummary } from "./schema.js";
 import {
   listSiteLabelsForOrganizationWithDrizzle,
   listSiteLabelsForSitesWithDrizzle,
@@ -116,12 +125,6 @@ interface SiteProximityStatsRow {
   readonly candidate_count: number;
   readonly missing_coordinates_count: number;
   readonly unmapped_site_count: number;
-}
-
-interface SiteActiveJobSummaryRow {
-  readonly active_job_count: number;
-  readonly highest_active_job_priority: string | null;
-  readonly site_id: string;
 }
 
 export interface CreateSiteRecordInput
@@ -453,35 +456,21 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
       const getActiveJobSummary = Effect.fn(
         "SitesRepository.getActiveJobSummary"
       )(function* (organizationId: OrganizationId, siteId: SiteId) {
-        // Raw SQL is retained for this aggregate projection because it uses
-        // PostgreSQL-specific priority ranking and filtered status logic.
-        const rows = yield* sql<{
-          readonly active_job_count: number;
-          readonly highest_active_job_priority: string | null;
-        }>`
-          select
-            count(*)::integer as active_job_count,
-            case max(
-              case work_items.priority
-                when 'urgent' then 4
-                when 'high' then 3
-                when 'medium' then 2
-                when 'low' then 1
-                else 0
-              end
+        const { db } = yield* DomainDrizzle;
+        const rows = yield* db
+          .select({
+            active_job_count: siteActiveJobSummary.activeJobCount,
+            highest_active_job_priority:
+              siteActiveJobSummary.highestActiveJobPriority,
+          })
+          .from(siteActiveJobSummary)
+          .where(
+            and(
+              eq(siteActiveJobSummary.organizationId, organizationId),
+              eq(siteActiveJobSummary.siteId, siteId)
             )
-              when 4 then 'urgent'
-              when 3 then 'high'
-              when 2 then 'medium'
-              when 1 then 'low'
-              when 0 then case when count(*) > 0 then 'none' else null end
-              else null
-            end as highest_active_job_priority
-          from work_items
-          where work_items.organization_id = ${organizationId}
-            and work_items.site_id = ${siteId}
-            and work_items.status not in ('completed', 'canceled')
-        `;
+          )
+          .limit(1);
         const [row] = rows;
 
         return {
@@ -973,7 +962,7 @@ function addExcluded(
 }
 
 function listActiveJobSummariesForSites(
-  sql: SqlClient.SqlClient,
+  _sql: SqlClient.SqlClient,
   organizationId: OrganizationId,
   siteIds: readonly SiteId[]
 ) {
@@ -982,34 +971,21 @@ function listActiveJobSummariesForSites(
   }
 
   return Effect.gen(function* () {
-    // Raw SQL is retained for this aggregate projection because it shares the
-    // PostgreSQL-specific priority ranking used by getActiveJobSummary.
-    const rows = yield* sql<SiteActiveJobSummaryRow>`
-      select
-        work_items.site_id,
-        count(*)::integer as active_job_count,
-        case max(
-          case work_items.priority
-            when 'urgent' then 4
-            when 'high' then 3
-            when 'medium' then 2
-            when 'low' then 1
-            else 0
-          end
+    const { db } = yield* DomainDrizzle;
+    const rows = yield* db
+      .select({
+        active_job_count: siteActiveJobSummary.activeJobCount,
+        highest_active_job_priority:
+          siteActiveJobSummary.highestActiveJobPriority,
+        site_id: siteActiveJobSummary.siteId,
+      })
+      .from(siteActiveJobSummary)
+      .where(
+        and(
+          eq(siteActiveJobSummary.organizationId, organizationId),
+          inArray(siteActiveJobSummary.siteId, siteIds)
         )
-          when 4 then 'urgent'
-          when 3 then 'high'
-          when 2 then 'medium'
-          when 1 then 'low'
-          when 0 then case when count(*) > 0 then 'none' else null end
-          else null
-        end as highest_active_job_priority
-      from work_items
-      where work_items.organization_id = ${organizationId}
-        and work_items.site_id in ${sql.in(siteIds)}
-        and work_items.status not in ('completed', 'canceled')
-      group by work_items.site_id
-    `;
+      );
     const summaries = new Map<SiteId, SiteActiveJobSummary>(
       siteIds.map((siteId) => [siteId, { activeJobCount: 0 }])
     );

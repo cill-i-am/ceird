@@ -1,15 +1,8 @@
 {
-  "version": "8",
   "dialect": "postgres",
-  "id": "9d6e4f59-d80c-48fd-b65d-57819db2a9a0",
-  "prevIds": [
-    "25f36a63-7647-44ba-b18c-c7db851e5310",
-    "2787c5fb-68b9-4d37-94eb-36756035af00",
-    "421f32f5-5bb2-47d9-b78c-6e0ecd615559",
-    "b8414801-d66f-4622-8a96-6a1b5db60aa6",
-    "c0c29aa4-fa3f-4785-8fd9-9ac1a78576f0",
-    "cb66f208-b837-4b70-9bd1-edfda7f0a2cd"
-  ],
+  "id": "612f5ce3-2684-47a8-a55a-ace691a31611",
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
+  "version": "8",
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -128,6 +121,12 @@
     {
       "isRlsEnabled": false,
       "name": "sites",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "site_active_job_summaries",
       "entityType": "tables",
       "schema": "public"
     },
@@ -2886,6 +2885,71 @@
       "entityType": "columns",
       "schema": "public",
       "table": "sites"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "site_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "active_job_count",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "highest_active_job_priority",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_active_job_summaries"
     },
     {
       "type": "uuid",
@@ -5661,6 +5725,41 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "updated_at",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "site_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "site_active_job_summaries_organization_updated_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "site_id",
           "isExpression": false,
           "asc": true,
@@ -7141,6 +7240,32 @@
       "table": "sites"
     },
     {
+      "nameExplicit": false,
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "site_active_job_summaries_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": ["site_id", "organization_id"],
+      "schemaTo": "public",
+      "tableTo": "sites",
+      "columnsTo": ["id", "organization_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "site_active_job_summaries_site_org_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
       "nameExplicit": true,
       "columns": ["comment_id", "organization_id"],
       "schemaTo": "public",
@@ -7581,6 +7706,14 @@
       "entityType": "fks",
       "schema": "public",
       "table": "work_item_visits"
+    },
+    {
+      "columns": ["site_id", "organization_id"],
+      "nameExplicit": false,
+      "name": "site_active_job_summaries_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "site_active_job_summaries"
     },
     {
       "columns": ["site_id", "contact_id"],
@@ -8100,6 +8233,27 @@
       "entityType": "checks",
       "schema": "public",
       "table": "sites"
+    },
+    {
+      "value": "\"active_job_count\" >= 0",
+      "name": "site_active_job_summaries_count_non_negative_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "value": "\"highest_active_job_priority\" is null or \"highest_active_job_priority\" in ('none', 'low', 'medium', 'high', 'urgent')",
+      "name": "site_active_job_summaries_priority_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "value": "(\"active_job_count\" = 0 and \"highest_active_job_priority\" is null) or (\"active_job_count\" > 0 and \"highest_active_job_priority\" is not null)",
+      "name": "site_active_job_summaries_priority_count_consistency_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "site_active_job_summaries"
     },
     {
       "value": "\"kind\" in ('job', 'issue', 'inspection', 'maintenance_request')",

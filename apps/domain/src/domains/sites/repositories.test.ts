@@ -230,6 +230,18 @@ describe("sites repository", () => {
         title: "Other organization job",
         userId,
       });
+      await seedSiteActiveJobSummary(pool, {
+        activeJobCount: 2,
+        highestActiveJobPriority: "urgent",
+        organizationId,
+        siteId: activeSiteId,
+      });
+      await seedSiteActiveJobSummary(pool, {
+        activeJobCount: 1,
+        highestActiveJobPriority: "urgent",
+        organizationId: otherOrganizationId,
+        siteId: otherOrganizationSiteId,
+      });
     });
 
     const options = await runSitesRepositoryEffect(
@@ -557,6 +569,38 @@ async function seedWorkItem(
       input.status === "completed" ? new Date() : null,
       input.status === "completed" ? input.userId : null,
       input.userId,
+    ]
+  );
+}
+
+async function seedSiteActiveJobSummary(
+  pool: Pool,
+  input: {
+    readonly activeJobCount: number;
+    readonly highestActiveJobPriority:
+      | "high"
+      | "low"
+      | "medium"
+      | "none"
+      | "urgent";
+    readonly organizationId: string;
+    readonly siteId: string;
+  }
+) {
+  await pool.query(
+    `insert into site_active_job_summaries (
+       site_id,
+       organization_id,
+       active_job_count,
+       highest_active_job_priority,
+       updated_at
+     )
+     values ($1, $2, $3, $4, now())`,
+    [
+      input.siteId,
+      input.organizationId,
+      input.activeJobCount,
+      input.highestActiveJobPriority,
     ]
   );
 }

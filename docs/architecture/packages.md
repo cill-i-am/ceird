@@ -98,7 +98,9 @@ Exports the shared contract for calling the private domain Worker:
 - `makeDomainOriginClient`, the package-local development origin client
 - sync shape names, private sync authorization path helpers, sync
   authorization DTO schemas, and typed sync authorization errors used by
-  `apps/domain`, `apps/sync`, and the public API boundary guard
+  `apps/domain`, `apps/sync`, and the public API boundary guard; named product
+  shapes include raw domain tables and product-safe projections such as
+  `site-active-job-summaries`
 
 Keep product repositories, Drizzle schema, authorization, action execution, and
 audit behavior out of this package. Those are owned by `apps/domain`; this

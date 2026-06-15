@@ -1,15 +1,9 @@
 {
   "dialect": "postgres",
-  "id": "612f5ce3-2684-47a8-a55a-ace691a31611",
+  "id": "a23736b4-6f35-4e5e-8d74-c85876808bab",
   "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "version": "8",
   "ddl": [
-    {
-      "isRlsEnabled": false,
-      "name": "account",
-      "entityType": "tables",
-      "schema": "public"
-    },
     {
       "isRlsEnabled": false,
       "name": "agent_action_runs",
@@ -24,19 +18,31 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "auth_security_audit_event",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
       "name": "comments",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "contacts",
+      "name": "site_comments",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "work_item_comments",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "account",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "auth_security_audit_event",
       "entityType": "tables",
       "schema": "public"
     },
@@ -49,12 +55,6 @@
     {
       "isRlsEnabled": false,
       "name": "jwks",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "labels",
       "entityType": "tables",
       "schema": "public"
     },
@@ -96,18 +96,6 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "product_activity_actors",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "product_activity_actor_sources",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
       "name": "rate_limit",
       "entityType": "tables",
       "schema": "public"
@@ -115,36 +103,6 @@
     {
       "isRlsEnabled": false,
       "name": "session",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "sites",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "site_active_job_summaries",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "site_comments",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "site_contacts",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "site_labels",
       "entityType": "tables",
       "schema": "public"
     },
@@ -162,13 +120,25 @@
     },
     {
       "isRlsEnabled": false,
+      "name": "verification",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
       "name": "user_preferences",
       "entityType": "tables",
       "schema": "public"
     },
     {
       "isRlsEnabled": false,
-      "name": "verification",
+      "name": "contacts",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "site_contacts",
       "entityType": "tables",
       "schema": "public"
     },
@@ -192,12 +162,6 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "work_item_comments",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
       "name": "work_item_labels",
       "entityType": "tables",
       "schema": "public"
@@ -209,173 +173,28 @@
       "schema": "public"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
+      "isRlsEnabled": false,
+      "name": "labels",
+      "entityType": "tables",
+      "schema": "public"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "account_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
+      "isRlsEnabled": false,
+      "name": "sites",
+      "entityType": "tables",
+      "schema": "public"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "provider_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
+      "isRlsEnabled": false,
+      "name": "site_active_job_summaries",
+      "entityType": "tables",
+      "schema": "public"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "access_token",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "refresh_token",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id_token",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "access_token_expires_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "refresh_token_expires_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "scope",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "password",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
+      "isRlsEnabled": false,
+      "name": "site_labels",
+      "entityType": "tables",
+      "schema": "public"
     },
     {
       "type": "uuid",
@@ -677,6 +496,370 @@
       "table": "agent_threads"
     },
     {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "comments"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "comments"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "author_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "comments"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "body",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "comments"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "comments"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "comments"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_by_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "comments"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "comment_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_comments"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_comments"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "site_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_comments"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_comments"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "comment_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_comments"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_comments"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "work_item_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_comments"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_comments"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "account_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "provider_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "access_token",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "refresh_token",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id_token",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "access_token_expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "refresh_token_expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "scope",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "password",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -818,227 +1001,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "auth_security_audit_event"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "author_user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "body",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "updated_by_user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "contacts"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "contacts"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "contacts"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "email",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "contacts"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "phone",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "contacts"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "notes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "contacts"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "contacts"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "contacts"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "archived_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "contacts"
     },
     {
       "type": "text",
@@ -1208,97 +1170,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "jwks"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "normalized_name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "archived_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "labels"
     },
     {
       "type": "text",
@@ -2198,227 +2069,6 @@
       "table": "organization"
     },
     {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "display_name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "display_detail",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "route_href",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "route_label",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "agent_thread_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "system_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -2586,6 +2236,1163 @@
       "entityType": "columns",
       "schema": "public",
       "table": "session"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "two_factor"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "secret",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "two_factor"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "backup_codes",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "two_factor"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "two_factor"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "verified",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "two_factor"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "email",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "email_verified",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "two_factor_enabled",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "image",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "verification"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "identifier",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "verification"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "value",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "verification"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "verification"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "verification"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "verification"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_preferences"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "route_proximity_location_enabled",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_preferences"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_preferences"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user_preferences"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "contacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "contacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "contacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "email",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "contacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "phone",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "contacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "notes",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "contacts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "contacts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "contacts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "archived_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "contacts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "site_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_contacts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "contact_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_contacts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_contacts"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "is_primary",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_contacts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "site_contacts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "title",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'none'",
+      "generated": null,
+      "identity": null,
+      "name": "priority",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "site_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "contact_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "assignee_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "coordinator_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "blocked_reason",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "completed_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "completed_by_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_by_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_items"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_activity"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "work_item_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_activity"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_activity"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_activity"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "actor_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_activity"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "payload",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_activity"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_activity"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_collaborators"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_collaborators"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "work_item_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_collaborators"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'user'",
+      "generated": null,
+      "identity": null,
+      "name": "subject_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_collaborators"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_collaborators"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "role_label",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_collaborators"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'comment'",
+      "generated": null,
+      "identity": null,
+      "name": "access_level",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_collaborators"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_by_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_collaborators"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_collaborators"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_collaborators"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "work_item_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_labels"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "label_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_labels"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_labels"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_labels"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_visits"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "work_item_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_visits"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_visits"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "author_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_visits"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "visit_date",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_visits"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "duration_minutes",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_visits"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "note",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_visits"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "work_item_visits"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "normalized_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "archived_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "labels"
     },
     {
       "type": "uuid",
@@ -2959,123 +3766,6 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "comment_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "site_comments"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "site_comments"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "site_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "site_comments"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "site_comments"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "site_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "site_contacts"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "contact_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "site_contacts"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "site_contacts"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "false",
-      "generated": null,
-      "identity": null,
-      "name": "is_primary",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "site_contacts"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "site_contacts"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
       "name": "site_id",
       "entityType": "columns",
       "schema": "public",
@@ -3119,1004 +3809,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "site_labels"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "two_factor"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "secret",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "two_factor"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "backup_codes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "two_factor"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "two_factor"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "true",
-      "generated": null,
-      "identity": null,
-      "name": "verified",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "two_factor"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "email",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "false",
-      "generated": null,
-      "identity": null,
-      "name": "email_verified",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "false",
-      "generated": null,
-      "identity": null,
-      "name": "two_factor_enabled",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "image",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user_preferences"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "false",
-      "generated": null,
-      "identity": null,
-      "name": "route_proximity_location_enabled",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user_preferences"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user_preferences"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user_preferences"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "identifier",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "value",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "expires_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "title",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'none'",
-      "generated": null,
-      "identity": null,
-      "name": "priority",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "site_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "contact_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "assignee_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "coordinator_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "blocked_reason",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "completed_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "completed_by_user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_by_user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_items"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "work_item_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "event_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "payload",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_collaborators"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_collaborators"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "work_item_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_collaborators"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'user'",
-      "generated": null,
-      "identity": null,
-      "name": "subject_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_collaborators"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_collaborators"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "role_label",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_collaborators"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'comment'",
-      "generated": null,
-      "identity": null,
-      "name": "access_level",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_collaborators"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_by_user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_collaborators"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_collaborators"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_collaborators"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "comment_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_comments"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_comments"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "work_item_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_comments"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_comments"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "work_item_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_labels"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "label_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_labels"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_labels"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_labels"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_visits"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "work_item_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_visits"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organization_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_visits"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "author_user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_visits"
-    },
-    {
-      "type": "date",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "visit_date",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_visits"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "duration_minutes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_visits"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "note",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_visits"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "work_item_visits"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "account_user_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "provider_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "account_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "account_provider_account_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "account"
     },
     {
       "nameExplicit": true,
@@ -4299,6 +3991,286 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "agent_threads"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "comments_id_organization_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "comments_organization_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "author_user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "comments_author_user_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "updated_by_user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "comments_updated_by_user_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "site_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "comment_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "site_comments_site_created_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "site_comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "comment_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "site_comments_organization_created_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "site_comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "work_item_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "comment_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "work_item_comments_work_item_created_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "work_item_comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "comment_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "work_item_comments_organization_created_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "work_item_comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "account_user_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "account"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "provider_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "account_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "account_provider_account_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "account"
     },
     {
       "nameExplicit": true,
@@ -4507,209 +4479,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "comments_id_organization_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "comments_organization_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "author_user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "comments_author_user_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "actor_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "comments_actor_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "updated_by_user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "comments_updated_by_user_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "comments"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "name",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "contacts_organization_name_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "contacts"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "email",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "contacts_organization_email_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "contacts"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "contacts_id_organization_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "contacts"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "organization_id",
           "isExpression": false,
           "asc": true,
@@ -4747,118 +4516,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "invitation"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "normalized_name",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"archived_at\" is null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "labels_organization_normalized_active_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "labels_id_organization_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "labels_organization_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "name",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": "\"archived_at\" is null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "labels_organization_name_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "labels"
     },
     {
       "nameExplicit": true,
@@ -5347,160 +5004,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "product_activity_actors_id_org_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "kind",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "updated_at",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "product_activity_actors_org_kind_updated_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"kind\" = 'member'",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "product_activity_actor_sources_member_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "agent_thread_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"kind\" = 'agent'",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "product_activity_actor_sources_agent_thread_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "system_key",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"kind\" = 'system'",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "product_activity_actor_sources_system_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "key",
           "isExpression": false,
           "asc": true,
@@ -5592,23 +5095,9 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "organization_id",
+          "value": "secret",
           "isExpression": false,
           "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "updated_at",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": false,
           "nullsFirst": false,
           "opclass": null
         }
@@ -5618,10 +5107,52 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "sites_organization_updated_at_idx",
+      "name": "two_factor_secret_idx",
       "entityType": "indexes",
       "schema": "public",
-      "table": "sites"
+      "table": "two_factor"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "two_factor_user_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "two_factor"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "identifier",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "verification_identifier_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "verification"
     },
     {
       "nameExplicit": true,
@@ -5634,29 +5165,50 @@
           "opclass": null
         },
         {
-          "value": "updated_at",
+          "value": "name",
           "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": false,
+          "asc": true,
           "nullsFirst": false,
           "opclass": null
         }
       ],
       "isUnique": false,
-      "where": "\"archived_at\" is null and \"location_status\" in ('google_resolved', 'manually_adjusted', 'validated') and \"latitude\" is not null and \"longitude\" is not null",
+      "where": null,
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "sites_organization_routeable_updated_at_idx",
+      "name": "contacts_organization_name_idx",
       "entityType": "indexes",
       "schema": "public",
-      "table": "sites"
+      "table": "contacts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "email",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "contacts_organization_email_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "contacts"
     },
     {
       "nameExplicit": true,
@@ -5681,150 +5233,10 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "sites_id_organization_idx",
+      "name": "contacts_id_organization_idx",
       "entityType": "indexes",
       "schema": "public",
-      "table": "sites"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "name",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": "\"archived_at\" is null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "sites_organization_active_name_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "sites"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "updated_at",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "site_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "site_active_job_summaries_organization_updated_at_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "site_active_job_summaries"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "site_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "comment_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "site_comments_site_created_at_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "site_comments"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "comment_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "site_comments_organization_created_at_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "site_comments"
+      "table": "contacts"
     },
     {
       "nameExplicit": true,
@@ -5916,139 +5328,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "site_contacts"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "label_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "site_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "site_labels_label_site_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "site_labels"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "site_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "label_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "site_labels_site_label_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "site_labels"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "secret",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "two_factor_secret_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "two_factor"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "two_factor_user_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "two_factor"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "identifier",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "verification_identifier_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "verification"
     },
     {
       "nameExplicit": true,
@@ -6505,48 +5784,6 @@
           "opclass": null
         },
         {
-          "value": "actor_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "work_item_activity_organization_actor_id_created_at_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
           "value": "event_type",
           "isExpression": false,
           "asc": true,
@@ -6647,76 +5884,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "work_item_collaborators"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "work_item_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "comment_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "work_item_comments_work_item_created_at_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "work_item_comments"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "comment_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "work_item_comments_organization_created_at_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "work_item_comments"
     },
     {
       "nameExplicit": true,
@@ -6824,17 +5991,354 @@
       "table": "work_item_visits"
     },
     {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "account_user_id_user_id_fkey",
-      "entityType": "fks",
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "normalized_name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"archived_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "labels_organization_normalized_active_idx",
+      "entityType": "indexes",
       "schema": "public",
-      "table": "account"
+      "table": "labels"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "labels_id_organization_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "labels_organization_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"archived_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "labels_organization_name_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "updated_at",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sites_organization_updated_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "updated_at",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"archived_at\" is null and \"location_status\" in ('google_resolved', 'manually_adjusted', 'validated') and \"latitude\" is not null and \"longitude\" is not null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sites_organization_routeable_updated_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sites_id_organization_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": "\"archived_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sites_organization_active_name_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "updated_at",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "site_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "site_active_job_summaries_organization_updated_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "label_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "site_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "site_labels_label_site_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "site_labels"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "site_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "label_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "site_labels_site_label_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "site_labels"
     },
     {
       "nameExplicit": true,
@@ -6916,29 +6420,68 @@
     },
     {
       "nameExplicit": true,
-      "columns": ["actor_id", "organization_id"],
+      "columns": ["comment_id", "organization_id"],
       "schemaTo": "public",
-      "tableTo": "product_activity_actors",
+      "tableTo": "comments",
       "columnsTo": ["id", "organization_id"],
       "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "comments_actor_org_fk",
+      "onDelete": "CASCADE",
+      "name": "site_comments_comment_org_fk",
       "entityType": "fks",
       "schema": "public",
-      "table": "comments"
+      "table": "site_comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": ["site_id", "organization_id"],
+      "schemaTo": "public",
+      "tableTo": "sites",
+      "columnsTo": ["id", "organization_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "site_comments_site_org_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "site_comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": ["comment_id", "organization_id"],
+      "schemaTo": "public",
+      "tableTo": "comments",
+      "columnsTo": ["id", "organization_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "work_item_comments_comment_org_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "work_item_comments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": ["work_item_id", "organization_id"],
+      "schemaTo": "public",
+      "tableTo": "work_items",
+      "columnsTo": ["id", "organization_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "work_item_comments_work_item_org_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "work_item_comments"
     },
     {
       "nameExplicit": false,
-      "columns": ["organization_id"],
+      "columns": ["user_id"],
       "schemaTo": "public",
-      "tableTo": "organization",
+      "tableTo": "user",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "contacts_organization_id_organization_id_fkey",
+      "name": "account_user_id_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "contacts"
+      "table": "account"
     },
     {
       "nameExplicit": false,
@@ -6965,19 +6508,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "invitation"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["organization_id"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "labels_organization_id_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "labels"
     },
     {
       "nameExplicit": false,
@@ -7137,71 +6667,6 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["organization_id"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "product_activity_actors_organization_id_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["organization_id"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "product_activity_actor_sources_maep6qoXJmr4_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "product_activity_actor_sources_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["actor_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "product_activity_actors",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "product_activity_actor_sources_actor_org_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["agent_thread_id", "organization_id", "user_id"],
-      "schemaTo": "public",
-      "tableTo": "agent_threads",
-      "columnsTo": ["id", "organization_id", "user_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "product_activity_actor_sources_agent_thread_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "nameExplicit": false,
       "columns": ["active_organization_id"],
       "schemaTo": "public",
       "tableTo": "organization",
@@ -7228,16 +6693,29 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["organization_id"],
+      "columns": ["user_id"],
       "schemaTo": "public",
-      "tableTo": "organization",
+      "tableTo": "user",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "sites_organization_id_organization_id_fkey",
+      "name": "two_factor_user_id_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "sites"
+      "table": "two_factor"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "user_preferences_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "user_preferences"
     },
     {
       "nameExplicit": false,
@@ -7247,49 +6725,10 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "site_active_job_summaries_organization_id_organization_id_fkey",
+      "name": "contacts_organization_id_organization_id_fkey",
       "entityType": "fks",
       "schema": "public",
-      "table": "site_active_job_summaries"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["site_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "sites",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "site_active_job_summaries_site_org_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "site_active_job_summaries"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["comment_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "comments",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "site_comments_comment_org_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "site_comments"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["site_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "sites",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "site_comments_site_org_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "site_comments"
+      "table": "contacts"
     },
     {
       "nameExplicit": false,
@@ -7329,71 +6768,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "site_contacts"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["organization_id"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "site_labels_organization_id_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "site_labels"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["site_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "sites",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "site_labels_site_org_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "site_labels"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["label_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "labels",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "site_labels_label_org_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "site_labels"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "two_factor_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "two_factor"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "user_preferences_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "user_preferences"
     },
     {
       "nameExplicit": false,
@@ -7526,19 +6900,6 @@
       "table": "work_item_activity"
     },
     {
-      "nameExplicit": true,
-      "columns": ["actor_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "product_activity_actors",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "work_item_activity_actor_org_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "work_item_activity"
-    },
-    {
       "nameExplicit": false,
       "columns": ["organization_id"],
       "schemaTo": "public",
@@ -7602,32 +6963,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "work_item_collaborators"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["comment_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "comments",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "work_item_comments_comment_org_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "work_item_comments"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["work_item_id", "organization_id"],
-      "schemaTo": "public",
-      "tableTo": "work_items",
-      "columnsTo": ["id", "organization_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "work_item_comments_work_item_org_fk",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "work_item_comments"
     },
     {
       "nameExplicit": false,
@@ -7708,12 +7043,95 @@
       "table": "work_item_visits"
     },
     {
-      "columns": ["site_id", "organization_id"],
       "nameExplicit": false,
-      "name": "site_active_job_summaries_pkey",
-      "entityType": "pks",
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "labels_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "sites_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "site_active_job_summaries_organization_id_organization_id_fkey",
+      "entityType": "fks",
       "schema": "public",
       "table": "site_active_job_summaries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": ["site_id", "organization_id"],
+      "schemaTo": "public",
+      "tableTo": "sites",
+      "columnsTo": ["id", "organization_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "site_active_job_summaries_site_org_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "site_labels_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "site_labels"
+    },
+    {
+      "nameExplicit": true,
+      "columns": ["site_id", "organization_id"],
+      "schemaTo": "public",
+      "tableTo": "sites",
+      "columnsTo": ["id", "organization_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "site_labels_site_org_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "site_labels"
+    },
+    {
+      "nameExplicit": true,
+      "columns": ["label_id", "organization_id"],
+      "schemaTo": "public",
+      "tableTo": "labels",
+      "columnsTo": ["id", "organization_id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "site_labels_label_org_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "site_labels"
     },
     {
       "columns": ["site_id", "contact_id"],
@@ -7724,14 +7142,6 @@
       "table": "site_contacts"
     },
     {
-      "columns": ["site_id", "label_id"],
-      "nameExplicit": false,
-      "name": "site_labels_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "site_labels"
-    },
-    {
       "columns": ["work_item_id", "label_id"],
       "nameExplicit": false,
       "name": "work_item_labels_pkey",
@@ -7740,12 +7150,20 @@
       "table": "work_item_labels"
     },
     {
-      "columns": ["id"],
+      "columns": ["site_id", "organization_id"],
       "nameExplicit": false,
-      "name": "account_pkey",
+      "name": "site_active_job_summaries_pkey",
+      "entityType": "pks",
       "schema": "public",
-      "table": "account",
-      "entityType": "pks"
+      "table": "site_active_job_summaries"
+    },
+    {
+      "columns": ["site_id", "label_id"],
+      "nameExplicit": false,
+      "name": "site_labels_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "site_labels"
     },
     {
       "columns": ["id"],
@@ -7766,25 +7184,41 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "auth_security_audit_event_pkey",
-      "schema": "public",
-      "table": "auth_security_audit_event",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
       "name": "comments_pkey",
       "schema": "public",
       "table": "comments",
       "entityType": "pks"
     },
     {
+      "columns": ["comment_id"],
+      "nameExplicit": false,
+      "name": "site_comments_pkey",
+      "schema": "public",
+      "table": "site_comments",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["comment_id"],
+      "nameExplicit": false,
+      "name": "work_item_comments_pkey",
+      "schema": "public",
+      "table": "work_item_comments",
+      "entityType": "pks"
+    },
+    {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "contacts_pkey",
+      "name": "account_pkey",
       "schema": "public",
-      "table": "contacts",
+      "table": "account",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "auth_security_audit_event_pkey",
+      "schema": "public",
+      "table": "auth_security_audit_event",
       "entityType": "pks"
     },
     {
@@ -7801,14 +7235,6 @@
       "name": "jwks_pkey",
       "schema": "public",
       "table": "jwks",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "labels_pkey",
-      "schema": "public",
-      "table": "labels",
       "entityType": "pks"
     },
     {
@@ -7862,22 +7288,6 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "product_activity_actors_pkey",
-      "schema": "public",
-      "table": "product_activity_actors",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["actor_id"],
-      "nameExplicit": false,
-      "name": "product_activity_actor_sources_pkey",
-      "schema": "public",
-      "table": "product_activity_actor_sources",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
       "name": "rate_limit_pkey",
       "schema": "public",
       "table": "rate_limit",
@@ -7889,22 +7299,6 @@
       "name": "session_pkey",
       "schema": "public",
       "table": "session",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "sites_pkey",
-      "schema": "public",
-      "table": "sites",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["comment_id"],
-      "nameExplicit": false,
-      "name": "site_comments_pkey",
-      "schema": "public",
-      "table": "site_comments",
       "entityType": "pks"
     },
     {
@@ -7924,6 +7318,14 @@
       "entityType": "pks"
     },
     {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "verification_pkey",
+      "schema": "public",
+      "table": "verification",
+      "entityType": "pks"
+    },
+    {
       "columns": ["user_id"],
       "nameExplicit": false,
       "name": "user_preferences_pkey",
@@ -7934,9 +7336,9 @@
     {
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "verification_pkey",
+      "name": "contacts_pkey",
       "schema": "public",
-      "table": "verification",
+      "table": "contacts",
       "entityType": "pks"
     },
     {
@@ -7964,19 +7366,27 @@
       "entityType": "pks"
     },
     {
-      "columns": ["comment_id"],
-      "nameExplicit": false,
-      "name": "work_item_comments_pkey",
-      "schema": "public",
-      "table": "work_item_comments",
-      "entityType": "pks"
-    },
-    {
       "columns": ["id"],
       "nameExplicit": false,
       "name": "work_item_visits_pkey",
       "schema": "public",
       "table": "work_item_visits",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "labels_pkey",
+      "schema": "public",
+      "table": "labels",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "sites_pkey",
+      "schema": "public",
+      "table": "sites",
       "entityType": "pks"
     },
     {
@@ -8095,34 +7505,6 @@
       "table": "invitation"
     },
     {
-      "value": "length(trim(\"name\")) > 0",
-      "name": "labels_name_not_empty_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "value": "length(trim(\"name\")) <= 48",
-      "name": "labels_name_max_length_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "value": "length(trim(\"normalized_name\")) > 0",
-      "name": "labels_normalized_name_not_empty_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
-      "value": "length(trim(\"normalized_name\")) <= 48",
-      "name": "labels_normalized_name_max_length_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "labels"
-    },
-    {
       "value": "\"role\" in ('owner', 'admin', 'member', 'external')",
       "name": "member_role_chk",
       "entityType": "checks",
@@ -8135,125 +7517,6 @@
       "entityType": "checks",
       "schema": "public",
       "table": "organization"
-    },
-    {
-      "value": "\"kind\" in ('member', 'agent', 'system')",
-      "name": "product_activity_actors_kind_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "value": "length(trim(\"display_name\")) > 0",
-      "name": "product_activity_actors_display_name_not_empty_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "value": "(\"route_href\" is null and \"route_label\" is null) or (\"route_href\" is not null and \"route_label\" is not null)",
-      "name": "product_activity_actors_route_consistent_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "product_activity_actors"
-    },
-    {
-      "value": "\"kind\" in ('member', 'agent', 'system')",
-      "name": "product_activity_actor_sources_kind_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "value": "(\n        \"kind\" = 'member'\n        and \"user_id\" is not null\n        and \"agent_thread_id\" is null\n        and \"system_key\" is null\n      ) or (\n        \"kind\" = 'agent'\n        and \"user_id\" is not null\n        and \"agent_thread_id\" is not null\n        and \"system_key\" is null\n      ) or (\n        \"kind\" = 'system'\n        and \"user_id\" is null\n        and \"agent_thread_id\" is null\n        and \"system_key\" is not null\n      )",
-      "name": "product_activity_actor_sources_one_source_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "product_activity_actor_sources"
-    },
-    {
-      "value": "\"country\" is null or \"country\" in ('IE', 'GB')",
-      "name": "sites_country_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "sites"
-    },
-    {
-      "value": "\"location_status\" in ('unverified', 'google_resolved', 'manually_adjusted', 'validated', 'needs_review')",
-      "name": "sites_location_status_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "sites"
-    },
-    {
-      "value": "\"location_provider\" is null or \"location_provider\" in ('google_places', 'stub')",
-      "name": "sites_location_provider_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "sites"
-    },
-    {
-      "value": "(\"latitude\" is null and \"longitude\" is null) or (\"latitude\" is not null and \"longitude\" is not null)",
-      "name": "sites_coordinates_pair_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "sites"
-    },
-    {
-      "value": "\"location_status\" <> 'google_resolved' or (\"latitude\" is not null and \"longitude\" is not null and \"location_provider\" is not null and \"location_resolved_at\" is not null and \"google_place_id\" is not null)",
-      "name": "sites_google_resolved_metadata_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "sites"
-    },
-    {
-      "value": "\"google_place_id\" is null or (length(\"google_place_id\") >= 1 and length(\"google_place_id\") <= 256 and \"google_place_id\" ~ '^[A-Za-z0-9_-]+$')",
-      "name": "sites_google_place_id_format_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "sites"
-    },
-    {
-      "value": "\"location_status\" <> 'unverified' or (\"latitude\" is null and \"longitude\" is null and \"location_provider\" is null and \"location_resolved_at\" is null and \"google_place_id\" is null)",
-      "name": "sites_unverified_location_metadata_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "sites"
-    },
-    {
-      "value": "\"latitude\" is null or (\"latitude\" >= -90 and \"latitude\" <= 90)",
-      "name": "sites_latitude_range_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "sites"
-    },
-    {
-      "value": "\"longitude\" is null or (\"longitude\" >= -180 and \"longitude\" <= 180)",
-      "name": "sites_longitude_range_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "sites"
-    },
-    {
-      "value": "\"active_job_count\" >= 0",
-      "name": "site_active_job_summaries_count_non_negative_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "site_active_job_summaries"
-    },
-    {
-      "value": "\"highest_active_job_priority\" is null or \"highest_active_job_priority\" in ('none', 'low', 'medium', 'high', 'urgent')",
-      "name": "site_active_job_summaries_priority_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "site_active_job_summaries"
-    },
-    {
-      "value": "(\"active_job_count\" = 0 and \"highest_active_job_priority\" is null) or (\"active_job_count\" > 0 and \"highest_active_job_priority\" is not null)",
-      "name": "site_active_job_summaries_priority_count_consistency_chk",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "site_active_job_summaries"
     },
     {
       "value": "\"kind\" in ('job', 'issue', 'inspection', 'maintenance_request')",
@@ -8352,6 +7615,118 @@
       "entityType": "checks",
       "schema": "public",
       "table": "work_item_visits"
+    },
+    {
+      "value": "length(trim(\"name\")) > 0",
+      "name": "labels_name_not_empty_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "value": "length(trim(\"name\")) <= 48",
+      "name": "labels_name_max_length_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "value": "length(trim(\"normalized_name\")) > 0",
+      "name": "labels_normalized_name_not_empty_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "value": "length(trim(\"normalized_name\")) <= 48",
+      "name": "labels_normalized_name_max_length_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "labels"
+    },
+    {
+      "value": "\"country\" is null or \"country\" in ('IE', 'GB')",
+      "name": "sites_country_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "value": "\"location_status\" in ('unverified', 'google_resolved', 'manually_adjusted', 'validated', 'needs_review')",
+      "name": "sites_location_status_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "value": "\"location_provider\" is null or \"location_provider\" in ('google_places', 'stub')",
+      "name": "sites_location_provider_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "value": "(\"latitude\" is null and \"longitude\" is null) or (\"latitude\" is not null and \"longitude\" is not null)",
+      "name": "sites_coordinates_pair_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "value": "\"location_status\" <> 'google_resolved' or (\"latitude\" is not null and \"longitude\" is not null and \"location_provider\" is not null and \"location_resolved_at\" is not null and \"google_place_id\" is not null)",
+      "name": "sites_google_resolved_metadata_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "value": "\"google_place_id\" is null or (length(\"google_place_id\") >= 1 and length(\"google_place_id\") <= 256 and \"google_place_id\" ~ '^[A-Za-z0-9_-]+$')",
+      "name": "sites_google_place_id_format_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "value": "\"location_status\" <> 'unverified' or (\"latitude\" is null and \"longitude\" is null and \"location_provider\" is null and \"location_resolved_at\" is null and \"google_place_id\" is null)",
+      "name": "sites_unverified_location_metadata_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "value": "\"latitude\" is null or (\"latitude\" >= -90 and \"latitude\" <= 90)",
+      "name": "sites_latitude_range_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "value": "\"longitude\" is null or (\"longitude\" >= -180 and \"longitude\" <= 180)",
+      "name": "sites_longitude_range_check",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "sites"
+    },
+    {
+      "value": "\"active_job_count\" >= 0",
+      "name": "site_active_job_summaries_count_non_negative_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "value": "\"highest_active_job_priority\" is null or \"highest_active_job_priority\" in ('none', 'low', 'medium', 'high', 'urgent')",
+      "name": "site_active_job_summaries_priority_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "site_active_job_summaries"
+    },
+    {
+      "value": "(\"active_job_count\" = 0 and \"highest_active_job_priority\" is null) or (\"active_job_count\" > 0 and \"highest_active_job_priority\" is not null)",
+      "name": "site_active_job_summaries_priority_count_consistency_chk",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "site_active_job_summaries"
     }
   ],
   "renames": []

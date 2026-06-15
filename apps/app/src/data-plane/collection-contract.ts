@@ -16,7 +16,9 @@ export const DATA_PLANE_COLLECTION_NAMES = [
   "job-sites",
   "job-visits",
   "sites",
+  "site-active-job-summaries",
   "site-comments",
+  "site-label-assignments",
   "site-related-jobs",
   "labels",
 ] as const;
