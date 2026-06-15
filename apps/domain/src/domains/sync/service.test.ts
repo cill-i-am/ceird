@@ -89,6 +89,7 @@ const expectedShapeDefinitions = {
   labels: {
     scope: "organization",
     table: "labels",
+    where: "organization_id = $1 AND archived_at IS NULL",
   },
   "site-comments": {
     scope: "organization",
@@ -131,6 +132,7 @@ const expectedShapeDefinitions = {
   {
     readonly scope: "organization" | "organization-user";
     readonly table: string;
+    readonly where?: string;
   }
 >;
 
@@ -160,7 +162,9 @@ describe("SyncAuthorizationService", () => {
         expect(authorization.params).toStrictEqual({
           "1": "org_sync",
         });
-        expect(authorization.where).toBe("organization_id = $1");
+        expect(authorization.where).toBe(
+          "where" in definition ? definition.where : "organization_id = $1"
+        );
       }
     }
   });
@@ -178,6 +182,22 @@ describe("SyncAuthorizationService", () => {
       table: "work_items",
       userId: "user_sync",
       where: "organization_id = $1",
+    });
+  });
+
+  it("authorizes the labels shape as active organization labels", async () => {
+    const authorization = await runWithActor(authorizeShape("labels"));
+
+    expect(authorization).toStrictEqual({
+      organizationId: "org_sync",
+      params: {
+        "1": "org_sync",
+      },
+      shape: "labels",
+      scope: "organization",
+      table: "labels",
+      userId: "user_sync",
+      where: "organization_id = $1 AND archived_at IS NULL",
     });
   });
 

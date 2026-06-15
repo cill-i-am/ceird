@@ -14,6 +14,7 @@ import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import {
   createLabelElectricMutationHandlers,
   getOrCreateLabelsCollectionState,
+  getOrCreateSettingsLabelsCollectionState,
 } from "./labels-data-plane";
 
 type LabelWriteEffect = Effect.Effect<LabelWriteResponse, unknown>;
@@ -110,6 +111,89 @@ describe("labels data plane", () => {
       source: "electric",
       status: "connecting",
     });
+  });
+
+  it("exposes a Settings labels Electric collection without Query fallback", () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+
+    const state = getOrCreateSettingsLabelsCollectionState({
+      scope,
+      sync: {
+        runtime: {
+          fetch: makeTestFetch(new Response("ok")),
+          isBrowser: true,
+        },
+      },
+    });
+
+    expect(state.collection?.id).toBe(
+      "organization:org_123:user:user_123:role:owner:labels:settings:electric"
+    );
+    expect(state.health.current).toMatchObject({
+      collection: "labels",
+      collectionId:
+        "organization:org_123:user:user_123:role:owner:labels:settings:electric",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "labels",
+    });
+  });
+
+  it("reports Settings labels sync disabled state without silently falling back", () => {
+    const state = getOrCreateSettingsLabelsCollectionState({
+      scope,
+      sync: {
+        runtime: {
+          isBrowser: true,
+        },
+      },
+    });
+
+    expect(state.collection).toBeNull();
+    expect(state.health.current).toMatchObject({
+      collection: "labels",
+      collectionId:
+        "organization:org_123:user:user_123:role:owner:labels:settings:electric",
+      disabledReason: "missing-sync-origin",
+      source: "electric",
+      status: "disabled",
+      subscriptionName: "labels",
+    });
+    expect(state.health.current).not.toHaveProperty("fallbackReason");
+  });
+
+  it("scopes Settings labels collections by organization, viewer, and role", () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+
+    const ownerState = getOrCreateSettingsLabelsCollectionState({
+      scope,
+      sync: {
+        runtime: {
+          fetch: makeTestFetch(new Response("ok")),
+          isBrowser: true,
+        },
+      },
+    });
+    const memberState = getOrCreateSettingsLabelsCollectionState({
+      scope: createOrganizationDataScope({
+        organizationId: "org_456" as OrganizationId,
+        role: "member",
+        userId: "user_456",
+      }),
+      sync: {
+        runtime: {
+          fetch: makeTestFetch(new Response("ok")),
+          isBrowser: true,
+        },
+      },
+    });
+
+    expect(ownerState.health.current.collectionId).toBe(
+      "organization:org_123:user:user_123:role:owner:labels:settings:electric"
+    );
+    expect(memberState.health.current.collectionId).toBe(
+      "organization:org_456:user:user_456:role:member:labels:settings:electric"
+    );
   });
 
   it("returns txid matching strategies from label Electric mutation handlers", async () => {

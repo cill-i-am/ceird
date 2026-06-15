@@ -435,6 +435,10 @@ to Electric. It then injects the domain-approved table, predicate, positional
 params, and the `ELECTRIC_SOURCE_SECRET` configured by Alchemy. Electric itself
 runs in the `ElectricSql` Cloudflare Container behind a Durable Object bridge,
 which starts the container on demand and forwards requests to port `3000`.
+The named `labels` shape is the active organization-label definition stream:
+the domain-approved predicate is
+`organization_id = $1 AND archived_at IS NULL`, matching the public labels list
+contract without letting browser callers provide `where` or `params` values.
 
 ## Observability
 
@@ -684,6 +688,8 @@ endpoints (`POST /labels`, `PATCH /labels/:labelId`, and
 server-confirmed row. The `mutation.txid` is PostgreSQL/Electric confirmation
 metadata for opt-in Electric collection mutation handlers; non-Electric browser
 commands map the response back to `Label` before reconciling local state.
+The sync `labels` shape covers active labels only; archived labels are excluded
+by the domain-approved Electric predicate.
 
 Core files:
 

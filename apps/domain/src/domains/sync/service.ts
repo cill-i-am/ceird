@@ -1,6 +1,4 @@
 import {
-  ORGANIZATION_SYNC_WHERE,
-  ORGANIZATION_USER_SYNC_WHERE,
   SyncAccessDeniedError,
   SyncAuthorizationStorageError,
   SyncShapeAuthorizationSchema,
@@ -89,7 +87,7 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
             ...baseAuthorization,
             params,
             scope: "organization-user",
-            where: ORGANIZATION_USER_SYNC_WHERE,
+            where: definition.where,
           };
 
           return yield* decodeSyncShapeAuthorization(authorization);
@@ -103,7 +101,7 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
           ...baseAuthorization,
           params,
           scope: "organization",
-          where: ORGANIZATION_SYNC_WHERE,
+          where: definition.where,
         };
 
         return yield* decodeSyncShapeAuthorization(authorization);

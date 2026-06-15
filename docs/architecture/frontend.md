@@ -430,7 +430,9 @@ an explicit SSR strategy. The current migrated slices are:
   comments are lazy per-site collections exposed through public reader hooks.
 - `features/labels/labels-data-plane.ts`, where organization labels have a
   first-class scoped collection so job/site label commands declare and update a
-  real data-plane root.
+  real data-plane root, plus a Settings Labels helper that consumes the active
+  `labels` Electric shape directly and surfaces disabled/unavailable sync
+  health without API fallback.
 - `features/jobs/jobs-detail-state.ts`, which is now a detail-sheet facade over
   job detail and collaborator collections plus command mutation feedback.
 
