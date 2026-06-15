@@ -578,6 +578,205 @@ describe("jobs repository", () => {
       });
     });
   });
+
+  it("uses the canonical member actor when simultaneous first writes race", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "actors_race_repo",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping actor concurrency coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    const organizationId = decodeOrganizationId(randomUUID());
+    const userId = decodeUserId(`activity_actor_race_${Date.now()}`);
+    const workItemId = decodeWorkItemId(randomUUID());
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Actor Race Projection",
+      });
+      await seedUser(pool, {
+        id: userId,
+        name: "Riley Source",
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "member",
+        userId,
+      });
+      await seedWorkItem(pool, {
+        createdByUserId: userId,
+        id: workItemId,
+        organizationId,
+        title: "Race actor projection",
+      });
+      await pool.query(`
+        create or replace function test_sleep_after_member_actor_insert()
+        returns trigger
+        language plpgsql
+        as $$
+        begin
+          if new.kind = 'member' then
+            perform pg_sleep(0.05);
+          end if;
+
+          return new;
+        end;
+        $$;
+      `);
+      await pool.query(`
+        create trigger test_sleep_after_member_actor_insert
+        after insert on product_activity_actors
+        for each row execute function test_sleep_after_member_actor_insert();
+      `);
+    });
+
+    const [commentOne, commentTwo, activityOne, activityTwo] =
+      await Promise.all([
+        runJobsRepositoryEffect(
+          testDatabase.url,
+          JobsRepository.addComment({
+            authorUserId: userId,
+            body: "First concurrent comment.",
+            organizationId,
+            workItemId,
+          })
+        ),
+        runJobsRepositoryEffect(
+          testDatabase.url,
+          JobsRepository.addComment({
+            authorUserId: userId,
+            body: "Second concurrent comment.",
+            organizationId,
+            workItemId,
+          })
+        ),
+        runJobsRepositoryEffect(
+          testDatabase.url,
+          JobsRepository.addActivity({
+            actorUserId: userId,
+            organizationId,
+            payload: {
+              eventType: "job_created",
+              kind: "job",
+              priority: "none",
+              title: "Race actor projection",
+            },
+            workItemId,
+          })
+        ),
+        runJobsRepositoryEffect(
+          testDatabase.url,
+          JobsRepository.addActivity({
+            actorUserId: userId,
+            organizationId,
+            payload: {
+              eventType: "priority_changed",
+              fromPriority: "none",
+              toPriority: "high",
+            },
+            workItemId,
+          })
+        ),
+      ]);
+
+    await withPool(testDatabase.url, async (pool) => {
+      const beforeRefresh = await pool.query<{
+        actor_id: string;
+        source_count: string;
+      }>(
+        `select
+           product_activity_actor_sources.actor_id,
+           count(*) over () as source_count
+         from product_activity_actor_sources
+         where organization_id = $1
+           and kind = 'member'
+           and user_id = $2`,
+        [organizationId, userId]
+      );
+      const canonicalActorId = beforeRefresh.rows[0]?.actor_id;
+
+      expect(beforeRefresh.rows).toHaveLength(1);
+      expect(beforeRefresh.rows[0]?.source_count).toBe("1");
+      expect([commentOne.actor?.id, commentTwo.actor?.id]).toStrictEqual([
+        canonicalActorId,
+        canonicalActorId,
+      ]);
+      expect(activityOne.actorUserId).toBe(userId);
+      expect(activityTwo.actorUserId).toBe(userId);
+
+      const persistedActorIds = await pool.query<{ actor_id: string }>(
+        `select actor_id
+         from comments
+         where organization_id = $1
+         union all
+         select actor_id
+         from work_item_activity
+         where organization_id = $1`,
+        [organizationId]
+      );
+
+      expect(
+        new Set(persistedActorIds.rows.map((row) => row.actor_id))
+      ).toStrictEqual(new Set([canonicalActorId]));
+
+      await pool.query(`update "user" set name = $1 where id = $2`, [
+        "Riley Refreshed",
+        userId,
+      ]);
+    });
+
+    await runJobsRepositoryEffect(
+      testDatabase.url,
+      JobsRepository.addComment({
+        authorUserId: userId,
+        body: "Refresh the canonical actor.",
+        organizationId,
+        workItemId,
+      })
+    );
+
+    await withPool(testDatabase.url, async (pool) => {
+      const referencedActors = await pool.query<{
+        actor_id: string;
+        display_name: string;
+      }>(
+        `select distinct
+           product_activity_actors.id as actor_id,
+           product_activity_actors.display_name
+         from product_activity_actors
+         where exists (
+           select 1
+           from comments
+           where comments.organization_id = product_activity_actors.organization_id
+             and comments.actor_id = product_activity_actors.id
+         ) or exists (
+           select 1
+           from work_item_activity
+           where work_item_activity.organization_id = product_activity_actors.organization_id
+             and work_item_activity.actor_id = product_activity_actors.id
+         )`,
+        []
+      );
+
+      expect(referencedActors.rows).toHaveLength(1);
+      expect(referencedActors.rows[0]?.display_name).toBe("Riley Refreshed");
+    });
+  });
 });
 
 async function seedOrganization(
