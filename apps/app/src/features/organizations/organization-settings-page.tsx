@@ -4,12 +4,20 @@ import type { Label, LabelIdType } from "@ceird/labels-core";
 import { useForm } from "@tanstack/react-form";
 import { useRouter } from "@tanstack/react-router";
 import { Effect, Schema } from "effect";
-import { Archive, Check, MoreHorizontal, Pencil, Plus, X } from "lucide-react";
+import {
+  Archive,
+  ArrowRight,
+  Check,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  X,
+} from "lucide-react";
 import * as React from "react";
 
 import { AppPageHeader } from "#/components/app-page-header";
 import { AppUtilityPanel } from "#/components/app-utility-panel";
-import { Button } from "#/components/ui/button";
+import { Button, buttonVariants } from "#/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -536,6 +544,21 @@ export function OrganizationSettingsPage({
             </form.Subscribe>
           </form>
         </AppUtilityPanel>
+
+        <AppUtilityPanel
+          id="organization-labels-entry"
+          title="Realtime Labels"
+          description="Open the dedicated realtime label-management surface for this organization."
+          actions={
+            <a
+              className={buttonVariants()}
+              href="/organization/settings/labels"
+            >
+              Open labels
+              <ArrowRight aria-hidden="true" />
+            </a>
+          }
+        />
 
         <AppUtilityPanel id="organization-labels" title="Labels">
           <div className="flex max-w-3xl flex-col gap-5">

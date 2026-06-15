@@ -22,6 +22,7 @@ type WorkspaceSheetNavigationTo =
   | "/members"
   | "/organization/security"
   | "/organization/settings"
+  | "/organization/settings/labels"
   | "/sites";
 
 interface WorkspaceSheetNavigationContextValue {
@@ -156,6 +157,7 @@ function getWorkspaceSheetNavigationTo(
     case "/members":
     case "/organization/security":
     case "/organization/settings":
+    case "/organization/settings/labels":
     case "/sites": {
       return pathname;
     }

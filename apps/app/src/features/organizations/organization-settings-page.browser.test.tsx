@@ -64,6 +64,11 @@ describe("organization settings form", () => {
 
     render(<OrganizationSettingsPage organization={TEST_ORGANIZATION} />);
 
+    expect(screen.getByRole("link", { name: /open labels/i })).toHaveAttribute(
+      "href",
+      "/organization/settings/labels"
+    );
+
     const nameInput = screen.getByLabelText("Organization name");
 
     await user.clear(nameInput);

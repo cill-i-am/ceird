@@ -129,5 +129,11 @@ function AdministratorRouteHotkeys() {
     });
   });
 
+  useAppHotkeySequence("goOrganizationLabels", () => {
+    React.startTransition(() => {
+      navigate({ to: "/organization/settings/labels" });
+    });
+  });
+
   return null;
 }
