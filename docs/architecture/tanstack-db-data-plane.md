@@ -38,6 +38,9 @@ auth-aware fetch behavior, normalized sync errors, and the shared collection
 health surface. Feature slices may opt into that factory while keeping their
 current Query Collection contracts available as fallbacks; route views must not
 construct Electric streams directly.
+Electric opt-in slices compose both contracts through
+`apps/app/src/data-plane/query-fallback-collection.ts`, which selects the active
+collection while marking fallback activation on that same shared health object.
 The initial factory supports eager full-shape sync only. Electric
 `on-demand`/`progressive` subset loading remains a future extension because the
 current sync Worker intentionally accepts named shape requests and protocol-safe
@@ -68,7 +71,10 @@ Query Collection fallback uses the same health object by marking
 `fallback-active` through the shared helper instead of carrying a separate
 feature-local flag. Product routes may consume the resulting status through
 feature data-plane modules, but should not inspect raw Electric errors or
-construct a separate fallback-health model.
+construct a separate fallback-health model. The fallback wrapper preserves
+TanStack DB subscription options and replays the latest hydration snapshot
+request when the active backend changes, so loader-seeded Query Collection data
+is still loaded after an Electric failure.
 
 Completeness is a discriminated contract, not a boolean. `complete-tenant`
 means the data covers the active organization scope. `paged-query` and
