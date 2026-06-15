@@ -227,6 +227,43 @@ describe("site header", () => {
     );
   });
 
+  it("keeps the Ask Ceird shell action disabled until shell controls are ready", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentChat = vi.fn<() => void>();
+    const { rerender } = render(
+      <HotkeysProvider>
+        <SiteHeader
+          canUseAgent
+          agentChatControlsReady={false}
+          currentOrganizationRole="owner"
+          onOpenAgentChat={onOpenAgentChat}
+        />
+      </HotkeysProvider>
+    );
+
+    const button = screen.getByRole("button", { name: "Ask Ceird" });
+    expect(button).toBeDisabled();
+
+    await user.click(button);
+
+    expect(onOpenAgentChat).not.toHaveBeenCalled();
+
+    rerender(
+      <HotkeysProvider>
+        <SiteHeader
+          canUseAgent
+          agentChatControlsReady
+          currentOrganizationRole="owner"
+          onOpenAgentChat={onOpenAgentChat}
+        />
+      </HotkeysProvider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Ask Ceird" }));
+
+    expect(onOpenAgentChat).toHaveBeenCalledOnce();
+  });
+
   it("exposes shortcut help directly in the mobile header", () => {
     mockedIsMobile.value = true;
     mockedPathname.value = "/jobs";

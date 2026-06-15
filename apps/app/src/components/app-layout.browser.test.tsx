@@ -77,26 +77,40 @@ const {
   mockedSiteHeader: vi.fn<
     ({
       agentChatOpen,
+      agentChatControlsReady,
       canUseAgent,
       onOpenAgentChat,
     }: {
       agentChatOpen?: boolean;
+      agentChatControlsReady?: boolean;
       canUseAgent?: boolean;
       onOpenAgentChat?: () => void;
     }) => ReactElement
-  >(({ agentChatOpen, canUseAgent, onOpenAgentChat }) => (
-    <header
-      data-agent-chat-open={String(agentChatOpen)}
-      data-can-use-agent={String(canUseAgent)}
-      data-testid="site-header"
-    >
-      {canUseAgent ? (
-        <button type="button" onClick={onOpenAgentChat}>
-          Ask Ceird
-        </button>
-      ) : null}
-    </header>
-  )),
+  >(
+    ({
+      agentChatOpen,
+      agentChatControlsReady,
+      canUseAgent,
+      onOpenAgentChat,
+    }) => (
+      <header
+        data-agent-chat-open={String(agentChatOpen)}
+        data-agent-chat-controls-ready={String(agentChatControlsReady)}
+        data-can-use-agent={String(canUseAgent)}
+        data-testid="site-header"
+      >
+        {canUseAgent ? (
+          <button
+            type="button"
+            disabled={!agentChatControlsReady}
+            onClick={onOpenAgentChat}
+          >
+            Ask Ceird
+          </button>
+        ) : null}
+      </header>
+    )
+  ),
   mockedSidebarInset: vi.fn<
     ({ children, ...props }: ComponentProps<"div">) => ReactElement
   >(({ children, ...props }: ComponentProps<"div">) => (
@@ -165,31 +179,37 @@ describe("app layout", () => {
         />
       );
 
-      expect(mockedAppSidebar).toHaveBeenCalledOnce();
-      expect(mockedAppSidebar.mock.calls[0]?.[0]).toStrictEqual({
-        activeOrganizationId: undefined,
-        currentOrganizationRole: undefined,
-        user: {
-          name: "Taylor Example",
+      expect(mockedAppSidebar).toHaveBeenCalledWith(
+        {
+          activeOrganizationId: undefined,
+          currentOrganizationRole: undefined,
+          user: {
+            name: "Taylor Example",
+            email: "person@example.com",
+            emailVerified: false,
+            image: null,
+          },
+        },
+        undefined
+      );
+      expect(mockedEmailVerificationBanner).toHaveBeenCalledWith(
+        {
           email: "person@example.com",
           emailVerified: false,
-          image: null,
         },
-      });
-      expect(mockedEmailVerificationBanner).toHaveBeenCalledOnce();
-      expect(mockedEmailVerificationBanner.mock.calls[0]?.[0]).toStrictEqual({
-        email: "person@example.com",
-        emailVerified: false,
-      });
+        undefined
+      );
       expect(screen.getByTestId("email-verification-banner")).toHaveTextContent(
         "person@example.com:false"
       );
       expect(screen.getByTestId("app-sidebar")).toHaveTextContent(
         "Taylor Example"
       );
-      expect(mockedSidebarInset).toHaveBeenCalledOnce();
-      expect(mockedSidebarInset.mock.calls[0]?.[0].className).toContain(
-        "overflow-hidden"
+      expect(mockedSidebarInset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          className: expect.stringContaining("overflow-hidden"),
+        }),
+        undefined
       );
       expect(screen.getByTestId("sidebar-inset")).toContainElement(
         screen.getByTestId("app-layout-outlet")
@@ -263,7 +283,7 @@ describe("app layout", () => {
     {
       timeout: 10_000,
     },
-    () => {
+    async () => {
       const { rerender } = render(
         <AppLayout
           activeOrganizationId={"org_123" as never}
@@ -289,6 +309,23 @@ describe("app layout", () => {
       expect(screen.getByTestId("site-header")).toHaveAttribute(
         "data-agent-chat-open",
         "false"
+      );
+      expect(mockedSiteHeader.mock.calls[0]?.[0]).toStrictEqual({
+        agentChatOpen: false,
+        agentChatControlsReady: false,
+        canUseAgent: true,
+        currentOrganizationRole: "owner",
+        onOpenAgentChat: expect.any(Function),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: /ask ceird/i })
+        ).toBeEnabled();
+      });
+      expect(screen.getByTestId("site-header")).toHaveAttribute(
+        "data-agent-chat-controls-ready",
+        "true"
       );
 
       fireEvent.click(screen.getByRole("button", { name: /ask ceird/i }));

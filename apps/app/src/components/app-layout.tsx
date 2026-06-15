@@ -41,20 +41,22 @@ export function AppLayout({
     activeOrganizationId !== undefined &&
     currentOrganizationRole !== undefined;
   const [agentChatOpen, setAgentChatOpen] = React.useState(false);
+  const [agentChatControlsReady, setAgentChatControlsReady] =
+    React.useState(false);
   const previousActiveOrganizationId = React.useRef(activeOrganizationId);
 
   const openAgentChat = React.useCallback(() => {
-    if (!canUseAgent) {
+    if (!canUseAgent || !agentChatControlsReady) {
       return;
     }
 
     setAgentChatOpen(true);
-  }, [canUseAgent]);
+  }, [agentChatControlsReady, canUseAgent]);
   const openAgentChatRef = React.useRef(openAgentChat);
   openAgentChatRef.current = openAgentChat;
 
   useAppHotkey("openAgentChat", openAgentChat, {
-    enabled: canUseAgent,
+    enabled: canUseAgent && agentChatControlsReady,
   });
 
   React.useEffect(() => {
@@ -66,12 +68,14 @@ export function AppLayout({
       GLOBAL_AGENT_CHAT_OPEN_EVENT,
       handleOpenAgentChatEvent
     );
+    setAgentChatControlsReady(true);
 
     return () => {
       window.removeEventListener(
         GLOBAL_AGENT_CHAT_OPEN_EVENT,
         handleOpenAgentChatEvent
       );
+      setAgentChatControlsReady(false);
     };
   }, []);
 
@@ -108,6 +112,7 @@ export function AppLayout({
         <SidebarInset className="min-h-svh overflow-hidden border border-border/60 bg-background/94 shadow-[0_1px_0_color-mix(in_oklab,var(--border)_65%,transparent)] supports-[backdrop-filter]:bg-background/88">
           <SiteHeader
             agentChatOpen={agentChatOpen}
+            agentChatControlsReady={agentChatControlsReady}
             canUseAgent={canUseAgent}
             currentOrganizationRole={currentOrganizationRole}
             onOpenAgentChat={openAgentChat}

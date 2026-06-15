@@ -24,11 +24,13 @@ import { ShortcutIntroNotice } from "#/hotkeys/shortcut-intro-notice";
 
 export function SiteHeader({
   agentChatOpen = false,
+  agentChatControlsReady = true,
   canUseAgent = false,
   currentOrganizationRole: appCurrentOrganizationRole,
   onOpenAgentChat,
 }: {
   agentChatOpen?: boolean;
+  agentChatControlsReady?: boolean;
   canUseAgent?: boolean;
   currentOrganizationRole?: OrganizationRole | undefined;
   onOpenAgentChat?: () => void;
@@ -83,6 +85,7 @@ export function SiteHeader({
                   aria-label="Ask Ceird"
                   aria-expanded={agentChatOpen}
                   aria-haspopup="dialog"
+                  disabled={!agentChatControlsReady}
                   onClick={onOpenAgentChat}
                 >
                   <HugeiconsIcon
