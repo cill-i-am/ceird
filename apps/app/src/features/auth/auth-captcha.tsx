@@ -147,7 +147,7 @@ function loadTurnstileScript() {
       { once: true }
     );
 
-    document.head.append(script);
+    (document.head as ParentNode).append(script);
   });
 
   return turnstileScriptPromise;

@@ -46,6 +46,7 @@ import {
 import { withMinimumMutationPendingDurationEffect } from "#/lib/mutation-feedback-effect";
 
 import type {
+  JobsCollectionSyncOptions,
   JobsListScope,
   JobOptionsCollectionState,
   JobsCollectionState,
@@ -203,6 +204,7 @@ export function JobsStateProvider({
   listScope = createJobsListScope(),
   options,
   queryClient: providedQueryClient,
+  sync,
   viewer,
 }: {
   readonly activeOrganizationId: OrganizationId;
@@ -211,6 +213,7 @@ export function JobsStateProvider({
   readonly listScope?: JobsListScope | undefined;
   readonly options: JobOptionsResponse;
   readonly queryClient?: QueryClient | undefined;
+  readonly sync?: JobsCollectionSyncOptions | undefined;
   readonly viewer: JobsViewer;
 }) {
   const organizationIdRef = React.useRef(activeOrganizationId);
@@ -227,6 +230,7 @@ export function JobsStateProvider({
       list.items,
       listScope,
       options,
+      sync,
       dataPlaneSession
     )
   );
@@ -631,6 +635,7 @@ function makeJobsStateStore(
   jobs: readonly JobListItem[],
   listScope: JobsListScope,
   options: JobOptionsResponse,
+  sync: JobsCollectionSyncOptions | undefined,
   dataPlaneSession: ReturnType<typeof useOptionalDataPlaneSession>
 ): JobsStateStore {
   const fallbackJobsRef = {
@@ -652,6 +657,7 @@ function makeJobsStateStore(
     queryClient,
     scope: queryScope,
     session: dataPlaneSession,
+    sync,
   });
   const jobOptionsState = getOrCreateJobOptionsCollectionState({
     initialOptions: options,

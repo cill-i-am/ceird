@@ -15,6 +15,7 @@ import {
 } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
 import type { SiteOption } from "@ceird/sites-core";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { QueryClient } from "@tanstack/query-core";
 import { Schema } from "effect";
 
@@ -29,6 +30,7 @@ import {
   defineQueryCollectionContract,
   entityDetailCollectionCompleteness,
   pagedQueryCollectionCompleteness,
+  syncBackedCollectionCompleteness,
 } from "#/data-plane/collection-contract";
 import type { DataPlaneCollectionFilterScope } from "#/data-plane/collection-contract";
 import {
@@ -43,6 +45,12 @@ import type {
   DataPlaneCollectionSnapshot,
   DataPlaneCollectionWriteVersionRef,
 } from "#/data-plane/collection-write";
+import { defineElectricCollectionContract } from "#/data-plane/electric-collection";
+import { createCollectionWithQueryFallback } from "#/data-plane/query-fallback-collection";
+import type {
+  CreateDataPlaneFallbackCollectionOptions,
+  DataPlaneFallbackHealth,
+} from "#/data-plane/query-fallback-collection";
 import { organizationDataQueryKey } from "#/data-plane/query-scope";
 import type { OrganizationDataScope } from "#/data-plane/query-scope";
 import type { DataPlaneSession } from "#/data-plane/session";
@@ -68,12 +76,46 @@ export const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
 
 const JOB_OPTIONS_COLLECTION_ITEM_ID = "job-options";
 const DEFAULT_JOBS_LIST_LIMIT = 50;
+type JobsElectricRowValue =
+  | bigint
+  | boolean
+  | null
+  | number
+  | string
+  | readonly JobsElectricRowValue[]
+  | { readonly [key: string]: JobsElectricRowValue };
+type JobsElectricRow = Record<string, JobsElectricRowValue>;
 
-type JobsCollection = ReturnType<typeof createJobsCollection>;
+interface JobsCollection extends DataPlaneCollectionSnapshot<JobListItem> {
+  readonly cleanup: () => Promise<void>;
+  readonly entries: () => Iterable<[JobListItem["id"], JobListItem]>;
+  readonly id: string;
+  readonly keys: () => IterableIterator<JobListItem["id"]>;
+  readonly preload?: (() => Promise<void>) | undefined;
+  readonly status: string;
+  readonly subscribeChanges: (callback: () => void) => {
+    readonly requestSnapshot?:
+      | ((options?: { readonly optimizedOnly?: boolean }) => void)
+      | undefined;
+    readonly unsubscribe: () => void;
+  };
+  readonly subscriberCount: number;
+  readonly utils: {
+    readonly writeBatch: (callback: () => void) => void;
+    readonly writeDelete: (
+      key: JobListItem["id"] | readonly JobListItem["id"][]
+    ) => void;
+    readonly writeUpsert: (data: JobListItem | readonly JobListItem[]) => void;
+  };
+}
 type JobOptionsCollection = ReturnType<typeof createJobOptionsCollection>;
 type JobDetailCollection = ReturnType<typeof createJobDetailCollection>;
 type JobCollaboratorsCollection = ReturnType<
   typeof createJobCollaboratorsCollection
+>;
+export type JobsCollectionSyncOptions = Omit<
+  CreateDataPlaneFallbackCollectionOptions<JobsCollection, JobsCollection>,
+  "createQueryCollection"
 >;
 
 const JobOptionsCollectionItemSchema = Schema.Struct({
@@ -91,9 +133,16 @@ const JobDetailCollectionItemSchema = Schema.Struct({
 export type JobDetailCollectionItem = Schema.Schema.Type<
   typeof JobDetailCollectionItemSchema
 >;
+const JobListItemStandardSchema = Schema.toStandardSchemaV1(JobListItemSchema);
+const JobListItemElectricStandardSchema =
+  JobListItemStandardSchema as unknown as StandardSchemaV1<
+    unknown,
+    JobsElectricRow
+  >;
 
 export interface JobsCollectionState {
   readonly collection: JobsCollection;
+  readonly health: DataPlaneFallbackHealth;
   readonly listScope: JobsListScope;
   readonly writeVersionRef: DataPlaneCollectionWriteVersionRef;
 }
@@ -250,12 +299,14 @@ export function getOrCreateJobsCollectionState({
   queryClient,
   scope,
   session,
+  sync,
 }: {
   readonly initialJobs: readonly JobListItem[];
   readonly listScope?: JobsListScope | undefined;
   readonly queryClient: QueryClient;
   readonly scope: OrganizationDataScope;
   readonly session?: DataPlaneSession | undefined;
+  readonly sync?: JobsCollectionSyncOptions | undefined;
 }): JobsCollectionState {
   const registryKey = jobsCollectionId(scope, listScope);
   const existing = session?.registry.get(registryKey);
@@ -274,20 +325,22 @@ export function getOrCreateJobsCollectionState({
     collection: undefined as JobsCollection | undefined,
     writeVersionRef,
   };
-  const collection = createJobsCollection({
+  const result = createJobsCollection({
     initialJobs,
     listScope,
     queryClient,
     scope,
     state,
+    sync,
     writeVersionRef,
   });
   const created = {
-    collection,
+    collection: result.collection,
+    health: result.health,
     listScope,
     writeVersionRef,
   } satisfies JobsCollectionState;
-  state.collection = collection;
+  state.collection = result.collection;
   session?.registry.set(registryKey, created);
 
   return created;
@@ -596,6 +649,7 @@ function createJobsCollection({
   queryClient,
   scope,
   state,
+  sync,
   writeVersionRef,
 }: {
   readonly initialJobs: readonly JobListItem[];
@@ -605,37 +659,92 @@ function createJobsCollection({
   readonly state: {
     collection?: DataPlaneCollectionSnapshot<JobListItem> | undefined;
   };
+  readonly sync?: JobsCollectionSyncOptions | undefined;
   readonly writeVersionRef: DataPlaneCollectionWriteVersionRef;
 }) {
   const queryKey = jobsCollectionKey(scope, listScope);
   seedQueryCollectionInitialData(queryClient, queryKey, [...initialJobs]);
 
-  return createQueryCollectionFromContract(
-    queryClient,
-    defineQueryCollectionContract({
-      collection: "jobs",
-      completeness: jobsListCompleteness(listScope),
-      getKey: (job: JobListItem) => job.id,
-      gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
-      id: jobsCollectionId(scope, listScope),
-      queryFn: async () => {
-        const requestWriteVersion = writeVersionRef.current;
-        const response = await listCurrentServerJobs(listScope.query);
+  const queryContract = defineQueryCollectionContract({
+    collection: "jobs",
+    completeness: jobsListCompleteness(listScope),
+    getKey: (job: JobListItem) => job.id,
+    gcTime: ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
+    id: jobsCollectionId(scope, listScope),
+    queryFn: async () => {
+      const requestWriteVersion = writeVersionRef.current;
+      const response = await listCurrentServerJobs(listScope.query);
 
-        return reconcileQueryCollectionDataAfterConcurrentWrite({
-          collection: state.collection,
-          incomingItems: response.items,
-          requestWriteVersion,
-          writeVersionRef,
-        });
-      },
-      queryKey,
-      retry: false,
-      schema: Schema.toStandardSchemaV1(JobListItemSchema),
-      staleTime: 30_000,
-      syncMode: "eager",
-    })
+      return reconcileQueryCollectionDataAfterConcurrentWrite({
+        collection: state.collection,
+        incomingItems: response.items,
+        requestWriteVersion,
+        writeVersionRef,
+      });
+    },
+    queryKey,
+    retry: false,
+    schema: JobListItemStandardSchema,
+    staleTime: 30_000,
+    syncMode: "eager",
+  });
+  const electricContract = defineElectricCollectionContract({
+    collection: "jobs",
+    completeness: syncBackedCollectionCompleteness({
+      covers: jobsListCompleteness(listScope),
+      source: "electric",
+      subscriptionName: "jobs",
+    }),
+    getKey: (job) => String(job.id) as JobListItem["id"],
+    id: `${jobsCollectionId(scope, listScope)}:electric`,
+    schema: JobListItemElectricStandardSchema,
+    shapeName: "jobs",
+    shapeOptions: {
+      transformer: toJobListItemElectricRow,
+    },
+  });
+
+  return createCollectionWithQueryFallback<
+    JobsCollection,
+    JobsCollection,
+    typeof queryContract,
+    typeof electricContract
+  >(
+    queryClient,
+    {
+      electric: electricContract,
+      query: queryContract,
+    },
+    { ...sync, electricEnabled: sync?.electricEnabled === true }
   );
+}
+
+function toJobListItemElectricRow(row: Record<string, unknown>) {
+  const item: JobsElectricRow = {
+    createdAt: String(row.createdAt),
+    id: String(row.id),
+    kind: String(row.kind),
+    labels: [],
+    priority: String(row.priority),
+    status: String(row.status),
+    title: String(row.title),
+    updatedAt: String(row.updatedAt),
+  };
+
+  addOptionalString(item, "assigneeId", row.assigneeId);
+  addOptionalString(item, "contactId", row.contactId);
+  addOptionalString(item, "coordinatorId", row.coordinatorId);
+  addOptionalString(item, "siteId", row.siteId);
+
+  return item;
+}
+
+function addOptionalString(item: JobsElectricRow, key: string, value: unknown) {
+  if (value === null || value === undefined) {
+    return;
+  }
+
+  item[key] = String(value);
 }
 
 function normalizeJobsListQuery(query: JobListQuery): JobListQuery {

@@ -5,7 +5,10 @@ import type {
   JobListResponse,
 } from "@ceird/jobs-core";
 import { QueryClient } from "@tanstack/react-query";
+import { afterEach, vi } from "vitest";
 
+import { createDataPlaneCollectionHealth } from "#/data-plane/collection-health";
+import type { DataPlaneElectricSyncError } from "#/data-plane/electric-collection";
 import { createDataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { getDataPlaneSessionKey } from "#/data-plane/session";
@@ -19,6 +22,10 @@ import {
 } from "./jobs-data-plane";
 
 describe("jobs data plane", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   const scope = createOrganizationDataScope({
     organizationId: "org_123" as OrganizationId,
     role: "owner",
@@ -143,4 +150,272 @@ describe("jobs data plane", () => {
       "organization:org_123:user:user_123:role:owner"
     );
   });
+
+  it("keeps jobs on Query Collection by default even when sync origin is configured", () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+
+    const state = getOrCreateJobsCollectionState({
+      initialJobs: [job],
+      queryClient: new QueryClient(),
+      scope,
+      sync: {
+        runtime: {
+          fetch: makeTestFetch(new Response("ok")),
+          isBrowser: true,
+        },
+      },
+    });
+
+    expect(state.collection.id).toBe(jobsCollectionId(scope));
+    expect(state.health.current).toMatchObject({
+      collection: "jobs",
+      collectionId: jobsCollectionId(scope),
+      fallbackReason: "sync-disabled",
+      source: "query",
+      status: "fallback-active",
+    });
+  });
+
+  it("can opt the jobs canary into the public Sync Worker jobs shape", () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+
+    const state = getOrCreateJobsCollectionState({
+      initialJobs: [job],
+      queryClient: new QueryClient(),
+      scope,
+      sync: {
+        electricEnabled: true,
+        runtime: {
+          fetch: makeTestFetch(new Response("ok")),
+          isBrowser: true,
+        },
+      },
+    });
+
+    expect(state.collection.id).toBe(`${jobsCollectionId(scope)}:electric`);
+    expect(state.health.current).toMatchObject({
+      collection: "jobs",
+      collectionId: `${jobsCollectionId(scope)}:electric`,
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "jobs",
+    });
+  });
+
+  it("falls back to loader-seeded Query data when VITE_SYNC_ORIGIN is missing", () => {
+    const state = getOrCreateJobsCollectionState({
+      initialJobs: [job],
+      queryClient: new QueryClient(),
+      scope,
+      sync: {
+        electricEnabled: true,
+        runtime: {
+          isBrowser: true,
+        },
+      },
+    });
+
+    expect(state.collection.id).toBe(jobsCollectionId(scope));
+    expect(state.health.current).toMatchObject({
+      collection: "jobs",
+      collectionId: `${jobsCollectionId(scope)}:electric`,
+      disabledReason: "missing-sync-origin",
+      fallbackReason: "missing-sync-origin",
+      source: "electric",
+      status: "fallback-active",
+    });
+  });
+
+  it("does not create browser-only jobs Electric state during server render", () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+
+    const state = getOrCreateJobsCollectionState({
+      initialJobs: [job],
+      queryClient: new QueryClient(),
+      scope,
+      sync: {
+        electricEnabled: true,
+        runtime: {
+          isBrowser: false,
+        },
+      },
+    });
+
+    expect(state.collection.id).toBe(jobsCollectionId(scope));
+    expect(state.health.current).toMatchObject({
+      collection: "jobs",
+      collectionId: `${jobsCollectionId(scope)}:electric`,
+      disabledReason: "server-render",
+      fallbackReason: "server-render",
+      source: "electric",
+      status: "fallback-active",
+    });
+  });
+
+  it("keeps the jobs route collection usable when sync origin is unavailable", () => {
+    const electricCollection = makeTestCollection([job], {
+      id: `${jobsCollectionId(scope)}:electric`,
+    });
+    const health = createDataPlaneCollectionHealth({
+      collection: "jobs",
+      collectionId: `${jobsCollectionId(scope)}:electric`,
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "jobs",
+    });
+    let onSyncError: ((error: DataPlaneElectricSyncError) => void) | undefined;
+
+    const state = getOrCreateJobsCollectionState({
+      initialJobs: [job],
+      queryClient: new QueryClient(),
+      scope,
+      sync: {
+        electricEnabled: true,
+        createElectricCollection: (_contract, options) => {
+          ({ onSyncError } = options);
+
+          return {
+            collection: electricCollection,
+            health,
+            shapeUrl: "https://sync.codex.ceird.localhost/v1/shapes/jobs",
+            status: "enabled",
+          };
+        },
+        runtime: { isBrowser: true },
+      },
+    });
+
+    const error = makeElectricError({
+      kind: "server",
+      message: "electric_container_unavailable",
+      status: 503,
+    });
+    health.markUnavailable(error);
+    onSyncError?.(error);
+
+    expect(state.health.current).toMatchObject({
+      fallbackReason: "sync-unavailable",
+      lastError: {
+        kind: "server",
+        retryable: true,
+        status: 503,
+      },
+      source: "electric",
+      status: "fallback-active",
+    });
+    expect(state.collection.id).toBe(jobsCollectionId(scope));
+  });
+
+  it("reports jobs Electric initial readiness latency", () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+    const now = vi
+      .fn<() => number>()
+      .mockReturnValueOnce(1000)
+      .mockReturnValueOnce(11_000)
+      .mockReturnValue(11_000);
+
+    const state = getOrCreateJobsCollectionState({
+      initialJobs: [job],
+      queryClient: new QueryClient(),
+      scope,
+      sync: {
+        electricEnabled: true,
+        runtime: {
+          fetch: makeTestFetch(new Response("ok")),
+          isBrowser: true,
+          now,
+        },
+      },
+    });
+
+    readElectricLifecycle(state.collection).setStatus("loading");
+    readElectricLifecycle(state.collection).markReady();
+
+    expect(state.health.current).toMatchObject({
+      initialReadyLatencyMs: 10_000,
+      lastStatusChangeAtMs: 11_000,
+      status: "ready",
+    });
+  });
 });
+
+function makeTestFetch(response: Response) {
+  return Object.assign(
+    vi.fn<(...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>>(
+      () => Promise.resolve(response) as ReturnType<typeof fetch>
+    ),
+    {
+      preconnect: vi.fn<typeof fetch.preconnect>(),
+    }
+  ) satisfies typeof fetch;
+}
+
+function readElectricLifecycle(collection: object) {
+  return (
+    collection as {
+      readonly _lifecycle: {
+        readonly markReady: () => void;
+        readonly setStatus: (status: string) => void;
+      };
+    }
+  )._lifecycle;
+}
+
+function makeElectricError({
+  kind,
+  message = "sync failed",
+  status,
+}: {
+  readonly kind: DataPlaneElectricSyncError["kind"];
+  readonly message?: string | undefined;
+  readonly status?: number | undefined;
+}): DataPlaneElectricSyncError {
+  return {
+    kind,
+    message,
+    retryable: status === undefined || status >= 500,
+    shapeName: "jobs",
+    ...(status === undefined ? {} : { status }),
+  };
+}
+
+function makeTestCollection(
+  rows: readonly JobListItem[],
+  options: { readonly id: string }
+) {
+  let currentRows = [...rows];
+
+  return {
+    cleanup: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+    entries: () =>
+      currentRows
+        .map((row) => [row.id, row] as [JobListItem["id"], JobListItem])
+        .values(),
+    id: options.id,
+    keys: () => currentRows.map((row) => row.id).values(),
+    preload: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+    status: "ready",
+    subscribeChanges: vi.fn<() => { unsubscribe: () => void }>(() => ({
+      unsubscribe: vi.fn<() => void>(),
+    })),
+    subscriberCount: 0,
+    get toArray() {
+      return currentRows;
+    },
+    utils: {
+      writeBatch: (callback: () => void) => callback(),
+      writeDelete: (key: JobListItem["id"] | readonly JobListItem["id"][]) => {
+        const keys = new Set(Array.isArray(key) ? key : [key]);
+        currentRows = currentRows.filter((row) => !keys.has(row.id));
+      },
+      writeUpsert: (data: JobListItem | readonly JobListItem[]) => {
+        const incomingRows = Array.isArray(data) ? data : [data];
+        const nextRowsById = new Map(currentRows.map((row) => [row.id, row]));
+        for (const row of incomingRows) {
+          nextRowsById.set(row.id, row);
+        }
+        currentRows = [...nextRowsById.values()];
+      },
+    },
+  };
+}

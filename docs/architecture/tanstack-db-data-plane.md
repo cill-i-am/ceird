@@ -45,6 +45,14 @@ The initial factory supports eager full-shape sync only. Electric
 `on-demand`/`progressive` subset loading remains a future extension because the
 current sync Worker intentionally accepts named shape requests and protocol-safe
 resume/live parameters, not caller-supplied subset predicates.
+The jobs primary route collection has a conservative Electric read canary behind
+that same fallback wrapper. It is disabled by default and must be opted in
+through the jobs data-plane sync options, so a configured `VITE_SYNC_ORIGIN`
+alone does not migrate the visible jobs list. When enabled, it requests the
+public sync Worker `jobs` shape and maps `work_items` rows into the narrow jobs
+list item shape with joined fields such as labels left empty; Query Collection
+fallback remains the default and fallback path for route-visible first-paint
+data.
 
 ## Collection Health
 
