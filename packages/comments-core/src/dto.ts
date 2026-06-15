@@ -1,3 +1,4 @@
+import { ProductActorSchema } from "@ceird/identity-core";
 import { Schema } from "effect";
 
 import {
@@ -10,6 +11,7 @@ import { CommentId } from "./ids.js";
 
 export const CommentSchema = Schema.Struct({
   id: CommentId,
+  actor: Schema.optional(ProductActorSchema),
   authorUserId: UserId,
   authorName: Schema.optional(Schema.String),
   body: CommentBodySchema,

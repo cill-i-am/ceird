@@ -63,6 +63,8 @@ Exports shared identity and organization primitives:
 - organization slug schema, generation, retry suffixing, reserved system slug
   checks, and the shared `isOrganizationSlug` predicate
 - organization role literals and role subsets
+- product-safe actor projection DTOs for member, agent, and system display in
+  activity and comments without exposing Better Auth user/session/account data
 - role helpers such as `isAdministrativeOrganizationRole`,
   `isInternalOrganizationRole`, and `isExternalOrganizationRole`
 - organization summary schemas
@@ -118,6 +120,8 @@ Exports the shared jobs contract:
   access, visits, activity event types, and shared active/terminal status
   groupings
 - job comment DTOs extended from `@ceird/comments-core`
+- product activity DTOs that reference the shared `ProductActorSchema` for
+  actor display
 - DTO schemas and inferred DTO types
 - bounded authenticated home dashboard summary DTOs for exact counts and top
   rows without full tenant job/site hydration

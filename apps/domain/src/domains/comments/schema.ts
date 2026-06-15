@@ -8,6 +8,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { productActivityActor } from "../activity/schema.js";
 import { organization, user } from "../identity/authentication/schema.js";
 import { workItem } from "../jobs/schema.js";
 import { site } from "../sites/schema.js";
@@ -26,6 +27,7 @@ export const comment = pgTable(
     authorUserId: text("author_user_id")
       .notNull()
       .references(() => user.id),
+    actorId: uuid("actor_id"),
     body: text("body").notNull(),
     createdAt: commentsTimestamp("created_at"),
     updatedAt: commentsTimestamp("updated_at"),
@@ -40,6 +42,15 @@ export const comment = pgTable(
     ),
     index("comments_organization_id_idx").on(table.organizationId),
     index("comments_author_user_id_idx").on(table.authorUserId),
+    foreignKey({
+      columns: [table.actorId, table.organizationId],
+      foreignColumns: [
+        productActivityActor.id,
+        productActivityActor.organizationId,
+      ],
+      name: "comments_actor_org_fk",
+    }),
+    index("comments_actor_id_idx").on(table.organizationId, table.actorId),
     index("comments_updated_by_user_id_idx").on(table.updatedByUserId),
   ]
 );

@@ -1,3 +1,4 @@
+import { activitySchema } from "../../domains/activity/schema.js";
 import { agentsSchema } from "../../domains/agents/schema.js";
 import { commentsSchema } from "../../domains/comments/schema.js";
 import { authSchema } from "../../domains/identity/authentication/schema.js";
@@ -6,6 +7,11 @@ import { jobsSchema } from "../../domains/jobs/schema.js";
 import { labelsSchema } from "../../domains/labels/schema.js";
 import { sitesSchema } from "../../domains/sites/schema.js";
 
+export {
+  activitySchema,
+  productActivityActor,
+  productActivityActorSource,
+} from "../../domains/activity/schema.js";
 export {
   agentActionRun,
   agentsSchema,
@@ -58,6 +64,7 @@ export {
 } from "../../domains/sites/schema.js";
 
 export const databaseSchema = {
+  ...activitySchema,
   ...agentsSchema,
   ...authSchema,
   ...identityPreferencesSchema,

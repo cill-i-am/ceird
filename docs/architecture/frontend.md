@@ -34,6 +34,7 @@ Current visible routes:
 | `/organization/settings`           | `_app._org.organization.settings.tsx`        | Organization settings and labels.                                            |
 | `/organization/settings/labels`    | `_app._org.organization.settings.labels.tsx` | Dedicated Labels settings shell for the Electric-native replacement surface. |
 | `/sites`                           | `_app._org.sites.tsx`                        | Sites list.                                                                  |
+| `/sites-workspace`                 | `_app._org.sites-workspace.tsx`              | Gated Electric-native Sites workspace shell.                                 |
 | `/health`                          | `health.ts`                                  | App stack/stage health response for Alchemy and Worker checks.               |
 
 `apps/app/src/router.tsx` configures scroll restoration, intent preloading, the
@@ -147,16 +148,29 @@ Authenticated layout and navigation live under:
 - `components/nav-user.tsx`
 - `components/app-page-header.tsx`
 
+The Electric-native Sites replacement starts as a separate `/sites-workspace`
+organization route rather than a canary under `/sites`. The shell is
+intentionally absent from primary navigation until realtime evidence passes, is
+marked as a preview route in the UI, and fails closed with explicit placeholder
+states instead of reading the old Sites Query Collection path.
+
 The authenticated app shell also mounts the global Ceird Agent entry point in
 `features/agent/global-agent-chat.tsx`. It is app-level rather than
-route-level: the fixed launcher, `Mod+J` hotkey, and command bar action are
-available anywhere an active organization exists. The shell entry stays
-intentionally small; it lazy-loads
-`features/agent/global-agent-chat-panel.tsx` only after the user opens the
-drawer, keeping `agents/react`, `@cloudflare/ai-chat/react`, and the Agent API
-client out of normal authenticated page startup. Desktop opens a right-side
-drawer and mobile uses the existing bottom drawer behavior. The browser app
-prepares or reuses the current user's active thread through
+route-level: `AppLayout` owns the Agent drawer open state, the authenticated
+header exposes the visible `Ask Ceird` action when an active organization and
+current role are available, and the command bar action plus `Mod+J` hotkey open
+that same drawer. The header action uses dialog semantics, accurate expanded
+state, and the shared shortcut display for `Mod+J`; there is no fixed
+bottom-right launcher. The shell entry stays intentionally small; it
+lazy-loads `features/agent/global-agent-chat-panel.tsx` only after the user
+opens the drawer, keeping `agents/react`, `@cloudflare/ai-chat/react`, and the
+Agent API client out of normal authenticated page startup. Desktop opens a
+right-side drawer and mobile uses the existing bottom drawer behavior. The
+first-open drawer state presents read capabilities as usable, frames write and
+destructive manifest entries conservatively as approval-gated metadata unless a
+runtime availability signal proves otherwise, and offers prompt starter buttons
+that fill the composer draft without sending. The browser app prepares or
+reuses the current user's active thread through
 `POST /agent/session/prepare`, which returns the thread, public action
 manifest, and initial short-lived connect token before the drawer connects to
 the Agent Worker. Later reconnects refresh the token through the thread
@@ -215,18 +229,19 @@ the package-local fallback and `local` when no Alchemy metadata is available.
 
 ## Feature Folders
 
-| Folder                    | Responsibility                                                                                                                                                                                                                                                                                                                       |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `features/auth`           | Login, signup, password reset, email verification, route guards, redirects, auth UI, and server session helpers.                                                                                                                                                                                                                     |
-| `features/organizations`  | Organization onboarding, active organization sync, settings, members, invitations, role access, and labels.                                                                                                                                                                                                                          |
-| `features/jobs`           | Jobs list, create flow, detail drawer/sheet, state effects, API client bridge, saved views, location display, maps, collaborators, labels, comments, and visits.                                                                                                                                                                     |
-| `features/jobs-workspace` | Electric-native Jobs workspace preview shell, route state, permission-aware placeholders, and shortcut affordances. It must not instantiate raw Electric streams or data-plane collections in route/view code.                                                                                                                       |
-| `features/sites`          | Sites list, site create flow, detail sheet, and site API state. The first Sites index refresh intentionally uses only supported site fields: name, address, and map readiness. Status, labels, lead, open job counts, saved views, updated timestamps, archive state, and bulk selection are product follow-ups, not placeholder UI. |
-| `features/activity`       | Organization activity feed search and formatting.                                                                                                                                                                                                                                                                                    |
-| `features/settings`       | User settings page schemas, search, profile/email/password forms, account security sessions, and 2FA settings UI.                                                                                                                                                                                                                    |
-| `features/command-bar`    | Command palette UI and global app actions.                                                                                                                                                                                                                                                                                           |
-| `features/agent`          | App-level Ceird Agent launcher, thread API helpers, Agent Worker origin resolution, responsive chat drawer, and chat E2E page object.                                                                                                                                                                                                |
-| `features/proximity`      | Shared route-aware proximity browser primitives: API bridge helpers, location access, maps handoff, typed-origin dialog control, route-ranking control, limit state, and display formatting.                                                                                                                                         |
+| Folder                     | Responsibility                                                                                                                                                                                                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `features/auth`            | Login, signup, password reset, email verification, route guards, redirects, auth UI, and server session helpers.                                                                                                                                                                                                                     |
+| `features/organizations`   | Organization onboarding, active organization sync, settings, members, invitations, role access, and labels.                                                                                                                                                                                                                          |
+| `features/jobs`            | Jobs list, create flow, detail drawer/sheet, state effects, API client bridge, saved views, location display, maps, collaborators, labels, comments, and visits.                                                                                                                                                                     |
+| `features/jobs-workspace`  | Electric-native Jobs workspace preview shell, route state, permission-aware placeholders, and shortcut affordances. It must not instantiate raw Electric streams or data-plane collections in route/view code.                                                                                                                       |
+| `features/sites`           | Sites list, site create flow, detail sheet, and site API state. The first Sites index refresh intentionally uses only supported site fields: name, address, and map readiness. Status, labels, lead, open job counts, saved views, updated timestamps, archive state, and bulk selection are product follow-ups, not placeholder UI. |
+| `features/sites-workspace` | Electric-native Sites workspace preview shell, route state, permission-aware placeholders, and shortcut affordances. It must not instantiate raw Electric streams or data-plane collections in route/view code.                                                                                                                      |
+| `features/activity`        | Organization activity feed search and formatting.                                                                                                                                                                                                                                                                                    |
+| `features/settings`        | User settings page schemas, search, profile/email/password forms, account security sessions, and 2FA settings UI.                                                                                                                                                                                                                    |
+| `features/command-bar`     | Command palette UI and global app actions.                                                                                                                                                                                                                                                                                           |
+| `features/agent`           | App-level Ceird Agent launcher, thread API helpers, Agent Worker origin resolution, responsive chat drawer, and chat E2E page object.                                                                                                                                                                                                |
+| `features/proximity`       | Shared route-aware proximity browser primitives: API bridge helpers, location access, maps handoff, typed-origin dialog control, route-ranking control, limit state, and display formatting.                                                                                                                                         |
 
 Shared app components live in `src/components`. shadcn-style primitives live in
 `src/components/ui`. Hotkey infrastructure lives in `src/hotkeys`.

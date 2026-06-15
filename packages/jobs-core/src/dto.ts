@@ -1,4 +1,5 @@
 import { AddCommentInputSchema, CommentSchema } from "@ceird/comments-core";
+import { ProductActorSchema } from "@ceird/identity-core";
 import { LabelId, LabelNameSchema, LabelSchema } from "@ceird/labels-core";
 import {
   ProximityLimitSchema,
@@ -204,6 +205,7 @@ export type JobActivityPayload = Schema.Schema.Type<
 export const JobActivitySchema = Schema.Struct({
   id: ActivityId,
   workItemId: WorkItemId,
+  actor: Schema.optional(ProductActorSchema),
   actorUserId: Schema.optional(UserId),
   payload: JobActivityPayloadSchema,
   createdAt: IsoDateTimeString,
@@ -238,11 +240,7 @@ export type OrganizationActivityQuery = Schema.Schema.Type<
   typeof OrganizationActivityQuerySchema
 >;
 
-export const OrganizationActivityActorSchema = Schema.Struct({
-  id: UserId,
-  name: Schema.String,
-  email: Schema.String,
-});
+export const OrganizationActivityActorSchema = ProductActorSchema;
 export type OrganizationActivityActor = Schema.Schema.Type<
   typeof OrganizationActivityActorSchema
 >;

@@ -145,6 +145,9 @@ The domain Worker exports a combined Drizzle schema from
 
 - `authSchema` contains Better Auth users, sessions, accounts,
   verifications, rate limits, organizations, members, and invitations.
+- `activitySchema` contains the product-safe activity actor projection and a
+  private source map used by the domain Worker to refresh member, agent, and
+  system actor rows.
 - `commentsSchema` contains shared comment rows and target ownership rows for
   jobs and sites.
 - `jobsSchema` contains contacts, work items, activity, visits, labels, and
@@ -164,6 +167,12 @@ outside auth, including product-safe projections such as
 scoped to the current user. The domain Worker owns the authorization decision
 for each shape, so the public sync Worker never accepts caller-supplied table,
 predicate, parameter, or source-secret values.
+`product_activity_actors` is the shared product-safe actor shape for activity
+and comments. It carries only display/routing fields such as actor kind,
+display name, display detail, and optional route metadata. The paired
+`product_activity_actor_sources` table stores private user/thread/system lookup
+keys, remains domain-only, and has no Electric shape. Better Auth user, session,
+account, and member tables stay outside the sync registry.
 
 Migrations live in `apps/domain/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses

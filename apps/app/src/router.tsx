@@ -53,7 +53,8 @@ declare module "@tanstack/react-router" {
         | "/organization/settings/labels"
         | "/organization/settings"
         | "/settings"
-        | "/sites";
+        | "/sites"
+        | "/sites-workspace";
     };
   }
 }

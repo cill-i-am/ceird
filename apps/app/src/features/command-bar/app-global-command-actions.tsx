@@ -1,7 +1,11 @@
 "use client";
 import { isAdministrativeOrganizationRole } from "@ceird/identity-core";
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
-import { AiGenerativeIcon, Settings02Icon } from "@hugeicons/core-free-icons";
+import {
+  AiGenerativeIcon,
+  Location01Icon,
+  Settings02Icon,
+} from "@hugeicons/core-free-icons";
 import { useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
@@ -9,7 +13,7 @@ import {
   getPrimaryNavItemsForRole,
   getPrimaryNavShortcut,
 } from "#/components/app-navigation";
-import { requestOpenGlobalAgentChat } from "#/features/agent/global-agent-chat";
+import { requestOpenGlobalAgentChat } from "#/features/agent/global-agent-chat-events";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 
 import { useRegisterCommandActions } from "./command-bar";
@@ -84,6 +88,11 @@ export function AppOrganizationCommandActions({
   const canUseAdministratorCommands =
     currentOrganizationRole !== undefined &&
     isAdministrativeOrganizationRole(currentOrganizationRole);
+  const canUseSitesWorkspace =
+    currentOrganizationRole !== undefined &&
+    getPrimaryNavItemsForRole(currentOrganizationRole).some(
+      (item) => item.url === "/sites"
+    );
   const actions = React.useMemo<readonly CommandAction[]>(
     () => [
       ...getPrimaryNavItemsForRole(currentOrganizationRole).map(
@@ -99,6 +108,21 @@ export function AppOrganizationCommandActions({
           title: `Go to ${item.title}`,
         })
       ),
+      ...(canUseSitesWorkspace
+        ? [
+            {
+              group: "Navigation",
+              icon: Location01Icon,
+              id: "global-go-sites-workspace",
+              keywords: ["electric", "realtime", "locations", "preview"],
+              priority: 45,
+              run: () => navigate({ to: "/sites-workspace" }),
+              scope: "org" as const,
+              shortcut: HOTKEYS.goSitesWorkspace,
+              title: "Go to Sites workspace",
+            },
+          ]
+        : []),
       ...(canUseAdministratorCommands
         ? [
             {
@@ -126,7 +150,12 @@ export function AppOrganizationCommandActions({
           ]
         : []),
     ],
-    [canUseAdministratorCommands, currentOrganizationRole, navigate]
+    [
+      canUseAdministratorCommands,
+      canUseSitesWorkspace,
+      currentOrganizationRole,
+      navigate,
+    ]
   );
 
   useRegisterCommandActions(actions);

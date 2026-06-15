@@ -1,3 +1,4 @@
+import type { ProductActorId } from "@ceird/identity-core";
 import type {
   ActivityIdType,
   OrganizationActivityItem,
@@ -16,11 +17,13 @@ import type { ActivitySearch } from "./activity-search";
 
 const taylorUserId = "user_taylor" as UserIdType;
 const jordanUserId = "user_jordan" as UserIdType;
+const taylorActorId = "77777777-7777-4777-8777-777777777777" as ProductActorId;
+const jordanActorId = "88888888-8888-4888-8888-888888888888" as ProductActorId;
 
 const mixedActivity = {
   items: [
     makeActivityItem({
-      actorId: taylorUserId,
+      actorId: taylorActorId,
       actorName: "Taylor Owner",
       createdAt: "2026-04-28T10:15:00.000Z",
       eventType: "job_created",
@@ -35,7 +38,7 @@ const mixedActivity = {
       workItemId: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
     }),
     makeActivityItem({
-      actorId: jordanUserId,
+      actorId: jordanActorId,
       actorName: "Jordan Admin",
       createdAt: "2026-04-27T09:00:00.000Z",
       eventType: "label_added",
@@ -49,7 +52,7 @@ const mixedActivity = {
       workItemId: "22222222-2222-4222-8222-222222222222" as WorkItemIdType,
     }),
     makeActivityItem({
-      actorId: taylorUserId,
+      actorId: taylorActorId,
       actorName: "Taylor Owner",
       createdAt: "2026-04-26T08:00:00.000Z",
       eventType: "visit_logged",
@@ -104,9 +107,10 @@ describe("organization activity page", () => {
             items: [
               {
                 actor: {
-                  email: "taylor@example.com",
-                  id: "user_taylor" as UserIdType,
-                  name: "Taylor Owner",
+                  displayDetail: "Team member",
+                  displayName: "Taylor Owner",
+                  id: taylorActorId,
+                  kind: "member",
                 },
                 createdAt: "2026-04-28T10:15:00.000Z",
                 eventType: "job_created",
@@ -243,11 +247,6 @@ describe("organization activity page", () => {
   );
 
   it.each([
-    {
-      hiddenSummary: "Jordan Admin added the Urgent label.",
-      search: { actorUserId: taylorUserId },
-      visibleSummary: "Taylor Owner logged a visit.",
-    },
     {
       hiddenSummary: "Taylor Owner logged a visit.",
       search: { fromDate: "2026-04-27" },
@@ -479,7 +478,7 @@ describe("organization activity page", () => {
 
 function makeActivityItem(
   item: Omit<OrganizationActivityItem, "actor"> & {
-    readonly actorId: UserIdType;
+    readonly actorId: ProductActorId;
     readonly actorName: string;
   }
 ): OrganizationActivityItem {
@@ -488,9 +487,10 @@ function makeActivityItem(
   return {
     ...activityItem,
     actor: {
-      email: `${actorName.toLowerCase().replaceAll(" ", ".")}@example.com`,
+      displayDetail: "Team member",
+      displayName: actorName,
       id: actorId,
-      name: actorName,
+      kind: "member",
     },
   };
 }

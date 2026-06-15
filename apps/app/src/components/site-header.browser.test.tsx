@@ -172,8 +172,97 @@ describe("site header", () => {
       expect(
         screen.queryByRole("button", { name: /keyboard shortcuts/i })
       ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /ask ceird/i })
+      ).not.toBeInTheDocument();
     }
   );
+
+  it("shows an accessible Ask Ceird shell action when agent access is available", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentChat = vi.fn<() => void>();
+
+    render(
+      <HotkeysProvider>
+        <SiteHeader
+          canUseAgent
+          agentChatOpen={false}
+          currentOrganizationRole="owner"
+          onOpenAgentChat={onOpenAgentChat}
+        />
+      </HotkeysProvider>
+    );
+
+    const button = screen.getByRole("button", { name: "Ask Ceird" });
+    expect(button).toHaveAttribute("aria-haspopup", "dialog");
+    expect(button).toHaveAttribute("aria-expanded", "false");
+
+    await user.hover(button);
+
+    await expect(screen.findByText("Ask Ceird")).resolves.toBeVisible();
+    await expect(
+      screen.findByLabelText(/ask ceird shortcut/i)
+    ).resolves.toBeVisible();
+
+    await user.click(button);
+
+    expect(onOpenAgentChat).toHaveBeenCalledOnce();
+  });
+
+  it("reflects the expanded state for the Ask Ceird shell action", () => {
+    render(
+      <HotkeysProvider>
+        <SiteHeader
+          canUseAgent
+          agentChatOpen
+          currentOrganizationRole="owner"
+          onOpenAgentChat={vi.fn<() => void>()}
+        />
+      </HotkeysProvider>
+    );
+
+    expect(screen.getByRole("button", { name: "Ask Ceird" })).toHaveAttribute(
+      "aria-expanded",
+      "true"
+    );
+  });
+
+  it("keeps the Ask Ceird shell action disabled until shell controls are ready", async () => {
+    const user = userEvent.setup();
+    const onOpenAgentChat = vi.fn<() => void>();
+    const { rerender } = render(
+      <HotkeysProvider>
+        <SiteHeader
+          canUseAgent
+          agentChatControlsReady={false}
+          currentOrganizationRole="owner"
+          onOpenAgentChat={onOpenAgentChat}
+        />
+      </HotkeysProvider>
+    );
+
+    const button = screen.getByRole("button", { name: "Ask Ceird" });
+    expect(button).toBeDisabled();
+
+    await user.click(button);
+
+    expect(onOpenAgentChat).not.toHaveBeenCalled();
+
+    rerender(
+      <HotkeysProvider>
+        <SiteHeader
+          canUseAgent
+          agentChatControlsReady
+          currentOrganizationRole="owner"
+          onOpenAgentChat={onOpenAgentChat}
+        />
+      </HotkeysProvider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Ask Ceird" }));
+
+    expect(onOpenAgentChat).toHaveBeenCalledOnce();
+  });
 
   it("exposes shortcut help directly in the mobile header", () => {
     mockedIsMobile.value = true;
