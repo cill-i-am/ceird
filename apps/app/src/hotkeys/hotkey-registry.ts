@@ -439,6 +439,14 @@ export const HOTKEYS = {
     scope: "jobs-workspace",
     when: "Filters are active",
   },
+  jobsWorkspaceCreate: {
+    group: "Jobs",
+    hotkey: "N",
+    id: "jobsWorkspaceCreate",
+    label: "Create job in workspace",
+    scope: "jobs-workspace",
+    when: "Jobs workspace is ready and focus is not in a field",
+  },
   jobCreateSubmit: {
     group: "Job drawer",
     hotkey: "Mod+Enter",

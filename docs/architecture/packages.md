@@ -139,6 +139,9 @@ Exports the shared jobs contract:
 - product activity DTOs that reference the shared `ProductActorSchema` for
   actor display
 - DTO schemas and inferred DTO types
+- write-response DTOs that pair canonical job/detail payloads with
+  PostgreSQL/Electric mutation `txid` metadata for clients that need sync
+  confirmation after domain-owned commands
 - bounded authenticated home dashboard summary DTOs for exact counts and top
   rows without full tenant job/site hydration
 - route-aware proximity request/response DTOs for ranking filtered jobs by

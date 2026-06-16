@@ -6,12 +6,18 @@ import {
   ProductActorRoute,
 } from "@ceird/identity-core";
 import type {
+  AssignJobLabelInput,
+  CreateJobInput,
   JobCollaborator,
+  JobDetailWriteResponse,
   JobDetailResponse,
+  JobWriteResponse,
   JobListItem,
   JobListQuery,
   JobListResponse,
   JobOptionsResponse,
+  PatchJobInput,
+  TransitionJobInput,
   WorkItemIdType,
 } from "@ceird/jobs-core";
 import {
@@ -32,7 +38,7 @@ import {
   UserId,
   WorkItemId,
 } from "@ceird/jobs-core";
-import type { Label } from "@ceird/labels-core";
+import type { Label, LabelIdType } from "@ceird/labels-core";
 import { LabelId, LabelSchema } from "@ceird/labels-core";
 import type { SiteOption } from "@ceird/sites-core";
 import {
@@ -44,7 +50,7 @@ import {
 } from "@ceird/sites-core";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { QueryClient } from "@tanstack/query-core";
-import { Schema } from "effect";
+import { Effect, Exit, Schema } from "effect";
 
 import {
   createDataPlaneSeed,
@@ -78,12 +84,14 @@ import type {
   DataPlaneCollectionSnapshot,
   DataPlaneCollectionWriteVersionRef,
 } from "#/data-plane/collection-write";
+import { executeDataPlaneCommandAction } from "#/data-plane/command-action";
 import {
   createElectricCollectionFromContract,
   defineElectricCollectionContract,
 } from "#/data-plane/electric-collection";
 import type { DataPlaneElectricCollectionContract } from "#/data-plane/electric-collection";
 import type { DataPlaneLiveCollection } from "#/data-plane/live-query";
+import type { DataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 import { createCollectionWithQueryFallback } from "#/data-plane/query-fallback-collection";
 import type {
   CreateDataPlaneFallbackCollectionOptions,
@@ -92,6 +100,7 @@ import type {
 import { organizationDataQueryKey } from "#/data-plane/query-scope";
 import type { OrganizationDataScope } from "#/data-plane/query-scope";
 import type { DataPlaneSession } from "#/data-plane/session";
+import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import {
   getCurrentServerJobDetail,
   getCurrentServerExternalJobOptions,
@@ -116,6 +125,7 @@ const JOB_OPTIONS_COLLECTION_ITEM_ID = "job-options";
 const DEFAULT_JOBS_LIST_LIMIT = 50;
 const JOBS_WORKSPACE_READ_MODEL_QUERY_NAME = "jobs.workspace.electric";
 const JOBS_WORKSPACE_DETAIL_QUERY_NAME = "jobs.workspace.detail.electric";
+const JOBS_WORKSPACE_MUTATION_CONFIRMATION_TIMEOUT_MS = 10_000;
 type JobsElectricRowValue =
   | bigint
   | boolean
@@ -157,6 +167,13 @@ type JobsWorkspaceCollection<
   Item extends object,
   Key extends string | number = string,
 > = DataPlaneLiveCollection<Item, Key, Record<string, never>>;
+interface JobsWorkspaceObservableCollection<Item> {
+  entries: () => Iterable<[string | number, Item]>;
+  subscribeChanges: (callback: () => void) => {
+    requestSnapshot?: (options?: { readonly optimizedOnly?: boolean }) => void;
+    unsubscribe: () => void;
+  };
+}
 export type JobsCollectionSyncOptions = Omit<
   CreateDataPlaneFallbackCollectionOptions<JobsCollection, JobsCollection>,
   "createQueryCollection"
@@ -380,6 +397,30 @@ export interface JobsWorkspaceDetailReadModelCollectionHealth extends JobsWorksp
   readonly comments: DataPlaneCollectionHealth;
   readonly memberActorSummaries: DataPlaneCollectionHealth;
 }
+
+export interface JobsWorkspaceCommandCollections {
+  readonly jobLabelAssignments: JobsWorkspaceObservableCollection<JobLabelAssignmentRow> | null;
+  readonly jobs: JobsWorkspaceObservableCollection<JobsWorkspaceJobRow> | null;
+}
+
+export interface JobsWorkspaceCommandRunnerOptions {
+  readonly collections: JobsWorkspaceCommandCollections;
+  readonly journal?: DataPlaneMutationJournal | undefined;
+  readonly timeoutMs?: number | undefined;
+}
+
+export interface JobsWorkspaceElectricObservation {
+  readonly collection: "job-label-assignments" | "jobs";
+  readonly kind: "already-reflected" | "observed-change";
+}
+
+export type JobsWorkspaceJobCommandResult = JobWriteResponse & {
+  readonly electricObservation: JobsWorkspaceElectricObservation;
+};
+
+export type JobsWorkspaceJobDetailCommandResult = JobDetailWriteResponse & {
+  readonly electricObservation: JobsWorkspaceElectricObservation;
+};
 
 export type JobsWorkspaceSort = "updated-desc" | "updated-asc" | "priority";
 export type JobsWorkspaceStatusFilter =
@@ -1143,6 +1184,207 @@ export function getOrCreateJobsWorkspaceReadModelState({
   return created;
 }
 
+export function createJobsWorkspaceCommandRunner({
+  collections,
+  journal,
+  timeoutMs = JOBS_WORKSPACE_MUTATION_CONFIRMATION_TIMEOUT_MS,
+}: JobsWorkspaceCommandRunnerOptions) {
+  return {
+    assignJobLabel: (workItemId: WorkItemIdType, input: AssignJobLabelInput) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["job-label-assignments"],
+          execute: async (commandInput: {
+            readonly input: AssignJobLabelInput;
+            readonly workItemId: WorkItemIdType;
+          }) => {
+            const exit = await Effect.runPromiseExit(
+              assignBrowserJobLabelWithConfirmation(
+                commandInput.workItemId,
+                commandInput.input
+              )
+            );
+
+            if (Exit.isFailure(exit)) {
+              return Exit.failCause(exit.cause);
+            }
+
+            return await catchJobsWorkspaceConfirmationFailure(
+              awaitJobLabelAssignmentConfirmation({
+                collection: collections.jobLabelAssignments,
+                labelId: commandInput.input.labelId,
+                mode: "assigned",
+                response: exit.value,
+                timeoutMs,
+                workItemId: commandInput.workItemId,
+              })
+            );
+          },
+          name: "jobs-workspace.assign-label",
+          optimistic: "none",
+        },
+        { input, workItemId },
+        { journal }
+      ),
+    createJob: (input: CreateJobInput) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["jobs", "job-sites", "job-contacts"],
+          execute: async (commandInput: CreateJobInput) => {
+            const exit = await Effect.runPromiseExit(
+              createBrowserJobWithConfirmation(commandInput)
+            );
+
+            if (Exit.isFailure(exit)) {
+              return Exit.failCause(exit.cause);
+            }
+
+            return await catchJobsWorkspaceConfirmationFailure(
+              awaitJobConfirmation({
+                collection: collections.jobs,
+                response: exit.value,
+                timeoutMs,
+              })
+            );
+          },
+          name: "jobs-workspace.create",
+          optimistic: "none",
+        },
+        input,
+        { journal }
+      ),
+    removeJobLabel: (workItemId: WorkItemIdType, labelId: LabelIdType) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["job-label-assignments"],
+          execute: async (commandInput: {
+            readonly labelId: LabelIdType;
+            readonly workItemId: WorkItemIdType;
+          }) => {
+            const exit = await Effect.runPromiseExit(
+              removeBrowserJobLabelWithConfirmation(
+                commandInput.workItemId,
+                commandInput.labelId
+              )
+            );
+
+            if (Exit.isFailure(exit)) {
+              return Exit.failCause(exit.cause);
+            }
+
+            return await catchJobsWorkspaceConfirmationFailure(
+              awaitJobLabelAssignmentConfirmation({
+                collection: collections.jobLabelAssignments,
+                labelId: commandInput.labelId,
+                mode: "removed",
+                response: exit.value,
+                timeoutMs,
+                workItemId: commandInput.workItemId,
+              })
+            );
+          },
+          name: "jobs-workspace.remove-label",
+          optimistic: "none",
+        },
+        { labelId, workItemId },
+        { journal }
+      ),
+    reopenJob: (workItemId: WorkItemIdType) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["jobs"],
+          execute: async (commandInput: WorkItemIdType) => {
+            const exit = await Effect.runPromiseExit(
+              reopenBrowserJobWithConfirmation(commandInput)
+            );
+
+            if (Exit.isFailure(exit)) {
+              return Exit.failCause(exit.cause);
+            }
+
+            return await catchJobsWorkspaceConfirmationFailure(
+              awaitJobConfirmation({
+                collection: collections.jobs,
+                response: exit.value,
+                timeoutMs,
+              })
+            );
+          },
+          name: "jobs-workspace.reopen",
+          optimistic: "none",
+        },
+        workItemId,
+        { journal }
+      ),
+    transitionJob: (workItemId: WorkItemIdType, input: TransitionJobInput) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["jobs"],
+          execute: async (commandInput: {
+            readonly input: TransitionJobInput;
+            readonly workItemId: WorkItemIdType;
+          }) => {
+            const exit = await Effect.runPromiseExit(
+              transitionBrowserJobWithConfirmation(
+                commandInput.workItemId,
+                commandInput.input
+              )
+            );
+
+            if (Exit.isFailure(exit)) {
+              return Exit.failCause(exit.cause);
+            }
+
+            return await catchJobsWorkspaceConfirmationFailure(
+              awaitJobConfirmation({
+                collection: collections.jobs,
+                response: exit.value,
+                timeoutMs,
+              })
+            );
+          },
+          name: "jobs-workspace.transition",
+          optimistic: "none",
+        },
+        { input, workItemId },
+        { journal }
+      ),
+    updateJob: (workItemId: WorkItemIdType, input: PatchJobInput) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["jobs", "job-sites", "job-contacts"],
+          execute: async (commandInput: {
+            readonly input: PatchJobInput;
+            readonly workItemId: WorkItemIdType;
+          }) => {
+            const exit = await Effect.runPromiseExit(
+              patchBrowserJobWithConfirmation(
+                commandInput.workItemId,
+                commandInput.input
+              )
+            );
+
+            if (Exit.isFailure(exit)) {
+              return Exit.failCause(exit.cause);
+            }
+
+            return await catchJobsWorkspaceConfirmationFailure(
+              awaitJobConfirmation({
+                collection: collections.jobs,
+                response: exit.value,
+                timeoutMs,
+              })
+            );
+          },
+          name: "jobs-workspace.update",
+          optimistic: "none",
+        },
+        { input, workItemId },
+        { journal }
+      ),
+  };
+}
+
 function createJobsWorkspaceElectricCollection<
   Item extends object,
   Key extends string | number,
@@ -1872,6 +2114,231 @@ export function createJobCommentsElectricContract(
       transformer: toJobCommentElectricRow,
     },
   });
+}
+
+async function awaitJobConfirmation({
+  collection,
+  response,
+  timeoutMs,
+}: {
+  readonly collection: JobsWorkspaceObservableCollection<JobsWorkspaceJobRow> | null;
+  readonly response: JobWriteResponse;
+  readonly timeoutMs: number;
+}) {
+  const observation = await waitForJobsWorkspaceCollectionObservation({
+    collection,
+    matches: (job) =>
+      job.id === response.job.id && job.updatedAt === response.job.updatedAt,
+    timeoutMs,
+  });
+
+  return Exit.succeed(
+    withJobsWorkspaceElectricObservation(response, {
+      collection: "jobs",
+      kind: observation.kind,
+    })
+  );
+}
+
+async function awaitJobLabelAssignmentConfirmation({
+  collection,
+  labelId,
+  mode,
+  response,
+  timeoutMs,
+  workItemId,
+}: {
+  readonly collection: JobsWorkspaceObservableCollection<JobLabelAssignmentRow> | null;
+  readonly labelId: LabelIdType;
+  readonly mode: "assigned" | "removed";
+  readonly response: JobDetailWriteResponse;
+  readonly timeoutMs: number;
+  readonly workItemId: WorkItemIdType;
+}) {
+  const observation = await waitForJobsWorkspaceCollectionObservation({
+    collection,
+    matches:
+      mode === "assigned"
+        ? (assignment) =>
+            assignment.workItemId === workItemId &&
+            assignment.labelId === labelId
+        : (assignment) =>
+            !(
+              assignment.workItemId === workItemId &&
+              assignment.labelId === labelId
+            ),
+    mode,
+    timeoutMs,
+  });
+
+  return Exit.succeed(
+    withJobsWorkspaceElectricObservation(response, {
+      collection: "job-label-assignments",
+      kind: observation.kind,
+    })
+  );
+}
+
+async function catchJobsWorkspaceConfirmationFailure<Success>(
+  promise: Promise<Exit.Exit<Success, unknown>>
+) {
+  try {
+    return await promise;
+  } catch (error) {
+    return Exit.fail(error);
+  }
+}
+
+function waitForJobsWorkspaceCollectionObservation<Item>({
+  collection,
+  matches,
+  mode = "assigned",
+  timeoutMs,
+}: {
+  readonly collection: JobsWorkspaceObservableCollection<Item> | null;
+  readonly matches: (item: Item) => boolean;
+  readonly mode?: "assigned" | "removed" | undefined;
+  readonly timeoutMs: number;
+}): Promise<Pick<JobsWorkspaceElectricObservation, "kind">> {
+  if (collection === null) {
+    return Promise.reject(
+      new Error(
+        "Electric confirmation is unavailable because the collection is not connected."
+      )
+    );
+  }
+
+  const isConfirmed = () => {
+    const items = Array.from(collection.entries(), ([, item]) => item);
+
+    if (mode === "removed") {
+      return items.every((item) => matches(item));
+    }
+
+    return items.some((item) => matches(item));
+  };
+
+  if (isConfirmed()) {
+    return Promise.resolve({ kind: "already-reflected" });
+  }
+
+  const deferred =
+    Promise.withResolvers<Pick<JobsWorkspaceElectricObservation, "kind">>();
+  let settled = false;
+  let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const subscription = collection.subscribeChanges(() => {
+    if (!isConfirmed()) {
+      return;
+    }
+
+    if (settled) {
+      return;
+    }
+
+    settled = true;
+    if (timeout !== undefined) {
+      globalThis.clearTimeout(timeout);
+    }
+    subscription.unsubscribe();
+    deferred.resolve({ kind: "observed-change" });
+  });
+
+  if (!settled) {
+    timeout = globalThis.setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      subscription.unsubscribe();
+      deferred.reject(
+        new Error("Timed out waiting for Electric to confirm the job mutation.")
+      );
+    }, timeoutMs);
+  }
+
+  subscription.requestSnapshot?.({ optimizedOnly: false });
+
+  return deferred.promise;
+}
+
+function withJobsWorkspaceElectricObservation(
+  response: JobWriteResponse,
+  electricObservation: JobsWorkspaceElectricObservation
+): JobsWorkspaceJobCommandResult;
+function withJobsWorkspaceElectricObservation(
+  response: JobDetailWriteResponse,
+  electricObservation: JobsWorkspaceElectricObservation
+): JobsWorkspaceJobDetailCommandResult;
+function withJobsWorkspaceElectricObservation(
+  response: JobDetailWriteResponse | JobWriteResponse,
+  electricObservation: JobsWorkspaceElectricObservation
+) {
+  return {
+    ...response,
+    electricObservation,
+  };
+}
+
+function createBrowserJobWithConfirmation(input: CreateJobInput) {
+  return runBrowserAppApiRequest("JobsWorkspace.createJob", (client) =>
+    client.jobs.createJob({ payload: input })
+  );
+}
+
+function patchBrowserJobWithConfirmation(
+  workItemId: WorkItemIdType,
+  input: PatchJobInput
+) {
+  return runBrowserAppApiRequest("JobsWorkspace.patchJob", (client) =>
+    client.jobs.patchJob({
+      params: { workItemId },
+      payload: input,
+    })
+  );
+}
+
+function transitionBrowserJobWithConfirmation(
+  workItemId: WorkItemIdType,
+  input: TransitionJobInput
+) {
+  return runBrowserAppApiRequest("JobsWorkspace.transitionJob", (client) =>
+    client.jobs.transitionJob({
+      params: { workItemId },
+      payload: input,
+    })
+  );
+}
+
+function reopenBrowserJobWithConfirmation(workItemId: WorkItemIdType) {
+  return runBrowserAppApiRequest("JobsWorkspace.reopenJob", (client) =>
+    client.jobs.reopenJob({
+      params: { workItemId },
+    })
+  );
+}
+
+function assignBrowserJobLabelWithConfirmation(
+  workItemId: WorkItemIdType,
+  input: AssignJobLabelInput
+) {
+  return runBrowserAppApiRequest("JobsWorkspace.assignJobLabel", (client) =>
+    client.jobs.assignJobLabel({
+      params: { workItemId },
+      payload: input,
+    })
+  );
+}
+
+function removeBrowserJobLabelWithConfirmation(
+  workItemId: WorkItemIdType,
+  labelId: LabelIdType
+) {
+  return runBrowserAppApiRequest("JobsWorkspace.removeJobLabel", (client) =>
+    client.jobs.removeJobLabel({
+      params: { labelId, workItemId },
+    })
+  );
 }
 
 function createJobsCollection({

@@ -55,6 +55,7 @@ const JobVisitDurationMinutesSchema = Schema.Int.pipe(
 const NonEmptyTrimmedString = Schema.Trim.pipe(
   Schema.check(Schema.isMinLength(1))
 );
+const MAX_ELECTRIC_MUTATION_TXID = 4_294_967_295;
 export const JobListCursor = Schema.String.pipe(
   Schema.brand("@ceird/jobs-core/JobListCursor")
 );
@@ -484,7 +485,36 @@ export const CreateJobInputSchema = Schema.Struct({
 });
 export type CreateJobInput = Schema.Schema.Type<typeof CreateJobInputSchema>;
 
-export const CreateJobResponseSchema = JobSchema;
+export const ElectricMutationConfirmationSchema = Schema.Struct({
+  txid: Schema.Number.pipe(
+    Schema.check(
+      Schema.isInt(),
+      Schema.isGreaterThanOrEqualTo(0),
+      Schema.isLessThanOrEqualTo(MAX_ELECTRIC_MUTATION_TXID)
+    )
+  ),
+});
+export type ElectricMutationConfirmation = Schema.Schema.Type<
+  typeof ElectricMutationConfirmationSchema
+>;
+
+export const JobWriteResponseSchema = Schema.Struct({
+  job: JobSchema,
+  mutation: ElectricMutationConfirmationSchema,
+});
+export type JobWriteResponse = Schema.Schema.Type<
+  typeof JobWriteResponseSchema
+>;
+
+export const JobDetailWriteResponseSchema = Schema.Struct({
+  detail: Schema.suspend((): typeof JobDetailSchema => JobDetailSchema),
+  mutation: ElectricMutationConfirmationSchema,
+});
+export type JobDetailWriteResponse = Schema.Schema.Type<
+  typeof JobDetailWriteResponseSchema
+>;
+
+export const CreateJobResponseSchema = JobWriteResponseSchema;
 export type CreateJobResponse = Schema.Schema.Type<
   typeof CreateJobResponseSchema
 >;
@@ -501,7 +531,7 @@ export const PatchJobInputSchema = Schema.Struct({
 });
 export type PatchJobInput = Schema.Schema.Type<typeof PatchJobInputSchema>;
 
-export const PatchJobResponseSchema = JobSchema;
+export const PatchJobResponseSchema = JobWriteResponseSchema;
 export type PatchJobResponse = Schema.Schema.Type<
   typeof PatchJobResponseSchema
 >;
@@ -516,12 +546,12 @@ export type TransitionJobInput = Schema.Schema.Type<
   typeof TransitionJobInputSchema
 >;
 
-export const TransitionJobResponseSchema = JobSchema;
+export const TransitionJobResponseSchema = JobWriteResponseSchema;
 export type TransitionJobResponse = Schema.Schema.Type<
   typeof TransitionJobResponseSchema
 >;
 
-export const ReopenJobResponseSchema = JobSchema;
+export const ReopenJobResponseSchema = JobWriteResponseSchema;
 export type ReopenJobResponse = Schema.Schema.Type<
   typeof ReopenJobResponseSchema
 >;

@@ -1,6 +1,6 @@
 import type {
   ContactIdType,
-  CreateJobResponse,
+  Job,
   JobListItem,
   UserIdType,
   WorkItemIdType,
@@ -25,7 +25,7 @@ describe("jobs state", () => {
       name: "Compliance",
       updatedAt: "2026-04-23T10:00:00.000Z",
     };
-    const job: CreateJobResponse = {
+    const job: Job = {
       createdAt: "2026-04-23T11:00:00.000Z",
       createdByUserId: "22222222-2222-4222-8222-222222222222" as UserIdType,
       id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,

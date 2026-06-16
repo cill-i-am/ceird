@@ -1,6 +1,7 @@
 import type { Context } from "effect";
 import { Effect, Layer, Stream } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
+import { SqlClient } from "effect/unstable/sql";
 
 import { DomainDrizzle } from "../../platform/database/database.js";
 import type { DomainDrizzleService } from "../../platform/database/database.js";
@@ -108,7 +109,11 @@ function runToolkitTool(
   params: unknown,
   runtime: ContextRuntime,
   servicesLayer: Layer.Layer<
-    DomainDrizzleService | JobsService | LabelsService | SitesService
+    | DomainDrizzleService
+    | JobsService
+    | LabelsService
+    | SitesService
+    | SqlClient.SqlClient
   >
 ) {
   return Effect.runPromise(
@@ -149,6 +154,7 @@ function makeTestToolServicesLayer(options: {
 }) {
   return Layer.mergeAll(
     makeUnusedDomainDrizzleLayer(),
+    makeUnusedSqlClientLayer(),
     Layer.succeed(
       LabelsService,
       LabelsService.of({
@@ -163,6 +169,22 @@ function makeTestToolServicesLayer(options: {
       SitesService,
       SitesService.of({} as Context.Service.Shape<typeof SitesService>)
     )
+  );
+}
+
+function makeUnusedSqlClientLayer() {
+  return Layer.succeed(
+    SqlClient.SqlClient,
+    new Proxy(
+      {},
+      {
+        get: (_target, property) => {
+          throw new Error(
+            `SqlClient.${String(property)} should not be called in MCP tool tests`
+          );
+        },
+      }
+    ) as unknown as SqlClient.SqlClient
   );
 }
 

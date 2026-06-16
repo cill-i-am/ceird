@@ -1,14 +1,18 @@
-import type { OrganizationId } from "@ceird/identity-core";
+import type { OrganizationId, UserId } from "@ceird/identity-core";
 import type {
   ContactIdType,
+  Job,
+  JobDetailWriteResponse,
   JobListCursorType,
   JobListItem,
   JobListResponse,
+  JobWriteResponse,
   WorkItemIdType,
 } from "@ceird/jobs-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
 import type { SiteIdType } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/react-query";
+import { Effect, Exit } from "effect";
 import { afterEach, vi } from "vitest";
 
 import { createDataPlaneCollectionHealth } from "#/data-plane/collection-health";
@@ -16,9 +20,11 @@ import type { DataPlaneElectricSyncError } from "#/data-plane/electric-collectio
 import { createDataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { getDataPlaneSessionKey } from "#/data-plane/session";
+import type { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 
 import {
   aggregateJobsWorkspaceReadModelHealth,
+  createJobsWorkspaceCommandRunner,
   createJobsWorkspaceReadModelContracts,
   deriveJobsWorkspaceDetail,
   deriveJobsWorkspaceVisibleRows,
@@ -40,9 +46,21 @@ import {
   toProductMemberActorSummaryElectricRow,
   toJobsWorkspaceJobRow,
 } from "./jobs-data-plane";
+import type { JobLabelAssignmentRow } from "./jobs-data-plane";
+
+const appApiMock = vi.hoisted(() => ({
+  runBrowserAppApiRequest:
+    vi.fn<() => Effect.Effect<unknown, unknown, never>>(),
+}));
+
+vi.mock(import("#/features/api/app-api-client"), () => ({
+  runBrowserAppApiRequest:
+    appApiMock.runBrowserAppApiRequest as unknown as typeof runBrowserAppApiRequest,
+}));
 
 describe("jobs data plane", () => {
   afterEach(() => {
+    appApiMock.runBrowserAppApiRequest.mockReset();
     vi.unstubAllEnvs();
   });
 
@@ -59,7 +77,7 @@ describe("jobs data plane", () => {
     id: "job_123",
     kind: "job",
     labels: [],
-    priority: "normal",
+    priority: "medium",
     status: "open",
     title: "Inspect boiler",
     updatedAt: "2026-05-30T00:00:00.000Z",
@@ -920,6 +938,199 @@ describe("jobs data plane", () => {
     });
   });
 
+  it("keeps create pending until the jobs collection observes the server row state", async () => {
+    const jobs = createFakeCollection<ReturnType<typeof toJobsWorkspaceJobRow>>(
+      (jobRow) => jobRow.id
+    );
+    const journal = createDataPlaneMutationJournal({
+      createId: () => "mutation_1",
+      now: () => 100,
+    });
+    const createdJob = makeJob("Install heat pump", {
+      id: "11111111-1111-4111-8111-111111111121" as WorkItemIdType,
+      updatedAt: "2026-06-15T13:00:00.000Z",
+    });
+    const response = makeJobWriteResponse(createdJob, 1201);
+    appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
+      Effect.promise(() => Promise.resolve(response))
+    );
+
+    const command = createJobsWorkspaceCommandRunner({
+      collections: {
+        jobLabelAssignments: createFakeCollection(
+          (assignment) => assignment.id
+        ),
+        jobs,
+      },
+      journal,
+      timeoutMs: 100,
+    }).createJob({ title: "Install heat pump" });
+
+    expect(journal.entries()).toMatchObject([
+      {
+        affectedCollections: ["jobs", "job-sites", "job-contacts"],
+        commandName: "jobs-workspace.create",
+        status: "pending",
+      },
+    ]);
+
+    globalThis.setTimeout(() => {
+      jobs.upsert(makeJobsWorkspaceJobRow(createdJob));
+    }, 0);
+    const exit = await command;
+
+    expect(Exit.isSuccess(exit)).toBeTruthy();
+    if (Exit.isFailure(exit)) {
+      throw new Error("Expected create command to succeed");
+    }
+    expect(exit.value).toMatchObject({
+      electricObservation: {
+        collection: "jobs",
+        kind: "observed-change",
+      },
+      mutation: { txid: 1201 },
+    });
+    expect(journal.entries()).toMatchObject([
+      {
+        commandName: "jobs-workspace.create",
+        status: "success",
+      },
+    ]);
+  });
+
+  it("records API command failures without waiting for Electric confirmation", async () => {
+    const journal = createDataPlaneMutationJournal();
+    const failure = new Error("Job access denied");
+    appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
+      Effect.fail(failure)
+    );
+
+    const exit = await createJobsWorkspaceCommandRunner({
+      collections: {
+        jobLabelAssignments: createFakeCollection(
+          (assignment) => assignment.id
+        ),
+        jobs: createFakeCollection((jobRow) => jobRow.id),
+      },
+      journal,
+    }).updateJob("11111111-1111-4111-8111-111111111121" as WorkItemIdType, {
+      priority: "high",
+    });
+
+    expect(Exit.isFailure(exit)).toBeTruthy();
+    expect(journal.entries()).toMatchObject([
+      {
+        commandName: "jobs-workspace.update",
+        error: failure,
+        status: "failure",
+      },
+    ]);
+  });
+
+  it("records Electric confirmation timeouts as command failures", async () => {
+    const journal = createDataPlaneMutationJournal();
+    appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
+      Effect.succeed(makeJobWriteResponse(makeJob("Install heat pump"), 1202))
+    );
+
+    const exit = await createJobsWorkspaceCommandRunner({
+      collections: {
+        jobLabelAssignments: createFakeCollection(
+          (assignment) => assignment.id
+        ),
+        jobs: createFakeCollection((jobRow) => jobRow.id),
+      },
+      journal,
+      timeoutMs: 1,
+    }).transitionJob("11111111-1111-4111-8111-111111111121" as WorkItemIdType, {
+      status: "in_progress",
+    });
+
+    expect(Exit.isFailure(exit)).toBeTruthy();
+    expect(journal.entries()[0]).toMatchObject({
+      commandName: "jobs-workspace.transition",
+      status: "failure",
+    });
+    expect(journal.entries()[0]?.error).toBeInstanceOf(Error);
+  });
+
+  it("confirms job label assignment and removal through synced assignment data", async () => {
+    const workItemId = "11111111-1111-4111-8111-111111111121" as WorkItemIdType;
+    const labelId = "22222222-2222-4222-8222-222222222222" as LabelIdType;
+    const assignments = createFakeCollection<JobLabelAssignmentRow>(
+      (assignment) => assignment.id
+    );
+    const commandRunner = createJobsWorkspaceCommandRunner({
+      collections: {
+        jobLabelAssignments: assignments,
+        jobs: createFakeCollection((jobRow) => jobRow.id),
+      },
+      timeoutMs: 100,
+    });
+    const assignment = {
+      createdAt: "2026-06-15T10:05:00.000Z",
+      id: `${workItemId}:${labelId}`,
+      labelId,
+      workItemId,
+    } satisfies JobLabelAssignmentRow;
+
+    appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
+      Effect.promise(() =>
+        Promise.resolve(
+          makeJobDetailWriteResponse(
+            makeJob("Install heat pump", { workItemId }),
+            1203
+          )
+        )
+      )
+    );
+    const assignCommand = commandRunner.assignJobLabel(workItemId, { labelId });
+    globalThis.setTimeout(() => {
+      assignments.upsert(assignment);
+    }, 0);
+    const assignExit = await assignCommand;
+
+    expect(Exit.isSuccess(assignExit)).toBeTruthy();
+    if (Exit.isFailure(assignExit)) {
+      throw new Error("Expected label assignment command to succeed");
+    }
+    expect(assignExit.value).toMatchObject({
+      electricObservation: {
+        collection: "job-label-assignments",
+        kind: "observed-change",
+      },
+      mutation: { txid: 1203 },
+    });
+
+    appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
+      Effect.promise(() =>
+        Promise.resolve(
+          makeJobDetailWriteResponse(
+            makeJob("Install heat pump", { workItemId }),
+            1204
+          )
+        )
+      )
+    );
+    const removeCommand = commandRunner.removeJobLabel(workItemId, labelId);
+    globalThis.setTimeout(() => {
+      assignments.delete(assignment);
+    }, 0);
+    const removeExit = await removeCommand;
+
+    expect(Exit.isSuccess(removeExit)).toBeTruthy();
+    if (Exit.isFailure(removeExit)) {
+      throw new Error("Expected label removal command to succeed");
+    }
+    expect(removeExit.value).toMatchObject({
+      electricObservation: {
+        collection: "job-label-assignments",
+        kind: "observed-change",
+      },
+      mutation: { txid: 1204 },
+    });
+  });
+
   it("maps product-safe Electric rows for the jobs workspace graph", () => {
     const workItemId = "11111111-1111-4111-8111-111111111111";
     const labelId = "22222222-2222-4222-8222-222222222222";
@@ -1203,6 +1414,110 @@ function makeTestCollection(
         }
         currentRows = [...nextRowsById.values()];
       },
+    },
+  };
+}
+
+function makeJob(
+  title: string,
+  options: {
+    readonly id?: WorkItemIdType | undefined;
+    readonly updatedAt?: string | undefined;
+    readonly workItemId?: WorkItemIdType | undefined;
+  } = {}
+): Job {
+  return {
+    createdAt: "2026-06-15T10:00:00.000Z",
+    createdByUserId: "user_123" as UserId,
+    id:
+      options.id ??
+      options.workItemId ??
+      ("11111111-1111-4111-8111-111111111121" as WorkItemIdType),
+    kind: "job",
+    labels: [],
+    priority: "medium",
+    status: "new",
+    title,
+    updatedAt: options.updatedAt ?? "2026-06-15T10:00:00.000Z",
+  } satisfies Job;
+}
+
+function makeJobsWorkspaceJobRow(
+  job: Job
+): ReturnType<typeof toJobsWorkspaceJobRow> {
+  return {
+    createdAt: job.createdAt,
+    createdByUserId: job.createdByUserId,
+    id: job.id,
+    kind: job.kind,
+    priority: job.priority,
+    status: job.status,
+    title: job.title,
+    updatedAt: job.updatedAt,
+  };
+}
+
+function makeJobWriteResponse(job: Job, txid: number): JobWriteResponse {
+  return {
+    job,
+    mutation: { txid },
+  };
+}
+
+function makeJobDetailWriteResponse(
+  job: Job,
+  txid: number
+): JobDetailWriteResponse {
+  return {
+    detail: {
+      activity: [],
+      comments: [],
+      job,
+      viewerAccess: {
+        canComment: true,
+        visibility: "internal",
+      },
+      visits: [],
+    },
+    mutation: { txid },
+  };
+}
+
+function createFakeCollection<Item>(getKey: (item: Item) => string): {
+  delete: (item: Item) => void;
+  entries: () => IterableIterator<[string, Item]>;
+  subscribeChanges: (callback: () => void) => {
+    requestSnapshot: () => void;
+    unsubscribe: () => void;
+  };
+  upsert: (item: Item) => void;
+} {
+  const rows = new Map<string, Item>();
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
+
+  return {
+    delete: (item) => {
+      rows.delete(getKey(item));
+      emit();
+    },
+    entries: () => rows.entries(),
+    subscribeChanges: (callback) => {
+      listeners.add(callback);
+      return {
+        requestSnapshot: callback,
+        unsubscribe: () => {
+          listeners.delete(callback);
+        },
+      };
+    },
+    upsert: (item) => {
+      rows.set(getKey(item), item);
+      emit();
     },
   };
 }

@@ -13,6 +13,7 @@ import { SiteId } from "@ceird/sites-core";
 import { Context, Effect, Schema } from "effect";
 import { Tool, Toolkit } from "effect/unstable/ai";
 import { HttpServerRequest } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 
 import type { DomainDrizzleService } from "../../platform/database/database.js";
 import { JobsService } from "../jobs/service.js";
@@ -72,7 +73,8 @@ export type McpToolDomainServices =
   | JobsService
   | LabelsService
   | SitesService
-  | DomainDrizzleService;
+  | DomainDrizzleService
+  | SqlClient.SqlClient;
 type McpToolPassthroughServices = HttpServerRequest.HttpServerRequest;
 
 export class McpToolDomainRuntime extends Context.Service<

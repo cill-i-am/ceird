@@ -23,6 +23,7 @@ import {
   JobCommentBodySchema,
   JobCommentSchema,
   JobDetailResponseSchema,
+  JobDetailWriteResponseSchema,
   IsoDateString,
   JobListQuerySchema,
   JobMemberOptionsResponseSchema,
@@ -35,6 +36,7 @@ import {
   JobStatusSchema,
   JobTitleSchema,
   JobViewerAccessSchema,
+  JobWriteResponseSchema,
   ACTIVE_JOB_STATUSES,
   JOB_COLLABORATOR_ACCESS_LEVELS,
   JOB_COLLABORATOR_SUBJECT_TYPES,
@@ -191,6 +193,48 @@ describe("jobs-core", () => {
         extra: true,
       })
     ).toThrow(/[Uu]nexpected/);
+  });
+
+  it("decodes job write responses with Electric confirmation metadata", () => {
+    const job = {
+      createdAt: "2026-05-20T09:00:00.000Z",
+      createdByUserId: "user_123",
+      id: "11111111-1111-4111-8111-111111111111",
+      kind: "job",
+      labels: [],
+      priority: "none",
+      status: "new",
+      title: "Inspect boiler",
+      updatedAt: "2026-05-20T09:00:00.000Z",
+    };
+
+    expect(
+      Schema.decodeUnknownSync(JobWriteResponseSchema)({
+        job,
+        mutation: { txid: 42 },
+      })
+    ).toStrictEqual({
+      job,
+      mutation: { txid: 42 },
+    });
+    expect(
+      Schema.decodeUnknownSync(JobDetailWriteResponseSchema)({
+        detail: {
+          activity: [],
+          comments: [],
+          job,
+          viewerAccess: { canComment: true, visibility: "internal" },
+          visits: [],
+        },
+        mutation: { txid: 42 },
+      }).detail.job
+    ).toStrictEqual(job);
+    expect(() =>
+      Schema.decodeUnknownSync(JobWriteResponseSchema)({
+        job,
+        mutation: { txid: 4_294_967_296 },
+      })
+    ).toThrow(/less than or equal to 4294967295/);
   });
 
   it("decodes job detail with viewer access and selected site detail", () => {

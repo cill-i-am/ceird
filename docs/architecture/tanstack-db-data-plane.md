@@ -306,6 +306,19 @@ as failed and leaves synced collection data as the source of truth. Read-only
 Electric adoption, including the jobs canary, does not require mutation
 confirmation and remains opt-in/test-gated.
 
+The Electric-native Jobs workspace follows the same command-runner model for
+job create, update, status transition, reopen, and job-label assignment/removal.
+Jobs commands call the typed Jobs API and receive `{ job, mutation: { txid } }`
+or `{ detail, mutation: { txid } }` from the domain. The runner keeps the
+command pending in the mutation journal until the synced `jobs` row reflects
+the returned job id and `updatedAt`, or until `job-label-assignments` reflects
+the assignment add/remove state. Create and update commands declare `jobs`,
+`job-sites`, and `job-contacts` as affected because domain enrichment can create
+or relink those workspace summaries; status/reopen commands affect `jobs`, and
+label commands affect `job-label-assignments`. API, authorization, validation,
+and Electric confirmation failures are recorded as failed commands and the UI
+continues to treat synced collection data as authoritative.
+
 ## Enforcement
 
 `apps/app/src/test/data-plane-boundaries.test.ts` prevents product views from
