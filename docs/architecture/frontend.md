@@ -457,10 +457,12 @@ an explicit SSR strategy. The current migrated slices are:
   `labels` Electric shape directly and surfaces disabled/unavailable sync
   health without API fallback.
 - `features/organizations/organization-labels-settings-page.tsx`, where the
-  dedicated Labels settings route owns only the route shell, navigation entry,
-  and realtime-ready loading/empty/unavailable/permission states until the
-  Electric-backed collection and label writes land in later slices. The old
-  API-backed labels panel in organization settings remains during rollout.
+  dedicated Labels settings route renders active labels from the
+  Electric-backed Settings Labels collection, filters the hydrated collection
+  locally for search, exposes connecting/ready/empty/unavailable/permission
+  states, and presents accessible edit/archive row actions that defer mutation
+  behavior to the label-write slice. The old API-backed labels panel in
+  organization settings remains during rollout.
 - `features/jobs-workspace/jobs-workspace-live-list.ts`, where the
   Electric-native Jobs workspace subscribes to the Jobs read-model collections,
   derives visible live rows from jobs, label assignments, labels, site
