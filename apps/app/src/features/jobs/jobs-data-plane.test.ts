@@ -1,9 +1,13 @@
 import type { OrganizationId } from "@ceird/identity-core";
 import type {
+  ContactIdType,
   JobListCursorType,
   JobListItem,
   JobListResponse,
+  WorkItemIdType,
 } from "@ceird/jobs-core";
+import type { Label, LabelIdType } from "@ceird/labels-core";
+import type { SiteIdType } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, vi } from "vitest";
 
@@ -15,8 +19,10 @@ import { getDataPlaneSessionKey } from "#/data-plane/session";
 
 import {
   createJobsWorkspaceReadModelContracts,
+  deriveJobsWorkspaceVisibleRows,
   createJobsListSeed,
   createJobsListScope,
+  getOrCreateJobsWorkspaceReadModelState,
   getOrCreateJobsCollectionState,
   jobsCollectionId,
   jobsCollectionKey,
@@ -444,6 +450,113 @@ describe("jobs data plane", () => {
       });
       expect(contract.shapeOptions?.params).toBeUndefined();
     }
+  });
+
+  it("reuses the Electric-native jobs workspace read model through the session registry", () => {
+    const queryClient = new QueryClient();
+    const session = {
+      mutationJournal: createDataPlaneMutationJournal(),
+      queryClient,
+      registry: new Map<string, unknown>(),
+      scope,
+    };
+
+    const first = getOrCreateJobsWorkspaceReadModelState({ scope, session });
+    const second = getOrCreateJobsWorkspaceReadModelState({ scope, session });
+
+    expect(first).toBe(second);
+    expect(first.health.current).toMatchObject({
+      collection: "jobs",
+      disabledReason: "server-render",
+      source: "electric",
+      status: "disabled",
+      subscriptionName: "jobs",
+    });
+  });
+
+  it("derives visible Jobs workspace rows from local joins, filters, search, and sort", () => {
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+    const secondWorkItemId =
+      "99999999-9999-4999-8999-999999999999" as WorkItemIdType;
+    const labelId = "22222222-2222-4222-8222-222222222222" as LabelIdType;
+    const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
+    const contactId = "44444444-4444-4444-8444-444444444444" as ContactIdType;
+    const jobs = [
+      toJobsWorkspaceJobRow({
+        contactId,
+        createdAt: "2026-06-15T10:00:00.000Z",
+        createdByUserId: "user_123",
+        id: workItemId,
+        kind: "job",
+        priority: "high",
+        siteId,
+        status: "blocked",
+        title: "Fit heat pump",
+        updatedAt: "2026-06-15T11:00:00.000Z",
+      }),
+      toJobsWorkspaceJobRow({
+        createdAt: "2026-06-15T09:00:00.000Z",
+        createdByUserId: "user_123",
+        id: secondWorkItemId,
+        kind: "job",
+        priority: "urgent",
+        status: "completed",
+        title: "Inspect boiler",
+        updatedAt: "2026-06-15T12:00:00.000Z",
+      }),
+    ];
+    const labels: readonly Label[] = [
+      {
+        createdAt: "2026-06-15T10:00:00.000Z",
+        id: labelId,
+        name: "Urgent",
+        updatedAt: "2026-06-15T10:00:00.000Z",
+      },
+    ];
+    const rows = deriveJobsWorkspaceVisibleRows({
+      contacts: [
+        {
+          email: "ops@example.com",
+          id: contactId,
+          name: "Operations",
+          updatedAt: "2026-06-15T10:00:00.000Z",
+        },
+      ],
+      jobs,
+      labelAssignments: [
+        {
+          createdAt: "2026-06-15T10:05:00.000Z",
+          id: `${workItemId}:${labelId}`,
+          labelId,
+          workItemId,
+        },
+      ],
+      labels,
+      options: {
+        labelId,
+        query: "urgent",
+        sort: "priority",
+        status: "active",
+      },
+      sites: [
+        {
+          displayLocation: "Dublin",
+          hasUsableCoordinates: false,
+          id: siteId,
+          locationStatus: "unverified",
+          name: "Warehouse",
+          updatedAt: "2026-06-15T10:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      contact: { name: "Operations" },
+      job: { id: workItemId, title: "Fit heat pump" },
+      labels: [{ id: labelId, name: "Urgent" }],
+      site: { name: "Warehouse" },
+    });
   });
 
   it("maps product-safe Electric rows for the jobs workspace graph", () => {

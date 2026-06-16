@@ -239,7 +239,7 @@ the package-local fallback and `local` when no Alchemy metadata is available.
 | `features/auth`            | Login, signup, password reset, email verification, route guards, redirects, auth UI, and server session helpers.                                                                                                                                                                                                                     |
 | `features/organizations`   | Organization onboarding, active organization sync, settings, members, invitations, role access, and labels.                                                                                                                                                                                                                          |
 | `features/jobs`            | Jobs list, create flow, detail drawer/sheet, state effects, API client bridge, saved views, location display, maps, collaborators, labels, comments, and visits.                                                                                                                                                                     |
-| `features/jobs-workspace`  | Electric-native Jobs workspace preview shell, route state, permission-aware placeholders, and shortcut affordances. It must not instantiate raw Electric streams or data-plane collections in route/view code.                                                                                                                       |
+| `features/jobs-workspace`  | Electric-native Jobs workspace preview route, live list controls, health/permission states, saved-view-ready route state, and shortcut affordances. It consumes feature-owned data-plane helpers and must not instantiate raw Electric streams or raw TanStack DB collection APIs in route/view code.                                |
 | `features/sites`           | Sites list, site create flow, detail sheet, and site API state. The first Sites index refresh intentionally uses only supported site fields: name, address, and map readiness. Status, labels, lead, open job counts, saved views, updated timestamps, archive state, and bulk selection are product follow-ups, not placeholder UI. |
 | `features/sites-workspace` | Electric-native Sites workspace preview shell, route state, permission-aware placeholders, and shortcut affordances. It must not instantiate raw Electric streams or data-plane collections in route/view code.                                                                                                                      |
 | `features/activity`        | Organization activity feed search and formatting.                                                                                                                                                                                                                                                                                    |
@@ -461,6 +461,11 @@ an explicit SSR strategy. The current migrated slices are:
   and realtime-ready loading/empty/unavailable/permission states until the
   Electric-backed collection and label writes land in later slices. The old
   API-backed labels panel in organization settings remains during rollout.
+- `features/jobs-workspace/jobs-workspace-live-list.ts`, where the
+  Electric-native Jobs workspace subscribes to the Jobs read-model collections,
+  derives visible live rows from jobs, label assignments, labels, site
+  summaries, and contact summaries, and surfaces explicit sync health instead
+  of falling back to the legacy Jobs route data path.
 - `features/jobs/jobs-detail-state.ts`, which is now a detail-sheet facade over
   job detail and collaborator collections plus command mutation feedback.
 

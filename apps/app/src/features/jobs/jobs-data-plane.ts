@@ -53,6 +53,7 @@ import {
   syncBackedCollectionCompleteness,
 } from "#/data-plane/collection-contract";
 import type { DataPlaneCollectionFilterScope } from "#/data-plane/collection-contract";
+import type { DataPlaneCollectionHealth } from "#/data-plane/collection-health";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
   deleteDataPlaneCollectionItem,
@@ -65,7 +66,12 @@ import type {
   DataPlaneCollectionSnapshot,
   DataPlaneCollectionWriteVersionRef,
 } from "#/data-plane/collection-write";
-import { defineElectricCollectionContract } from "#/data-plane/electric-collection";
+import {
+  createElectricCollectionFromContract,
+  defineElectricCollectionContract,
+} from "#/data-plane/electric-collection";
+import type { DataPlaneElectricCollectionContract } from "#/data-plane/electric-collection";
+import type { DataPlaneLiveCollection } from "#/data-plane/live-query";
 import { createCollectionWithQueryFallback } from "#/data-plane/query-fallback-collection";
 import type {
   CreateDataPlaneFallbackCollectionOptions,
@@ -135,6 +141,10 @@ type JobDetailCollection = ReturnType<typeof createJobDetailCollection>;
 type JobCollaboratorsCollection = ReturnType<
   typeof createJobCollaboratorsCollection
 >;
+type JobsWorkspaceCollection<
+  Item extends object,
+  Key extends string | number = string,
+> = DataPlaneLiveCollection<Item, Key, Record<string, never>>;
 export type JobsCollectionSyncOptions = Omit<
   CreateDataPlaneFallbackCollectionOptions<JobsCollection, JobsCollection>,
   "createQueryCollection"
@@ -273,6 +283,43 @@ export interface JobsWorkspaceReadModelContracts {
     typeof createJobSiteSummariesElectricContract
   >;
   readonly visits: ReturnType<typeof createJobVisitsElectricContract>;
+}
+
+export interface JobsWorkspaceReadModelState {
+  readonly contactSummaries?:
+    | JobsWorkspaceCollection<JobContactSummaryRow>
+    | undefined;
+  readonly health: DataPlaneCollectionHealth;
+  readonly jobLabelAssignments?:
+    | JobsWorkspaceCollection<JobLabelAssignmentRow>
+    | undefined;
+  readonly jobs?: JobsWorkspaceCollection<JobsWorkspaceJobRow> | undefined;
+  readonly labels?: JobsWorkspaceCollection<Label> | undefined;
+  readonly siteSummaries?:
+    | JobsWorkspaceCollection<JobSiteSummaryRow>
+    | undefined;
+}
+
+export type JobsWorkspaceSort = "updated-desc" | "updated-asc" | "priority";
+export type JobsWorkspaceStatusFilter =
+  | "active"
+  | "blocked"
+  | "completed"
+  | "all";
+
+export interface JobsWorkspaceVisibleRowsOptions {
+  readonly labelId?: string | undefined;
+  readonly query?: string | undefined;
+  readonly sort: JobsWorkspaceSort;
+  readonly status: JobsWorkspaceStatusFilter;
+}
+
+export interface JobsWorkspaceVisibleRow {
+  readonly contact?: JobContactSummaryRow | undefined;
+  readonly job: JobsWorkspaceJobRow;
+  readonly labels: readonly Label[];
+  readonly searchText: string;
+  readonly site?: JobSiteSummaryRow | undefined;
 }
 
 export interface JobsWorkspaceListContract {
@@ -871,6 +918,84 @@ export function createJobsWorkspaceReadModelContracts(
   };
 }
 
+export function getOrCreateJobsWorkspaceReadModelState({
+  scope,
+  session,
+}: {
+  readonly scope: OrganizationDataScope;
+  readonly session?: DataPlaneSession | undefined;
+}): JobsWorkspaceReadModelState {
+  const registryKey = jobsWorkspaceCollectionId(scope, "list-read-model");
+  const existing = session?.registry.get(registryKey);
+
+  if (existing) {
+    return existing as JobsWorkspaceReadModelState;
+  }
+
+  const contracts = createJobsWorkspaceReadModelContracts(scope);
+  const jobs = createJobsWorkspaceElectricCollection<
+    JobsWorkspaceJobRow,
+    string
+  >(contracts.jobs);
+  const labels = createJobsWorkspaceElectricCollection<Label, string>(
+    contracts.labels
+  );
+  const jobLabelAssignments = createJobsWorkspaceElectricCollection<
+    JobLabelAssignmentRow,
+    string
+  >(contracts.jobLabelAssignments);
+  const siteSummaries = createJobsWorkspaceElectricCollection<
+    JobSiteSummaryRow,
+    string
+  >(contracts.siteSummaries);
+  const contactSummaries = createJobsWorkspaceElectricCollection<
+    JobContactSummaryRow,
+    string
+  >(contracts.contactSummaries);
+  const created = {
+    contactSummaries: contactSummaries.collection,
+    health: jobs.health,
+    jobLabelAssignments: jobLabelAssignments.collection,
+    jobs: jobs.collection,
+    labels: labels.collection,
+    siteSummaries: siteSummaries.collection,
+  } satisfies JobsWorkspaceReadModelState;
+
+  session?.registry.set(registryKey, created);
+
+  return created;
+}
+
+function createJobsWorkspaceElectricCollection<
+  Item extends object,
+  Key extends string | number,
+>(
+  contract: unknown
+): {
+  readonly collection?: JobsWorkspaceCollection<Item, Key> | undefined;
+  readonly health: DataPlaneCollectionHealth;
+} {
+  const typedContract = contract as DataPlaneElectricCollectionContract<
+    StandardSchemaV1<unknown, never>,
+    Key
+  >;
+  const result = createElectricCollectionFromContract(typedContract);
+
+  if (result.status === "disabled") {
+    return {
+      health: result.health,
+    };
+  }
+
+  return {
+    collection: result.collection as unknown as JobsWorkspaceCollection<
+      Item,
+      Key
+    >,
+    health: result.health,
+  };
+}
+
 export function createJobsWorkspaceListContract(): JobsWorkspaceListContract {
   return {
     completeness: jobsWorkspaceListCompleteness(),
@@ -930,6 +1055,158 @@ export function createJobsWorkspaceDetailContract(): JobsWorkspaceDetailContract
       "comments",
     ],
   };
+}
+
+export function deriveJobsWorkspaceVisibleRows({
+  contacts,
+  jobs,
+  labels,
+  labelAssignments,
+  options,
+  sites,
+}: {
+  readonly contacts: readonly JobContactSummaryRow[];
+  readonly jobs: readonly JobsWorkspaceJobRow[];
+  readonly labels: readonly Label[];
+  readonly labelAssignments: readonly JobLabelAssignmentRow[];
+  readonly options: JobsWorkspaceVisibleRowsOptions;
+  readonly sites: readonly JobSiteSummaryRow[];
+}): readonly JobsWorkspaceVisibleRow[] {
+  const labelsById = new Map(labels.map((label) => [label.id, label]));
+  const sitesById = new Map(sites.map((site) => [site.id, site]));
+  const contactsById = new Map(
+    contacts.map((contact) => [contact.id, contact])
+  );
+  const labelsByJobId = new Map<string, Label[]>();
+
+  for (const assignment of labelAssignments) {
+    const label = labelsById.get(assignment.labelId);
+
+    if (!label) {
+      continue;
+    }
+
+    const existing = labelsByJobId.get(assignment.workItemId);
+    if (existing) {
+      existing.push(label);
+    } else {
+      labelsByJobId.set(assignment.workItemId, [label]);
+    }
+  }
+
+  const normalizedQuery = normalizeJobsWorkspaceQuery(options.query);
+  const rows = jobs
+    .map((job): JobsWorkspaceVisibleRow => {
+      const rowLabels = labelsByJobId.get(job.id) ?? [];
+      const site =
+        job.siteId === undefined ? undefined : sitesById.get(job.siteId);
+      const contact =
+        job.contactId === undefined
+          ? undefined
+          : contactsById.get(job.contactId);
+      const searchText = normalizeJobsWorkspaceQuery(
+        [
+          job.title,
+          job.status,
+          job.priority,
+          job.blockedReason,
+          site?.name,
+          site?.displayLocation,
+          contact?.name,
+          contact?.email,
+          contact?.phone,
+          ...rowLabels.map((label) => label.name),
+        ]
+          .filter(Boolean)
+          .join(" ")
+      );
+
+      return {
+        contact,
+        job,
+        labels: rowLabels.toSorted((left, right) =>
+          left.name.localeCompare(right.name)
+        ),
+        searchText,
+        site,
+      };
+    })
+    .filter((row) => matchesJobsWorkspaceStatus(row.job, options.status))
+    .filter((row) =>
+      options.labelId === undefined
+        ? true
+        : row.labels.some((label) => label.id === options.labelId)
+    )
+    .filter((row) =>
+      normalizedQuery === "" ? true : row.searchText.includes(normalizedQuery)
+    );
+
+  return rows.toSorted((left, right) =>
+    compareJobsWorkspaceRows(left, right, options.sort)
+  );
+}
+
+function normalizeJobsWorkspaceQuery(query: string | undefined): string {
+  return query?.trim().toLocaleLowerCase() ?? "";
+}
+
+function matchesJobsWorkspaceStatus(
+  job: JobsWorkspaceJobRow,
+  status: JobsWorkspaceStatusFilter
+): boolean {
+  if (status === "all") {
+    return true;
+  }
+
+  if (status === "active") {
+    return job.status !== "completed" && job.status !== "canceled";
+  }
+
+  return job.status === status;
+}
+
+function compareJobsWorkspaceRows(
+  left: JobsWorkspaceVisibleRow,
+  right: JobsWorkspaceVisibleRow,
+  sort: JobsWorkspaceSort
+): number {
+  if (sort === "updated-asc") {
+    return left.job.updatedAt.localeCompare(right.job.updatedAt);
+  }
+
+  if (sort === "priority") {
+    const priorityDelta =
+      jobPriorityRank(right.job.priority) - jobPriorityRank(left.job.priority);
+
+    return priorityDelta === 0
+      ? right.job.updatedAt.localeCompare(left.job.updatedAt)
+      : priorityDelta;
+  }
+
+  return right.job.updatedAt.localeCompare(left.job.updatedAt);
+}
+
+function jobPriorityRank(priority: JobsWorkspaceJobRow["priority"]): number {
+  switch (priority) {
+    case "urgent": {
+      return 4;
+    }
+    case "high": {
+      return 3;
+    }
+    case "medium": {
+      return 2;
+    }
+    case "low": {
+      return 1;
+    }
+    case "none": {
+      return 0;
+    }
+    default: {
+      return 0;
+    }
+  }
 }
 
 export function createJobsWorkspaceJobsElectricContract(
