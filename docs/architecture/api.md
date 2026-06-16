@@ -841,9 +841,12 @@ action replay lookups.
 Product activity/comment actor display uses `product_activity_actors`, a
 domain-owned projection safe for Electric sync. The domain Worker updates member
 actor rows from Better Auth user/member data when comments or activity are
-written, but only `product_activity_actors` is shape-authorized. The private
-`product_activity_actor_sources` table keeps user, agent-thread, and system
-lookup keys out of synced product data.
+written. Assignment/coordinator summaries use the separate
+`product_member_actor_summaries` projection, which carries the job-visible
+member `user_id` plus product-safe actor display/routing fields for Electric
+joins. The private `product_activity_actor_sources` table keeps agent-thread,
+system, and source lookup keys out of synced product data and is not
+shape-authorized.
 Global feed activity uses `activity_events`, a bounded product-facing read model
 owned by the activity domain. Rows carry stable ids, organization scope, event
 and target metadata, a product-safe `actor_id`, display payload, status,

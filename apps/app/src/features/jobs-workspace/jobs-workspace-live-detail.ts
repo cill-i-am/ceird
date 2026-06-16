@@ -19,6 +19,7 @@ import type {
   JobsWorkspaceCommentRow,
   JobsWorkspaceDetailReadModel,
   JobsWorkspaceJobRow,
+  JobsWorkspaceMemberActorSummaryRow,
   JobsWorkspaceProductActorRow,
   JobsWorkspaceVisitRow,
 } from "#/features/jobs/jobs-data-plane";
@@ -83,6 +84,10 @@ export function useJobsWorkspaceLiveDetail(
     () => readModel.actors ?? undefined,
     [readModel.actors]
   );
+  const memberActorSummariesQuery = useDataPlaneLiveQuery(
+    () => readModel.memberActorSummaries ?? undefined,
+    [readModel.memberActorSummaries]
+  );
   const activityQuery = useDataPlaneLiveQuery(
     () => readModel.activity ?? undefined,
     [readModel.activity]
@@ -107,6 +112,7 @@ export function useJobsWorkspaceLiveDetail(
     contactsQuery,
     collaboratorsQuery,
     actorsQuery,
+    memberActorSummariesQuery,
     activityQuery,
     visitsQuery,
     jobCommentsQuery,
@@ -147,6 +153,10 @@ export function useJobsWorkspaceLiveDetail(
           assignmentsQuery.data
         ),
         labels: readLiveQueryData<Label>(labelsQuery.data),
+        memberActorSummaries:
+          readLiveQueryData<JobsWorkspaceMemberActorSummaryRow>(
+            memberActorSummariesQuery.data
+          ),
         selectedJobId,
         sites: readLiveQueryData<JobSiteSummaryRow>(sitesQuery.data),
         visits: readLiveQueryData<JobsWorkspaceVisitRow>(visitsQuery.data),
@@ -184,6 +194,7 @@ function isJobsWorkspaceDetailGraphAvailable(
     readModel.contactSummaries !== undefined &&
     readModel.collaborators !== undefined &&
     readModel.actors !== undefined &&
+    readModel.memberActorSummaries !== undefined &&
     readModel.activity !== undefined &&
     readModel.visits !== undefined &&
     readModel.jobComments !== undefined &&

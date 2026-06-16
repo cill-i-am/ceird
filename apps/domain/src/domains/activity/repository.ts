@@ -339,13 +339,53 @@ export class ProductActivityActorsRepository extends Context.Service<ProductActi
                   inserted_actor_with_source.source_user_id
                 from inserted_actor_with_source
                 returning actor_id
+              ),
+              actor_row as (
+                select * from existing_actor
+                union all
+                select inserted_actor_with_source.*
+                from inserted_actor_with_source
+                inner join inserted_source
+                  on inserted_source.actor_id = inserted_actor_with_source.id
+              ),
+              upserted_member_summary as (
+                insert into product_member_actor_summaries (
+                  actor_id,
+                  organization_id,
+                  user_id,
+                  display_name,
+                  display_detail,
+                  route_href,
+                  route_label,
+                  created_at,
+                  updated_at
+                )
+                select
+                  actor_row.id,
+                  ${input.organizationId},
+                  actor_row.source_user_id,
+                  actor_row.display_name,
+                  actor_row.display_detail,
+                  actor_row.route_href,
+                  actor_row.route_label,
+                  now(),
+                  now()
+                from actor_row
+                on conflict (actor_id) do update
+                set
+                  organization_id = excluded.organization_id,
+                  user_id = excluded.user_id,
+                  display_name = excluded.display_name,
+                  display_detail = excluded.display_detail,
+                  route_href = excluded.route_href,
+                  route_label = excluded.route_label,
+                  updated_at = excluded.updated_at
+                returning actor_id
               )
-              select * from existing_actor
-              union all
-              select inserted_actor_with_source.*
-              from inserted_actor_with_source
-              inner join inserted_source
-                on inserted_source.actor_id = inserted_actor_with_source.id
+              select actor_row.*
+              from actor_row
+              inner join upserted_member_summary
+                on upserted_member_summary.actor_id = actor_row.id
             `;
           })
         );

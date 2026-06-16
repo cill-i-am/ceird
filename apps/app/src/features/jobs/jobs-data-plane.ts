@@ -282,10 +282,21 @@ export const JobsWorkspaceProductActorRowSchema = Schema.Struct({
   id: ProductActorId,
   kind: ProductActorKind,
   route: Schema.optional(ProductActorRoute),
-  userId: Schema.optional(UserId),
 });
 export type JobsWorkspaceProductActorRow = Schema.Schema.Type<
   typeof JobsWorkspaceProductActorRowSchema
+>;
+
+export const JobsWorkspaceMemberActorSummaryRowSchema = Schema.Struct({
+  displayDetail: Schema.optional(ProductActorDisplayDetail),
+  displayName: ProductActorDisplayName,
+  id: ProductActorId,
+  kind: Schema.Literal("member"),
+  route: Schema.optional(ProductActorRoute),
+  userId: UserId,
+});
+export type JobsWorkspaceMemberActorSummaryRow = Schema.Schema.Type<
+  typeof JobsWorkspaceMemberActorSummaryRowSchema
 >;
 
 export interface JobsWorkspaceReadModelContracts {
@@ -310,6 +321,9 @@ export interface JobsWorkspaceReadModelContracts {
   readonly jobs: ReturnType<typeof createJobsWorkspaceJobsElectricContract>;
   readonly labels: ReturnType<typeof createJobsWorkspaceLabelsElectricContract>;
   readonly list: JobsWorkspaceListContract;
+  readonly memberActorSummaries: ReturnType<
+    typeof createProductMemberActorSummariesElectricContract
+  >;
   readonly siteSummaries: ReturnType<
     typeof createJobSiteSummariesElectricContract
   >;
@@ -340,6 +354,9 @@ export interface JobsWorkspaceReadModelState {
     | undefined;
   readonly jobs?: JobsWorkspaceCollection<JobsWorkspaceJobRow> | undefined;
   readonly labels?: JobsWorkspaceCollection<Label> | undefined;
+  readonly memberActorSummaries?:
+    | JobsWorkspaceCollection<JobsWorkspaceMemberActorSummaryRow>
+    | undefined;
   readonly siteSummaries?:
     | JobsWorkspaceCollection<JobSiteSummaryRow>
     | undefined;
@@ -361,6 +378,7 @@ export interface JobsWorkspaceDetailReadModelCollectionHealth extends JobsWorksp
   readonly visits: DataPlaneCollectionHealth;
   readonly jobComments: DataPlaneCollectionHealth;
   readonly comments: DataPlaneCollectionHealth;
+  readonly memberActorSummaries: DataPlaneCollectionHealth;
 }
 
 export type JobsWorkspaceSort = "updated-desc" | "updated-asc" | "priority";
@@ -392,11 +410,11 @@ export interface JobsWorkspaceDetailActivityItem {
 
 export interface JobsWorkspaceDetailReadModel {
   readonly activity: readonly JobsWorkspaceDetailActivityItem[];
-  readonly assignee?: JobsWorkspaceProductActorRow | undefined;
+  readonly assignee?: JobsWorkspaceMemberActorSummaryRow | undefined;
   readonly collaborators: readonly JobCollaborator[];
   readonly commentCount: number;
   readonly contact?: JobContactSummaryRow | undefined;
-  readonly coordinator?: JobsWorkspaceProductActorRow | undefined;
+  readonly coordinator?: JobsWorkspaceMemberActorSummaryRow | undefined;
   readonly job: JobsWorkspaceJobRow;
   readonly labels: readonly Label[];
   readonly site?: JobSiteSummaryRow | undefined;
@@ -438,6 +456,7 @@ export interface JobsWorkspaceDetailContract {
     "job-contacts",
     "job-collaborators",
     "product-activity-actors",
+    "product-member-actor-summaries",
     "job-activity",
     "job-visits",
     "job-comments",
@@ -451,6 +470,7 @@ export interface JobsWorkspaceDetailContract {
     "job-contacts",
     "job-collaborators",
     "product-activity-actors",
+    "product-member-actor-summaries",
     "job-activity",
     "job-visits",
     "job-comments",
@@ -465,6 +485,7 @@ export interface JobsWorkspaceDetailContract {
     "contacts",
     "work-item-collaborators",
     "product-activity-actors",
+    "product-member-actor-summaries",
     "work-item-activity",
     "work-item-visits",
     "work-item-comments",
@@ -1004,6 +1025,8 @@ export function createJobsWorkspaceReadModelContracts(
     jobs: createJobsWorkspaceJobsElectricContract(scope),
     labels: createJobsWorkspaceLabelsElectricContract(scope),
     list: createJobsWorkspaceListContract(),
+    memberActorSummaries:
+      createProductMemberActorSummariesElectricContract(scope),
     siteSummaries: createJobSiteSummariesElectricContract(scope),
     visits: createJobVisitsElectricContract(scope),
   };
@@ -1051,6 +1074,10 @@ export function getOrCreateJobsWorkspaceReadModelState({
     JobsWorkspaceProductActorRow,
     string
   >(contracts.actors);
+  const memberActorSummaries = createJobsWorkspaceElectricCollection<
+    JobsWorkspaceMemberActorSummaryRow,
+    string
+  >(contracts.memberActorSummaries);
   const activity = createJobsWorkspaceElectricCollection<
     JobsWorkspaceActivityRow,
     string
@@ -1082,6 +1109,7 @@ export function getOrCreateJobsWorkspaceReadModelState({
     visits: visits.health,
     jobComments: jobComments.health,
     comments: comments.health,
+    memberActorSummaries: memberActorSummaries.health,
   } satisfies JobsWorkspaceDetailReadModelCollectionHealth;
   const created = {
     activity: activity.collection,
@@ -1105,6 +1133,7 @@ export function getOrCreateJobsWorkspaceReadModelState({
     jobLabelAssignments: jobLabelAssignments.collection,
     jobs: jobs.collection,
     labels: labels.collection,
+    memberActorSummaries: memberActorSummaries.collection,
     siteSummaries: siteSummaries.collection,
     visits: visits.collection,
   } satisfies JobsWorkspaceReadModelState;
@@ -1315,6 +1344,7 @@ export function createJobsWorkspaceDetailContract(): JobsWorkspaceDetailContract
       "job-contacts",
       "job-collaborators",
       "product-activity-actors",
+      "product-member-actor-summaries",
       "job-activity",
       "job-visits",
       "job-comments",
@@ -1328,6 +1358,7 @@ export function createJobsWorkspaceDetailContract(): JobsWorkspaceDetailContract
       "job-contacts",
       "job-collaborators",
       "product-activity-actors",
+      "product-member-actor-summaries",
       "job-activity",
       "job-visits",
       "job-comments",
@@ -1345,6 +1376,7 @@ export function createJobsWorkspaceDetailContract(): JobsWorkspaceDetailContract
       "contacts",
       "work-item-collaborators",
       "product-activity-actors",
+      "product-member-actor-summaries",
       "work-item-activity",
       "work-item-visits",
       "work-item-comments",
@@ -1452,6 +1484,7 @@ export function deriveJobsWorkspaceDetail({
   jobs,
   labels,
   labelAssignments,
+  memberActorSummaries,
   selectedJobId,
   sites,
   visits,
@@ -1465,6 +1498,7 @@ export function deriveJobsWorkspaceDetail({
   readonly jobs: readonly JobsWorkspaceJobRow[];
   readonly labels: readonly Label[];
   readonly labelAssignments: readonly JobLabelAssignmentRow[];
+  readonly memberActorSummaries: readonly JobsWorkspaceMemberActorSummaryRow[];
   readonly selectedJobId?: WorkItemIdType | string | undefined;
   readonly sites: readonly JobSiteSummaryRow[];
   readonly visits: readonly JobsWorkspaceVisitRow[];
@@ -1481,15 +1515,7 @@ export function deriveJobsWorkspaceDetail({
   const labelsById = new Map(labels.map((label) => [label.id, label]));
   const actorsById = new Map(actors.map((actor) => [actor.id, actor]));
   const memberActorsByUserId = new Map(
-    actors
-      .filter(
-        (
-          actor
-        ): actor is JobsWorkspaceProductActorRow & {
-          readonly userId: UserId;
-        } => actor.kind === "member" && actor.userId !== undefined
-      )
-      .map((actor) => [actor.userId, actor])
+    memberActorSummaries.map((summary) => [summary.userId, summary])
   );
   const commentIdsForJob = new Set(
     jobComments
@@ -1746,6 +1772,26 @@ export function createProductActivityActorsElectricContract(
     shapeName: "product-activity-actors",
     shapeOptions: {
       transformer: toProductActivityActorElectricRow,
+    },
+  });
+}
+
+export function createProductMemberActorSummariesElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "product-member-actor-summaries",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "product-member-actor-summaries",
+    }),
+    getKey: (summary: JobsWorkspaceMemberActorSummaryRow) => summary.userId,
+    id: `${jobsWorkspaceCollectionId(scope, "product-member-actor-summaries")}:electric`,
+    schema: Schema.toStandardSchemaV1(JobsWorkspaceMemberActorSummaryRowSchema),
+    shapeName: "product-member-actor-summaries",
+    shapeOptions: {
+      transformer: toProductMemberActorSummaryElectricRow,
     },
   });
 }
@@ -2103,7 +2149,6 @@ export function toProductActivityActorElectricRow(
   };
 
   addOptionalString(item, "displayDetail", row.displayDetail);
-  addOptionalString(item, "userId", row.userId);
 
   if (
     row.routeHref !== null &&
@@ -2118,6 +2163,35 @@ export function toProductActivityActorElectricRow(
   }
 
   return Schema.decodeUnknownSync(JobsWorkspaceProductActorRowSchema)(item);
+}
+
+export function toProductMemberActorSummaryElectricRow(
+  row: Record<string, unknown>
+): JobsWorkspaceMemberActorSummaryRow {
+  const item: JobsElectricRow = {
+    displayName: String(row.displayName),
+    id: String(row.actorId),
+    kind: "member",
+    userId: String(row.userId),
+  };
+
+  addOptionalString(item, "displayDetail", row.displayDetail);
+
+  if (
+    row.routeHref !== null &&
+    row.routeHref !== undefined &&
+    row.routeLabel !== null &&
+    row.routeLabel !== undefined
+  ) {
+    item.route = {
+      href: String(row.routeHref),
+      label: String(row.routeLabel),
+    };
+  }
+
+  return Schema.decodeUnknownSync(JobsWorkspaceMemberActorSummaryRowSchema)(
+    item
+  );
 }
 
 function addOptionalString(item: JobsElectricRow, key: string, value: unknown) {

@@ -37,6 +37,7 @@ import {
   toJobSiteSummaryRow,
   toJobVisitElectricRow,
   toProductActivityActorElectricRow,
+  toProductMemberActorSummaryElectricRow,
   toJobsWorkspaceJobRow,
 } from "./jobs-data-plane";
 
@@ -392,6 +393,7 @@ describe("jobs data plane", () => {
         "contacts",
         "work-item-collaborators",
         "product-activity-actors",
+        "product-member-actor-summaries",
         "work-item-activity",
         "work-item-visits",
         "work-item-comments",
@@ -429,6 +431,10 @@ describe("jobs data plane", () => {
       collection: "product-activity-actors",
       shapeName: "product-activity-actors",
     });
+    expect(graph.memberActorSummaries).toMatchObject({
+      collection: "product-member-actor-summaries",
+      shapeName: "product-member-actor-summaries",
+    });
     expect(graph.activity).toMatchObject({
       collection: "job-activity",
       shapeName: "work-item-activity",
@@ -455,6 +461,7 @@ describe("jobs data plane", () => {
       graph.jobLabelAssignments,
       graph.jobs,
       graph.labels,
+      graph.memberActorSummaries,
       graph.siteSummaries,
       graph.visits,
     ]) {
@@ -710,7 +717,6 @@ describe("jobs data plane", () => {
           kind: "member",
           routeHref: "/members/user_taylor",
           routeLabel: "Taylor Member",
-          userId: "user_taylor",
         }),
         toProductActivityActorElectricRow({
           displayDetail: "Scheduling",
@@ -719,7 +725,6 @@ describe("jobs data plane", () => {
           kind: "member",
           routeHref: "/members/user_jordan",
           routeLabel: "Jordan Coordinator",
-          userId: "user_jordan",
         }),
       ],
       collaborators: [
@@ -788,6 +793,24 @@ describe("jobs data plane", () => {
           name: "Urgent",
           updatedAt: "2026-06-15T10:00:00.000Z",
         },
+      ],
+      memberActorSummaries: [
+        toProductMemberActorSummaryElectricRow({
+          actorId,
+          displayDetail: "Dispatch",
+          displayName: "Taylor Member",
+          routeHref: "/members/user_taylor",
+          routeLabel: "Taylor Member",
+          userId: "user_taylor",
+        }),
+        toProductMemberActorSummaryElectricRow({
+          actorId: coordinatorActorId,
+          displayDetail: "Scheduling",
+          displayName: "Jordan Coordinator",
+          routeHref: "/members/user_jordan",
+          routeLabel: "Jordan Coordinator",
+          userId: "user_jordan",
+        }),
       ],
       selectedJobId: workItemId,
       sites: [
@@ -994,19 +1017,33 @@ describe("jobs data plane", () => {
       body: "Ready for dispatch",
       id: commentId,
     });
+    const productActor = toProductActivityActorElectricRow({
+      displayDetail: "Dispatch",
+      displayName: "Taylor Member",
+      id: "66666666-6666-4666-8666-666666666666",
+      kind: "member",
+      routeHref: "/members/user_taylor",
+      routeLabel: "Taylor Member",
+    });
+    expect(productActor).toMatchObject({
+      displayDetail: "Dispatch",
+      displayName: "Taylor Member",
+      kind: "member",
+      route: { href: "/members/user_taylor", label: "Taylor Member" },
+    });
+    expect(productActor).not.toHaveProperty("userId");
     expect(
-      toProductActivityActorElectricRow({
+      toProductMemberActorSummaryElectricRow({
+        actorId: "66666666-6666-4666-8666-666666666666",
         displayDetail: "Dispatch",
         displayName: "Taylor Member",
-        id: "66666666-6666-4666-8666-666666666666",
-        kind: "member",
         routeHref: "/members/user_taylor",
         routeLabel: "Taylor Member",
         userId,
       })
     ).toMatchObject({
-      displayDetail: "Dispatch",
       displayName: "Taylor Member",
+      id: "66666666-6666-4666-8666-666666666666",
       kind: "member",
       route: { href: "/members/user_taylor", label: "Taylor Member" },
       userId,

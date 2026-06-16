@@ -12,6 +12,7 @@ export {
   activitySchema,
   productActivityActor,
   productActivityActorSource,
+  productMemberActorSummary,
 } from "../../domains/activity/schema.js";
 export {
   agentActionRun,

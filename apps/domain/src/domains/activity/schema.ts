@@ -17,6 +17,7 @@ import type {
   OrganizationId,
   ProductActorId,
   ProductActorKind,
+  UserId,
 } from "@ceird/identity-core";
 import { sql } from "drizzle-orm";
 import {
@@ -170,6 +171,54 @@ export const productActivityActorSource = pgTable(
   ]
 );
 
+export const productMemberActorSummary = pgTable(
+  "product_member_actor_summaries",
+  {
+    actorId: uuid("actor_id").$type<ProductActorId>().primaryKey(),
+    organizationId: text("organization_id")
+      .$type<OrganizationId>()
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .$type<UserId>()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull(),
+    displayDetail: text("display_detail"),
+    routeHref: text("route_href"),
+    routeLabel: text("route_label"),
+    createdAt: activityTimestamp("created_at"),
+    updatedAt: activityTimestamp("updated_at"),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.actorId, table.organizationId],
+      foreignColumns: [
+        productActivityActor.id,
+        productActivityActor.organizationId,
+      ],
+      name: "product_member_actor_summaries_actor_org_fk",
+    }).onDelete("cascade"),
+    check(
+      "product_member_actor_summaries_display_name_not_empty_chk",
+      sql`length(trim(${table.displayName})) > 0`
+    ),
+    check(
+      "product_member_actor_summaries_route_consistent_chk",
+      sql`(${table.routeHref} is null and ${table.routeLabel} is null) or (${table.routeHref} is not null and ${table.routeLabel} is not null)`
+    ),
+    uniqueIndex("product_member_actor_summaries_org_user_idx").on(
+      table.organizationId,
+      table.userId
+    ),
+    index("product_member_actor_summaries_org_updated_idx").on(
+      table.organizationId,
+      table.updatedAt.desc(),
+      table.actorId.desc()
+    ),
+  ]
+);
+
 export const activityEvent = pgTable(
   "activity_events",
   {
@@ -263,4 +312,5 @@ export const activitySchema = {
   activityEvent,
   productActivityActor,
   productActivityActorSource,
+  productMemberActorSummary,
 };
