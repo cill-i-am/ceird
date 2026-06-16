@@ -202,6 +202,13 @@ migration the same directory name as the canonical `apps/domain/drizzle`
 migration. Existing preview branches can apply the SQL, and branches forked
 after the parent deploy can skip it through the copied `neon_migrations` record.
 
+The global activity feed uses the domain-owned `activity_events` read model and
+the named `activity-events` Electric shape. The table is intentionally bounded:
+repository writes prune rows past the 30-day `retained_until` window and clamp
+each organization to the latest 5,000 feed rows. Browser collections consume
+that named shape through the data-plane Electric factory and shared health
+surface; they do not request arbitrary Electric predicates for feed windowing.
+
 The root Alchemy stack, runtime apps, and shared domain packages now use the
 same Effect 4 beta line. Runtime code imports Effect 4 HTTP, SQL, AI, and
 platform APIs from their current stable or unstable package locations, while

@@ -38,6 +38,7 @@ export const instructionTopologyPolicy = {
     "docs/architecture",
     "infra",
     "packages",
+    "packages/activity-core",
     "packages/agents-core",
     "packages/comments-core",
     "packages/domain-core",

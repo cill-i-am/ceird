@@ -11,6 +11,7 @@ const SyncUserId = Schema.NonEmptyString.pipe(
 );
 
 export const SYNC_SHAPE_NAMES = [
+  "activity-events",
   "agent-action-runs",
   "agent-threads",
   "comments",
@@ -54,6 +55,11 @@ export const ACTIVE_LABELS_SYNC_WHERE =
   "organization_id = $1 AND archived_at IS NULL" as const;
 
 export const SYNC_SHAPE_AUTHORIZATION_DEFINITIONS = {
+  "activity-events": {
+    scope: "organization",
+    table: "activity_events",
+    where: ORGANIZATION_SYNC_WHERE,
+  },
   "agent-action-runs": {
     scope: "organization-user",
     table: "agent_action_runs",
@@ -190,6 +196,10 @@ function makeOrganizationUserShapeAuthorizationSchema<
 }
 
 export const OrganizationSyncShapeAuthorizationSchema = Schema.Union([
+  makeOrganizationShapeAuthorizationSchema(
+    "activity-events",
+    "activity_events"
+  ),
   makeOrganizationShapeAuthorizationSchema("comments", "comments"),
   makeOrganizationShapeAuthorizationSchema("contacts", "contacts"),
   makeOrganizationShapeAuthorizationSchema("jobs", "work_items"),

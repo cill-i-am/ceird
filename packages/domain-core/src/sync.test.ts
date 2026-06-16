@@ -77,6 +77,34 @@ describe("domain sync boundary contracts", () => {
     });
   });
 
+  it("decodes the bounded activity events Electric shape definition", () => {
+    const authorization = Schema.decodeUnknownSync(
+      SyncShapeAuthorizationSchema
+    )({
+      organizationId: "org_123",
+      params: {
+        "1": "org_123",
+      },
+      shape: "activity-events",
+      scope: "organization",
+      table: "activity_events",
+      userId: "user_123",
+      where: "organization_id = $1",
+    });
+
+    expect(authorization).toStrictEqual({
+      organizationId: "org_123",
+      params: {
+        "1": "org_123",
+      },
+      shape: "activity-events",
+      scope: "organization",
+      table: "activity_events",
+      userId: "user_123",
+      where: "organization_id = $1",
+    });
+  });
+
   it("decodes per-user authorized Electric shape definitions", () => {
     expect(
       Schema.decodeUnknownSync(SyncShapeAuthorizationSchema)({
@@ -117,6 +145,7 @@ describe("domain sync boundary contracts", () => {
   });
 
   it("keeps shape names explicit for the public sync API", () => {
+    expect(SYNC_SHAPE_NAMES).toContain("activity-events");
     expect(SYNC_SHAPE_NAMES).toContain("jobs");
     expect(SYNC_SHAPE_NAMES).toContain("site-active-job-summaries");
     expect(SYNC_SHAPE_NAMES).toContain("sites");

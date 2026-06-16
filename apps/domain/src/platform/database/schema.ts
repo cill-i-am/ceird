@@ -8,6 +8,7 @@ import { labelsSchema } from "../../domains/labels/schema.js";
 import { sitesSchema } from "../../domains/sites/schema.js";
 
 export {
+  activityEvent,
   activitySchema,
   productActivityActor,
   productActivityActorSource,

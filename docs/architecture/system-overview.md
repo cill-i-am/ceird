@@ -68,6 +68,7 @@ Worker can be tied back to the stage that produced it.
 | `apps/domain`                   | Better Auth, product services, repositories, authorization, action execution, audit/activity, migrations, and database runtime. | Public route ownership or browser UI.                              |
 | `apps/mcp`                      | Standalone Effect MCP adapter Worker, `DOMAIN` service binding, forwarding logs, and public MCP domain.                         | Product repositories, auth policy, action execution, or DB.        |
 | `apps/sync`                     | Public Electric SQL adapter Worker, sync CORS, shape forwarding, and Cloudflare Container runtime.                              | Product authorization, schema, repositories, or migrations.        |
+| `packages/activity-core`        | Shared activity event ids, taxonomy literals, DTO schemas, and retention constants for the global realtime feed.                | SQL repositories, write emitters, sync authorization, or UI state. |
 | `packages/comments-core`        | Shared comment ID, body, base DTO, editable DTO, and add-comment schemas.                                                       | Target ownership, authorization, repositories, or UI state.        |
 | `packages/identity-core`        | Organization IDs, organization role schemas, input decoders, and shared identity DTOs.                                          | Better Auth adapter setup or persistence.                          |
 | `packages/jobs-core`            | Jobs branded IDs, domain schemas, DTO schemas, Effect `HttpApi` contract, and typed HTTP errors.                                | Repository SQL or React state.                                     |
@@ -173,6 +174,11 @@ display name, display detail, and optional route metadata. The paired
 `product_activity_actor_sources` table stores private user/thread/system lookup
 keys, remains domain-only, and has no Electric shape. Better Auth user, session,
 account, and member tables stay outside the sync registry.
+`activity_events` is the domain-owned global feed read model. It stores stable
+product-facing event ids, organization scope, event and target metadata,
+product-safe actor references, display payloads, status, creation time, and
+`retained_until`. Repository retention keeps the feed bounded to the last 30
+days and latest 5,000 events per organization.
 
 Migrations live in `apps/domain/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses

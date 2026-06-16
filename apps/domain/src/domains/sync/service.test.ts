@@ -66,6 +66,10 @@ function authorizeShape(shapeName: SyncShapeName) {
 }
 
 const expectedShapeDefinitions = {
+  "activity-events": {
+    scope: "organization",
+    table: "activity_events",
+  },
   "agent-action-runs": {
     scope: "organization-user",
     table: "agent_action_runs",

@@ -45,7 +45,8 @@ vi.mock(import("@tanstack/react-start"), async (importActual) => {
   };
 });
 
-vi.mock(import("@tanstack/react-start/server"), () => ({
+// eslint-disable-next-line vitest/prefer-import-in-mock -- the dynamic import mock leaks the real TanStack Start server module in the full app suite.
+vi.mock("@tanstack/react-start/server", () => ({
   getRequestHeader: mockedGetRequestHeader,
 }));
 
