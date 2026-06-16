@@ -12,6 +12,7 @@
     "dev": "vite dev --host 127.0.0.1 --port 4173 --strictPort",
     "e2e": "playwright test --project=chromium",
     "perf:jobs-workspace": "tsx src/features/jobs-workspace/jobs-workspace-performance-harness.ts",
+    "perf:jobs-workspace:stage": "JOBS_WORKSPACE_STAGE_PERF_REQUIRED=1 playwright test e2e/jobs-workspace-performance.test.ts --project=chromium",
     "perf:sites-workspace": "tsx src/features/sites-workspace/sites-workspace-performance-harness.ts",
     "preview": "vite preview",
     "react-doctor": "react-doctor --diff false --blocking error --offline",

@@ -118,6 +118,42 @@ heap observations. It can record stage/browser-observed Electric initial ready
 latency with `--initial-ready-ms`, but a local synthetic run leaves that field
 explicitly marked as not recorded so cutover evidence still requires an
 approved realtime verification stage.
+`pnpm --filter app perf:jobs-workspace:stage` is the repeatable browser/stage
+evidence path for that realtime gate. It runs only against an already prepared
+stage and signed-in account; it does not create accounts, organizations,
+Alchemy stages, provider resources, or seed data. The command requires
+`PLAYWRIGHT_BASE_URL`, `PLAYWRIGHT_API_URL`, and `PLAYWRIGHT_AGENT_URL` for
+the existing stage surfaces, plus `JOBS_WORKSPACE_STAGE_STORAGE_STATE` for a
+Playwright storage-state file that is already authenticated into the seeded
+organization. When the seeded org is served from a tenant subdomain, set
+`PLAYWRIGHT_TENANT_URL` and the harness will navigate there instead of the
+apex app URL. The command writes a machine-readable artifact when
+`JOBS_WORKSPACE_STAGE_PERF_OUTPUT` is set:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://app.pr-223.ceird.app \
+PLAYWRIGHT_API_URL=https://api.pr-223.ceird.app \
+PLAYWRIGHT_AGENT_URL=https://agent.pr-223.ceird.app \
+PLAYWRIGHT_TENANT_URL=https://<org-slug>--pr-223.ceird.app \
+JOBS_WORKSPACE_STAGE_STORAGE_STATE=/path/to/seeded-stage-storage-state.json \
+JOBS_WORKSPACE_STAGE_PERF_OUTPUT=/tmp/tsk-236-jobs-workspace-stage.json \
+pnpm --filter app perf:jobs-workspace:stage
+```
+
+The stage harness opens `/jobs-workspace?perfHarness=jobs-workspace`, waits for
+the Electric list graph to report `ready`, records the aggregated initial
+ready latency from collection health, verifies the seeded shape, and measures
+representative browser search, status filter, label filter, priority sort, and
+detail-open timings. The default seeded-shape minimums match TSK-200: 5,000
+jobs, 1,000 sites, 100 labels, and 15,000 job-label assignments. Override the
+minimums only when recording a deliberately smaller exploratory run by setting
+`JOBS_WORKSPACE_EXPECTED_MIN_JOBS`,
+`JOBS_WORKSPACE_EXPECTED_MIN_SITES`,
+`JOBS_WORKSPACE_EXPECTED_MIN_LABELS`, and
+`JOBS_WORKSPACE_EXPECTED_MIN_JOB_LABEL_ASSIGNMENTS`; final cutover evidence
+must use the TSK-200 shape. If the stage URL, authenticated storage state, or
+seeded rows are absent, the harness skips in normal E2E runs and fails clearly
+when invoked through `perf:jobs-workspace:stage`.
 The jobs primary route collection has a conservative Electric read canary behind
 that same fallback wrapper. It is disabled by default and must be opted in
 through the jobs data-plane sync options, so a configured `VITE_SYNC_ORIGIN`

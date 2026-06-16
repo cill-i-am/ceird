@@ -100,6 +100,41 @@ type JobsWorkspaceCommandStatus = {
   readonly targetJobId?: string | undefined;
   readonly txid?: number | undefined;
 } | null;
+const PERF_HARNESS_SEARCH_PARAM = "jobs-workspace";
+
+declare global {
+  interface Window {
+    __CEIRD_JOBS_WORKSPACE_PERF__?:
+      | {
+          readonly detail?: {
+            readonly commentCount?: number | undefined;
+            readonly graphCounts: ReturnType<
+              typeof useJobsWorkspaceLiveDetail
+            >["graphCounts"];
+            readonly health: DataPlaneCollectionHealthSnapshot;
+            readonly isReady: boolean;
+            readonly selectedJobId?: string | undefined;
+          };
+          readonly list: {
+            readonly graphCounts: ReturnType<
+              typeof useJobsWorkspaceLiveList
+            >["graphCounts"];
+            readonly health: DataPlaneCollectionHealthSnapshot;
+            readonly isReady: boolean;
+            readonly rows: readonly {
+              readonly id: string;
+              readonly labelCount: number;
+              readonly priority: string;
+              readonly siteId?: string | undefined;
+              readonly status: string;
+              readonly title: string;
+            }[];
+          };
+          readonly measuredAt: number;
+        }
+      | undefined;
+  }
+}
 
 function clearedSearchParam(): undefined {
   return undefined;
@@ -168,6 +203,50 @@ function JobsWorkspaceLiveRouteShell({
     ? liveList.rows[selectedRowIndex]
     : undefined;
   const commandPending = commandStatus?.status === "pending";
+
+  React.useEffect(() => {
+    if (!isPerfHarnessEnabled()) {
+      return;
+    }
+
+    window.__CEIRD_JOBS_WORKSPACE_PERF__ = {
+      ...(detailJobId === undefined
+        ? {}
+        : {
+            detail: {
+              commentCount: liveDetail.detail?.commentCount,
+              graphCounts: liveDetail.graphCounts,
+              health: liveDetail.health,
+              isReady: liveDetail.isReady,
+              selectedJobId: detailJobId,
+            },
+          }),
+      list: {
+        graphCounts: liveList.graphCounts,
+        health: liveList.health,
+        isReady: liveList.isReady,
+        rows: liveList.rows.map((row) => ({
+          id: row.job.id,
+          labelCount: row.labels.length,
+          priority: row.job.priority,
+          siteId: row.job.siteId,
+          status: row.job.status,
+          title: row.job.title,
+        })),
+      },
+      measuredAt: performance.now(),
+    };
+  }, [
+    detailJobId,
+    liveDetail.detail?.commentCount,
+    liveDetail.graphCounts,
+    liveDetail.health,
+    liveDetail.isReady,
+    liveList.graphCounts,
+    liveList.health,
+    liveList.isReady,
+    liveList.rows,
+  ]);
 
   React.useEffect(() => {
     setSelectedRowIndex((current) =>
@@ -1418,6 +1497,14 @@ function normalizeInput(value: string): string | undefined {
   const trimmed = value.trim();
 
   return trimmed === "" ? undefined : trimmed;
+}
+
+function isPerfHarnessEnabled(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("perfHarness") ===
+      PERF_HARNESS_SEARCH_PARAM
+  );
 }
 
 function nextSort(sort: JobsWorkspaceSort): JobsWorkspaceSort {
