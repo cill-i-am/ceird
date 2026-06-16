@@ -348,7 +348,10 @@ function useLabelsSettingsHotkeys({
         requestArchiveConfirmation(editingLabel);
       }
     },
-    { enabled: canWriteLabels && editingLabel !== null && !isMutating }
+    {
+      enabled: canWriteLabels && editingLabel !== null && !isMutating,
+      ignoreInputs: false,
+    }
   );
 
   React.useEffect(() => {
