@@ -52,6 +52,7 @@ function LabelsSettingsRoute() {
         scope: dataPlaneSession.scope,
         session: dataPlaneSession,
       })}
+      mutationJournal={dataPlaneSession.mutationJournal}
       organization={activeOrganization}
       organizationRole={currentOrganizationRole}
     />
