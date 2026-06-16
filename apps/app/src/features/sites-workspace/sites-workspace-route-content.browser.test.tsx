@@ -25,7 +25,9 @@ describe(SitesWorkspaceRouteContent, () => {
     expect(
       screen.getByRole("searchbox", { name: /search sites workspace/i })
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /new site/i })).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /new site/i })
+    ).not.toBeInTheDocument();
     expect(
       screen.getAllByText("Realtime sites unavailable").length
     ).toBeGreaterThan(0);
@@ -43,7 +45,9 @@ describe(SitesWorkspaceRouteContent, () => {
     expect(
       screen.getByText("Sites workspace is internal-only")
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /new site/i })).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: /new site/i })
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("searchbox", { name: /search sites workspace/i })
     ).not.toBeInTheDocument();
@@ -60,7 +64,7 @@ describe(SitesWorkspaceRouteContent, () => {
     ).not.toBeInTheDocument();
   });
 
-  it("registers keyboard access for search and create affordances", async () => {
+  it("registers keyboard access for search without a placeholder create affordance", async () => {
     const user = userEvent.setup();
     const onWorkspaceSearchChange =
       vi.fn<
@@ -73,6 +77,9 @@ describe(SitesWorkspaceRouteContent, () => {
 
     await user.keyboard("n");
     expect(onWorkspaceSearchChange).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: /new site/i })
+    ).not.toBeInTheDocument();
     expect(
       screen.getAllByText("Realtime sites unavailable").length
     ).toBeGreaterThan(0);
@@ -145,8 +152,11 @@ describe(SitesWorkspaceRouteContent, () => {
     expect(searchOption).toBeInTheDocument();
     expect(within(searchOption).getByText("/")).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: /prepare site creation/i })
-    ).toBeInTheDocument();
+      screen.queryByRole("option", { name: /prepare site creation/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /new site/i })
+    ).not.toBeInTheDocument();
   });
 });
 

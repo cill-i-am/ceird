@@ -511,14 +511,6 @@ export const HOTKEYS = {
     label: "Search sites workspace",
     scope: "sites-workspace",
   },
-  sitesWorkspaceCreate: {
-    group: "Sites workspace",
-    hotkey: "N",
-    id: "sitesWorkspaceCreate",
-    label: "Prepare site creation",
-    scope: "sites-workspace",
-    when: "Viewer can create sites",
-  },
   sitesWorkspaceNextRow: {
     group: "Sites workspace",
     hotkey: "ArrowDown",

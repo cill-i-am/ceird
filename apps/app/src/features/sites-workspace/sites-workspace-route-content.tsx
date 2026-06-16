@@ -5,7 +5,6 @@ import type { JobListItem } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
 import type { SiteOption } from "@ceird/sites-core";
 import {
-  Add01Icon,
   Alert02Icon,
   Briefcase01Icon,
   Database01Icon,
@@ -98,14 +97,8 @@ export function SitesWorkspaceRouteContent({
   const focusSearch = React.useCallback(() => {
     searchInputRef.current?.focus();
   }, []);
-  const prepareSiteCreation = React.useCallback(() => {
-    searchInputRef.current?.focus();
-  }, []);
 
   useAppHotkey("sitesWorkspaceSearch", focusSearch, {
-    enabled: canUseWorkspace,
-  });
-  useAppHotkey("sitesWorkspaceCreate", prepareSiteCreation, {
     enabled: canUseWorkspace,
   });
 
@@ -123,19 +116,9 @@ export function SitesWorkspaceRouteContent({
               shortcut: HOTKEYS.sitesWorkspaceSearch,
               title: "Focus workspace search",
             },
-            {
-              group: "Current page",
-              icon: Add01Icon,
-              id: "sites-workspace-create-placeholder",
-              priority: 70,
-              run: prepareSiteCreation,
-              scope: "route",
-              shortcut: HOTKEYS.sitesWorkspaceCreate,
-              title: "Prepare site creation",
-            },
           ]
         : [],
-    [canUseWorkspace, focusSearch, prepareSiteCreation]
+    [canUseWorkspace, focusSearch]
   );
 
   useRegisterCommandActions(commandActions);
@@ -149,24 +132,7 @@ export function SitesWorkspaceRouteContent({
         eyebrow="Electric workspace"
         title="Sites workspace"
         description="Live site directory, labels, related jobs, and active-job summaries from the Electric-backed Sites collection graph."
-        actions={
-          <>
-            <Badge variant="outline">Preview route</Badge>
-            <Button
-              type="button"
-              disabled={!canUseWorkspace}
-              onClick={prepareSiteCreation}
-            >
-              <HugeiconsIcon aria-hidden icon={Add01Icon} strokeWidth={2} />
-              New Site
-              <ShortcutHint
-                decorative
-                hotkey={HOTKEYS.sitesWorkspaceCreate.hotkey}
-                label={HOTKEYS.sitesWorkspaceCreate.label}
-              />
-            </Button>
-          </>
-        }
+        actions={<Badge variant="outline">Preview route</Badge>}
       />
 
       {canUseWorkspace ? (

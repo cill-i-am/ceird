@@ -940,7 +940,7 @@ function listBrowserSiteComments(siteId: SiteIdType) {
   );
 }
 
-function toSiteOptionElectricRow(
+export function toSiteOptionElectricRow(
   row: Record<string, unknown>
 ): SitesElectricRow {
   const site: Record<string, unknown> = {
@@ -957,6 +957,7 @@ function toSiteOptionElectricRow(
     labels: [],
     locationStatus: String(row.locationStatus),
     name: String(row.name),
+    updatedAt: String(row.updatedAt),
     activeJobCount: 0,
   };
 

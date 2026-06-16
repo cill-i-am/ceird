@@ -5,9 +5,8 @@ import type {
   SiteComment,
   SiteCommentsResponse,
   SiteListResponse,
-  SiteOption,
 } from "@ceird/sites-core";
-import { SiteListCursor } from "@ceird/sites-core";
+import { SiteListCursor, SiteOptionSchema } from "@ceird/sites-core";
 import { QueryClient } from "@tanstack/react-query";
 import { Schema } from "effect";
 
@@ -34,6 +33,7 @@ import {
   siteRelatedJobsCollectionKey,
   sitesCollectionId,
   sitesCollectionKey,
+  toSiteOptionElectricRow,
 } from "./sites-data-plane";
 
 describe("sites data plane", () => {
@@ -44,14 +44,16 @@ describe("sites data plane", () => {
     userId: "user_123",
   });
 
-  const site = {
+  const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
+  const site = decodeSiteOption({
     displayLocation: "No location",
     hasUsableCoordinates: false,
     id: "22222222-2222-4222-8222-222222222222",
     labels: [],
     locationStatus: "unverified",
     name: "Dublin Port",
-  } as unknown as SiteOption;
+    updatedAt: "2026-05-30T00:00:00.000Z",
+  });
 
   const comment = {
     authorName: "Ciara",
@@ -195,6 +197,25 @@ describe("sites data plane", () => {
         subscriptionName: "jobs",
       },
       shapeName: "jobs",
+    });
+  });
+
+  it("maps raw Electric site rows through the shared SiteOption boundary", () => {
+    const transformed = toSiteOptionElectricRow({
+      displayLocation: "Dublin Port",
+      id: "22222222-2222-4222-8222-222222222222",
+      latitude: null,
+      locationStatus: "unverified",
+      longitude: null,
+      name: "Dublin Port",
+      updatedAt: "2026-05-31T00:00:00.000Z",
+    });
+
+    expect(transformed).toMatchObject({
+      id: site.id,
+      labels: [],
+      name: "Dublin Port",
+      updatedAt: "2026-05-31T00:00:00.000Z",
     });
   });
 
