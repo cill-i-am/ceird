@@ -20,6 +20,7 @@ import { getDataPlaneSessionKey } from "#/data-plane/session";
 import {
   aggregateJobsWorkspaceReadModelHealth,
   createJobsWorkspaceReadModelContracts,
+  deriveJobsWorkspaceDetail,
   deriveJobsWorkspaceVisibleRows,
   createJobsListSeed,
   createJobsListScope,
@@ -35,6 +36,8 @@ import {
   toJobLabelAssignmentRow,
   toJobSiteSummaryRow,
   toJobVisitElectricRow,
+  toProductActivityActorElectricRow,
+  toProductMemberActorSummaryElectricRow,
   toJobsWorkspaceJobRow,
 } from "./jobs-data-plane";
 
@@ -389,6 +392,8 @@ describe("jobs data plane", () => {
         "sites",
         "contacts",
         "work-item-collaborators",
+        "product-activity-actors",
+        "product-member-actor-summaries",
         "work-item-activity",
         "work-item-visits",
         "work-item-comments",
@@ -397,7 +402,7 @@ describe("jobs data plane", () => {
     });
     expect(graph.detail.projectionFollowUps).toStrictEqual(
       expect.arrayContaining([
-        expect.stringContaining("domain-owned product projection"),
+        expect.stringContaining("Additional member/contact availability"),
         expect.stringContaining("site-level rollups"),
       ])
     );
@@ -422,6 +427,14 @@ describe("jobs data plane", () => {
       collection: "job-collaborators",
       shapeName: "work-item-collaborators",
     });
+    expect(graph.actors).toMatchObject({
+      collection: "product-activity-actors",
+      shapeName: "product-activity-actors",
+    });
+    expect(graph.memberActorSummaries).toMatchObject({
+      collection: "product-member-actor-summaries",
+      shapeName: "product-member-actor-summaries",
+    });
     expect(graph.activity).toMatchObject({
       collection: "job-activity",
       shapeName: "work-item-activity",
@@ -440,6 +453,7 @@ describe("jobs data plane", () => {
     });
     for (const contract of [
       graph.activity,
+      graph.actors,
       graph.collaborators,
       graph.comments,
       graph.contactSummaries,
@@ -447,6 +461,7 @@ describe("jobs data plane", () => {
       graph.jobLabelAssignments,
       graph.jobs,
       graph.labels,
+      graph.memberActorSummaries,
       graph.siteSummaries,
       graph.visits,
     ]) {
@@ -669,6 +684,242 @@ describe("jobs data plane", () => {
     });
   });
 
+  it("derives selected Jobs workspace detail from local joins and product actors", () => {
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+    const labelId = "22222222-2222-4222-8222-222222222222" as LabelIdType;
+    const siteId = "33333333-3333-4333-8333-333333333333" as SiteIdType;
+    const contactId = "44444444-4444-4444-8444-444444444444" as ContactIdType;
+    const commentId = "55555555-5555-4555-8555-555555555555";
+    const actorId = "66666666-6666-4666-8666-666666666666";
+    const coordinatorActorId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+    const detail = deriveJobsWorkspaceDetail({
+      activity: [
+        toJobActivityElectricRow({
+          actorId,
+          actorUserId: "user_taylor",
+          createdAt: "2026-06-15T10:25:00.000Z",
+          eventType: "priority_changed",
+          id: "77777777-7777-4777-8777-777777777777",
+          payload: JSON.stringify({
+            eventType: "priority_changed",
+            fromPriority: "medium",
+            toPriority: "high",
+          }),
+          workItemId,
+        }),
+      ],
+      actors: [
+        toProductActivityActorElectricRow({
+          displayDetail: "Dispatch",
+          displayName: "Taylor Member",
+          id: actorId,
+          kind: "member",
+          routeHref: "/members/user_taylor",
+          routeLabel: "Taylor Member",
+        }),
+        toProductActivityActorElectricRow({
+          displayDetail: "Scheduling",
+          displayName: "Jordan Coordinator",
+          id: coordinatorActorId,
+          kind: "member",
+          routeHref: "/members/user_jordan",
+          routeLabel: "Jordan Coordinator",
+        }),
+      ],
+      collaborators: [
+        toJobCollaboratorElectricRow({
+          accessLevel: "comment",
+          createdAt: "2026-06-15T10:20:00.000Z",
+          id: "99999999-9999-4999-8999-999999999999",
+          roleLabel: "Facilities",
+          subjectType: "user",
+          updatedAt: "2026-06-15T10:20:00.000Z",
+          userId: "user_taylor",
+          workItemId,
+        }),
+      ],
+      comments: [
+        toJobCommentElectricRow({
+          actorId,
+          authorUserId: "user_taylor",
+          body: "Ready for dispatch",
+          createdAt: "2026-06-15T10:40:00.000Z",
+          id: commentId,
+          updatedAt: "2026-06-15T10:40:00.000Z",
+        }),
+      ],
+      contacts: [
+        toJobContactSummaryRow({
+          id: contactId,
+          name: "Operations",
+          updatedAt: "2026-06-15T10:15:00.000Z",
+        }),
+      ],
+      jobComments: [
+        toJobCommentEdgeRow({
+          commentId,
+          createdAt: "2026-06-15T10:35:00.000Z",
+          workItemId,
+        }),
+      ],
+      jobs: [
+        toJobsWorkspaceJobRow({
+          assigneeId: "user_taylor",
+          contactId,
+          coordinatorId: "user_jordan",
+          createdAt: "2026-06-15T10:00:00.000Z",
+          createdByUserId: "user_123",
+          id: workItemId,
+          kind: "job",
+          priority: "high",
+          siteId,
+          status: "blocked",
+          title: "Fit heat pump",
+          updatedAt: "2026-06-15T11:00:00.000Z",
+        }),
+      ],
+      labelAssignments: [
+        toJobLabelAssignmentRow({
+          createdAt: "2026-06-15T10:05:00.000Z",
+          labelId,
+          workItemId,
+        }),
+      ],
+      labels: [
+        {
+          createdAt: "2026-06-15T10:00:00.000Z",
+          id: labelId,
+          name: "Urgent",
+          updatedAt: "2026-06-15T10:00:00.000Z",
+        },
+      ],
+      memberActorSummaries: [
+        toProductMemberActorSummaryElectricRow({
+          actorId,
+          displayDetail: "Dispatch",
+          displayName: "Taylor Member",
+          routeHref: "/members/user_taylor",
+          routeLabel: "Taylor Member",
+          userId: "user_taylor",
+        }),
+        toProductMemberActorSummaryElectricRow({
+          actorId: coordinatorActorId,
+          displayDetail: "Scheduling",
+          displayName: "Jordan Coordinator",
+          routeHref: "/members/user_jordan",
+          routeLabel: "Jordan Coordinator",
+          userId: "user_jordan",
+        }),
+      ],
+      selectedJobId: workItemId,
+      sites: [
+        toJobSiteSummaryRow({
+          displayLocation: "Dublin",
+          id: siteId,
+          locationStatus: "unverified",
+          name: "Warehouse",
+          updatedAt: "2026-06-15T10:10:00.000Z",
+        }),
+      ],
+      visits: [
+        toJobVisitElectricRow({
+          authorUserId: "user_taylor",
+          createdAt: "2026-06-15T10:30:00.000Z",
+          durationMinutes: 60,
+          id: "88888888-8888-4888-8888-888888888888",
+          note: "Initial survey",
+          visitDate: "2026-06-15",
+          workItemId,
+        }),
+      ],
+    });
+
+    expect(detail).toMatchObject({
+      activity: [
+        {
+          actor: {
+            displayName: "Taylor Member",
+            route: { href: "/members/user_taylor" },
+          },
+        },
+      ],
+      assignee: {
+        displayName: "Taylor Member",
+        userId: "user_taylor",
+      },
+      collaborators: [{ roleLabel: "Facilities" }],
+      commentCount: 1,
+      contact: { name: "Operations" },
+      coordinator: {
+        displayName: "Jordan Coordinator",
+        userId: "user_jordan",
+      },
+      job: { id: workItemId, title: "Fit heat pump" },
+      labels: [{ name: "Urgent" }],
+      site: { name: "Warehouse" },
+      visits: [{ note: "Initial survey" }],
+    });
+  });
+
+  it("derives assignment summaries from member summary rows without activity actor rows", () => {
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+
+    const detail = deriveJobsWorkspaceDetail({
+      activity: [],
+      actors: [],
+      collaborators: [],
+      comments: [],
+      contacts: [],
+      jobComments: [],
+      jobs: [
+        toJobsWorkspaceJobRow({
+          assigneeId: "user_never_activity_assignee",
+          coordinatorId: "user_never_activity_coordinator",
+          createdAt: "2026-06-15T10:00:00.000Z",
+          createdByUserId: "user_123",
+          id: workItemId,
+          kind: "job",
+          priority: "high",
+          status: "new",
+          title: "Assigned without activity",
+          updatedAt: "2026-06-15T11:00:00.000Z",
+        }),
+      ],
+      labelAssignments: [],
+      labels: [],
+      memberActorSummaries: [
+        toProductMemberActorSummaryElectricRow({
+          actorId: "66666666-6666-4666-8666-666666666666",
+          displayDetail: "Team member",
+          displayName: "Never Activity Assignee",
+          userId: "user_never_activity_assignee",
+        }),
+        toProductMemberActorSummaryElectricRow({
+          actorId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          displayDetail: "Team member",
+          displayName: "Never Activity Coordinator",
+          userId: "user_never_activity_coordinator",
+        }),
+      ],
+      selectedJobId: workItemId,
+      sites: [],
+      visits: [],
+    });
+
+    expect(detail).toMatchObject({
+      assignee: {
+        displayName: "Never Activity Assignee",
+        userId: "user_never_activity_assignee",
+      },
+      coordinator: {
+        displayName: "Never Activity Coordinator",
+        userId: "user_never_activity_coordinator",
+      },
+      job: { id: workItemId, title: "Assigned without activity" },
+    });
+  });
+
   it("maps product-safe Electric rows for the jobs workspace graph", () => {
     const workItemId = "11111111-1111-4111-8111-111111111111";
     const labelId = "22222222-2222-4222-8222-222222222222";
@@ -763,6 +1014,7 @@ describe("jobs data plane", () => {
     ).toMatchObject({ accessLevel: "comment", userId, workItemId });
     expect(
       toJobActivityElectricRow({
+        actorId: "66666666-6666-4666-8666-666666666666",
         actorUserId: userId,
         createdAt: "2026-06-15T10:25:00.000Z",
         eventType: "priority_changed",
@@ -775,6 +1027,7 @@ describe("jobs data plane", () => {
         workItemId,
       })
     ).toMatchObject({
+      actorId: "66666666-6666-4666-8666-666666666666",
       actorUserId: userId,
       eventType: "priority_changed",
       payload: {
@@ -808,6 +1061,7 @@ describe("jobs data plane", () => {
     });
     expect(
       toJobCommentElectricRow({
+        actorId: "66666666-6666-4666-8666-666666666666",
         authorUserId: userId,
         body: "Ready for dispatch",
         createdAt: "2026-06-15T10:40:00.000Z",
@@ -816,9 +1070,41 @@ describe("jobs data plane", () => {
         updatedByUserId: null,
       })
     ).toMatchObject({
+      actorId: "66666666-6666-4666-8666-666666666666",
       authorUserId: userId,
       body: "Ready for dispatch",
       id: commentId,
+    });
+    const productActor = toProductActivityActorElectricRow({
+      displayDetail: "Dispatch",
+      displayName: "Taylor Member",
+      id: "66666666-6666-4666-8666-666666666666",
+      kind: "member",
+      routeHref: "/members/user_taylor",
+      routeLabel: "Taylor Member",
+    });
+    expect(productActor).toMatchObject({
+      displayDetail: "Dispatch",
+      displayName: "Taylor Member",
+      kind: "member",
+      route: { href: "/members/user_taylor", label: "Taylor Member" },
+    });
+    expect(productActor).not.toHaveProperty("userId");
+    expect(
+      toProductMemberActorSummaryElectricRow({
+        actorId: "66666666-6666-4666-8666-666666666666",
+        displayDetail: "Dispatch",
+        displayName: "Taylor Member",
+        routeHref: "/members/user_taylor",
+        routeLabel: "Taylor Member",
+        userId,
+      })
+    ).toMatchObject({
+      displayName: "Taylor Member",
+      id: "66666666-6666-4666-8666-666666666666",
+      kind: "member",
+      route: { href: "/members/user_taylor", label: "Taylor Member" },
+      userId,
     });
   });
 });

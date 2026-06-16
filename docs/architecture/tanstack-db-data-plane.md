@@ -72,15 +72,23 @@ explicit in `apps/app/src/features/jobs/jobs-data-plane.ts` through
 `createJobsWorkspaceReadModelContracts(...)`. Its list graph derives from the
 domain-approved `jobs`, `work-item-labels`, `labels`, `sites`, and `contacts`
 shapes. Its detail graph adds `work-item-collaborators`,
+`product-activity-actors`, `product-member-actor-summaries`,
 `work-item-activity`, `work-item-visits`, `work-item-comments`, and `comments`.
 Each shape is a complete-tenant, organization/viewer/role-scoped Electric
 collection with shared health state; local live queries can join job rows,
 label assignments, label definitions, site summaries, contact summaries,
-collaborators, activity, visits, comment edges, and comment bodies without
-constructing raw Electric streams in feature UI. Member/actor display names and
-site-level active job rollups remain domain-owned projection follow-ups rather
-than browser business-rule recomputation.
-The `/jobs-workspace` live list consumes that graph through
+collaborators, product-safe actors, activity, visits, comment edges, and comment
+bodies without constructing raw Electric streams in feature UI. Assignment and
+coordinator display joins use the domain-owned
+`product-member-actor-summaries` shape rather than synthesizing names from raw
+user identifiers or relying on the generic activity actor shape to expose source
+keys. The domain write path materializes that summary projection when jobs are
+created or patched with assignee/coordinator users, and the projection migration
+backfills existing job member references, so detail rendering does not depend on
+those users having previously emitted comments or activity. Site-level active
+job rollups remain domain-owned projection follow-ups rather than browser
+business-rule recomputation.
+The `/jobs-workspace` live list consumes the list graph through
 `features/jobs-workspace/jobs-workspace-live-list.ts`, which creates the
 Electric collections through the data-plane boundary, subscribes with the
 shared live-query wrapper, joins labels/sites/contacts locally, and exposes
@@ -90,6 +98,15 @@ derives visible rows only after jobs, label assignments, labels, sites, and
 contacts are all healthy and live-query ready. When the graph is disabled,
 unavailable, or not fully ready, the workspace reports that shared graph health
 directly and does not activate the legacy Jobs Query Collection fallback.
+The same route opens URL-backed detail state through `detailJobId` and consumes
+`features/jobs-workspace/jobs-workspace-live-detail.ts`, deriving selected job
+metadata, labels, site/contact summaries, collaborators, visits, activity, and a
+comments-ready count from the Electric detail graph. Assignee and coordinator
+display are joined from the synced `product-member-actor-summaries` projection
+by member `userId`; the UI shows an unavailable summary state when that
+projection is absent rather than synthesizing names from raw identifiers. Detail
+health is aggregated separately from list health so list readiness is not gated
+by the wider record-local activity/comment graph.
 The jobs primary route collection has a conservative Electric read canary behind
 that same fallback wrapper. It is disabled by default and must be opted in
 through the jobs data-plane sync options, so a configured `VITE_SYNC_ORIGIN`

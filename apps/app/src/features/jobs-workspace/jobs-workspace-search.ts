@@ -3,6 +3,7 @@ export type JobsWorkspaceStatus = "active" | "blocked" | "completed" | "all";
 export type JobsWorkspaceSort = "updated-desc" | "updated-asc" | "priority";
 
 export interface JobsWorkspaceSearch {
+  readonly detailJobId?: string | undefined;
   readonly labelId?: string | undefined;
   readonly query?: string | undefined;
   readonly recentSearch?: string | undefined;
@@ -28,6 +29,7 @@ export function decodeJobsWorkspaceSearch(
   search: Record<string, unknown>
 ): JobsWorkspaceSearch {
   return {
+    detailJobId: parseNonEmptyString(search.detailJobId),
     labelId: parseNonEmptyString(search.labelId),
     query: parseNonEmptyString(search.query),
     recentSearch: parseNonEmptyString(search.recentSearch),

@@ -30,6 +30,7 @@ export const SYNC_SHAPE_NAMES = [
   "jobs",
   "labels",
   "product-activity-actors",
+  "product-member-actor-summaries",
   "site-active-job-summaries",
   "site-comments",
   "site-contacts",
@@ -106,6 +107,11 @@ export const SYNC_SHAPE_AUTHORIZATION_DEFINITIONS = {
   "product-activity-actors": {
     scope: "organization",
     table: "product_activity_actors",
+    where: ORGANIZATION_SYNC_WHERE,
+  },
+  "product-member-actor-summaries": {
+    scope: "organization",
+    table: "product_member_actor_summaries",
     where: ORGANIZATION_SYNC_WHERE,
   },
   "site-active-job-summaries": {
@@ -241,6 +247,10 @@ export const OrganizationSyncShapeAuthorizationSchema = Schema.Union([
   makeOrganizationShapeAuthorizationSchema(
     "product-activity-actors",
     "product_activity_actors"
+  ),
+  makeOrganizationShapeAuthorizationSchema(
+    "product-member-actor-summaries",
+    "product_member_actor_summaries"
   ),
   makeOrganizationShapeAuthorizationSchema(
     "site-active-job-summaries",

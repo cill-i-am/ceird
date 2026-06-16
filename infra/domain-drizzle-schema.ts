@@ -27,6 +27,7 @@ const schemaExportNames = [
   "organization",
   "productActivityActor",
   "productActivityActorSource",
+  "productMemberActorSummary",
   "rateLimit",
   "session",
   "site",
@@ -99,6 +100,9 @@ export const organization = requireSchemaExport("organization");
 export const productActivityActor = requireSchemaExport("productActivityActor");
 export const productActivityActorSource = requireSchemaExport(
   "productActivityActorSource"
+);
+export const productMemberActorSummary = requireSchemaExport(
+  "productMemberActorSummary"
 );
 export const rateLimit = requireSchemaExport("rateLimit");
 export const session = requireSchemaExport("session");

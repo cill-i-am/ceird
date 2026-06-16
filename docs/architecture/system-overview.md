@@ -174,7 +174,14 @@ predicate, parameter, or source-secret values.
 and comments. It carries only display/routing fields such as actor kind,
 display name, display detail, and optional route metadata. The paired
 `product_activity_actor_sources` table stores private user/thread/system lookup
-keys, remains domain-only, and has no Electric shape. Better Auth user, session,
+keys, remains domain-only, and has no Electric shape.
+`product_member_actor_summaries` is the domain-owned, synced member projection
+for assignment/coordinator display joins; it exposes the job-visible member
+`user_id`, product actor id, and product-safe display/routing fields without
+syncing the private actor source table. Job create/patch writes materialize the
+projection for assignee/coordinator users, and the projection migration
+backfills existing job member references, so member summaries are not limited to
+users who have already written comments or activity. Better Auth user, session,
 account, and member tables stay outside the sync registry.
 `activity_events` is the domain-owned global feed read model. It stores stable
 product-facing event ids, organization scope, event and target metadata,

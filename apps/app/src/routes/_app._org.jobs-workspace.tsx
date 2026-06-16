@@ -35,8 +35,17 @@ function JobsWorkspaceRoute() {
   return (
     <JobsWorkspaceRouteShell
       currentOrganizationRole={currentOrganizationRole}
+      detailJobId={search.detailJobId}
       hotkeysEnabled={shouldEnableJobsWorkspaceHotkeys({ pathname })}
       labelId={search.labelId}
+      onDetailJobChange={(detailJobId: string | undefined) => {
+        navigate({
+          search: (current) => ({
+            ...current,
+            detailJobId,
+          }),
+        });
+      }}
       onLabelChange={(labelId: string | undefined) => {
         navigate({
           replace: true,

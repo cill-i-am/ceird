@@ -6,6 +6,7 @@ import {
   OrganizationId,
   ProductActorId,
 } from "@ceird/activity-core";
+import { UserId } from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import type { Pool } from "pg";
@@ -21,11 +22,15 @@ import {
   configProviderFromMap,
   withConfigProvider,
 } from "../../test/effect-test-helpers.js";
-import { ActivityEventsRepository } from "./repository.js";
+import {
+  ActivityEventsRepository,
+  ProductActivityActorsRepository,
+} from "./repository.js";
 
 const decodeActivityEventId = Schema.decodeUnknownSync(ActivityEventId);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeProductActorId = Schema.decodeUnknownSync(ProductActorId);
+const decodeUserId = Schema.decodeUnknownSync(UserId);
 const cleanup: (() => Promise<void>)[] = [];
 
 describe("activity events repository", () => {
@@ -293,6 +298,93 @@ describe("activity events repository", () => {
     expect(listed).toHaveLength(10);
     expect(listed.some((event) => event.id === expired.id)).toBeFalsy();
   });
+
+  it("maintains a synced member actor summary projection", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createMigratedTestDatabase(context);
+    if (testDatabase === undefined) {
+      return;
+    }
+
+    const organizationId = decodeOrganizationId(randomUUID());
+    const userId = decodeUserId(`user_${randomUUID()}`);
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Actor Summaries",
+      });
+      await seedMember(pool, {
+        email: "taylor@example.com",
+        name: "Taylor Member",
+        organizationId,
+        userId,
+      });
+    });
+
+    const created = await runProductActivityActorsRepositoryEffect(
+      testDatabase.url,
+      ProductActivityActorsRepository.use((repository) =>
+        repository.ensureMemberActor({
+          organizationId,
+          userId,
+        })
+      )
+    );
+    const summary = await withPool(testDatabase.url, async (pool) => {
+      const result = await pool.query<{
+        actor_id: string;
+        display_detail: string | null;
+        display_name: string;
+        user_id: string;
+      }>(
+        `select actor_id, user_id, display_name, display_detail
+         from product_member_actor_summaries
+         where organization_id = $1 and user_id = $2`,
+        [organizationId, userId]
+      );
+
+      return result.rows[0];
+    });
+
+    expect(summary).toStrictEqual({
+      actor_id: created.actor.id,
+      display_detail: "Team member",
+      display_name: "Taylor Member",
+      user_id: userId,
+    });
+
+    await withPool(testDatabase.url, async (pool) => {
+      await pool.query(`update "user" set name = $1 where id = $2`, [
+        "Taylor Updated",
+        userId,
+      ]);
+    });
+
+    const updated = await runProductActivityActorsRepositoryEffect(
+      testDatabase.url,
+      ProductActivityActorsRepository.use((repository) =>
+        repository.ensureMemberActor({
+          organizationId,
+          userId,
+        })
+      )
+    );
+    const updatedSummary = await withPool(testDatabase.url, async (pool) => {
+      const result = await pool.query<{ display_name: string }>(
+        `select display_name
+         from product_member_actor_summaries
+         where actor_id = $1`,
+        [created.actor.id]
+      );
+
+      return result.rows[0];
+    });
+
+    expect(updated.actor.id).toBe(created.actor.id);
+    expect(updatedSummary).toStrictEqual({ display_name: "Taylor Updated" });
+  });
 });
 
 async function createMigratedTestDatabase(context: {
@@ -324,6 +416,27 @@ async function runActivityEventsRepositoryEffect<Value, Error, Requirements>(
     Effect.scoped(
       effect.pipe(
         Effect.provide(ActivityEventsRepository.Default),
+        Effect.provide(AppEffectSqlRuntimeLive),
+        withConfigProvider(
+          configProviderFromMap(new Map([["DATABASE_URL", databaseUrl]]))
+        )
+      ) as Effect.Effect<Value, Error, never>
+    )
+  );
+}
+
+async function runProductActivityActorsRepositoryEffect<
+  Value,
+  Error,
+  Requirements,
+>(
+  databaseUrl: string,
+  effect: Effect.Effect<Value, Error, Requirements>
+): Promise<Value> {
+  return await Effect.runPromise(
+    Effect.scoped(
+      effect.pipe(
+        Effect.provide(ProductActivityActorsRepository.Default),
         Effect.provide(AppEffectSqlRuntimeLive),
         withConfigProvider(
           configProviderFromMap(new Map([["DATABASE_URL", databaseUrl]]))
@@ -370,6 +483,27 @@ async function seedProductActivityActor(
      )
      values ($1, $2, 'member', $3, 'Team member', now(), now())`,
     [input.id, input.organizationId, input.name]
+  );
+}
+
+async function seedMember(
+  pool: Pool,
+  input: {
+    readonly email: string;
+    readonly name: string;
+    readonly organizationId: string;
+    readonly userId: string;
+  }
+) {
+  await pool.query(
+    `insert into "user" (id, name, email, email_verified, two_factor_enabled, created_at, updated_at)
+     values ($1, $2, $3, false, false, now(), now())`,
+    [input.userId, input.name, input.email]
+  );
+  await pool.query(
+    `insert into member (id, organization_id, user_id, role, created_at)
+     values ($1, $2, $3, 'member', now())`,
+    [randomUUID(), input.organizationId, input.userId]
   );
 }
 

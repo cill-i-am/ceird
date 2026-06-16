@@ -408,13 +408,21 @@ export const HOTKEYS = {
     scope: "jobs-workspace",
     when: "Jobs workspace rows are visible",
   },
-  jobsWorkspaceRowActions: {
+  jobsWorkspaceOpenDetail: {
     group: "Jobs",
     hotkey: "Enter",
-    id: "jobsWorkspaceRowActions",
-    label: "Focus selected job row actions",
+    id: "jobsWorkspaceOpenDetail",
+    label: "Open selected job detail",
     scope: "jobs-workspace",
     when: "A jobs workspace row is selected",
+  },
+  jobsWorkspaceCloseDetail: {
+    group: "Jobs",
+    hotkey: "Escape",
+    id: "jobsWorkspaceCloseDetail",
+    label: "Close job detail",
+    scope: "jobs-workspace",
+    when: "Jobs workspace detail is open",
   },
   jobsWorkspaceCycleSort: {
     group: "Jobs",
