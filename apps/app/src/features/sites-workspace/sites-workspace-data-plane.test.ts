@@ -196,7 +196,7 @@ describe("sites workspace data plane", () => {
     expect(rows.map((row) => row.site.name)).toStrictEqual(["Cork Yard"]);
   });
 
-  it("keeps create pending until the sites collection observes the committed txid row", async () => {
+  it("keeps create pending until the sites collection observes the server row state", async () => {
     const sites = createFakeCollection<SiteOption>((site) => site.id);
     const journal = createDataPlaneMutationJournal({
       createId: () => "mutation_1",
@@ -204,7 +204,7 @@ describe("sites workspace data plane", () => {
     });
     const response = makeSiteWriteResponse(dublinSite, 901);
     appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
-      Effect.succeed(response)
+      Effect.promise(() => Promise.resolve(response))
     );
 
     const command = createSitesWorkspaceCommandRunner({
@@ -226,10 +226,22 @@ describe("sites workspace data plane", () => {
       },
     ]);
 
-    sites.upsert(dublinSite);
+    globalThis.setTimeout(() => {
+      sites.upsert(dublinSite);
+    }, 0);
     const exit = await command;
 
     expect(Exit.isSuccess(exit)).toBeTruthy();
+    if (Exit.isFailure(exit)) {
+      throw new Error("Expected create command to succeed");
+    }
+    expect(exit.value).toMatchObject({
+      electricObservation: {
+        collection: "sites",
+        kind: "observed-change",
+      },
+      mutation: { txid: 901 },
+    });
     expect(journal.entries()).toMatchObject([
       {
         commandName: "sites-workspace.create",
@@ -310,24 +322,119 @@ describe("sites workspace data plane", () => {
     } satisfies SiteLabelAssignmentElectricRow;
 
     appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
-      Effect.succeed(makeSiteWriteResponse(dublinSite, 903))
+      Effect.promise(() =>
+        Promise.resolve(makeSiteWriteResponse(dublinSite, 903))
+      )
     );
     const assignCommand = commandRunner.assignSiteLabel(dublinSite.id, {
       labelId: urgentLabel.id,
     });
-    assignments.upsert(assignment);
-    expect(Exit.isSuccess(await assignCommand)).toBeTruthy();
+    globalThis.setTimeout(() => {
+      assignments.upsert(assignment);
+    }, 0);
+    const assignExit = await assignCommand;
+    expect(Exit.isSuccess(assignExit)).toBeTruthy();
+    if (Exit.isFailure(assignExit)) {
+      throw new Error("Expected label assignment command to succeed");
+    }
+    expect(assignExit.value).toMatchObject({
+      electricObservation: {
+        collection: "site-label-assignments",
+        kind: "observed-change",
+      },
+      mutation: { txid: 903 },
+    });
 
     appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
-      Effect.succeed(makeSiteWriteResponse(dublinSite, 904))
+      Effect.promise(() =>
+        Promise.resolve(makeSiteWriteResponse(dublinSite, 904))
+      )
     );
     const removeCommand = commandRunner.removeSiteLabel(
       dublinSite.id,
       urgentLabel.id
     );
-    assignments.delete(assignment);
+    globalThis.setTimeout(() => {
+      assignments.delete(assignment);
+    }, 0);
 
-    expect(Exit.isSuccess(await removeCommand)).toBeTruthy();
+    const removeExit = await removeCommand;
+    expect(Exit.isSuccess(removeExit)).toBeTruthy();
+    if (Exit.isFailure(removeExit)) {
+      throw new Error("Expected label removal command to succeed");
+    }
+    expect(removeExit.value).toMatchObject({
+      electricObservation: {
+        collection: "site-label-assignments",
+        kind: "observed-change",
+      },
+      mutation: { txid: 904 },
+    });
+  });
+
+  it("preserves server txid without reporting a txid match when label assignment is already reflected", async () => {
+    const assignments = createFakeCollection<SiteLabelAssignmentElectricRow>(
+      (assignment) => `${assignment.siteId}:${assignment.labelId}`
+    );
+    assignments.upsert({
+      createdAt: "2026-06-02T00:00:00.000Z",
+      labelId: urgentLabel.id,
+      organizationId: "org_123",
+      siteId: dublinSite.id,
+    });
+    appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
+      Effect.succeed(makeSiteWriteResponse(dublinSite, 905))
+    );
+
+    const exit = await createSitesWorkspaceCommandRunner({
+      collections: {
+        siteLabelAssignments: assignments,
+        sites: createFakeCollection<SiteOption>((site) => site.id),
+      },
+      timeoutMs: 100,
+    }).assignSiteLabel(dublinSite.id, {
+      labelId: urgentLabel.id,
+    });
+
+    expect(Exit.isSuccess(exit)).toBeTruthy();
+    if (Exit.isFailure(exit)) {
+      throw new Error("Expected already reflected assignment to succeed");
+    }
+    expect(exit.value).toMatchObject({
+      electricObservation: {
+        collection: "site-label-assignments",
+        kind: "already-reflected",
+      },
+      mutation: { txid: 905 },
+    });
+  });
+
+  it("preserves server txid without reporting a txid match when label removal is already reflected", async () => {
+    appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
+      Effect.succeed(makeSiteWriteResponse(dublinSite, 906))
+    );
+
+    const exit = await createSitesWorkspaceCommandRunner({
+      collections: {
+        siteLabelAssignments: createFakeCollection(
+          (assignment) => `${assignment.siteId}:${assignment.labelId}`
+        ),
+        sites: createFakeCollection<SiteOption>((site) => site.id),
+      },
+      timeoutMs: 100,
+    }).removeSiteLabel(dublinSite.id, urgentLabel.id);
+
+    expect(Exit.isSuccess(exit)).toBeTruthy();
+    if (Exit.isFailure(exit)) {
+      throw new Error("Expected already reflected removal to succeed");
+    }
+    expect(exit.value).toMatchObject({
+      electricObservation: {
+        collection: "site-label-assignments",
+        kind: "already-reflected",
+      },
+      mutation: { txid: 906 },
+    });
   });
 });
 

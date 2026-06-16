@@ -226,10 +226,15 @@ invariants. Site create, update, assign-label, and remove-label commands call
 the typed Sites API, receive `{ site, mutation: { txid } }`, keep the command
 pending in the mutation journal, and resolve only after the relevant Electric
 collection observes the committed row: `sites` for create/update and
-`site-label-assignments` for assignment changes. Confirmation timeout or
-failure records the command as failed and leaves synced collection data as the
-source of truth. Read-only Electric adoption, including the jobs canary, does
-not require mutation confirmation and remains opt-in/test-gated.
+`site-label-assignments` for assignment changes. The Sites shapes expose the
+product rows, not Electric txid stream metadata, so the route presents this as
+row-state observation while preserving the server txid for diagnostics. If the
+row state was already reflected, for example an idempotent assign/remove race,
+the runner records that as already reflected instead of claiming Electric
+observed the returned txid. Confirmation timeout or failure records the command
+as failed and leaves synced collection data as the source of truth. Read-only
+Electric adoption, including the jobs canary, does not require mutation
+confirmation and remains opt-in/test-gated.
 
 ## Enforcement
 

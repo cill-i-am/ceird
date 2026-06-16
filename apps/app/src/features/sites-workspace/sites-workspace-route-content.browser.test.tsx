@@ -1,7 +1,7 @@
 import type { OrganizationId } from "@ceird/identity-core";
 import type { JobListItem } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
-import type { SiteOption, SiteWriteResponse } from "@ceird/sites-core";
+import type { SiteOption } from "@ceird/sites-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { QueryClient } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
@@ -17,6 +17,7 @@ import { CommandBarProvider } from "#/features/command-bar/command-bar";
 import type * as SitesDataPlane from "./sites-workspace-data-plane";
 import type {
   SiteActiveJobSummaryElectricRow,
+  SitesWorkspaceCommandResult,
   SiteLabelAssignmentElectricRow,
 } from "./sites-workspace-data-plane";
 import {
@@ -242,7 +243,7 @@ describe(SitesWorkspaceRouteContent, () => {
 
     await user.keyboard("{Meta>}{Enter}{/Meta}");
 
-    expect(commandRunner.createSite).toHaveBeenCalledWith({
+    expect(commandRunner.createSite).toHaveBeenCalledExactlyOnceWith({
       accessNotes: "Ring reception",
       name: "Galway Depot",
     });
@@ -256,6 +257,20 @@ describe(SitesWorkspaceRouteContent, () => {
     expect(
       within(createForm).getByRole("button", { name: /cancel/i })
     ).toBeDisabled();
+
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await user.keyboard("{Escape}");
+    await user.keyboard("n");
+
+    expect(commandRunner.createSite).toHaveBeenCalledExactlyOnceWith({
+      accessNotes: "Ring reception",
+      name: "Galway Depot",
+    });
+    expect(
+      screen.getByRole("form", { name: /create site/i })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /new site/i })).toBeDisabled();
+    expect(screen.getByText("Site mutation pending")).toBeInTheDocument();
 
     const galwaySite = makeSite({
       accessNotes: "Ring reception",
@@ -272,7 +287,9 @@ describe(SitesWorkspaceRouteContent, () => {
 
     await expect(screen.findByText("Site synced")).resolves.toBeInTheDocument();
     expect(
-      screen.getByText("Site synced: Galway Depot (txid 1001)")
+      screen.getByText(
+        "Site synced: Galway Depot (site row observed in live data after server txid 1001)"
+      )
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("form", { name: /create site/i })
@@ -314,10 +331,13 @@ describe(SitesWorkspaceRouteContent, () => {
     await user.type(screen.getByLabelText("Name"), "Dublin North");
     await user.keyboard("{Meta>}{Enter}{/Meta}");
 
-    expect(commandRunner.updateSite).toHaveBeenCalledWith(dublinSite.id, {
-      accessNotes: dublinSite.accessNotes,
-      name: "Dublin North",
-    });
+    expect(commandRunner.updateSite).toHaveBeenCalledExactlyOnceWith(
+      dublinSite.id,
+      {
+        accessNotes: dublinSite.accessNotes,
+        name: "Dublin North",
+      }
+    );
     expect(screen.getByText("Site mutation pending")).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -326,6 +346,20 @@ describe(SitesWorkspaceRouteContent, () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /cancel/i })).toBeDisabled();
+
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await user.keyboard("{Escape}");
+
+    expect(commandRunner.updateSite).toHaveBeenCalledExactlyOnceWith(
+      dublinSite.id,
+      {
+        accessNotes: dublinSite.accessNotes,
+        name: "Dublin North",
+      }
+    );
+    expect(screen.getByText("Edit site")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Dublin North")).toBeInTheDocument();
+    expect(screen.getByText("Site mutation pending")).toBeInTheDocument();
 
     const updatedSite = {
       ...dublinSite,
@@ -340,7 +374,9 @@ describe(SitesWorkspaceRouteContent, () => {
 
     await expect(screen.findByText("Site synced")).resolves.toBeInTheDocument();
     expect(
-      screen.getByText("Site synced: Dublin North (txid 1002)")
+      screen.getByText(
+        "Site synced: Dublin North (site row observed in live data after server txid 1002)"
+      )
     ).toBeInTheDocument();
     expect(screen.queryByText("Edit site")).not.toBeInTheDocument();
     expect(
@@ -389,12 +425,16 @@ describe(SitesWorkspaceRouteContent, () => {
         organizationId: "org_123",
         siteId: dublinSite.id,
       });
-      assignCommand.resolve(makeSuccess(dublinSite, 1003));
+      assignCommand.resolve(
+        makeSuccess(dublinSite, 1003, "site-label-assignments")
+      );
       await assignCommand.promise;
     });
 
     await expect(
-      screen.findByText("Maintenance label synced (txid 1003)")
+      screen.findByText(
+        "Maintenance label synced (site label row observed in live data after server txid 1003)"
+      )
     ).resolves.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /remove maintenance/i })
@@ -418,12 +458,16 @@ describe(SitesWorkspaceRouteContent, () => {
       readModel.siteLabelAssignments.collection.delete(
         `${dublinSite.id}:${maintenanceLabel.id}`
       );
-      removeCommand.resolve(makeSuccess(dublinSite, 1004));
+      removeCommand.resolve(
+        makeSuccess(dublinSite, 1004, "site-label-assignments")
+      );
       await removeCommand.promise;
     });
 
     await expect(
-      screen.findByText("Maintenance label synced (txid 1004)")
+      screen.findByText(
+        "Maintenance label synced (site label row observed in live data after server txid 1004)"
+      )
     ).resolves.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /assign maintenance/i })
@@ -630,22 +674,34 @@ function createMockCommandRunner() {
 }
 
 function deferredCommand() {
-  return Promise.withResolvers<Exit.Exit<SiteWriteResponse, unknown>>();
+  return Promise.withResolvers<
+    Exit.Exit<SitesWorkspaceCommandResult, unknown>
+  >();
 }
 
 function makeSuccess(
   site: SiteOption,
-  txid: number
-): Exit.Exit<SiteWriteResponse, unknown> {
+  txid: number,
+  collection: SitesWorkspaceCommandResult["electricObservation"]["collection"] = "sites"
+): Exit.Exit<SitesWorkspaceCommandResult, unknown> {
   return Effect.runSync(
-    Effect.exit(Effect.succeed({ mutation: { txid }, site }))
+    Effect.exit(
+      Effect.succeed({
+        electricObservation: {
+          collection,
+          kind: "observed-change",
+        },
+        mutation: { txid },
+        site,
+      })
+    )
   );
 }
 
 function makeFailure(
   message: string
-): Promise<Exit.Exit<SiteWriteResponse, unknown>> {
-  return Effect.runPromiseExit<SiteWriteResponse, Error>(
+): Promise<Exit.Exit<SitesWorkspaceCommandResult, unknown>> {
+  return Effect.runPromiseExit<SitesWorkspaceCommandResult, Error>(
     Effect.fail(new Error(message))
   );
 }

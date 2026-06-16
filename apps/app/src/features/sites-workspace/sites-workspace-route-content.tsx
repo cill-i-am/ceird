@@ -55,6 +55,7 @@ import type {
   SiteActiveJobSummaryElectricRow,
   SiteLabelAssignmentElectricRow,
   SitesWorkspaceCommandCollections,
+  SitesWorkspaceCommandResult,
   SitesWorkspaceVisibleRow,
 } from "./sites-workspace-data-plane";
 import type {
@@ -75,8 +76,9 @@ type WorkspaceWriteStatus =
   | {
       readonly kind: "synced";
       readonly message: string;
+      readonly observation: SitesWorkspaceCommandResult["electricObservation"];
+      readonly serverTxid: number;
       readonly siteId?: string | undefined;
-      readonly txid: number;
     }
   | {
       readonly error: string;
@@ -277,6 +279,8 @@ function SitesWorkspaceShell({
     [selectedSiteId, visibleRows]
   );
   const formOpen = createOpen || editingSiteId !== undefined;
+  const writePending = writeStatus.kind === "pending";
+  const formActionsEnabled = formOpen && !writePending;
 
   React.useEffect(
     () => () => {
@@ -286,22 +290,34 @@ function SitesWorkspaceShell({
   );
 
   const beginCreate = React.useCallback(() => {
+    if (writePending) {
+      return;
+    }
+
     setCreateOpen(true);
     setEditingSiteId(undefined);
     setWriteStatus(IDLE_WRITE_STATUS);
-  }, []);
+  }, [writePending]);
   const cancelForm = React.useCallback(() => {
+    if (writePending) {
+      return;
+    }
+
     setCreateOpen(false);
     setEditingSiteId(undefined);
-  }, []);
+  }, [writePending]);
   const requestActiveFormSubmit = React.useCallback(() => {
+    if (writePending) {
+      return;
+    }
+
     if (createOpen) {
       createFormRef.current?.requestSubmit();
       return;
     }
 
     editFormRef.current?.requestSubmit();
-  }, [createOpen]);
+  }, [createOpen, writePending]);
 
   React.useEffect(() => {
     if (visibleRows.length === 0) {
@@ -339,13 +355,13 @@ function SitesWorkspaceShell({
     enabled: visibleRows.length > 0,
   });
   useAppHotkey("sitesWorkspaceCreate", beginCreate, {
-    enabled: status === "ready",
+    enabled: status === "ready" && !writePending,
   });
   useAppHotkey("sitesWorkspaceSave", requestActiveFormSubmit, {
-    enabled: formOpen,
+    enabled: formActionsEnabled,
   });
   useAppHotkey("sitesWorkspaceCancel", cancelForm, {
-    enabled: formOpen,
+    enabled: formActionsEnabled,
   });
 
   const submitCreate = React.useCallback(
@@ -384,8 +400,9 @@ function SitesWorkspaceShell({
         setWriteStatus({
           kind: "synced",
           message: `Site synced: ${exit.value.site.name}`,
+          observation: exit.value.electricObservation,
+          serverTxid: exit.value.mutation.txid,
           siteId: exit.value.site.id,
-          txid: exit.value.mutation.txid,
         });
         form.reset();
         return;
@@ -442,8 +459,9 @@ function SitesWorkspaceShell({
         setWriteStatus({
           kind: "synced",
           message: `Site synced: ${exit.value.site.name}`,
+          observation: exit.value.electricObservation,
+          serverTxid: exit.value.mutation.txid,
           siteId: exit.value.site.id,
-          txid: exit.value.mutation.txid,
         });
         return;
       }
@@ -461,6 +479,10 @@ function SitesWorkspaceShell({
   const toggleLabel = React.useCallback(
     async (label: Label, assigned: boolean) => {
       if (!selectedRow) {
+        return;
+      }
+
+      if (writePending) {
         return;
       }
 
@@ -484,8 +506,9 @@ function SitesWorkspaceShell({
         setWriteStatus({
           kind: "synced",
           message: `${label.name} label synced`,
+          observation: exit.value.electricObservation,
+          serverTxid: exit.value.mutation.txid,
           siteId: selectedRow.site.id,
-          txid: exit.value.mutation.txid,
         });
         return;
       }
@@ -497,11 +520,11 @@ function SitesWorkspaceShell({
         siteId: selectedRow.site.id,
       });
     },
-    [commandRunner, selectedRow]
+    [commandRunner, selectedRow, writePending]
   );
 
   const commandActions = React.useMemo<readonly CommandAction[]>(() => {
-    if (status !== "ready") {
+    if (status !== "ready" || writePending) {
       return EMPTY_COMMAND_ACTIONS;
     }
 
@@ -552,7 +575,14 @@ function SitesWorkspaceShell({
           ]),
       ...labelActions,
     ];
-  }, [beginCreate, readModel.labels, selectedRow, status, toggleLabel]);
+  }, [
+    beginCreate,
+    readModel.labels,
+    selectedRow,
+    status,
+    toggleLabel,
+    writePending,
+  ]);
 
   useRegisterCommandActions(commandActions);
 
@@ -601,7 +631,7 @@ function SitesWorkspaceShell({
         </label>
         <div className="flex flex-wrap items-center gap-2">
           <Button
-            disabled={status !== "ready"}
+            disabled={status !== "ready" || writePending}
             onClick={beginCreate}
             type="button"
           >
@@ -1246,7 +1276,9 @@ function WorkspaceWriteStatusAlert({
       </AlertTitle>
       <AlertDescription>
         {status.message}
-        {status.kind === "synced" ? ` (txid ${status.txid})` : ""}
+        {status.kind === "synced"
+          ? ` (${formatWorkspaceWriteObservation(status)})`
+          : ""}
       </AlertDescription>
     </Alert>
   );
@@ -1604,6 +1636,19 @@ function getMutationInlineStatusLabel(
   }
 
   return "Failed";
+}
+
+function formatWorkspaceWriteObservation(
+  status: Extract<WorkspaceWriteStatus, { readonly kind: "synced" }>
+) {
+  const collection =
+    status.observation.collection === "sites" ? "site row" : "site label row";
+
+  if (status.observation.kind === "already-reflected") {
+    return `${collection} already reflected in live data; server txid ${status.serverTxid}`;
+  }
+
+  return `${collection} observed in live data after server txid ${status.serverTxid}`;
 }
 
 function NoWorkspaceAccess() {

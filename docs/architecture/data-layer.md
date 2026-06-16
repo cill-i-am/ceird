@@ -136,8 +136,12 @@ stage mutation is not required to exercise this helper.
 Domain-owned label writes and Sites create/update/label-assignment writes wrap
 their persistence work in this helper and return shared DTOs that include the
 canonical entity plus `mutation.txid`. Browser command layers use that metadata
-only to wait for synced collection observation; they do not derive ids,
-authorization, enrichment, or label invariants locally.
+alongside synced collection observation; they do not derive ids, authorization,
+enrichment, or label invariants locally. Sites workspace shapes currently expose
+product rows rather than Electric txid stream metadata, so its UI must describe
+confirmed writes as Electric row-state observation, or already-reflected state
+for idempotent races, and must not present row-state heuristics as proof that
+Electric observed a specific txid.
 
 ## Cloudflare Neon Postgres And Hyperdrive
 

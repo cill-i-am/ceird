@@ -107,6 +107,15 @@ export interface SiteLabelAssignmentElectricRow {
   readonly siteId: SiteIdType;
 }
 
+export interface SitesWorkspaceElectricObservation {
+  readonly collection: "site-label-assignments" | "sites";
+  readonly kind: "already-reflected" | "observed-change";
+}
+
+export type SitesWorkspaceCommandResult = SiteWriteResponse & {
+  readonly electricObservation: SitesWorkspaceElectricObservation;
+};
+
 export type SitesWorkspaceFilter =
   | "all"
   | "with-active-jobs"
@@ -149,7 +158,7 @@ export function createSitesWorkspaceCommandRunner({
             );
 
             if (Exit.isFailure(exit)) {
-              return exit;
+              return Exit.failCause(exit.cause);
             }
 
             return await catchWorkspaceConfirmationFailure(
@@ -179,7 +188,7 @@ export function createSitesWorkspaceCommandRunner({
             );
 
             if (Exit.isFailure(exit)) {
-              return exit;
+              return Exit.failCause(exit.cause);
             }
 
             return await catchWorkspaceConfirmationFailure(
@@ -212,7 +221,7 @@ export function createSitesWorkspaceCommandRunner({
             );
 
             if (Exit.isFailure(exit)) {
-              return exit;
+              return Exit.failCause(exit.cause);
             }
 
             return await catchWorkspaceConfirmationFailure(
@@ -248,7 +257,7 @@ export function createSitesWorkspaceCommandRunner({
             );
 
             if (Exit.isFailure(exit)) {
-              return exit;
+              return Exit.failCause(exit.cause);
             }
 
             return await catchWorkspaceConfirmationFailure(
@@ -612,7 +621,7 @@ async function awaitSiteConfirmation({
   readonly response: SiteWriteResponse;
   readonly timeoutMs: number;
 }) {
-  await waitForWorkspaceCollectionObservation({
+  const observation = await waitForWorkspaceCollectionObservation({
     collection,
     matches: (site) =>
       site.id === response.site.id &&
@@ -620,7 +629,12 @@ async function awaitSiteConfirmation({
     timeoutMs,
   });
 
-  return Exit.succeed(response);
+  return Exit.succeed(
+    withSitesWorkspaceElectricObservation(response, {
+      collection: "sites",
+      kind: observation.kind,
+    })
+  );
 }
 
 async function catchWorkspaceConfirmationFailure<Success>(
@@ -648,7 +662,7 @@ async function awaitSiteLabelAssignmentConfirmation({
   readonly siteId: SiteIdType;
   readonly timeoutMs: number;
 }) {
-  await waitForWorkspaceCollectionObservation({
+  const observation = await waitForWorkspaceCollectionObservation({
     collection,
     matches:
       mode === "assigned"
@@ -660,7 +674,12 @@ async function awaitSiteLabelAssignmentConfirmation({
     timeoutMs,
   });
 
-  return Exit.succeed(response);
+  return Exit.succeed(
+    withSitesWorkspaceElectricObservation(response, {
+      collection: "site-label-assignments",
+      kind: observation.kind,
+    })
+  );
 }
 
 function waitForWorkspaceCollectionObservation<Item>({
@@ -673,7 +692,7 @@ function waitForWorkspaceCollectionObservation<Item>({
   readonly matches: (item: Item) => boolean;
   readonly mode?: "assigned" | "removed" | undefined;
   readonly timeoutMs: number;
-}): Promise<unknown> {
+}): Promise<Pick<SitesWorkspaceElectricObservation, "kind">> {
   if (collection === null) {
     return Promise.reject(
       new Error(
@@ -693,10 +712,11 @@ function waitForWorkspaceCollectionObservation<Item>({
   };
 
   if (isConfirmed()) {
-    return Promise.resolve();
+    return Promise.resolve({ kind: "already-reflected" });
   }
 
-  const deferred = Promise.withResolvers<null>();
+  const deferred =
+    Promise.withResolvers<Pick<SitesWorkspaceElectricObservation, "kind">>();
   const timeout = globalThis.setTimeout(() => {
     subscription.unsubscribe();
     deferred.reject(
@@ -710,12 +730,22 @@ function waitForWorkspaceCollectionObservation<Item>({
 
     globalThis.clearTimeout(timeout);
     subscription.unsubscribe();
-    deferred.resolve(null);
+    deferred.resolve({ kind: "observed-change" });
   });
 
   subscription.requestSnapshot?.({ optimizedOnly: false });
 
   return deferred.promise;
+}
+
+function withSitesWorkspaceElectricObservation(
+  response: SiteWriteResponse,
+  electricObservation: SitesWorkspaceElectricObservation
+): SitesWorkspaceCommandResult {
+  return {
+    ...response,
+    electricObservation,
+  };
 }
 
 function createBrowserSiteWithConfirmation(input: CreateSiteInput) {
