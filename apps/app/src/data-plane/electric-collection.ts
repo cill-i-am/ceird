@@ -13,6 +13,8 @@ import { electricCollectionOptions } from "@tanstack/electric-db-collection";
 import type { ElectricCollectionConfig } from "@tanstack/electric-db-collection";
 import { createCollection } from "@tanstack/react-db";
 
+import { resolveSyncOrigin } from "#/lib/sync-origin";
+
 import type {
   DataPlaneCollectionCompleteness,
   DataPlaneCollectionName,
@@ -46,6 +48,7 @@ export interface DataPlaneElectricRuntime {
   readonly fetch?: typeof fetch | undefined;
   readonly isBrowser: boolean;
   readonly now?: (() => number) | undefined;
+  readonly syncOrigin?: string | undefined;
 }
 
 interface ResolvedDataPlaneElectricRuntime extends DataPlaneElectricRuntime {
@@ -564,11 +567,13 @@ function formatElectricSyncErrorMessage(
 function resolveElectricRuntime(
   runtime: Partial<DataPlaneElectricRuntime> | undefined
 ): ResolvedDataPlaneElectricRuntime {
+  const browserOrigin = isBrowserRuntime() ? window.location.origin : undefined;
+
   return {
     fetch: runtime?.fetch,
     isBrowser: runtime?.isBrowser ?? isBrowserRuntime(),
     now: runtime?.now,
-    syncOrigin: readViteSyncOrigin(),
+    syncOrigin: runtime?.syncOrigin ?? resolveSyncOrigin(browserOrigin),
   };
 }
 
@@ -633,20 +638,4 @@ export function connectElectricCollectionHealth(
 
 function isBrowserRuntime() {
   return typeof window !== "undefined" && typeof document !== "undefined";
-}
-
-function readViteSyncOrigin() {
-  const { env } = import.meta as ImportMeta & {
-    readonly env?: { readonly VITE_SYNC_ORIGIN?: string | undefined };
-  };
-  const processEnv = (
-    globalThis as typeof globalThis & {
-      readonly process?: {
-        readonly env?: { readonly VITE_SYNC_ORIGIN?: string | undefined };
-      };
-    }
-  ).process?.env;
-  const value = (env?.VITE_SYNC_ORIGIN ?? processEnv?.VITE_SYNC_ORIGIN)?.trim();
-
-  return value && value.length > 0 ? value : undefined;
 }
