@@ -395,13 +395,7 @@ async function seedActivityEventRows(
        retained_until
      )
      select
-       (
-         substr(md5(series::text), 1, 8) || '-' ||
-         substr(md5(series::text), 9, 4) || '-' ||
-         substr(md5(series::text), 13, 4) || '-' ||
-         substr(md5(series::text), 17, 4) || '-' ||
-         substr(md5(series::text), 21, 12)
-       )::uuid,
+       ('00000000-0000-4000-8000-' || lpad(to_hex(series), 12, '0'))::uuid,
        $1,
        'job.created',
        'job',
