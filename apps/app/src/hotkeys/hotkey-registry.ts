@@ -511,13 +511,21 @@ export const HOTKEYS = {
     label: "Search sites workspace",
     scope: "sites-workspace",
   },
-  sitesWorkspaceCreate: {
+  sitesWorkspaceNextRow: {
     group: "Sites workspace",
-    hotkey: "N",
-    id: "sitesWorkspaceCreate",
-    label: "Prepare site creation",
+    hotkey: "ArrowDown",
+    id: "sitesWorkspaceNextRow",
+    label: "Select next site",
     scope: "sites-workspace",
-    when: "Viewer can create sites",
+    when: "Sites workspace list has rows",
+  },
+  sitesWorkspacePreviousRow: {
+    group: "Sites workspace",
+    hotkey: "ArrowUp",
+    id: "sitesWorkspacePreviousRow",
+    label: "Select previous site",
+    scope: "sites-workspace",
+    when: "Sites workspace list has rows",
   },
   membersInvite: {
     group: "Members",

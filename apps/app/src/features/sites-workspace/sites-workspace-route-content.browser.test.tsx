@@ -1,25 +1,42 @@
+import type { OrganizationId } from "@ceird/identity-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { render, screen, within } from "@testing-library/react";
+import { QueryClient } from "@tanstack/react-query";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 
+import { createOrganizationDataScope } from "#/data-plane/query-scope";
+import { DataPlaneProvider } from "#/data-plane/session";
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
 
-import { SitesWorkspaceRouteContent } from "./sites-workspace-route-content";
+import {
+  resolveWorkspaceStatus,
+  SitesWorkspaceRouteContent,
+} from "./sites-workspace-route-content";
 
 describe(SitesWorkspaceRouteContent, () => {
   it("renders the gated realtime shell for internal roles", () => {
-    renderSitesWorkspace();
+    renderSitesWorkspace({ shellState: "ready" });
 
     expect(
       screen.getByRole("heading", { name: "Sites workspace" })
     ).toBeInTheDocument();
     expect(screen.getByText("Preview route")).toBeInTheDocument();
     expect(
-      screen.getByRole("textbox", { name: "Search sites workspace" })
+      screen.getByRole("searchbox", { name: /search sites workspace/i })
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /new site/i })).toBeEnabled();
-    expect(screen.getByText("Realtime sites unavailable")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /new site/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByText("Realtime sites unavailable").length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByText("Live Sites read model ready")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/server-render|missing-sync-origin/)
+    ).toBeInTheDocument();
   });
 
   it("shows a permission-aware state for external collaborators", () => {
@@ -28,48 +45,99 @@ describe(SitesWorkspaceRouteContent, () => {
     expect(
       screen.getByText("Sites workspace is internal-only")
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /new site/i })).toBeDisabled();
     expect(
-      screen.queryByRole("textbox", { name: "Search sites workspace" })
+      screen.queryByRole("button", { name: /new site/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("searchbox", { name: /search sites workspace/i })
     ).not.toBeInTheDocument();
   });
 
-  it("switches placeholder route state through shell controls", async () => {
-    const user = userEvent.setup();
-    const onShellStateChange =
-      vi.fn<
-        React.ComponentProps<
-          typeof SitesWorkspaceRouteContent
-        >["onShellStateChange"]
-      >();
+  it("does not let forced loading shell state mask disabled sync health", () => {
+    renderSitesWorkspace({ shellState: "loading" });
 
-    renderSitesWorkspace({ onShellStateChange, shellState: "ready" });
-
-    await user.click(screen.getByRole("tab", { name: "Loading" }));
-    expect(onShellStateChange).toHaveBeenCalledWith("loading");
-
-    await user.click(screen.getByRole("tab", { name: "Empty" }));
-    expect(onShellStateChange).toHaveBeenCalledWith("empty");
+    expect(
+      screen.getAllByText("Realtime sites unavailable").length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByText("Connecting to live Sites")
+    ).not.toBeInTheDocument();
   });
 
-  it("registers keyboard access for search and create affordances", async () => {
+  it("registers keyboard access for search without a placeholder create affordance", async () => {
     const user = userEvent.setup();
-    const onShellStateChange =
+    const onWorkspaceSearchChange =
       vi.fn<
         React.ComponentProps<
           typeof SitesWorkspaceRouteContent
-        >["onShellStateChange"]
+        >["onWorkspaceSearchChange"]
       >();
 
-    renderSitesWorkspace({ onShellStateChange });
+    renderSitesWorkspace({ onWorkspaceSearchChange });
 
     await user.keyboard("n");
-    expect(onShellStateChange).toHaveBeenCalledWith("ready");
+    expect(onWorkspaceSearchChange).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: /new site/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByText("Realtime sites unavailable").length
+    ).toBeGreaterThan(0);
 
     await user.keyboard("/");
     expect(
-      screen.getByRole("textbox", { name: "Search sites workspace" })
+      screen.getByRole("searchbox", { name: /search sites workspace/i })
     ).toHaveFocus();
+  });
+
+  it("routes search input changes through the workspace search hook", () => {
+    const onWorkspaceSearchChange =
+      vi.fn<
+        React.ComponentProps<
+          typeof SitesWorkspaceRouteContent
+        >["onWorkspaceSearchChange"]
+      >();
+
+    renderSitesWorkspace({
+      onWorkspaceSearchChange,
+      workspaceSearch: { query: "Dub" },
+    });
+
+    const searchInput = screen.getByRole("searchbox", {
+      name: /search sites workspace/i,
+    });
+
+    expect(searchInput).toHaveValue("Dub");
+
+    fireEvent.change(searchInput, { target: { value: "Cork" } });
+
+    expect(onWorkspaceSearchChange).toHaveBeenLastCalledWith({
+      query: "Cork",
+    });
+  });
+
+  it("fails closed when joined read-model slices are unavailable with base sites ready", () => {
+    expect(
+      resolveWorkspaceStatus([
+        collectionHealth("sites", "ready"),
+        collectionHealth("site-label-assignments", "unavailable"),
+        collectionHealth("site-active-job-summaries", "unavailable"),
+        collectionHealth("site-related-jobs", "ready"),
+        collectionHealth("labels", "ready"),
+      ])
+    ).toBe("unavailable");
+  });
+
+  it("keeps rows connecting until every joined read-model slice is initially hydrated", () => {
+    expect(
+      resolveWorkspaceStatus([
+        collectionHealth("sites", "ready"),
+        collectionHealth("site-label-assignments", "connecting"),
+        collectionHealth("site-active-job-summaries", "connecting"),
+        collectionHealth("site-related-jobs", "ready"),
+        collectionHealth("labels", "ready"),
+      ])
+    ).toBe("connecting");
   });
 
   it("exposes route commands with discoverable shortcuts", async () => {
@@ -84,29 +152,63 @@ describe(SitesWorkspaceRouteContent, () => {
     expect(searchOption).toBeInTheDocument();
     expect(within(searchOption).getByText("/")).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: /prepare site creation/i })
-    ).toBeInTheDocument();
+      screen.queryByRole("option", { name: /prepare site creation/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /new site/i })
+    ).not.toBeInTheDocument();
   });
 });
 
 function renderSitesWorkspace({
   currentOrganizationRole = "owner",
-  onShellStateChange = vi.fn<
+  onWorkspaceSearchChange = vi.fn<
     React.ComponentProps<
       typeof SitesWorkspaceRouteContent
-    >["onShellStateChange"]
+    >["onWorkspaceSearchChange"]
   >(),
   shellState = "unavailable",
+  workspaceSearch = {},
 }: Partial<React.ComponentProps<typeof SitesWorkspaceRouteContent>> = {}) {
+  const queryClient = new QueryClient();
+
   return render(
     <HotkeysProvider>
-      <CommandBarProvider>
-        <SitesWorkspaceRouteContent
-          currentOrganizationRole={currentOrganizationRole}
-          onShellStateChange={onShellStateChange}
-          shellState={shellState}
-        />
-      </CommandBarProvider>
+      <DataPlaneProvider
+        queryClient={queryClient}
+        scope={createOrganizationDataScope({
+          organizationId: "org_123" as OrganizationId,
+          role: currentOrganizationRole,
+          userId: "user_123",
+        })}
+      >
+        <CommandBarProvider>
+          <SitesWorkspaceRouteContent
+            currentOrganizationRole={currentOrganizationRole}
+            workspaceSearch={workspaceSearch}
+            onWorkspaceSearchChange={onWorkspaceSearchChange}
+            shellState={shellState}
+          />
+        </CommandBarProvider>
+      </DataPlaneProvider>
     </HotkeysProvider>
   );
+}
+
+function collectionHealth(
+  collection: Parameters<
+    typeof resolveWorkspaceStatus
+  >[0][number]["collection"],
+  status: Parameters<typeof resolveWorkspaceStatus>[0][number]["status"]
+): Parameters<typeof resolveWorkspaceStatus>[0][number] {
+  return {
+    collection,
+    collectionId: `test:${collection}`,
+    lastStatusChangeAtMs: 1,
+    recoveryAttempts: 0,
+    source: "electric",
+    startedAtMs: 1,
+    status,
+    subscriptionName: collection,
+  };
 }

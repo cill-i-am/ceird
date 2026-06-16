@@ -935,6 +935,7 @@ function buildResponse(): JobProximityResponse {
           locationStatus: "google_resolved",
           longitude: -6.24,
           name: "Dublin Estate",
+          updatedAt: "2026-06-06T11:00:00.000Z",
         },
       },
     ],

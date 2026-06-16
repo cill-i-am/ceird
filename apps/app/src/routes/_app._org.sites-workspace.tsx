@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { SitesWorkspaceRouteContent } from "#/features/sites-workspace/sites-workspace-route-content";
 import { decodeSitesWorkspaceSearch } from "#/features/sites-workspace/sites-workspace-search";
-import type { SitesWorkspaceShellState } from "#/features/sites-workspace/sites-workspace-search";
+import type { SitesWorkspaceSearch } from "#/features/sites-workspace/sites-workspace-search";
 
 export const Route = createFileRoute("/_app/_org/sites-workspace")({
   staticData: {
@@ -22,12 +22,14 @@ function SitesWorkspaceRoute() {
   const navigate = useNavigate({ from: "/sites-workspace" });
   const shellState = search.shell ?? "unavailable";
 
-  function setShellState(nextShellState: SitesWorkspaceShellState) {
+  function updateWorkspaceSearch(
+    nextSearch: Partial<Omit<SitesWorkspaceSearch, "shell">>
+  ) {
     navigate({
       replace: true,
       search: (current) => ({
         ...current,
-        shell: nextShellState === "unavailable" ? undefined : nextShellState,
+        ...nextSearch,
       }),
     });
   }
@@ -35,8 +37,9 @@ function SitesWorkspaceRoute() {
   return (
     <SitesWorkspaceRouteContent
       currentOrganizationRole={currentOrganizationRole}
-      onShellStateChange={setShellState}
       shellState={shellState}
+      workspaceSearch={search}
+      onWorkspaceSearchChange={updateWorkspaceSearch}
     />
   );
 }

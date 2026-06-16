@@ -27,6 +27,7 @@ export interface SiteOptionRow {
   readonly name: string;
   readonly raw_location_input: string | null;
   readonly town: string | null;
+  readonly updated_at: Date;
 }
 
 interface SiteOptionActiveJobSummary {
@@ -91,6 +92,7 @@ export function mapSiteOptionRow(
     name: row.name,
     rawLocationInput: nullableToUndefined(row.raw_location_input),
     town: nullableToUndefined(row.town),
+    updatedAt: row.updated_at.toISOString(),
   });
 }
 
