@@ -11,6 +11,7 @@
     "check-types": "tsc --noEmit -p tsconfig.json",
     "dev": "vite dev --host 127.0.0.1 --port 4173 --strictPort",
     "e2e": "playwright test --project=chromium",
+    "perf:sites-workspace": "tsx src/features/sites-workspace/sites-workspace-performance-harness.ts",
     "preview": "vite preview",
     "react-doctor": "react-doctor --diff false --blocking error --offline",
     "react-doctor:staged": "react-doctor --staged --no-dead-code --blocking error --offline",

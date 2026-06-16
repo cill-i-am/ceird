@@ -213,6 +213,59 @@ The organization route owns the session lifecycle. Feature providers such as
 session registry and should not instantiate raw TanStack DB collections
 directly.
 
+## Sites Performance Harness
+
+The Electric-native Sites workspace has a repeatable larger-organization
+evidence path under `apps/app`. The local synthetic harness is
+`apps/app/src/features/sites-workspace/sites-workspace-performance-harness.ts`
+and runs with:
+
+```bash
+pnpm --filter app perf:sites-workspace
+```
+
+It creates the TSK-200 fixture shape in memory: 1,000 sites, 5,000 related job
+rows, 100 labels, roughly three label assignments per site, active-job summary
+rows for every site, a realistic active/completed/canceled job status mix, and
+queries that exercise label joins, related-job detail selection, active-job
+summary updates, local search, filters, and sorts through
+`deriveSitesWorkspaceVisibleRows(...)`. The JSON report records p95/mean/min/max
+interaction timings, recomputation input/output row counts, process heap
+movement, CPU usage when available, and recommendations for projection or query
+changes before cutover.
+
+The browser/stage harness is `apps/app/e2e/sites-workspace-performance.test.ts`
+and is opt-in so ordinary package-local Playwright runs do not require a stage.
+It only consumes an already-approved, already-seeded stage/account; it never
+creates an organization or seed data for performance evidence. The stage
+credentials and seeded-row expectation are mandatory:
+
+```bash
+SITES_WORKSPACE_PERF_STAGE=1 \
+PLAYWRIGHT_BASE_URL=<alchemy-app-url> \
+PLAYWRIGHT_API_URL=<alchemy-api-url> \
+SITES_WORKSPACE_PERF_EMAIL=<seeded-user-email> \
+SITES_WORKSPACE_PERF_PASSWORD=<seeded-user-password> \
+SITES_WORKSPACE_PERF_EXPECTED_MIN_ROWS=1000 \
+SITES_WORKSPACE_PERF_SEARCH_QUERY=<query-with-results> \
+DATA_PLANE_PERF_OUTPUT=artifacts/sites-workspace-performance.ndjson \
+pnpm --filter app e2e -- sites-workspace-performance.test.ts
+```
+
+`SITES_WORKSPACE_PERF_EXPECTED_MIN_ROWS` must be at least `1000`, matching the
+TSK-200 Sites fixture. `SITES_WORKSPACE_PERF_SEARCH_QUERY` should be a stable
+term known to return rows in that seeded organization; when omitted the harness
+uses `site`. The test records time from route navigation to the `Live Sites read
+model ready` state, visible row count, browser heap observation when Chrome
+exposes it, and completed local search/filter/sort/detail timings. Each timed
+interaction waits for post-action UI state: search results visible, active-job
+filtered rows with related jobs present, the updated-sort control selected, the
+selected detail panel visible, and related jobs rendered. It fails if required
+seed credentials are absent, the workspace is unavailable, the seeded row count
+is below the TSK-200 threshold, or initial ready exceeds the TSK-200 5s blocker
+threshold. Creating or mutating an Alchemy stage and seeding the organization
+remain explicit operator actions outside the harness.
+
 ## Commands
 
 Browser writes are named server-confirmed data-plane commands. Every command
