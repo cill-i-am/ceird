@@ -12,6 +12,8 @@ import { ActivityEventsRepository } from "../activity/repository.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import { JobsRepository } from "./repositories.js";
 
+const ACTIVITY_DETAIL_MAX_LENGTH = 280;
+
 export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>()(
   "@ceird/domains/jobs/JobsActivityRecorder",
   {
@@ -155,9 +157,9 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
         yield* activityEvents.recordEvent({
           actorId: comment.actor.id,
           display: {
-            detail: comment.body,
+            detail: summarizeCommentActivityDetail(comment.body),
             route: {
-              href: `/jobs-workspace?job=${job.id}`,
+              href: `/jobs-workspace?detailJobId=${job.id}`,
               label: job.title,
             },
             summary: `Commented on ${job.title}`,
@@ -196,6 +198,14 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
         Layer.mergeAll(ActivityEventsRepository.Default, JobsRepository.Default)
       )
     );
+}
+
+function summarizeCommentActivityDetail(body: string): string {
+  if (body.length <= ACTIVITY_DETAIL_MAX_LENGTH) {
+    return body;
+  }
+
+  return `${body.slice(0, ACTIVITY_DETAIL_MAX_LENGTH - 3)}...`;
 }
 
 function collectPatchEvents(

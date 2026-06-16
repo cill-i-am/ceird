@@ -373,6 +373,7 @@ function JobsWorkspaceLiveRouteShell({
       enabled:
         hotkeysEnabled &&
         liveList.isReady &&
+        !detailOpen &&
         !commandPending &&
         createTitle.trim().length > 0,
     }
@@ -420,6 +421,10 @@ function JobsWorkspaceLiveRouteShell({
 
   async function handleCreateJob() {
     const title = createTitle.trim();
+
+    if (detailOpen) {
+      return;
+    }
 
     if (title.length === 0 || !liveList.isReady || commandPending) {
       createTitleRef.current?.focus();

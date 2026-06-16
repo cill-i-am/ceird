@@ -1,3 +1,4 @@
+import type { ProductActivityEvent } from "@ceird/activity-core";
 import {
   decodeUserPreferences,
   OrganizationId,
@@ -35,6 +36,8 @@ import {
   configProviderFromMap,
   withConfigProvider,
 } from "../../test/effect-test-helpers.js";
+import { ActivityEventsRepository } from "../activity/repository.js";
+import type { RecordActivityEventInput } from "../activity/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -302,6 +305,42 @@ describe("JobsService contracts", () => {
     expect(calls.withTransaction).toBe(1);
     expect(calls.addComment).toBe(1);
     expect(calls.recordCommentCreated).toBe(1);
+  });
+
+  it("allows long valid comments while emitting capped activity detail", async () => {
+    const capturedEvents: RecordActivityEventInput[] = [];
+    const calls = {
+      addComment: 0,
+      withTransaction: 0,
+    };
+    const longBody = "Long maintenance note. ".repeat(18);
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const jobs = yield* JobsService;
+
+        return yield* jobs.addComment(workItemId, {
+          body: longBody,
+        });
+      }).pipe(
+        Effect.provide(JobsService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsLongCommentActivityTestLayer({
+            calls,
+            capturedEvents,
+          })
+        )
+      )
+    );
+
+    expect(result.body).toBe(longBody);
+    expect(calls.withTransaction).toBe(1);
+    expect(calls.addComment).toBe(1);
+    expect(capturedEvents).toHaveLength(1);
+    expect(capturedEvents[0]?.display.detail).toHaveLength(280);
+    expect(capturedEvents[0]?.display.detail?.endsWith("...")).toBe(true);
+    expect(capturedEvents[0]?.display.route?.href).toBe(
+      `/jobs-workspace?detailJobId=${workItemId}`
+    );
   });
 
   it("returns empty scoped options for external collaborators with no accessible option data", async () => {
@@ -1061,6 +1100,103 @@ function makeJobsServiceTestLayer(options: {
         },
       } as unknown as ContextService<typeof JobsRepository>)
     ),
+    Layer.succeed(
+      LabelsRepository,
+      LabelsRepository.of({} as ContextService<typeof LabelsRepository>)
+    ),
+    makeUserPreferencesRepositoryLayer(),
+    Layer.succeed(
+      RouteProximityService,
+      RouteProximityService.of(
+        {} as ContextService<typeof RouteProximityService>
+      )
+    ),
+    Layer.succeed(
+      SiteLocationProvider,
+      SiteLocationProvider.of({} as ContextService<typeof SiteLocationProvider>)
+    ),
+    Layer.succeed(
+      SitesRepository,
+      SitesRepository.of({} as ContextService<typeof SitesRepository>)
+    )
+  );
+}
+
+function makeJobsLongCommentActivityTestLayer(options: {
+  readonly calls: {
+    addComment: number;
+    withTransaction: number;
+  };
+  readonly capturedEvents: RecordActivityEventInput[];
+}) {
+  const activityEventsLayer = Layer.succeed(
+    ActivityEventsRepository,
+    ActivityEventsRepository.of({
+      recordEvent: (input: RecordActivityEventInput) => {
+        options.capturedEvents.push(input);
+        return Effect.succeed({} as ProductActivityEvent);
+      },
+    } as unknown as ContextService<typeof ActivityEventsRepository>)
+  );
+  const jobsRepositoryLayer = Layer.succeed(
+    JobsRepository,
+    JobsRepository.of({
+      addComment: (input: { readonly body: string }) => {
+        options.calls.addComment += 1;
+        return Effect.succeed(
+          decodeJobComment({
+            actor: {
+              displayDetail: "Team member",
+              displayName: "Taylor Member",
+              id: "99999999-9999-4999-8999-999999999999",
+              kind: "member",
+            },
+            authorName: "Taylor Member",
+            authorUserId: internalActor.userId,
+            body: input.body,
+            createdAt: "2026-05-20T10:00:00.000Z",
+            id: "33333333-3333-4333-8333-333333333333",
+            workItemId,
+          })
+        );
+      },
+      findByIdForUpdate: () => Effect.succeed(Option.some(existingJob)),
+      withTransaction: <Value, Error, Requirements>(
+        effect: Effect.Effect<Value, Error, Requirements>
+      ) => {
+        options.calls.withTransaction += 1;
+        return effect;
+      },
+    } as unknown as ContextService<typeof JobsRepository>)
+  );
+
+  return Layer.mergeAll(
+    activityEventsLayer,
+    Layer.succeed(
+      ContactsRepository,
+      ContactsRepository.of({} as ContextService<typeof ContactsRepository>)
+    ),
+    Layer.succeed(
+      CurrentOrganizationActor,
+      CurrentOrganizationActor.of({
+        get: () => Effect.succeed(internalActor),
+      })
+    ),
+    Layer.succeed(
+      HttpServerRequest.HttpServerRequest,
+      {} as HttpServerRequest.HttpServerRequest
+    ),
+    Layer.succeed(
+      JobLabelAssignmentsRepository,
+      JobLabelAssignmentsRepository.of(
+        {} as ContextService<typeof JobLabelAssignmentsRepository>
+      )
+    ),
+    JobsActivityRecorder.DefaultWithoutDependencies.pipe(
+      Layer.provide(Layer.mergeAll(activityEventsLayer, jobsRepositoryLayer))
+    ),
+    JobsAuthorization.Default,
+    jobsRepositoryLayer,
     Layer.succeed(
       LabelsRepository,
       LabelsRepository.of({} as ContextService<typeof LabelsRepository>)

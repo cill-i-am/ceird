@@ -398,6 +398,61 @@ describe("jobs workspace route shell", () => {
     expect(screen.getByLabelText("Comment")).toHaveValue("");
   });
 
+  it("focuses detail comments instead of creating a hidden draft job", async () => {
+    const user = userEvent.setup();
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+    const createJob =
+      vi.fn<JobsWorkspaceLiveListState["commands"]["createJob"]>();
+    liveListState.current = {
+      ...liveListState.current,
+      allRowsCount: 1,
+      commands: {
+        ...makeCommandStubs(),
+        createJob,
+      },
+      rows: [makeWorkspaceRow(workItemId)],
+    };
+    liveDetailState.current = makeReadyDetailState(workItemId);
+
+    function StatefulDetailShell() {
+      const [detailJobId, setDetailJobId] = React.useState<
+        string | undefined
+      >();
+
+      return (
+        <JobsWorkspaceRouteShell
+          currentOrganizationRole="owner"
+          detailJobId={detailJobId}
+          hotkeysEnabled
+          onDetailJobChange={setDetailJobId}
+          onLabelChange={vi.fn<(labelId: string | undefined) => void>()}
+          onQueryChange={vi.fn<(query: string | undefined) => void>()}
+          onRecentSearchCommit={vi.fn<(query: string | undefined) => void>()}
+          onSortChange={vi.fn<(sort: unknown) => void>()}
+          onStatusChange={vi.fn<(status: unknown) => void>()}
+          onViewChange={vi.fn<(view: unknown) => void>()}
+          sort="updated-desc"
+          view="list"
+        />
+      );
+    }
+
+    render(
+      <HotkeysProvider>
+        <StatefulDetailShell />
+      </HotkeysProvider>
+    );
+
+    await user.type(screen.getByLabelText("New job title"), "Hidden draft");
+    await user.click(
+      screen.getByRole("button", { name: /open detail for fit heat pump/i })
+    );
+    await user.keyboard("N");
+
+    expect(screen.getByLabelText("Comment")).toHaveFocus();
+    expect(createJob).not.toHaveBeenCalled();
+  });
+
   it("shows failed comment feedback when Electric confirmation fails", async () => {
     const user = userEvent.setup();
     const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
