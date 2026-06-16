@@ -289,7 +289,25 @@ describe("jobs workspace route shell", () => {
     expect(screen.getAllByText("Warehouse").length).toBeGreaterThan(1);
     expect(screen.getAllByText("Operations").length).toBeGreaterThan(1);
     expect(screen.getByText("Activity and comments")).toBeVisible();
-    expect(screen.getByText("Taylor Member · Dispatch")).toBeVisible();
+    expect(
+      screen.getAllByText("Taylor Member · Dispatch").length
+    ).toBeGreaterThan(1);
+    expect(screen.getByText("Jordan Coordinator · Scheduling")).toBeVisible();
+    expect(screen.queryByText(/Member [a-z0-9_-]+/i)).not.toBeInTheDocument();
+  });
+
+  it("describes Enter as opening detail in shortcut help", () => {
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+    liveListState.current = {
+      ...liveListState.current,
+      allRowsCount: 1,
+      rows: [makeWorkspaceRow(workItemId)],
+    };
+
+    renderShell();
+
+    expect(screen.getByText(/to open job detail/i)).toBeVisible();
+    expect(screen.queryByText(/to focus row actions/i)).not.toBeInTheDocument();
   });
 
   it("shows detail sync unavailable state without falling back", () => {
@@ -490,6 +508,13 @@ function makeReadyDetailState(
           },
         },
       ],
+      assignee: {
+        displayDetail: "Dispatch",
+        displayName: "Taylor Member",
+        id: "99999999-9999-4999-8999-999999999999" as ProductActorId,
+        kind: "member",
+        userId: "user_taylor" as UserId,
+      },
       collaborators: [],
       commentCount: 2,
       contact: {
@@ -508,6 +533,13 @@ function makeReadyDetailState(
         status: "blocked",
         title: "Fit heat pump",
         updatedAt: "2026-06-15T11:00:00.000Z",
+      },
+      coordinator: {
+        displayDetail: "Scheduling",
+        displayName: "Jordan Coordinator",
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as ProductActorId,
+        kind: "member",
+        userId: "user_jordan" as UserId,
       },
       labels: [
         {

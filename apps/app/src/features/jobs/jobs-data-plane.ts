@@ -1,5 +1,10 @@
-import type { ProductActor } from "@ceird/identity-core";
-import { ProductActorId, ProductActorSchema } from "@ceird/identity-core";
+import {
+  ProductActorDisplayDetail,
+  ProductActorDisplayName,
+  ProductActorId,
+  ProductActorKind,
+  ProductActorRoute,
+} from "@ceird/identity-core";
 import type {
   JobCollaborator,
   JobDetailResponse,
@@ -271,6 +276,18 @@ export type JobsWorkspaceActivityRow = Schema.Schema.Type<
 
 export type JobsWorkspaceVisitRow = Schema.Schema.Type<typeof JobVisitSchema>;
 
+export const JobsWorkspaceProductActorRowSchema = Schema.Struct({
+  displayDetail: Schema.optional(ProductActorDisplayDetail),
+  displayName: ProductActorDisplayName,
+  id: ProductActorId,
+  kind: ProductActorKind,
+  route: Schema.optional(ProductActorRoute),
+  userId: Schema.optional(UserId),
+});
+export type JobsWorkspaceProductActorRow = Schema.Schema.Type<
+  typeof JobsWorkspaceProductActorRowSchema
+>;
+
 export interface JobsWorkspaceReadModelContracts {
   readonly activity: ReturnType<typeof createJobActivityElectricContract>;
   readonly actors: ReturnType<
@@ -304,7 +321,9 @@ export interface JobsWorkspaceReadModelState {
   readonly activity?:
     | JobsWorkspaceCollection<JobsWorkspaceActivityRow>
     | undefined;
-  readonly actors?: JobsWorkspaceCollection<ProductActor> | undefined;
+  readonly actors?:
+    | JobsWorkspaceCollection<JobsWorkspaceProductActorRow>
+    | undefined;
   readonly collaborators?: JobsWorkspaceCollection<JobCollaborator> | undefined;
   readonly comments?:
     | JobsWorkspaceCollection<JobsWorkspaceCommentRow>
@@ -368,14 +387,16 @@ export interface JobsWorkspaceVisibleRow {
 
 export interface JobsWorkspaceDetailActivityItem {
   readonly activity: JobsWorkspaceActivityRow;
-  readonly actor?: ProductActor | undefined;
+  readonly actor?: JobsWorkspaceProductActorRow | undefined;
 }
 
 export interface JobsWorkspaceDetailReadModel {
   readonly activity: readonly JobsWorkspaceDetailActivityItem[];
+  readonly assignee?: JobsWorkspaceProductActorRow | undefined;
   readonly collaborators: readonly JobCollaborator[];
   readonly commentCount: number;
   readonly contact?: JobContactSummaryRow | undefined;
+  readonly coordinator?: JobsWorkspaceProductActorRow | undefined;
   readonly job: JobsWorkspaceJobRow;
   readonly labels: readonly Label[];
   readonly site?: JobSiteSummaryRow | undefined;
@@ -1026,9 +1047,10 @@ export function getOrCreateJobsWorkspaceReadModelState({
     JobCollaborator,
     string
   >(contracts.collaborators);
-  const actors = createJobsWorkspaceElectricCollection<ProductActor, string>(
-    contracts.actors
-  );
+  const actors = createJobsWorkspaceElectricCollection<
+    JobsWorkspaceProductActorRow,
+    string
+  >(contracts.actors);
   const activity = createJobsWorkspaceElectricCollection<
     JobsWorkspaceActivityRow,
     string
@@ -1312,7 +1334,7 @@ export function createJobsWorkspaceDetailContract(): JobsWorkspaceDetailContract
       "job-comment-bodies",
     ],
     projectionFollowUps: [
-      "Member/actor display names and external-collaborator-safe actor summaries should come from a domain-owned product projection before Jobs detail renders them from Electric.",
+      "Additional member/contact availability facets should come from domain-owned product projections before Jobs detail renders them from Electric.",
       "Site active-job counts and highest-active-priority summaries remain domain projections; the Jobs workspace should not recompute those site-level rollups from synced job rows.",
     ],
     requiredShapes: [
@@ -1435,7 +1457,7 @@ export function deriveJobsWorkspaceDetail({
   visits,
 }: {
   readonly activity: readonly JobsWorkspaceActivityRow[];
-  readonly actors: readonly ProductActor[];
+  readonly actors: readonly JobsWorkspaceProductActorRow[];
   readonly collaborators: readonly JobCollaborator[];
   readonly comments: readonly JobsWorkspaceCommentRow[];
   readonly contacts: readonly JobContactSummaryRow[];
@@ -1458,6 +1480,17 @@ export function deriveJobsWorkspaceDetail({
 
   const labelsById = new Map(labels.map((label) => [label.id, label]));
   const actorsById = new Map(actors.map((actor) => [actor.id, actor]));
+  const memberActorsByUserId = new Map(
+    actors
+      .filter(
+        (
+          actor
+        ): actor is JobsWorkspaceProductActorRow & {
+          readonly userId: UserId;
+        } => actor.kind === "member" && actor.userId !== undefined
+      )
+      .map((actor) => [actor.userId, actor])
+  );
   const commentIdsForJob = new Set(
     jobComments
       .filter((edge) => edge.workItemId === job.id)
@@ -1477,6 +1510,10 @@ export function deriveJobsWorkspaceDetail({
         actor:
           item.actorId === undefined ? undefined : actorsById.get(item.actorId),
       })),
+    assignee:
+      job.assigneeId === undefined
+        ? undefined
+        : memberActorsByUserId.get(job.assigneeId),
     collaborators: collaborators
       .filter((collaborator) => collaborator.workItemId === job.id)
       .toSorted((left, right) => left.roleLabel.localeCompare(right.roleLabel)),
@@ -1486,6 +1523,10 @@ export function deriveJobsWorkspaceDetail({
       job.contactId === undefined
         ? undefined
         : contacts.find((contact) => contact.id === job.contactId),
+    coordinator:
+      job.coordinatorId === undefined
+        ? undefined
+        : memberActorsByUserId.get(job.coordinatorId),
     job,
     labels: labelAssignments
       .filter((assignment) => assignment.workItemId === job.id)
@@ -1699,9 +1740,9 @@ export function createProductActivityActorsElectricContract(
       source: "electric",
       subscriptionName: "product-activity-actors",
     }),
-    getKey: (actor: ProductActor) => actor.id,
+    getKey: (actor: JobsWorkspaceProductActorRow) => actor.id,
     id: `${jobsWorkspaceCollectionId(scope, "product-activity-actors")}:electric`,
-    schema: Schema.toStandardSchemaV1(ProductActorSchema),
+    schema: Schema.toStandardSchemaV1(JobsWorkspaceProductActorRowSchema),
     shapeName: "product-activity-actors",
     shapeOptions: {
       transformer: toProductActivityActorElectricRow,
@@ -2054,7 +2095,7 @@ export function toJobCommentElectricRow(
 
 export function toProductActivityActorElectricRow(
   row: Record<string, unknown>
-): ProductActor {
+): JobsWorkspaceProductActorRow {
   const item: JobsElectricRow = {
     displayName: String(row.displayName),
     id: String(row.id),
@@ -2062,6 +2103,7 @@ export function toProductActivityActorElectricRow(
   };
 
   addOptionalString(item, "displayDetail", row.displayDetail);
+  addOptionalString(item, "userId", row.userId);
 
   if (
     row.routeHref !== null &&
@@ -2075,7 +2117,7 @@ export function toProductActivityActorElectricRow(
     };
   }
 
-  return Schema.decodeUnknownSync(ProductActorSchema)(item);
+  return Schema.decodeUnknownSync(JobsWorkspaceProductActorRowSchema)(item);
 }
 
 function addOptionalString(item: JobsElectricRow, key: string, value: unknown) {

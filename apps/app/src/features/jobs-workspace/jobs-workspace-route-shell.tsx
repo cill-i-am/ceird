@@ -663,11 +663,17 @@ function renderJobDetailPanelBody(
         </div>
         <DetailField
           label="Assignee"
-          value={formatMemberId(detail.job.assigneeId)}
+          value={formatAssignmentSummary(
+            detail.job.assigneeId,
+            detail.assignee
+          )}
         />
         <DetailField
           label="Coordinator"
-          value={formatMemberId(detail.job.coordinatorId)}
+          value={formatAssignmentSummary(
+            detail.job.coordinatorId,
+            detail.coordinator
+          )}
         />
         <DetailField label="Site" value={detail.site?.name ?? "Unassigned"} />
         <DetailField
@@ -871,10 +877,10 @@ function HealthPanel({
         />{" "}
         to move through rows, then{" "}
         <ShortcutHint
-          hotkey={HOTKEYS.jobsWorkspaceRowActions.hotkey}
+          hotkey={HOTKEYS.jobsWorkspaceOpenDetail.hotkey}
           label=""
         />{" "}
-        to focus row actions.
+        to open job detail.
       </div>
     </>
   );
@@ -1010,12 +1016,21 @@ function formatPriority(priority: string): string {
   return priority === "none" ? "No priority" : priority;
 }
 
-function formatMemberId(memberId: string | undefined): string {
-  return memberId === undefined ? "Unassigned" : `Member ${memberId.slice(-6)}`;
-}
-
 function formatActivityEvent(eventType: string): string {
   return eventType.replaceAll("_", " ");
+}
+
+function formatAssignmentSummary(
+  memberId: string | undefined,
+  actor: IdentityCore.ProductActor | undefined
+): string {
+  if (memberId === undefined) {
+    return "Unassigned";
+  }
+
+  return actor === undefined
+    ? "Member summary unavailable"
+    : formatProductActor(actor);
 }
 
 function formatActor(
@@ -1023,14 +1038,18 @@ function formatActor(
   actorUserId: string | undefined
 ): string {
   if (actor) {
-    return actor.displayDetail
-      ? `${actor.displayName} · ${actor.displayDetail}`
-      : actor.displayName;
+    return formatProductActor(actor);
   }
 
   return actorUserId === undefined
     ? "System activity"
-    : `Member ${actorUserId.slice(-6)}`;
+    : "Actor summary unavailable";
+}
+
+function formatProductActor(actor: IdentityCore.ProductActor): string {
+  return actor.displayDetail
+    ? `${actor.displayName} · ${actor.displayDetail}`
+    : actor.displayName;
 }
 
 function formatLongDate(value: string): string {

@@ -224,6 +224,21 @@ describe("hotkey registry", () => {
     });
   });
 
+  it("keeps Jobs workspace Enter discoverability aligned with detail open", () => {
+    const jobsWorkspaceEnterHotkeys = Object.values(HOTKEYS).filter(
+      (definition) =>
+        definition.scope === "jobs-workspace" && definition.hotkey === "Enter"
+    );
+
+    expect(jobsWorkspaceEnterHotkeys).toStrictEqual([
+      HOTKEYS.jobsWorkspaceOpenDetail,
+    ]);
+    expect(HOTKEYS.jobsWorkspaceOpenDetail).toMatchObject({
+      id: "jobsWorkspaceOpenDetail",
+      label: "Open selected job detail",
+    });
+  });
+
   it("keeps the Jobs Near me sequence clear of active map single-key shortcuts", () => {
     const [jobsNearMeFirstChord] = HOTKEYS.jobsNearMe.hotkey.split(/\s+/);
     const [sitesNearMeFirstChord] = HOTKEYS.sitesNearMe.hotkey.split(/\s+/);

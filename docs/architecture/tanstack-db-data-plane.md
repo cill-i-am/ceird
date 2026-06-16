@@ -94,7 +94,10 @@ directly and does not activate the legacy Jobs Query Collection fallback.
 The same route opens URL-backed detail state through `detailJobId` and consumes
 `features/jobs-workspace/jobs-workspace-live-detail.ts`, deriving selected job
 metadata, labels, site/contact summaries, collaborators, visits, activity, and a
-comments-ready count from the Electric detail graph. Detail health is aggregated
+comments-ready count from the Electric detail graph. Assignee and coordinator
+display are joined from the synced product actor projection by member `userId`;
+the UI shows an unavailable summary state when that projection is absent rather
+than synthesizing names from raw identifiers. Detail health is aggregated
 separately from list health so list readiness is not gated by the wider
 record-local activity/comment graph.
 The jobs primary route collection has a conservative Electric read canary behind

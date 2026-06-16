@@ -400,7 +400,7 @@ describe("jobs data plane", () => {
     });
     expect(graph.detail.projectionFollowUps).toStrictEqual(
       expect.arrayContaining([
-        expect.stringContaining("domain-owned product projection"),
+        expect.stringContaining("Additional member/contact availability"),
         expect.stringContaining("site-level rollups"),
       ])
     );
@@ -684,6 +684,7 @@ describe("jobs data plane", () => {
     const contactId = "44444444-4444-4444-8444-444444444444" as ContactIdType;
     const commentId = "55555555-5555-4555-8555-555555555555";
     const actorId = "66666666-6666-4666-8666-666666666666";
+    const coordinatorActorId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
     const detail = deriveJobsWorkspaceDetail({
       activity: [
@@ -709,6 +710,16 @@ describe("jobs data plane", () => {
           kind: "member",
           routeHref: "/members/user_taylor",
           routeLabel: "Taylor Member",
+          userId: "user_taylor",
+        }),
+        toProductActivityActorElectricRow({
+          displayDetail: "Scheduling",
+          displayName: "Jordan Coordinator",
+          id: coordinatorActorId,
+          kind: "member",
+          routeHref: "/members/user_jordan",
+          routeLabel: "Jordan Coordinator",
+          userId: "user_jordan",
         }),
       ],
       collaborators: [
@@ -749,7 +760,9 @@ describe("jobs data plane", () => {
       ],
       jobs: [
         toJobsWorkspaceJobRow({
+          assigneeId: "user_taylor",
           contactId,
+          coordinatorId: "user_jordan",
           createdAt: "2026-06-15T10:00:00.000Z",
           createdByUserId: "user_123",
           id: workItemId,
@@ -808,9 +821,17 @@ describe("jobs data plane", () => {
           },
         },
       ],
+      assignee: {
+        displayName: "Taylor Member",
+        userId: "user_taylor",
+      },
       collaborators: [{ roleLabel: "Facilities" }],
       commentCount: 1,
       contact: { name: "Operations" },
+      coordinator: {
+        displayName: "Jordan Coordinator",
+        userId: "user_jordan",
+      },
       job: { id: workItemId, title: "Fit heat pump" },
       labels: [{ name: "Urgent" }],
       site: { name: "Warehouse" },
@@ -981,12 +1002,14 @@ describe("jobs data plane", () => {
         kind: "member",
         routeHref: "/members/user_taylor",
         routeLabel: "Taylor Member",
+        userId,
       })
     ).toMatchObject({
       displayDetail: "Dispatch",
       displayName: "Taylor Member",
       kind: "member",
       route: { href: "/members/user_taylor", label: "Taylor Member" },
+      userId,
     });
   });
 });

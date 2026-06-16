@@ -1,5 +1,4 @@
 "use client";
-import type { ProductActor } from "@ceird/identity-core";
 import type { JobCollaborator, WorkItemIdType } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
 import * as React from "react";
@@ -20,6 +19,7 @@ import type {
   JobsWorkspaceCommentRow,
   JobsWorkspaceDetailReadModel,
   JobsWorkspaceJobRow,
+  JobsWorkspaceProductActorRow,
   JobsWorkspaceVisitRow,
 } from "#/features/jobs/jobs-data-plane";
 
@@ -129,7 +129,9 @@ export function useJobsWorkspaceLiveDetail(
         activity: readLiveQueryData<JobsWorkspaceActivityRow>(
           activityQuery.data
         ),
-        actors: readLiveQueryData<ProductActor>(actorsQuery.data),
+        actors: readLiveQueryData<JobsWorkspaceProductActorRow>(
+          actorsQuery.data
+        ),
         collaborators: readLiveQueryData<JobCollaborator>(
           collaboratorsQuery.data
         ),
