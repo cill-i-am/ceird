@@ -14,7 +14,6 @@ const DOMAIN_HEAVY_ROUTE_FILES = [
 ] as const;
 
 const COMPONENT_SPLIT_ROUTE_FILES = [
-  "routes/_app._org.jobs.tsx",
   "routes/_app._org.members.tsx",
   "routes/forgot-password.tsx",
   "routes/login.tsx",

@@ -1721,7 +1721,13 @@ function HealthPanel({
 
 function JobsWorkspacePermissionState() {
   return (
-    <main className="flex min-h-full min-w-0 flex-1 p-4 md:p-6">
+    <main className="flex min-h-full min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
+      <AppPageHeader
+        eyebrow="Live operations"
+        leading={<HugeiconsIcon icon={DatabaseSync01Icon} strokeWidth={2} />}
+        title="Jobs"
+        description="Electric-backed live jobs list and detail workspace for internal teams."
+      />
       <Empty className="min-h-[32rem] rounded-md">
         <EmptyHeader>
           <EmptyMedia variant="icon">

@@ -20,7 +20,6 @@ export const Route = createFileRoute("/_app/_org/jobs")({
       to: "/jobs",
     },
   },
-  codeSplitGroupings: [["component"]],
   validateSearch: decodeJobsWorkspaceSearch,
   component: JobsRoute,
 });
