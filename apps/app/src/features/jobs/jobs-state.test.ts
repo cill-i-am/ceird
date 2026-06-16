@@ -173,5 +173,6 @@ function createSiteOption({
     labels: [],
     locationStatus: "unverified",
     name,
+    updatedAt: "2026-04-23T10:00:00.000Z",
   };
 }

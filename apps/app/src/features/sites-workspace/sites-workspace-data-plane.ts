@@ -339,6 +339,7 @@ function toSiteOptionElectricRow(
     labels: [],
     locationStatus: String(row.locationStatus),
     name: String(row.name),
+    updatedAt: String(row.updatedAt),
   };
 
   addOptionalValue(site, "accessNotes", row.accessNotes);

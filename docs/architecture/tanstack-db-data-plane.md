@@ -99,6 +99,9 @@ read model requests the named `sites`, `site-labels`,
 `site-active-job-summaries`, `jobs`, and `labels` shapes, joins shared label
 definitions through site-label assignments, derives visible rows from local
 search/filter/sort state, and selects related jobs from the synced jobs row set.
+The synced `sites` row transformer carries the shared `SiteOption.updatedAt`
+boundary field so the workspace's recently-updated sort is backed by production
+site data rather than a view-local fallback.
 The current visible-row helper derives over hydrated TanStack DB
 collection snapshots inside the feature data-plane boundary rather than adding a
 separate TanStack DB derived collection: each input collection is already a live

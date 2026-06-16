@@ -147,10 +147,10 @@ describe("sites workspace data plane", () => {
     expect(rows[0]?.relatedJobs).toStrictEqual([dublinJob]);
   });
 
-  it("sorts by recently updated and supports needs-location filters", () => {
+  it("sorts two rows by the production updatedAt boundary field", () => {
     const rows = deriveSitesWorkspaceVisibleRows({
       activeJobSummaries: [],
-      filter: "needs-location",
+      filter: "all",
       labels: [],
       query: "",
       relatedJobs: [corkJob, dublinJob],
@@ -159,7 +159,25 @@ describe("sites workspace data plane", () => {
       sort: "updated",
     });
 
+    expect(rows.map((row) => row.site.name)).toStrictEqual([
+      "Dublin Port",
+      "Cork Yard",
+    ]);
+    expect(rows[0]?.relatedJobs).toStrictEqual([dublinJob]);
+  });
+
+  it("supports needs-location filters", () => {
+    const rows = deriveSitesWorkspaceVisibleRows({
+      activeJobSummaries: [],
+      filter: "needs-location",
+      labels: [],
+      query: "",
+      relatedJobs: [corkJob, dublinJob],
+      siteLabelAssignments: [],
+      sites: [dublinSite, corkSite],
+      sort: "name",
+    });
+
     expect(rows.map((row) => row.site.name)).toStrictEqual(["Cork Yard"]);
-    expect(rows[0]?.relatedJobs).toStrictEqual([corkJob]);
   });
 });

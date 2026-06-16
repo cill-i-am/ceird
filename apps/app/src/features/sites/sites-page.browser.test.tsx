@@ -146,6 +146,7 @@ function buildSite(
     locationStatus: "google_resolved",
     longitude: -8.6267,
     name: "Site",
+    updatedAt: "2026-06-06T10:00:00.000Z",
     ...overrides,
   };
 }

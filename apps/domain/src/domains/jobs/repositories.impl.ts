@@ -271,6 +271,7 @@ interface JobProximityCandidateRow extends WorkItemRow {
   readonly site_name: string | null;
   readonly site_raw_location_input: string | null;
   readonly site_town: string | null;
+  readonly site_updated_at: Date | null;
 }
 
 interface JobProximityStatsRow {
@@ -611,6 +612,7 @@ const siteOptionSelection = {
   name: siteTable.name,
   raw_location_input: siteTable.rawLocationInput,
   town: siteTable.town,
+  updated_at: siteTable.updatedAt,
 } satisfies Record<keyof SiteOptionRow, unknown>;
 
 export class JobsRepository extends Context.Service<JobsRepository>()(
@@ -1534,7 +1536,8 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
             sites.longitude as site_longitude,
             sites.name as site_name,
             sites.raw_location_input as site_raw_location_input,
-            sites.town as site_town
+            sites.town as site_town,
+            sites.updated_at as site_updated_at
           from work_items
           left join sites
             on sites.id = work_items.site_id
@@ -3186,6 +3189,7 @@ function mapJobProximitySiteOptionRow(
       name: row.site_name ?? "",
       raw_location_input: row.site_raw_location_input,
       town: row.site_town,
+      updated_at: row.site_updated_at ?? row.updated_at,
     },
     labels
   );

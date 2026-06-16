@@ -9,7 +9,10 @@ import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { DataPlaneProvider } from "#/data-plane/session";
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
 
-import { SitesWorkspaceRouteContent } from "./sites-workspace-route-content";
+import {
+  resolveWorkspaceStatus,
+  SitesWorkspaceRouteContent,
+} from "./sites-workspace-route-content";
 
 describe(SitesWorkspaceRouteContent, () => {
   it("renders the gated realtime shell for internal roles", () => {
@@ -106,6 +109,30 @@ describe(SitesWorkspaceRouteContent, () => {
     });
   });
 
+  it("fails closed when joined read-model slices are unavailable with base sites ready", () => {
+    expect(
+      resolveWorkspaceStatus([
+        collectionHealth("sites", "ready"),
+        collectionHealth("site-label-assignments", "unavailable"),
+        collectionHealth("site-active-job-summaries", "unavailable"),
+        collectionHealth("site-related-jobs", "ready"),
+        collectionHealth("labels", "ready"),
+      ])
+    ).toBe("unavailable");
+  });
+
+  it("keeps rows connecting until every joined read-model slice is initially hydrated", () => {
+    expect(
+      resolveWorkspaceStatus([
+        collectionHealth("sites", "ready"),
+        collectionHealth("site-label-assignments", "connecting"),
+        collectionHealth("site-active-job-summaries", "connecting"),
+        collectionHealth("site-related-jobs", "ready"),
+        collectionHealth("labels", "ready"),
+      ])
+    ).toBe("connecting");
+  });
+
   it("exposes route commands with discoverable shortcuts", async () => {
     const user = userEvent.setup();
     renderSitesWorkspace();
@@ -156,4 +183,22 @@ function renderSitesWorkspace({
       </DataPlaneProvider>
     </HotkeysProvider>
   );
+}
+
+function collectionHealth(
+  collection: Parameters<
+    typeof resolveWorkspaceStatus
+  >[0][number]["collection"],
+  status: Parameters<typeof resolveWorkspaceStatus>[0][number]["status"]
+): Parameters<typeof resolveWorkspaceStatus>[0][number] {
+  return {
+    collection,
+    collectionId: `test:${collection}`,
+    lastStatusChangeAtMs: 1,
+    recoveryAttempts: 0,
+    source: "electric",
+    startedAtMs: 1,
+    status,
+    subscriptionName: collection,
+  };
 }

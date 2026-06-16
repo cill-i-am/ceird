@@ -205,6 +205,7 @@ function buildSite(overrides: Partial<SiteOption> & Pick<SiteOption, "id">) {
     labels: [],
     locationStatus: "unverified",
     name: "Site",
+    updatedAt: "2026-06-06T10:00:00.000Z",
     ...overrides,
   } satisfies SiteOption;
 }

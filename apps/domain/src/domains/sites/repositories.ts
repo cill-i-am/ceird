@@ -208,6 +208,7 @@ const siteOptionSelection = {
   name: site.name,
   raw_location_input: site.rawLocationInput,
   town: site.town,
+  updated_at: site.updatedAt,
 } as const;
 
 export class SitesRepository extends Context.Service<SitesRepository>()(
@@ -563,7 +564,8 @@ export class SitesRepository extends Context.Service<SitesRepository>()(
             sites.longitude,
             sites.name,
             sites.raw_location_input,
-            sites.town
+            sites.town,
+            sites.updated_at
           from sites
           where ${sql.and([...clauses, routeableSiteClause])}
           order by sites.updated_at desc, sites.id desc

@@ -143,6 +143,7 @@ describe("SitesService contracts", () => {
       labels: [],
       locationStatus: "unverified",
       name: "Laydown yard",
+      updatedAt: "2026-05-20T09:30:00.000Z",
     });
     let createdRecord:
       | Parameters<ContextService<typeof SitesRepository>["create"]>[0]
@@ -183,6 +184,7 @@ describe("SitesService contracts", () => {
       locationStatus: "unverified",
       name: "Quarry gate",
       rawLocationInput: "gate beside old quarry",
+      updatedAt: "2026-05-20T09:30:00.000Z",
     });
     let createdRecord:
       | Parameters<ContextService<typeof SitesRepository>["create"]>[0]
@@ -233,6 +235,7 @@ describe("SitesService contracts", () => {
       locationStatus: "unverified",
       name: "Listowel Yard",
       rawLocationInput: "V31R968",
+      updatedAt: "2026-05-20T09:30:00.000Z",
     });
     let createdRecord:
       | Parameters<ContextService<typeof SitesRepository>["create"]>[0]
@@ -290,6 +293,7 @@ describe("SitesService contracts", () => {
       longitude: -9.485 as SiteLongitude,
       name: "Listowel Yard",
       rawLocationInput: "V31R968",
+      updatedAt: "2026-05-20T09:30:00.000Z",
     });
     let autocompleteInput:
       | Parameters<
@@ -387,6 +391,7 @@ describe("SitesService contracts", () => {
       locationStatus: "unverified",
       name: "Listowel Yard",
       rawLocationInput: "V31R968",
+      updatedAt: "2026-05-20T09:30:00.000Z",
     });
     let createdRecord:
       | Parameters<ContextService<typeof SitesRepository>["create"]>[0]
@@ -444,6 +449,7 @@ describe("SitesService contracts", () => {
       longitude: -6.1956,
       name: "Dublin Port",
       rawLocationInput: "dub port",
+      updatedAt: "2026-05-20T09:30:00.000Z",
     });
     let createdRecord:
       | Parameters<ContextService<typeof SitesRepository>["create"]>[0]
@@ -515,6 +521,7 @@ describe("SitesService contracts", () => {
       longitude: -6.2,
       name: "Existing Depot",
       rawLocationInput: "existing dep",
+      updatedAt: "2026-05-20T09:30:00.000Z",
     });
     const updatedSite = decodeSiteOption({
       ...existingSite,
@@ -565,6 +572,7 @@ describe("SitesService contracts", () => {
       longitude: -6.2,
       name: "Unchanged Depot",
       rawLocationInput: "unchanged dep",
+      updatedAt: "2026-05-20T09:30:00.000Z",
     });
     let updatedRecord:
       | Parameters<ContextService<typeof SitesRepository>["update"]>[2]
@@ -618,6 +626,7 @@ describe("SitesService contracts", () => {
       longitude: -6.2,
       name: "Existing Depot",
       rawLocationInput: "existing dep",
+      updatedAt: "2026-05-20T09:30:00.000Z",
     });
     const updatedSite = decodeSiteOption({
       displayLocation: "",
@@ -626,6 +635,7 @@ describe("SitesService contracts", () => {
       labels: [],
       locationStatus: "unverified",
       name: "Existing Depot",
+      updatedAt: "2026-05-20T09:35:00.000Z",
     });
     let updatedRecord:
       | Parameters<ContextService<typeof SitesRepository>["update"]>[2]
@@ -1390,6 +1400,7 @@ function makeMappedSite(
     longitude,
     name,
     rawLocationInput: name,
+    updatedAt: "2026-05-20T09:30:00.000Z",
   });
 }
 

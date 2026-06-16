@@ -211,6 +211,7 @@ describe("jobs-core", () => {
       country: "IE",
       eircode: "D01 X2X2",
       labels: [],
+      updatedAt: "2026-04-22T10:05:00.000Z",
     };
     const detail = {
       activity: [],
@@ -624,6 +625,7 @@ describe("jobs-core", () => {
             locationStatus: "google_resolved",
             longitude: -6.267_428,
             name: "Dublin Boiler Room",
+            updatedAt: "2026-06-06T09:30:00.000Z",
           },
         },
       ],

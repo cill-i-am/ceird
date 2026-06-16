@@ -98,6 +98,7 @@ export type SiteActiveJobPriority = Schema.Schema.Type<
 const SiteOptionBaseSchema = Schema.Struct({
   id: SiteId,
   name: Schema.String,
+  updatedAt: IsoDateTimeString,
   displayLocation: Schema.String,
   hasUsableCoordinates: Schema.Boolean,
   locationStatus: SiteLocationStatusSchema,

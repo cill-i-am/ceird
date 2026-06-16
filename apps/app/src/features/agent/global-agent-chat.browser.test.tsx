@@ -104,6 +104,7 @@ const mappedSite = {
   longitude: -6.2603,
   name: "Docklands Campus",
   town: "Dublin",
+  updatedAt: "2026-04-27T10:05:00.000Z",
 } satisfies SiteProximityResponse["rows"][number]["site"];
 
 const nearbyJobResponse: JobProximityResponse = {

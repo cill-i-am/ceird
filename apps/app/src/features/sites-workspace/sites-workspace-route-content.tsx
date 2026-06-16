@@ -231,29 +231,34 @@ function SitesWorkspaceShell({
     [onWorkspaceSearchChange, setRestoredSelectedSiteId]
   );
 
-  const visibleRows = React.useMemo(
-    () =>
-      deriveSitesWorkspaceVisibleRows({
-        activeJobSummaries: readModel.activeJobSummaries,
-        filter,
-        labels: readModel.labels,
-        query,
-        relatedJobs: readModel.relatedJobs,
-        siteLabelAssignments: readModel.siteLabelAssignments,
-        sites: readModel.sites,
-        sort,
-      }),
-    [
+  const status = resolveWorkspaceStatus(readModel.health);
+  const canDeriveCompleteRows = status === "ready";
+  const visibleRows = React.useMemo(() => {
+    if (!canDeriveCompleteRows) {
+      return [];
+    }
+
+    return deriveSitesWorkspaceVisibleRows({
+      activeJobSummaries: readModel.activeJobSummaries,
       filter,
+      labels: readModel.labels,
       query,
-      readModel.activeJobSummaries,
-      readModel.labels,
-      readModel.relatedJobs,
-      readModel.siteLabelAssignments,
-      readModel.sites,
+      relatedJobs: readModel.relatedJobs,
+      siteLabelAssignments: readModel.siteLabelAssignments,
+      sites: readModel.sites,
       sort,
-    ]
-  );
+    });
+  }, [
+    canDeriveCompleteRows,
+    filter,
+    query,
+    readModel.activeJobSummaries,
+    readModel.labels,
+    readModel.relatedJobs,
+    readModel.siteLabelAssignments,
+    readModel.sites,
+    sort,
+  ]);
   const selectedRow = React.useMemo(
     () => visibleRows.find((row) => row.site.id === selectedSiteId),
     [selectedSiteId, visibleRows]
@@ -295,10 +300,6 @@ function SitesWorkspaceShell({
     enabled: visibleRows.length > 0,
   });
 
-  const status = resolveWorkspaceStatus({
-    health: readModel.health,
-    hasRows: readModel.sites.length > 0,
-  });
   const isBusy = status === "connecting";
   const isUnavailable = status === "unavailable";
   const isStale = status === "stale";
@@ -581,15 +582,11 @@ function parseStoredRecentSearches(stored: string | null): readonly string[] {
   }
 }
 
-function resolveWorkspaceStatus({
-  hasRows,
-  health,
-}: {
-  readonly hasRows: boolean;
-  readonly health: readonly DataPlaneCollectionHealthSnapshot[];
-}): SyncPresentationStatus {
+export function resolveWorkspaceStatus(
+  health: readonly DataPlaneCollectionHealthSnapshot[]
+): SyncPresentationStatus {
   if (health.some((snapshot) => snapshot.status === "unavailable")) {
-    return hasRows ? "stale" : "unavailable";
+    return "unavailable";
   }
 
   if (health.some((snapshot) => snapshot.status === "disabled")) {
