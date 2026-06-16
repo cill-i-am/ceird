@@ -15,6 +15,7 @@ import {
   createLabelElectricMutationHandlers,
   getOrCreateLabelsCollectionState,
   getOrCreateSettingsLabelsCollectionState,
+  searchSettingsLabels,
 } from "./labels-data-plane";
 
 type LabelWriteEffect = Effect.Effect<LabelWriteResponse, unknown>;
@@ -194,6 +195,26 @@ describe("labels data plane", () => {
     expect(memberState.health.current.collectionId).toBe(
       "organization:org_456:user:user_456:role:member:labels:settings:electric"
     );
+  });
+
+  it("filters Settings labels from the local synced label set", () => {
+    const urgentLabel = {
+      ...label,
+      id: "22222222-2222-4222-8222-222222222222" as Label["id"],
+      name: "Urgent",
+    } satisfies Label;
+    const electricalLabel = {
+      ...label,
+      id: "33333333-3333-4333-8333-333333333333" as Label["id"],
+      name: "Electrical",
+    } satisfies Label;
+
+    expect(
+      searchSettingsLabels([label, urgentLabel, electricalLabel], "g")
+    ).toStrictEqual([label, urgentLabel]);
+    expect(
+      searchSettingsLabels([urgentLabel, label, electricalLabel], "")
+    ).toStrictEqual([electricalLabel, label, urgentLabel]);
   });
 
   it("returns txid matching strategies from label Electric mutation handlers", async () => {

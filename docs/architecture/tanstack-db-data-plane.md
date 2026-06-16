@@ -79,7 +79,9 @@ data. Settings Labels is intentionally different: it requests the named
 `labels` Electric shape directly through
 `getOrCreateSettingsLabelsCollectionState(...)` and exposes disabled or
 unavailable collection health to the route instead of silently activating an API
-fallback. The Electric-native Sites read-model contracts likewise do not
+fallback. The route's label search derives from the hydrated local collection
+items rather than API requests per keystroke. The Electric-native Sites
+read-model contracts likewise do not
 introduce a legacy Query Collection fallback; callers consume shared health from
 the Electric collection factory and can show an explicit unavailable/degraded
 state when sync is disabled or unavailable.
