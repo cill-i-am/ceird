@@ -1,3 +1,5 @@
+import type { ProductActor } from "@ceird/identity-core";
+import { ProductActorId, ProductActorSchema } from "@ceird/identity-core";
 import type {
   JobCollaborator,
   JobDetailResponse,
@@ -242,6 +244,7 @@ export type JobCommentEdgeRow = Schema.Schema.Type<
 >;
 
 export const JobsWorkspaceCommentRowSchema = Schema.Struct({
+  actorId: Schema.optional(ProductActorId),
   authorUserId: UserId,
   body: Schema.String,
   createdAt: IsoDateTimeString,
@@ -254,6 +257,7 @@ export type JobsWorkspaceCommentRow = Schema.Schema.Type<
 >;
 
 export const JobsWorkspaceActivityRowSchema = Schema.Struct({
+  actorId: Schema.optional(ProductActorId),
   actorUserId: Schema.optional(UserId),
   createdAt: IsoDateTimeString,
   eventType: JobActivityEventTypeSchema,
@@ -265,8 +269,13 @@ export type JobsWorkspaceActivityRow = Schema.Schema.Type<
   typeof JobsWorkspaceActivityRowSchema
 >;
 
+export type JobsWorkspaceVisitRow = Schema.Schema.Type<typeof JobVisitSchema>;
+
 export interface JobsWorkspaceReadModelContracts {
   readonly activity: ReturnType<typeof createJobActivityElectricContract>;
+  readonly actors: ReturnType<
+    typeof createProductActivityActorsElectricContract
+  >;
   readonly collaborators: ReturnType<
     typeof createJobCollaboratorsElectricContract
   >;
@@ -292,10 +301,21 @@ export interface JobsWorkspaceReadModelContracts {
 
 export interface JobsWorkspaceReadModelState {
   readonly collectionHealth: JobsWorkspaceReadModelCollectionHealth;
+  readonly activity?:
+    | JobsWorkspaceCollection<JobsWorkspaceActivityRow>
+    | undefined;
+  readonly actors?: JobsWorkspaceCollection<ProductActor> | undefined;
+  readonly collaborators?: JobsWorkspaceCollection<JobCollaborator> | undefined;
+  readonly comments?:
+    | JobsWorkspaceCollection<JobsWorkspaceCommentRow>
+    | undefined;
   readonly contactSummaries?:
     | JobsWorkspaceCollection<JobContactSummaryRow>
     | undefined;
+  readonly detailHealth: DataPlaneCollectionHealth;
+  readonly detailCollectionHealth: JobsWorkspaceDetailReadModelCollectionHealth;
   readonly health: DataPlaneCollectionHealth;
+  readonly jobComments?: JobsWorkspaceCollection<JobCommentEdgeRow> | undefined;
   readonly jobLabelAssignments?:
     | JobsWorkspaceCollection<JobLabelAssignmentRow>
     | undefined;
@@ -304,6 +324,7 @@ export interface JobsWorkspaceReadModelState {
   readonly siteSummaries?:
     | JobsWorkspaceCollection<JobSiteSummaryRow>
     | undefined;
+  readonly visits?: JobsWorkspaceCollection<JobsWorkspaceVisitRow> | undefined;
 }
 
 export interface JobsWorkspaceReadModelCollectionHealth {
@@ -312,6 +333,15 @@ export interface JobsWorkspaceReadModelCollectionHealth {
   readonly jobLabelAssignments: DataPlaneCollectionHealth;
   readonly siteSummaries: DataPlaneCollectionHealth;
   readonly contactSummaries: DataPlaneCollectionHealth;
+}
+
+export interface JobsWorkspaceDetailReadModelCollectionHealth extends JobsWorkspaceReadModelCollectionHealth {
+  readonly actors: DataPlaneCollectionHealth;
+  readonly collaborators: DataPlaneCollectionHealth;
+  readonly activity: DataPlaneCollectionHealth;
+  readonly visits: DataPlaneCollectionHealth;
+  readonly jobComments: DataPlaneCollectionHealth;
+  readonly comments: DataPlaneCollectionHealth;
 }
 
 export type JobsWorkspaceSort = "updated-desc" | "updated-asc" | "priority";
@@ -334,6 +364,22 @@ export interface JobsWorkspaceVisibleRow {
   readonly labels: readonly Label[];
   readonly searchText: string;
   readonly site?: JobSiteSummaryRow | undefined;
+}
+
+export interface JobsWorkspaceDetailActivityItem {
+  readonly activity: JobsWorkspaceActivityRow;
+  readonly actor?: ProductActor | undefined;
+}
+
+export interface JobsWorkspaceDetailReadModel {
+  readonly activity: readonly JobsWorkspaceDetailActivityItem[];
+  readonly collaborators: readonly JobCollaborator[];
+  readonly commentCount: number;
+  readonly contact?: JobContactSummaryRow | undefined;
+  readonly job: JobsWorkspaceJobRow;
+  readonly labels: readonly Label[];
+  readonly site?: JobSiteSummaryRow | undefined;
+  readonly visits: readonly JobsWorkspaceVisitRow[];
 }
 
 export interface JobsWorkspaceListContract {
@@ -370,6 +416,7 @@ export interface JobsWorkspaceDetailContract {
     "job-sites",
     "job-contacts",
     "job-collaborators",
+    "product-activity-actors",
     "job-activity",
     "job-visits",
     "job-comments",
@@ -382,6 +429,7 @@ export interface JobsWorkspaceDetailContract {
     "job-sites",
     "job-contacts",
     "job-collaborators",
+    "product-activity-actors",
     "job-activity",
     "job-visits",
     "job-comments",
@@ -395,6 +443,7 @@ export interface JobsWorkspaceDetailContract {
     "sites",
     "contacts",
     "work-item-collaborators",
+    "product-activity-actors",
     "work-item-activity",
     "work-item-visits",
     "work-item-comments",
@@ -924,6 +973,7 @@ export function createJobsWorkspaceReadModelContracts(
 ): JobsWorkspaceReadModelContracts {
   return {
     activity: createJobActivityElectricContract(scope),
+    actors: createProductActivityActorsElectricContract(scope),
     collaborators: createJobCollaboratorsElectricContract(scope),
     comments: createJobCommentsElectricContract(scope),
     contactSummaries: createJobContactSummariesElectricContract(scope),
@@ -972,6 +1022,29 @@ export function getOrCreateJobsWorkspaceReadModelState({
     JobContactSummaryRow,
     string
   >(contracts.contactSummaries);
+  const collaborators = createJobsWorkspaceElectricCollection<
+    JobCollaborator,
+    string
+  >(contracts.collaborators);
+  const actors = createJobsWorkspaceElectricCollection<ProductActor, string>(
+    contracts.actors
+  );
+  const activity = createJobsWorkspaceElectricCollection<
+    JobsWorkspaceActivityRow,
+    string
+  >(contracts.activity);
+  const visits = createJobsWorkspaceElectricCollection<
+    JobsWorkspaceVisitRow,
+    string
+  >(contracts.visits);
+  const jobComments = createJobsWorkspaceElectricCollection<
+    JobCommentEdgeRow,
+    string
+  >(contracts.jobComments);
+  const comments = createJobsWorkspaceElectricCollection<
+    JobsWorkspaceCommentRow,
+    string
+  >(contracts.comments);
   const collectionHealth = {
     jobs: jobs.health,
     labels: labels.health,
@@ -979,17 +1052,39 @@ export function getOrCreateJobsWorkspaceReadModelState({
     siteSummaries: siteSummaries.health,
     contactSummaries: contactSummaries.health,
   } satisfies JobsWorkspaceReadModelCollectionHealth;
+  const detailCollectionHealth = {
+    ...collectionHealth,
+    actors: actors.health,
+    collaborators: collaborators.health,
+    activity: activity.health,
+    visits: visits.health,
+    jobComments: jobComments.health,
+    comments: comments.health,
+  } satisfies JobsWorkspaceDetailReadModelCollectionHealth;
   const created = {
+    activity: activity.collection,
+    actors: actors.collection,
     collectionHealth,
+    collaborators: collaborators.collection,
+    comments: comments.collection,
     contactSummaries: contactSummaries.collection,
+    detailCollectionHealth,
+    detailHealth: createJobsWorkspaceReadModelHealth({
+      collectionHealth: detailCollectionHealth,
+      collectionId: jobsWorkspaceCollectionId(scope, "detail-read-model"),
+      subscriptionName: "jobs-workspace-detail",
+    }),
     health: createJobsWorkspaceReadModelHealth({
       collectionHealth,
       collectionId: jobsWorkspaceCollectionId(scope, "list-read-model"),
+      subscriptionName: "jobs-workspace-list",
     }),
+    jobComments: jobComments.collection,
     jobLabelAssignments: jobLabelAssignments.collection,
     jobs: jobs.collection,
     labels: labels.collection,
     siteSummaries: siteSummaries.collection,
+    visits: visits.collection,
   } satisfies JobsWorkspaceReadModelState;
 
   session?.registry.set(registryKey, created);
@@ -1030,15 +1125,20 @@ function createJobsWorkspaceElectricCollection<
 export function createJobsWorkspaceReadModelHealth({
   collectionHealth,
   collectionId,
+  subscriptionName,
 }: {
-  readonly collectionHealth: JobsWorkspaceReadModelCollectionHealth;
+  readonly collectionHealth:
+    | JobsWorkspaceReadModelCollectionHealth
+    | JobsWorkspaceDetailReadModelCollectionHealth;
   readonly collectionId: string;
+  readonly subscriptionName: string;
 }): DataPlaneCollectionHealth {
   const healthSources = Object.values(collectionHealth);
   const computeCurrent = () =>
     aggregateJobsWorkspaceReadModelHealth({
       collectionId,
       snapshots: healthSources.map((health) => health.current),
+      subscriptionName,
     });
 
   return {
@@ -1065,9 +1165,11 @@ export function createJobsWorkspaceReadModelHealth({
 export function aggregateJobsWorkspaceReadModelHealth({
   collectionId,
   snapshots,
+  subscriptionName = "jobs-workspace-list",
 }: {
   readonly collectionId: string;
   readonly snapshots: readonly DataPlaneCollectionHealthSnapshot[];
+  readonly subscriptionName?: string | undefined;
 }): DataPlaneCollectionHealthSnapshot {
   const status = getJobsWorkspaceReadModelHealthStatus(snapshots);
   const firstUnavailable = snapshots.find(
@@ -1117,7 +1219,7 @@ export function aggregateJobsWorkspaceReadModelHealth({
     source: "electric",
     startedAtMs: Math.min(...snapshots.map((snapshot) => snapshot.startedAtMs)),
     status,
-    subscriptionName: "jobs-workspace-list",
+    subscriptionName,
   };
 }
 
@@ -1190,6 +1292,7 @@ export function createJobsWorkspaceDetailContract(): JobsWorkspaceDetailContract
       "job-sites",
       "job-contacts",
       "job-collaborators",
+      "product-activity-actors",
       "job-activity",
       "job-visits",
       "job-comments",
@@ -1202,6 +1305,7 @@ export function createJobsWorkspaceDetailContract(): JobsWorkspaceDetailContract
       "job-sites",
       "job-contacts",
       "job-collaborators",
+      "product-activity-actors",
       "job-activity",
       "job-visits",
       "job-comments",
@@ -1218,6 +1322,7 @@ export function createJobsWorkspaceDetailContract(): JobsWorkspaceDetailContract
       "sites",
       "contacts",
       "work-item-collaborators",
+      "product-activity-actors",
       "work-item-activity",
       "work-item-visits",
       "work-item-comments",
@@ -1313,6 +1418,92 @@ export function deriveJobsWorkspaceVisibleRows({
   return rows.toSorted((left, right) =>
     compareJobsWorkspaceRows(left, right, options.sort)
   );
+}
+
+export function deriveJobsWorkspaceDetail({
+  activity,
+  actors,
+  collaborators,
+  comments,
+  contacts,
+  jobComments,
+  jobs,
+  labels,
+  labelAssignments,
+  selectedJobId,
+  sites,
+  visits,
+}: {
+  readonly activity: readonly JobsWorkspaceActivityRow[];
+  readonly actors: readonly ProductActor[];
+  readonly collaborators: readonly JobCollaborator[];
+  readonly comments: readonly JobsWorkspaceCommentRow[];
+  readonly contacts: readonly JobContactSummaryRow[];
+  readonly jobComments: readonly JobCommentEdgeRow[];
+  readonly jobs: readonly JobsWorkspaceJobRow[];
+  readonly labels: readonly Label[];
+  readonly labelAssignments: readonly JobLabelAssignmentRow[];
+  readonly selectedJobId?: WorkItemIdType | string | undefined;
+  readonly sites: readonly JobSiteSummaryRow[];
+  readonly visits: readonly JobsWorkspaceVisitRow[];
+}): JobsWorkspaceDetailReadModel | undefined {
+  if (selectedJobId === undefined) {
+    return undefined;
+  }
+
+  const job = jobs.find((candidate) => candidate.id === selectedJobId);
+  if (!job) {
+    return undefined;
+  }
+
+  const labelsById = new Map(labels.map((label) => [label.id, label]));
+  const actorsById = new Map(actors.map((actor) => [actor.id, actor]));
+  const commentIdsForJob = new Set(
+    jobComments
+      .filter((edge) => edge.workItemId === job.id)
+      .map((edge) => edge.commentId)
+  );
+
+  return {
+    activity: activity
+      .filter((item) => item.workItemId === job.id)
+      .toSorted((left, right) =>
+        right.createdAt === left.createdAt
+          ? right.id.localeCompare(left.id)
+          : right.createdAt.localeCompare(left.createdAt)
+      )
+      .map((item) => ({
+        activity: item,
+        actor:
+          item.actorId === undefined ? undefined : actorsById.get(item.actorId),
+      })),
+    collaborators: collaborators
+      .filter((collaborator) => collaborator.workItemId === job.id)
+      .toSorted((left, right) => left.roleLabel.localeCompare(right.roleLabel)),
+    commentCount: comments.filter((comment) => commentIdsForJob.has(comment.id))
+      .length,
+    contact:
+      job.contactId === undefined
+        ? undefined
+        : contacts.find((contact) => contact.id === job.contactId),
+    job,
+    labels: labelAssignments
+      .filter((assignment) => assignment.workItemId === job.id)
+      .map((assignment) => labelsById.get(assignment.labelId))
+      .filter((label): label is Label => label !== undefined)
+      .toSorted((left, right) => left.name.localeCompare(right.name)),
+    site:
+      job.siteId === undefined
+        ? undefined
+        : sites.find((site) => site.id === job.siteId),
+    visits: visits
+      .filter((visit) => visit.workItemId === job.id)
+      .toSorted((left, right) =>
+        right.visitDate === left.visitDate
+          ? right.createdAt.localeCompare(left.createdAt)
+          : right.visitDate.localeCompare(left.visitDate)
+      ),
+  };
 }
 
 function normalizeJobsWorkspaceQuery(query: string | undefined): string {
@@ -1494,6 +1685,26 @@ export function createJobCollaboratorsElectricContract(
     shapeName: "work-item-collaborators",
     shapeOptions: {
       transformer: toJobCollaboratorElectricRow,
+    },
+  });
+}
+
+export function createProductActivityActorsElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "product-activity-actors",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "product-activity-actors",
+    }),
+    getKey: (actor: ProductActor) => actor.id,
+    id: `${jobsWorkspaceCollectionId(scope, "product-activity-actors")}:electric`,
+    schema: Schema.toStandardSchemaV1(ProductActorSchema),
+    shapeName: "product-activity-actors",
+    shapeOptions: {
+      transformer: toProductActivityActorElectricRow,
     },
   });
 }
@@ -1790,6 +2001,7 @@ export function toJobActivityElectricRow(
     workItemId: String(row.workItemId),
   };
 
+  addOptionalString(item, "actorId", row.actorId);
   addOptionalString(item, "actorUserId", row.actorUserId);
 
   return Schema.decodeUnknownSync(JobsWorkspaceActivityRowSchema)(item);
@@ -1834,9 +2046,36 @@ export function toJobCommentElectricRow(
     updatedAt: String(row.updatedAt),
   };
 
+  addOptionalString(item, "actorId", row.actorId);
   addOptionalString(item, "updatedByUserId", row.updatedByUserId);
 
   return Schema.decodeUnknownSync(JobsWorkspaceCommentRowSchema)(item);
+}
+
+export function toProductActivityActorElectricRow(
+  row: Record<string, unknown>
+): ProductActor {
+  const item: JobsElectricRow = {
+    displayName: String(row.displayName),
+    id: String(row.id),
+    kind: String(row.kind),
+  };
+
+  addOptionalString(item, "displayDetail", row.displayDetail);
+
+  if (
+    row.routeHref !== null &&
+    row.routeHref !== undefined &&
+    row.routeLabel !== null &&
+    row.routeLabel !== undefined
+  ) {
+    item.route = {
+      href: String(row.routeHref),
+      label: String(row.routeLabel),
+    };
+  }
+
+  return Schema.decodeUnknownSync(ProductActorSchema)(item);
 }
 
 function addOptionalString(item: JobsElectricRow, key: string, value: unknown) {

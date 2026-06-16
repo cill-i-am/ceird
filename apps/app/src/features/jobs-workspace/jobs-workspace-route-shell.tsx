@@ -1,6 +1,5 @@
 "use client";
-import { isInternalOrganizationRole } from "@ceird/identity-core";
-import type { OrganizationRole } from "@ceird/identity-core";
+import * as IdentityCore from "@ceird/identity-core";
 import {
   Alert01Icon,
   Briefcase01Icon,
@@ -22,11 +21,13 @@ import {
 } from "#/components/ui/empty";
 import { Input } from "#/components/ui/input";
 import { Skeleton } from "#/components/ui/skeleton";
+import type { DataPlaneCollectionHealthSnapshot } from "#/data-plane/collection-health";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey, useAppHotkeySequence } from "#/hotkeys/use-app-hotkey";
 import { cn } from "#/lib/utils";
 
+import { useJobsWorkspaceLiveDetail } from "./jobs-workspace-live-detail";
 import { useJobsWorkspaceLiveList } from "./jobs-workspace-live-list";
 import type {
   JobsWorkspaceSort,
@@ -35,9 +36,11 @@ import type {
 } from "./jobs-workspace-search";
 
 interface JobsWorkspaceRouteShellProps {
-  readonly currentOrganizationRole?: OrganizationRole;
+  readonly currentOrganizationRole?: IdentityCore.OrganizationRole;
+  readonly detailJobId?: string | undefined;
   readonly hotkeysEnabled: boolean;
   readonly labelId?: string | undefined;
+  readonly onDetailJobChange: (jobId: string | undefined) => void;
   readonly onLabelChange: (labelId: string | undefined) => void;
   readonly onQueryChange: (query: string | undefined) => void;
   readonly onRecentSearchCommit: (query: string | undefined) => void;
@@ -72,13 +75,17 @@ function clearedSearchParam(): undefined {
   return undefined;
 }
 
+function clearedDetailJobId(): undefined {
+  return undefined;
+}
+
 export function JobsWorkspaceRouteShell({
   currentOrganizationRole,
   ...props
 }: JobsWorkspaceRouteShellProps) {
   const canPreviewWorkspace =
     currentOrganizationRole !== undefined &&
-    isInternalOrganizationRole(currentOrganizationRole);
+    IdentityCore.isInternalOrganizationRole(currentOrganizationRole);
 
   if (!canPreviewWorkspace) {
     return <JobsWorkspacePermissionState />;
@@ -88,8 +95,10 @@ export function JobsWorkspaceRouteShell({
 }
 
 function JobsWorkspaceLiveRouteShell({
+  detailJobId,
   hotkeysEnabled,
   labelId,
+  onDetailJobChange,
   onLabelChange,
   onQueryChange,
   onRecentSearchCommit,
@@ -104,6 +113,9 @@ function JobsWorkspaceLiveRouteShell({
 }: Omit<JobsWorkspaceRouteShellProps, "currentOrganizationRole">) {
   const searchRef = React.useRef<HTMLInputElement>(null);
   const rowActionRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
+  const detailPanelRef = React.useRef<HTMLElement>(null);
+  const detailCloseWasRequestedRef = React.useRef(false);
+  const focusedDetailJobIdRef = React.useRef<string | null>(null);
   const [selectedRowIndex, setSelectedRowIndex] = React.useState(0);
   const liveList = useJobsWorkspaceLiveList({
     labelId,
@@ -111,11 +123,13 @@ function JobsWorkspaceLiveRouteShell({
     sort,
     status: status ?? "active",
   });
+  const liveDetail = useJobsWorkspaceLiveDetail(detailJobId);
   const filtersActive =
     Boolean(query) ||
     Boolean(labelId) ||
     status !== undefined ||
     sort !== "updated-desc";
+  const detailOpen = detailJobId !== undefined;
 
   React.useEffect(() => {
     setSelectedRowIndex((current) =>
@@ -124,6 +138,42 @@ function JobsWorkspaceLiveRouteShell({
         : Math.min(current, liveList.rows.length - 1)
     );
   }, [liveList.rows.length]);
+
+  React.useEffect(() => {
+    if (detailJobId === undefined) {
+      focusedDetailJobIdRef.current = null;
+      if (detailCloseWasRequestedRef.current) {
+        detailCloseWasRequestedRef.current = false;
+        rowActionRefs.current[selectedRowIndex]?.focus();
+      }
+      return;
+    }
+
+    const detailIndex = liveList.rows.findIndex(
+      (row) => row.job.id === detailJobId
+    );
+    if (detailIndex !== -1) {
+      setSelectedRowIndex(detailIndex);
+    }
+    if (focusedDetailJobIdRef.current !== detailJobId) {
+      focusedDetailJobIdRef.current = detailJobId;
+      detailPanelRef.current?.focus();
+    }
+  }, [detailJobId, liveList.rows, selectedRowIndex]);
+
+  const openSelectedDetail = React.useCallback(() => {
+    const row = liveList.rows[selectedRowIndex];
+    if (!row) {
+      return;
+    }
+
+    onDetailJobChange(row.job.id);
+  }, [liveList.rows, onDetailJobChange, selectedRowIndex]);
+
+  const closeDetail = React.useCallback(() => {
+    detailCloseWasRequestedRef.current = true;
+    onDetailJobChange(clearedDetailJobId());
+  }, [onDetailJobChange]);
 
   useAppHotkey(
     "jobsWorkspaceSearch",
@@ -152,15 +202,12 @@ function JobsWorkspaceLiveRouteShell({
       enabled: hotkeysEnabled && liveList.rows.length > 0,
     }
   );
-  useAppHotkey(
-    "jobsWorkspaceRowActions",
-    () => {
-      rowActionRefs.current[selectedRowIndex]?.focus();
-    },
-    {
-      enabled: hotkeysEnabled && liveList.rows.length > 0,
-    }
-  );
+  useAppHotkey("jobsWorkspaceOpenDetail", openSelectedDetail, {
+    enabled: hotkeysEnabled && liveList.rows.length > 0,
+  });
+  useAppHotkey("jobsWorkspaceCloseDetail", closeDetail, {
+    enabled: hotkeysEnabled && detailOpen,
+  });
   useAppHotkey("jobsWorkspaceCycleSort", () => onSortChange(nextSort(sort)), {
     enabled: hotkeysEnabled,
   });
@@ -357,19 +404,37 @@ function JobsWorkspaceLiveRouteShell({
             isAvailable={liveList.isCollectionGraphAvailable}
             isLoading={liveList.isLoading}
             isReady={liveList.isReady}
+            onOpenDetail={(rowIndex) => {
+              const row = liveList.rows[rowIndex];
+              if (!row) {
+                return;
+              }
+
+              setSelectedRowIndex(rowIndex);
+              onDetailJobChange(row.job.id);
+            }}
             rowActionRefs={rowActionRefs}
             rows={liveList.rows}
+            selectedJobId={detailJobId}
             selectedRowIndex={selectedRowIndex}
             setSelectedRowIndex={setSelectedRowIndex}
           />
         </div>
         <aside className="flex min-w-0 flex-col gap-3 border-t border-border/60 pt-4 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-4">
-          <HealthPanel
-            allRowsCount={liveList.allRowsCount}
-            health={liveList.health}
-            recentSearch={recentSearch}
-            visibleRowsCount={liveList.rows.length}
-          />
+          {detailOpen ? (
+            <JobDetailPanel
+              ref={detailPanelRef}
+              detailState={liveDetail}
+              onClose={closeDetail}
+            />
+          ) : (
+            <HealthPanel
+              allRowsCount={liveList.allRowsCount}
+              health={liveList.health}
+              recentSearch={recentSearch}
+              visibleRowsCount={liveList.rows.length}
+            />
+          )}
         </aside>
       </section>
     </main>
@@ -380,16 +445,20 @@ function ListBody({
   isAvailable,
   isLoading,
   isReady,
+  onOpenDetail,
   rowActionRefs,
   rows,
+  selectedJobId,
   selectedRowIndex,
   setSelectedRowIndex,
 }: {
   readonly isAvailable: boolean;
   readonly isLoading: boolean;
   readonly isReady: boolean;
+  readonly onOpenDetail: (rowIndex: number) => void;
   readonly rowActionRefs: React.MutableRefObject<(HTMLButtonElement | null)[]>;
   readonly rows: ReturnType<typeof useJobsWorkspaceLiveList>["rows"];
+  readonly selectedJobId?: string | undefined;
   readonly selectedRowIndex: number;
   readonly setSelectedRowIndex: (index: number) => void;
 }) {
@@ -424,7 +493,7 @@ function ListBody({
           <li
             className={cn(
               "grid grid-cols-[minmax(13rem,1.3fr)_minmax(8rem,0.7fr)_minmax(7rem,0.6fr)_8rem] gap-3 px-4 py-3 text-sm transition-colors",
-              selectedRowIndex === index
+              selectedRowIndex === index || selectedJobId === row.job.id
                 ? "bg-accent text-accent-foreground"
                 : "focus-within:bg-muted/60 hover:bg-muted/50"
             )}
@@ -433,7 +502,10 @@ function ListBody({
             <button
               aria-pressed={selectedRowIndex === index}
               className="col-span-3 grid grid-cols-[minmax(13rem,1.3fr)_minmax(8rem,0.7fr)_minmax(7rem,0.6fr)] gap-3 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              onClick={() => setSelectedRowIndex(index)}
+              onClick={() => {
+                setSelectedRowIndex(index);
+                onOpenDetail(index);
+              }}
               type="button"
             >
               <span className="min-w-0">
@@ -478,22 +550,263 @@ function ListBody({
                 ref={(node) => {
                   rowActionRefs.current[index] = node;
                 }}
-                aria-label={`Open actions for ${row.job.title}`}
-                aria-disabled="true"
-                onClick={(event) => {
-                  event.preventDefault();
-                }}
+                aria-label={`Open detail for ${row.job.title}`}
+                onClick={() => onOpenDetail(index)}
                 size="sm"
                 type="button"
                 variant="ghost"
               >
-                Actions
+                Open
               </Button>
             </span>
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+const JobDetailPanel = React.forwardRef<
+  HTMLElement,
+  {
+    readonly detailState: ReturnType<typeof useJobsWorkspaceLiveDetail>;
+    readonly onClose: () => void;
+  }
+>(function JobDetailPanel({ detailState, onClose }, ref) {
+  const { detail } = detailState;
+  const body = renderJobDetailPanelBody(detailState);
+
+  return (
+    <section
+      ref={ref}
+      aria-label="Job detail"
+      className="flex min-h-[32rem] min-w-0 flex-col gap-4 outline-none"
+      tabIndex={-1}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-muted-foreground uppercase">
+            Job detail
+          </p>
+          <h2 className="mt-1 truncate font-heading text-lg font-semibold">
+            {detail?.job.title ?? "Loading job"}
+          </h2>
+        </div>
+        <Button onClick={onClose} size="sm" type="button" variant="ghost">
+          Close
+          <ShortcutHint
+            decorative
+            hotkey={HOTKEYS.jobsWorkspaceCloseDetail.hotkey}
+            label={HOTKEYS.jobsWorkspaceCloseDetail.label}
+          />
+        </Button>
+      </div>
+
+      {body}
+    </section>
+  );
+});
+
+function renderJobDetailPanelBody(
+  detailState: ReturnType<typeof useJobsWorkspaceLiveDetail>
+) {
+  const { detail, health } = detailState;
+
+  if (!detailState.isCollectionGraphAvailable) {
+    return <JobsWorkspaceDetailUnavailableState health={health} />;
+  }
+
+  if (detailState.isLoading && !detailState.isReady) {
+    return (
+      <div aria-label="Connecting job detail" className="grid gap-2">
+        {Array.from({ length: 5 }, (_, index) => (
+          <Skeleton aria-hidden className="h-16 rounded-md" key={index} />
+        ))}
+      </div>
+    );
+  }
+
+  if (detailState.isNotFound) {
+    return (
+      <Empty className="min-h-80 rounded-md">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <HugeiconsIcon aria-hidden icon={Briefcase01Icon} strokeWidth={2} />
+          </EmptyMedia>
+          <EmptyTitle>Job detail is not in the synced graph</EmptyTitle>
+          <EmptyDescription>
+            The selected job is not available in the Electric workspace.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+
+  if (!detail) {
+    return null;
+  }
+
+  return (
+    <>
+      <section
+        aria-label="Job metadata"
+        className="grid gap-3 rounded-md border border-border/70 p-4 text-sm"
+      >
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">{formatStatus(detail.job.status)}</Badge>
+          <Badge variant="outline">{formatPriority(detail.job.priority)}</Badge>
+          {detail.labels.map((label) => (
+            <Badge key={label.id} variant="secondary">
+              {label.name}
+            </Badge>
+          ))}
+        </div>
+        <DetailField
+          label="Assignee"
+          value={formatMemberId(detail.job.assigneeId)}
+        />
+        <DetailField
+          label="Coordinator"
+          value={formatMemberId(detail.job.coordinatorId)}
+        />
+        <DetailField label="Site" value={detail.site?.name ?? "Unassigned"} />
+        <DetailField
+          label="Location"
+          value={detail.site?.displayLocation ?? "No site location"}
+        />
+        <DetailField
+          label="Contact"
+          value={detail.contact?.name ?? "No contact"}
+        />
+        <DetailField
+          label="Created"
+          value={formatLongDate(detail.job.createdAt)}
+        />
+        <DetailField
+          label="Updated"
+          value={formatLongDate(detail.job.updatedAt)}
+        />
+      </section>
+
+      <JobVisitsSection detail={detail} />
+      <JobActivitySection detail={detail} />
+    </>
+  );
+}
+
+type ReadyJobDetail = NonNullable<
+  ReturnType<typeof useJobsWorkspaceLiveDetail>["detail"]
+>;
+
+function JobVisitsSection({ detail }: { readonly detail: ReadyJobDetail }) {
+  return (
+    <section
+      aria-label="Job visits"
+      className="rounded-md border border-border/70 p-4"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-heading text-sm font-medium">Visits</h3>
+        <Badge variant="outline">{detail.visits.length}</Badge>
+      </div>
+      {detail.visits.length === 0 ? (
+        <p className="mt-3 text-sm/6 text-muted-foreground">
+          No visits are synced for this job.
+        </p>
+      ) : (
+        <ul className="mt-3 grid gap-2 text-sm">
+          {detail.visits.slice(0, 3).map((visit) => (
+            <li key={visit.id} className="rounded-md bg-muted/50 p-3">
+              <div className="font-medium">{visit.visitDate}</div>
+              <div className="text-muted-foreground">
+                {visit.durationMinutes} min · {visit.note}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function JobActivitySection({ detail }: { readonly detail: ReadyJobDetail }) {
+  return (
+    <section
+      aria-label="Job activity and comments"
+      className="rounded-md border border-border/70 p-4"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-heading text-sm font-medium">
+          Activity and comments
+        </h3>
+        <Badge variant="outline">{detail.commentCount} comments</Badge>
+      </div>
+      {detail.activity.length === 0 ? (
+        <p className="mt-3 text-sm/6 text-muted-foreground">
+          No synced activity is available for this job.
+        </p>
+      ) : (
+        <ul className="mt-3 grid gap-2 text-sm">
+          {detail.activity.slice(0, 4).map((item) => (
+            <li key={item.activity.id} className="rounded-md bg-muted/50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-medium">
+                  {formatActivityEvent(item.activity.eventType)}
+                </span>
+                <time
+                  className="text-xs text-muted-foreground"
+                  dateTime={item.activity.createdAt}
+                >
+                  {formatShortDate(item.activity.createdAt)}
+                </time>
+              </div>
+              <div className="mt-1 text-muted-foreground">
+                {formatActor(item.actor, item.activity.actorUserId)}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function DetailField({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string;
+}) {
+  return (
+    <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="min-w-0 truncate">{value}</span>
+    </div>
+  );
+}
+
+function JobsWorkspaceDetailUnavailableState({
+  health,
+}: {
+  readonly health: DataPlaneCollectionHealthSnapshot;
+}) {
+  return (
+    <Empty className="min-h-80 rounded-md">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <HugeiconsIcon
+            aria-hidden
+            icon={DatabaseSync01Icon}
+            strokeWidth={2}
+          />
+        </EmptyMedia>
+        <EmptyTitle>Realtime job detail is unavailable</EmptyTitle>
+        <EmptyDescription>
+          Detail sync status: {health.status}
+          {health.lastError ? `, ${health.lastError.message}` : ""}
+        </EmptyDescription>
+      </EmptyHeader>
+    </Empty>
   );
 }
 
@@ -695,6 +1008,39 @@ function formatStatus(status: string): string {
 
 function formatPriority(priority: string): string {
   return priority === "none" ? "No priority" : priority;
+}
+
+function formatMemberId(memberId: string | undefined): string {
+  return memberId === undefined ? "Unassigned" : `Member ${memberId.slice(-6)}`;
+}
+
+function formatActivityEvent(eventType: string): string {
+  return eventType.replaceAll("_", " ");
+}
+
+function formatActor(
+  actor: IdentityCore.ProductActor | undefined,
+  actorUserId: string | undefined
+): string {
+  if (actor) {
+    return actor.displayDetail
+      ? `${actor.displayName} · ${actor.displayDetail}`
+      : actor.displayName;
+  }
+
+  return actorUserId === undefined
+    ? "System activity"
+    : `Member ${actorUserId.slice(-6)}`;
+}
+
+function formatLongDate(value: string): string {
+  return new Intl.DateTimeFormat("en", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 function formatShortDate(value: string): string {

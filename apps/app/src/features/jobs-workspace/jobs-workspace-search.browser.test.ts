@@ -4,6 +4,7 @@ describe("jobs workspace search", () => {
   it("keeps only supported route state values", () => {
     expect(
       decodeJobsWorkspaceSearch({
+        detailJobId: "11111111-1111-4111-8111-111111111111",
         labelId: "label_123",
         query: " boiler ",
         recentSearch: "pump",
@@ -12,6 +13,7 @@ describe("jobs workspace search", () => {
         view: "board",
       })
     ).toStrictEqual({
+      detailJobId: "11111111-1111-4111-8111-111111111111",
       labelId: "label_123",
       query: "boiler",
       recentSearch: "pump",
@@ -29,6 +31,7 @@ describe("jobs workspace search", () => {
         view: "map",
       })
     ).toStrictEqual({
+      detailJobId: undefined,
       labelId: undefined,
       query: undefined,
       recentSearch: undefined,
