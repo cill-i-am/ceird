@@ -643,6 +643,13 @@ ids. Database triggers enforce exactly one ownership target per comment,
 validate that comment authors/editors are members of the comment organization
 without pinning historical comments to membership rows after a member is
 removed, and delete a shared comment after its ownership row is removed.
+Legacy rows whose `actor_id` predates the product actor projection are repaired
+to a product actor during migration: active member authors resolve to member
+actors, while readable comments from authors without a current member row resolve
+to an organization-scoped `system` actor labelled "Former team member". This
+keeps historical comments visible through product-safe API/Electric projections
+without exposing Better Auth user ids or leaving a target edge without a body
+projection.
 
 Job comment writes go through `JobsService.addComment`. The service creates the
 shared comment row, `work_item_comments` edge, and `work_item_comment_bodies`

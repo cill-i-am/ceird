@@ -369,6 +369,141 @@ describe("comments repository", () => {
     ]);
   });
 
+  it("backfills historical site comments whose author no longer has a member row", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "orphan_site_comment_actor",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Comments integration database unavailable; skipping orphaned author actor backfill coverage"
+      );
+    }
+
+    await applyMigrationsBefore(
+      testDatabase.url,
+      NULL_ACTOR_BACKFILL_MIGRATION
+    );
+
+    const organizationId = decodeOrganizationId(randomUUID());
+    const userId = decodeUserId(`orphan_site_comment_${Date.now()}`);
+    const siteId = decodeSiteId(randomUUID());
+    const siteCommentId = randomUUID();
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Orphan Site Comment Actor",
+      });
+      await seedUser(pool, {
+        id: userId,
+        name: "Taylor Former",
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "member",
+        userId,
+      });
+      await seedSite(pool, {
+        id: siteId,
+        name: "Former Author Site",
+        organizationId,
+      });
+      await seedNullActorSiteComment(pool, {
+        body: "Existing comment from former member",
+        commentId: siteCommentId,
+        organizationId,
+        siteId,
+        userId,
+      });
+
+      await pool.query(
+        `delete from member
+         where organization_id = $1
+           and user_id = $2`,
+        [organizationId, userId]
+      );
+    });
+
+    await applyMigration(testDatabase.url, NULL_ACTOR_BACKFILL_MIGRATION);
+
+    await withPool(testDatabase.url, async (pool) => {
+      const repaired = await pool.query<{
+        actor_display_detail: string;
+        actor_display_name: string;
+        actor_id: string;
+        actor_kind: string;
+        body_actor_id: string;
+        source_system_key: string;
+        source_user_id: string | null;
+      }>(
+        `select
+           comments.actor_id,
+           site_comment_bodies.actor_id as body_actor_id,
+           product_activity_actors.kind as actor_kind,
+           product_activity_actors.display_name as actor_display_name,
+           product_activity_actors.display_detail as actor_display_detail,
+           product_activity_actor_sources.user_id as source_user_id,
+           product_activity_actor_sources.system_key as source_system_key
+         from comments
+         inner join site_comment_bodies
+           on site_comment_bodies.id = comments.id
+           and site_comment_bodies.organization_id = comments.organization_id
+         inner join product_activity_actors
+           on product_activity_actors.id = comments.actor_id
+           and product_activity_actors.organization_id = comments.organization_id
+         inner join product_activity_actor_sources
+           on product_activity_actor_sources.actor_id = comments.actor_id
+           and product_activity_actor_sources.organization_id = comments.organization_id
+         where comments.organization_id = $1
+           and comments.id = $2`,
+        [organizationId, siteCommentId]
+      );
+
+      expect(repaired.rows).toStrictEqual([
+        {
+          actor_display_detail: "Comment author unavailable",
+          actor_display_name: "Former team member",
+          actor_id: expect.any(String),
+          actor_kind: "system",
+          body_actor_id: repaired.rows[0]?.actor_id,
+          source_system_key: "legacy-comment-author",
+          source_user_id: null,
+        },
+      ]);
+    });
+
+    const comments = await runCommentsRepositoryEffect(
+      testDatabase.url,
+      CommentsRepository.listForExistingSite(organizationId, siteId)
+    );
+
+    expect(Option.isSome(comments)).toBeTruthy();
+    if (Option.isNone(comments)) {
+      throw new Error("Expected orphan-author site comments to decode");
+    }
+    expect(comments.value).toMatchObject([
+      {
+        actor: {
+          displayDetail: "Comment author unavailable",
+          displayName: "Former team member",
+          kind: "system",
+        },
+        actorId: expect.any(String),
+        body: "Existing comment from former member",
+        id: siteCommentId,
+      },
+    ]);
+  });
+
   it("creates the safe site projection when a preview stage missed the earlier projection migration", async (context: {
     skip: (note?: string) => never;
   }) => {

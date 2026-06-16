@@ -39,7 +39,7 @@ BEGIN
 	END IF;
 END $$;
 --> statement-breakpoint
-CREATE TABLE "work_item_comment_bodies" (
+CREATE TABLE IF NOT EXISTS "work_item_comment_bodies" (
 	"id" uuid PRIMARY KEY,
 	"organization_id" text NOT NULL,
 	"actor_id" uuid NOT NULL,
@@ -199,6 +199,110 @@ WHERE "comments"."actor_id" IS NULL
 	AND product_activity_actor_sources."kind" = 'member'
 	AND product_activity_actor_sources."user_id" = "comments"."author_user_id";
 --> statement-breakpoint
+WITH unresolved_comment_organizations AS (
+	SELECT DISTINCT
+		"comments"."organization_id"
+	FROM "comments"
+	WHERE "comments"."actor_id" IS NULL
+),
+existing_sources AS (
+	SELECT
+		product_activity_actor_sources."actor_id",
+		product_activity_actor_sources."organization_id"
+	FROM unresolved_comment_organizations
+	INNER JOIN product_activity_actor_sources
+		ON product_activity_actor_sources."organization_id" = unresolved_comment_organizations."organization_id"
+		AND product_activity_actor_sources."kind" = 'system'
+		AND product_activity_actor_sources."system_key" = 'legacy-comment-author'
+),
+updated_existing_actors AS (
+	UPDATE product_activity_actors
+	SET
+		"kind" = 'system',
+		"display_name" = 'Former team member',
+		"display_detail" = 'Comment author unavailable',
+		"route_href" = NULL,
+		"route_label" = NULL,
+		"updated_at" = now()
+	FROM existing_sources
+	WHERE product_activity_actors."id" = existing_sources."actor_id"
+		AND product_activity_actors."organization_id" = existing_sources."organization_id"
+	RETURNING
+		product_activity_actors."id" AS "actor_id",
+		product_activity_actors."organization_id"
+),
+source_organizations AS (
+	SELECT
+		gen_random_uuid() AS "actor_id",
+		unresolved_comment_organizations."organization_id"
+	FROM unresolved_comment_organizations
+	WHERE NOT EXISTS (
+		SELECT 1
+		FROM existing_sources
+		WHERE existing_sources."organization_id" = unresolved_comment_organizations."organization_id"
+	)
+),
+inserted_actors AS (
+	INSERT INTO "product_activity_actors" (
+		"id",
+		"organization_id",
+		"kind",
+		"display_name",
+		"display_detail",
+		"created_at",
+		"updated_at"
+	)
+	SELECT
+		source_organizations."actor_id",
+		source_organizations."organization_id",
+		'system',
+		'Former team member',
+		'Comment author unavailable',
+		now(),
+		now()
+	FROM source_organizations
+	RETURNING
+		"id",
+		"organization_id"
+),
+inserted_sources AS (
+	INSERT INTO "product_activity_actor_sources" (
+		"actor_id",
+		"organization_id",
+		"kind",
+		"system_key",
+		"created_at",
+		"updated_at"
+	)
+	SELECT
+		inserted_actors."id",
+		inserted_actors."organization_id",
+		'system',
+		'legacy-comment-author',
+		now(),
+		now()
+	FROM inserted_actors
+	RETURNING
+		"actor_id",
+		"organization_id"
+),
+fallback_actors AS (
+	SELECT
+		updated_existing_actors."actor_id",
+		updated_existing_actors."organization_id"
+	FROM updated_existing_actors
+	UNION ALL
+	SELECT
+		inserted_sources."actor_id",
+		inserted_sources."organization_id"
+	FROM inserted_sources
+)
+UPDATE "comments"
+SET "actor_id" = fallback_actors."actor_id"
+FROM fallback_actors
+WHERE "comments"."actor_id" IS NULL
+	AND fallback_actors."organization_id" = "comments"."organization_id";
+--> statement-breakpoint
 INSERT INTO "site_comment_bodies" (
 	"id",
 	"organization_id",
@@ -255,8 +359,34 @@ SET
 	"created_at" = excluded."created_at",
 	"updated_at" = excluded."updated_at";
 --> statement-breakpoint
-CREATE INDEX "work_item_comment_bodies_organization_created_at_idx" ON "work_item_comment_bodies" ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX "work_item_comment_bodies_actor_id_idx" ON "work_item_comment_bodies" ("organization_id","actor_id");--> statement-breakpoint
-ALTER TABLE "work_item_comment_bodies" ADD CONSTRAINT "work_item_comment_bodies_organization_id_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization"("id") ON DELETE CASCADE;--> statement-breakpoint
-ALTER TABLE "work_item_comment_bodies" ADD CONSTRAINT "work_item_comment_bodies_comment_org_fk" FOREIGN KEY ("id","organization_id") REFERENCES "comments"("id","organization_id") ON DELETE CASCADE;--> statement-breakpoint
-ALTER TABLE "work_item_comment_bodies" ADD CONSTRAINT "work_item_comment_bodies_actor_org_fk" FOREIGN KEY ("actor_id","organization_id") REFERENCES "product_activity_actors"("id","organization_id");
+CREATE INDEX IF NOT EXISTS "work_item_comment_bodies_organization_created_at_idx" ON "work_item_comment_bodies" ("organization_id","created_at","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "work_item_comment_bodies_actor_id_idx" ON "work_item_comment_bodies" ("organization_id","actor_id");--> statement-breakpoint
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conname = 'work_item_comment_bodies_organization_id_organization_id_fkey'
+	) THEN
+		ALTER TABLE "work_item_comment_bodies" ADD CONSTRAINT "work_item_comment_bodies_organization_id_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization"("id") ON DELETE CASCADE;
+	END IF;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conname = 'work_item_comment_bodies_comment_org_fk'
+	) THEN
+		ALTER TABLE "work_item_comment_bodies" ADD CONSTRAINT "work_item_comment_bodies_comment_org_fk" FOREIGN KEY ("id","organization_id") REFERENCES "comments"("id","organization_id") ON DELETE CASCADE;
+	END IF;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conname = 'work_item_comment_bodies_actor_org_fk'
+	) THEN
+		ALTER TABLE "work_item_comment_bodies" ADD CONSTRAINT "work_item_comment_bodies_actor_org_fk" FOREIGN KEY ("actor_id","organization_id") REFERENCES "product_activity_actors"("id","organization_id");
+	END IF;
+END $$;

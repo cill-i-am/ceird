@@ -113,10 +113,17 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
             and member_actor_sources.organization_id = comments.organization_id
             and member_actor_sources.kind = 'member'
             and member_actor_sources.user_id = comments.author_user_id
+          left join product_activity_actor_sources legacy_author_actor_sources
+            on comments.actor_id is null
+            and member_actor_sources.actor_id is null
+            and legacy_author_actor_sources.organization_id = comments.organization_id
+            and legacy_author_actor_sources.kind = 'system'
+            and legacy_author_actor_sources.system_key = 'legacy-comment-author'
           left join product_activity_actors
             on product_activity_actors.id = coalesce(
               comments.actor_id,
-              member_actor_sources.actor_id
+              member_actor_sources.actor_id,
+              legacy_author_actor_sources.actor_id
             )
             and product_activity_actors.organization_id = comments.organization_id
           where work_item_comments.organization_id = ${organizationId}
@@ -244,10 +251,17 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
               and member_actor_sources.organization_id = comments.organization_id
               and member_actor_sources.kind = 'member'
               and member_actor_sources.user_id = comments.author_user_id
+            left join product_activity_actor_sources legacy_author_actor_sources
+              on comments.actor_id is null
+              and member_actor_sources.actor_id is null
+              and legacy_author_actor_sources.organization_id = comments.organization_id
+              and legacy_author_actor_sources.kind = 'system'
+              and legacy_author_actor_sources.system_key = 'legacy-comment-author'
             left join product_activity_actors
               on product_activity_actors.id = coalesce(
                 comments.actor_id,
-                member_actor_sources.actor_id
+                member_actor_sources.actor_id,
+                legacy_author_actor_sources.actor_id
               )
               and product_activity_actors.organization_id = comments.organization_id
             where site_comments.organization_id = ${organizationId}
@@ -300,10 +314,17 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
             and member_actor_sources.organization_id = comments.organization_id
             and member_actor_sources.kind = 'member'
             and member_actor_sources.user_id = comments.author_user_id
+          left join product_activity_actor_sources legacy_author_actor_sources
+            on comments.actor_id is null
+            and member_actor_sources.actor_id is null
+            and legacy_author_actor_sources.organization_id = comments.organization_id
+            and legacy_author_actor_sources.kind = 'system'
+            and legacy_author_actor_sources.system_key = 'legacy-comment-author'
           left join product_activity_actors
             on product_activity_actors.id = coalesce(
               comments.actor_id,
-              member_actor_sources.actor_id
+              member_actor_sources.actor_id,
+              legacy_author_actor_sources.actor_id
             )
             and product_activity_actors.organization_id = comments.organization_id
           order by site_comments.created_at asc nulls last,
@@ -520,7 +541,10 @@ function mapNullableSiteCommentRow(
     row.author_user_id === null ||
     row.body === null ||
     row.created_at === null ||
-    row.site_id === null
+    row.site_id === null ||
+    row.actor_id === null ||
+    row.actor_kind === null ||
+    row.actor_display_name === null
   ) {
     return Option.none();
   }
