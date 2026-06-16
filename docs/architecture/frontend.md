@@ -467,8 +467,10 @@ an explicit SSR strategy. The current migrated slices are:
   dedicated Labels settings route renders active labels from the
   Electric-backed Settings Labels collection, filters the hydrated collection
   locally for search, exposes connecting/ready/empty/unavailable/permission
-  states, and presents accessible edit/archive row actions that defer mutation
-  behavior to the label-write slice. The old API-backed labels panel in
+  states, and runs create, rename, and archive mutations through the writable
+  Settings Labels collection so the domain/API label commands stay
+  authoritative while the UI waits for Electric txid confirmation. The old
+  API-backed labels panel in
   organization settings remains during rollout.
 - `features/jobs-workspace/jobs-workspace-live-list.ts`, where the
   Electric-native Jobs workspace subscribes to the Jobs read-model collections,

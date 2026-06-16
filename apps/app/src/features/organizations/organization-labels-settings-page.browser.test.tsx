@@ -10,6 +10,7 @@ import type {
   DataPlaneCollectionHealth,
   DataPlaneCollectionHealthStatus,
 } from "#/data-plane/collection-health";
+import { createDataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 
 import { OrganizationLabelsSettingsPage } from "./organization-labels-settings-page";
 
@@ -43,6 +44,9 @@ describe("organization labels settings page", () => {
 
     expect(screen.getByRole("heading", { name: "Labels" })).toBeVisible();
     expect(screen.getByText("Realtime ready")).toBeVisible();
+    expect(
+      screen.getByRole("textbox", { name: /new label name/i })
+    ).toBeVisible();
     await expect(
       screen.findByRole("button", {
         name: /open actions for electrical/i,
@@ -141,7 +145,193 @@ describe("organization labels settings page", () => {
     ).toBeNull();
   });
 
-  it("keeps row actions accessible while deferring mutation behavior", async () => {
+  it("creates labels through the writable collection and records command lifecycle", async () => {
+    const user = userEvent.setup();
+    const mutationJournal = createDataPlaneMutationJournal({
+      createId: () => "mutation_1",
+      now: () => 1000,
+    });
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [],
+        status: "ready",
+      }),
+      createTemporaryLabelId: () =>
+        "44444444-4444-4444-8444-444444444444" as Label["id"],
+      mutationJournal,
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: /new label name/i }),
+      "Fire Safety"
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+    await expect(
+      screen.findByText("Label created and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+    expect(
+      screen.getByText("Label created and confirmed by realtime sync.")
+    ).toHaveTextContent("Label created and confirmed by realtime sync.");
+    expect(mutationJournal.entries()).toMatchObject([
+      {
+        affectedCollections: ["labels"],
+        commandName: "labels.create",
+        input: { name: "Fire Safety" },
+        status: "success",
+      },
+    ]);
+  });
+
+  it("disables mouse-driven row actions while another mutation is pending", async () => {
+    const user = userEvent.setup();
+    const createTransaction = Promise.withResolvers<unknown>();
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [urgentLabel],
+        status: "ready",
+        transactions: {
+          insert: [createTransaction],
+        },
+      }),
+      createTemporaryLabelId: () =>
+        "44444444-4444-4444-8444-444444444444" as Label["id"],
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: /new label name/i }),
+      "Fire Safety"
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+    expect(screen.getByText("Pending realtime confirmation")).toBeVisible();
+    const urgentActions = screen.getByRole("button", {
+      name: /open actions for urgent/i,
+    });
+    expect(urgentActions).toBeDisabled();
+
+    await user.click(urgentActions);
+
+    expect(
+      screen.queryByRole("menuitem", { name: /archive label/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Pending realtime confirmation")).toBeVisible();
+
+    createTransaction.resolve({ txid: 123 });
+
+    await expect(
+      screen.findByText("Label created and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+  });
+
+  it("shows duplicate and invalid label feedback before submitting", async () => {
+    const user = userEvent.setup();
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [urgentLabel],
+        status: "ready",
+      }),
+    });
+
+    const input = screen.getByRole("textbox", { name: /new label name/i });
+    await user.type(input, "  urgent  ");
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "A label with that name already exists."
+    );
+
+    await user.clear(input);
+    await user.type(input, "x".repeat(49));
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Label names must be between 1 and 48 characters."
+    );
+  });
+
+  it("renames labels after Electric confirmation and rolls back failed renames", async () => {
+    const user = userEvent.setup();
+    const mutationJournal = createDataPlaneMutationJournal({
+      createId: () => "mutation_rename",
+      now: () => 1000,
+    });
+    const collectionState = makeCollectionState({
+      failures: {
+        update: [new Error("Timeout waiting for txId: 102")],
+      },
+      labels: [urgentLabel],
+      status: "ready",
+    });
+
+    renderLabelsPage({
+      collectionState,
+      mutationJournal,
+    });
+
+    await user.click(
+      await screen.findByRole("button", { name: /open actions for urgent/i })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit label/i })
+    );
+    const editInput = screen.getByRole("textbox", { name: /rename urgent/i });
+    await user.clear(editInput);
+    await user.type(editInput, "Emergency");
+    await user.click(screen.getByRole("button", { name: /save urgent/i }));
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "realtime confirmation timed out"
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Urgent")).toBeVisible();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Emergency")).not.toBeInTheDocument();
+    });
+    expect(mutationJournal.entries()).toMatchObject([
+      {
+        affectedCollections: ["labels"],
+        commandName: "labels.update",
+        status: "failure",
+      },
+    ]);
+  });
+
+  it("requires menu archive confirmation before removing labels from the active synced list", async () => {
+    const user = userEvent.setup();
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [urgentLabel],
+        status: "ready",
+      }),
+    });
+
+    await user.click(
+      await screen.findByRole("button", { name: /open actions for urgent/i })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /archive label/i })
+    );
+
+    expect(screen.getByText("Archive this label?")).toBeVisible();
+    expect(screen.getByText("Urgent")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /archive label/i }));
+
+    await expect(
+      screen.findByText(
+        "Label archived and removed after realtime confirmation."
+      )
+    ).resolves.toBeVisible();
+    expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
+  });
+
+  it("requires edit-mode archive icon confirmation and supports cancel", async () => {
     const user = userEvent.setup();
 
     renderLabelsPage({
@@ -157,27 +347,22 @@ describe("organization labels settings page", () => {
     await user.click(
       await screen.findByRole("menuitem", { name: /edit label/i })
     );
+    await user.click(screen.getByRole("button", { name: /archive urgent/i }));
 
-    expect(
-      screen.getByText(
-        "Edit for Urgent will be handled by the label mutation confirmation flow."
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByText("Archive this label?")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(
+      "Urgent"
+    );
 
-    await user.click(
-      screen.getByRole("button", { name: /open actions for urgent/i })
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(screen.queryByText("Archive this label?")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(
+      "Urgent"
     );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /archive label/i })
-    );
-    expect(
-      screen.getByText(
-        "Archive for Urgent will be handled by the label mutation confirmation flow."
-      )
-    ).toBeInTheDocument();
   });
 
-  it("focuses label search from the route hotkey", async () => {
+  it("supports route hotkeys for search, create, save, cancel, and archive edit mode", async () => {
     const user = userEvent.setup();
 
     renderLabelsPage({
@@ -185,6 +370,8 @@ describe("organization labels settings page", () => {
         labels: [urgentLabel],
         status: "ready",
       }),
+      createTemporaryLabelId: () =>
+        "55555555-5555-4555-8555-555555555555" as Label["id"],
     });
 
     const searchInput = await screen.findByRole("textbox", {
@@ -193,29 +380,95 @@ describe("organization labels settings page", () => {
     await user.keyboard("/");
 
     expect(searchInput).toHaveFocus();
+
+    await user.click(screen.getByRole("heading", { name: "Labels" }));
+    await user.keyboard("n");
+    const createInput = screen.getByRole("textbox", {
+      name: /new label name/i,
+    });
+    expect(createInput).toHaveFocus();
+    await user.type(createInput, "Plaster");
+    await user.keyboard(getModEnterKeyboardInput());
+    await expect(screen.findByText("Plaster")).resolves.toBeVisible();
+
+    await user.click(
+      await screen.findByRole("button", { name: /open actions for urgent/i })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit label/i })
+    );
+    expect(
+      screen.getByRole("textbox", { name: /rename urgent/i })
+    ).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByRole("textbox", { name: /rename urgent/i })
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: /open actions for urgent/i })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit label/i })
+    );
+    await user.keyboard(getModShiftBackspaceKeyboardInput());
+    expect(screen.getByText("Archive this label?")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(
+      "Urgent"
+    );
+    await user.click(screen.getByRole("button", { name: /archive label/i }));
+    await waitFor(() => {
+      expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
+    });
   });
 });
 
 function renderLabelsPage({
   collectionState,
+  createTemporaryLabelId,
+  mutationJournal,
   organizationRole = "owner",
 }: {
   readonly collectionState: ReturnType<typeof makeCollectionState>;
+  readonly createTemporaryLabelId?: (() => Label["id"]) | undefined;
+  readonly mutationJournal?:
+    | ReturnType<typeof createDataPlaneMutationJournal>
+    | undefined;
   readonly organizationRole?: "admin" | "member" | "owner";
 }) {
   return render(
     <LabelsPageHarness
       collectionState={collectionState}
+      createTemporaryLabelId={createTemporaryLabelId}
+      mutationJournal={mutationJournal}
       organizationRole={organizationRole}
     />
   );
 }
 
+function getModEnterKeyboardInput() {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? "{Meta>}{Enter}{/Meta}"
+    : "{Control>}{Enter}{/Control}";
+}
+
+function getModShiftBackspaceKeyboardInput() {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? "{Meta>}{Shift>}{Backspace}{/Shift}{/Meta}"
+    : "{Control>}{Shift>}{Backspace}{/Shift}{/Control}";
+}
+
 function LabelsPageHarness({
   collectionState,
+  createTemporaryLabelId,
+  mutationJournal,
   organizationRole = "owner",
 }: {
   readonly collectionState: ReturnType<typeof makeCollectionState>;
+  readonly createTemporaryLabelId?: (() => Label["id"]) | undefined;
+  readonly mutationJournal?:
+    | ReturnType<typeof createDataPlaneMutationJournal>
+    | undefined;
   readonly organizationRole?: "admin" | "member" | "owner";
 }) {
   return (
@@ -223,6 +476,8 @@ function LabelsPageHarness({
       <TooltipProvider>
         <OrganizationLabelsSettingsPage
           collectionState={collectionState}
+          createTemporaryLabelId={createTemporaryLabelId}
+          mutationJournal={mutationJournal}
           organization={TEST_ORGANIZATION}
           organizationRole={organizationRole}
         />
@@ -232,11 +487,19 @@ function LabelsPageHarness({
 }
 
 function makeCollectionState({
+  failures,
   labels,
   status,
+  transactions,
 }: {
+  readonly failures?: Partial<
+    Record<"delete" | "insert" | "update", readonly Error[]>
+  >;
   readonly labels: readonly Label[];
   readonly status: DataPlaneCollectionHealthStatus;
+  readonly transactions?: Partial<
+    Record<"delete" | "insert" | "update", readonly ManualTransaction[]>
+  >;
 }) {
   const health = createDataPlaneCollectionHealth({
     collection: "labels",
@@ -263,30 +526,155 @@ function makeCollectionState({
     collection:
       status === "disabled" || status === "unavailable"
         ? null
-        : makeCollection(labels, status),
+        : makeCollection(labels, status, failures, transactions),
     health: health as DataPlaneCollectionHealth,
   };
 }
 
 function makeCollection(
   labels: readonly Label[],
-  status: DataPlaneCollectionHealthStatus
+  status: DataPlaneCollectionHealthStatus,
+  failures?: Partial<Record<"delete" | "insert" | "update", readonly Error[]>>,
+  transactions?: Partial<
+    Record<"delete" | "insert" | "update", readonly ManualTransaction[]>
+  >
 ) {
+  let currentLabels = [...labels].toSorted(compareLabels);
+  const listeners = new Set<() => void>();
+  const failureQueues = {
+    delete: [...(failures?.delete ?? [])],
+    insert: [...(failures?.insert ?? [])],
+    update: [...(failures?.update ?? [])],
+  };
+  const transactionQueues = {
+    delete: [...(transactions?.delete ?? [])],
+    insert: [...(transactions?.insert ?? [])],
+    update: [...(transactions?.update ?? [])],
+  };
+  const notify = () => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
+
   return {
     entries: () =>
-      labels
+      currentLabels
         .map((label): [string | number, Label] => [label.id, label])
         .values(),
+    delete: (key: Label["id"]) => {
+      const previous = currentLabels;
+      currentLabels = currentLabels.filter((label) => label.id !== key);
+      notify();
+
+      return makeTransaction({
+        failWith: failureQueues.delete.shift(),
+        transaction: transactionQueues.delete.shift(),
+        onRollback: () => {
+          currentLabels = previous;
+          notify();
+        },
+      });
+    },
+    insert: (label: Label) => {
+      const previous = currentLabels;
+      currentLabels = [...currentLabels, label].toSorted(compareLabels);
+      notify();
+
+      return makeTransaction({
+        failWith: failureQueues.insert.shift(),
+        transaction: transactionQueues.insert.shift(),
+        onRollback: () => {
+          currentLabels = previous;
+          notify();
+        },
+      });
+    },
     status,
     subscribeChanges: (callback: () => void) => {
+      listeners.add(callback);
       queueMicrotask(callback);
 
       return {
         requestSnapshot: () => queueMicrotask(callback),
-        unsubscribe: vi.fn<() => void>(),
+        unsubscribe: () => {
+          listeners.delete(callback);
+        },
       };
     },
+    update: (
+      key: Label["id"],
+      callback: (draft: {
+        createdAt: string;
+        id: Label["id"];
+        name: string;
+        updatedAt: string;
+      }) => void
+    ) => {
+      const previous = currentLabels;
+      currentLabels = currentLabels.map((label) => {
+        if (label.id !== key) {
+          return label;
+        }
+
+        const draft = { ...label };
+        callback(draft);
+        return draft;
+      });
+      notify();
+
+      return makeTransaction({
+        failWith: failureQueues.update.shift(),
+        transaction: transactionQueues.update.shift(),
+        onRollback: () => {
+          currentLabels = previous;
+          notify();
+        },
+      });
+    },
   };
+}
+
+function makeTransaction({
+  failWith,
+  onRollback,
+  transaction,
+}: {
+  readonly failWith?: Error | undefined;
+  readonly onRollback: () => void;
+  readonly transaction?: ManualTransaction | undefined;
+}) {
+  const persisted = transaction ?? Promise.withResolvers<unknown>();
+
+  if (transaction) {
+    return {
+      isPersisted: {
+        promise: persisted.promise,
+      },
+    };
+  }
+
+  queueMicrotask(() => {
+    if (failWith) {
+      onRollback();
+      persisted.reject(failWith);
+      return;
+    }
+
+    persisted.resolve({ txid: 123 });
+  });
+
+  return {
+    isPersisted: {
+      promise: persisted.promise,
+    },
+  };
+}
+
+interface ManualTransaction {
+  readonly promise: Promise<unknown>;
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (value: unknown) => void;
 }
 
 function makeLabel({
@@ -302,4 +690,12 @@ function makeLabel({
     name,
     updatedAt: "2026-06-14T00:00:00.000Z",
   };
+}
+
+function compareLabels(left: Label, right: Label) {
+  const nameComparison = left.name.localeCompare(right.name);
+
+  return nameComparison === 0
+    ? left.id.localeCompare(right.id)
+    : nameComparison;
 }

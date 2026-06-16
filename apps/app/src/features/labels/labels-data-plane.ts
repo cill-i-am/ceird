@@ -58,8 +58,10 @@ export { searchSettingsLabels } from "#/features/labels/labels-search";
 
 interface LabelsCollection extends DataPlaneCollectionSnapshot<Label> {
   readonly cleanup: () => Promise<void>;
+  delete: (key: Label["id"]) => LabelMutationTransaction;
   entries: () => IterableIterator<[string | number, Label]>;
   readonly id: string;
+  insert: (data: Label) => LabelMutationTransaction;
   readonly keys: () => IterableIterator<Label["id"]>;
   readonly preload?: (() => Promise<void>) | undefined;
   readonly status: string;
@@ -73,6 +75,10 @@ interface LabelsCollection extends DataPlaneCollectionSnapshot<Label> {
     readonly writeDelete: (key: Label["id"] | readonly Label["id"][]) => void;
     readonly writeUpsert: (data: Label | readonly Label[]) => void;
   };
+  update: (
+    key: Label["id"],
+    callback: (draft: Label) => void
+  ) => LabelMutationTransaction;
 }
 type LabelsCollectionSyncOptions = Omit<
   CreateDataPlaneFallbackCollectionOptions<LabelsCollection, LabelsCollection>,
@@ -116,6 +122,14 @@ export interface LabelsCollectionState {
 export interface SettingsLabelsCollectionState {
   readonly collection: LabelsCollection | null;
   readonly health: DataPlaneCollectionHealth;
+}
+
+interface LabelMutationTransaction {
+  readonly error?: unknown;
+  readonly isPersisted: {
+    readonly promise: Promise<unknown>;
+  };
+  readonly state?: string;
 }
 
 function labelsCollectionKey(scope: OrganizationDataScope) {
@@ -209,6 +223,7 @@ export function getOrCreateSettingsLabelsCollectionState({
 
   const contract = createLabelsElectricCollectionContract({
     id: registryKey,
+    mutationHandlers: createLabelElectricMutationHandlers(),
   });
   const result = createElectricCollectionFromContract(contract, sync);
   const created = {
