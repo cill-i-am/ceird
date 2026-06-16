@@ -25,7 +25,6 @@ export const SYNC_SHAPE_NAMES = [
   "activity-events",
   "agent-action-runs",
   "agent-threads",
-  "comments",
   "contacts",
   "jobs",
   "labels",
@@ -38,6 +37,7 @@ export const SYNC_SHAPE_NAMES = [
   "site-labels",
   "sites",
   "work-item-activity",
+  "work-item-comment-bodies",
   "work-item-collaborators",
   "work-item-comments",
   "work-item-labels",
@@ -84,11 +84,6 @@ export const SYNC_SHAPE_AUTHORIZATION_DEFINITIONS = {
     scope: "organization-user",
     table: "agent_threads",
     where: ORGANIZATION_USER_SYNC_WHERE,
-  },
-  comments: {
-    scope: "organization",
-    table: "comments",
-    where: ORGANIZATION_SYNC_WHERE,
   },
   contacts: {
     scope: "organization",
@@ -148,6 +143,11 @@ export const SYNC_SHAPE_AUTHORIZATION_DEFINITIONS = {
   "work-item-activity": {
     scope: "organization",
     table: "work_item_activity",
+    where: ORGANIZATION_SYNC_WHERE,
+  },
+  "work-item-comment-bodies": {
+    scope: "organization",
+    table: "work_item_comment_bodies",
     where: ORGANIZATION_SYNC_WHERE,
   },
   "work-item-collaborators": {
@@ -242,7 +242,6 @@ function makeOrganizationUserShapeAuthorizationSchema<
 
 export const OrganizationSyncShapeAuthorizationSchema = Schema.Union([
   makeActivityEventsShapeAuthorizationSchema(),
-  makeOrganizationShapeAuthorizationSchema("comments", "comments"),
   makeOrganizationShapeAuthorizationSchema("contacts", "contacts"),
   makeOrganizationShapeAuthorizationSchema("jobs", "work_items"),
   makeOrganizationShapeAuthorizationSchema(
@@ -273,6 +272,10 @@ export const OrganizationSyncShapeAuthorizationSchema = Schema.Union([
   makeOrganizationShapeAuthorizationSchema(
     "work-item-activity",
     "work_item_activity"
+  ),
+  makeOrganizationShapeAuthorizationSchema(
+    "work-item-comment-bodies",
+    "work_item_comment_bodies"
   ),
   makeOrganizationShapeAuthorizationSchema(
     "work-item-collaborators",

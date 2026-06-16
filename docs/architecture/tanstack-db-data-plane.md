@@ -74,7 +74,8 @@ explicit in `apps/app/src/features/jobs/jobs-data-plane.ts` through
 domain-approved `jobs`, `work-item-labels`, `labels`, `sites`, and `contacts`
 shapes. Its detail graph adds `work-item-collaborators`,
 `product-activity-actors`, `product-member-actor-summaries`,
-`work-item-activity`, `work-item-visits`, `work-item-comments`, and `comments`.
+`work-item-activity`, `work-item-visits`, `work-item-comments`, and
+`work-item-comment-bodies`.
 Each shape is a complete-tenant, organization/viewer/role-scoped Electric
 collection with shared health state; local live queries can join job rows,
 label assignments, label definitions, site summaries, contact summaries,
@@ -337,6 +338,7 @@ widening the command implementation, not by bypassing the data plane.
 The Electric-native Jobs workspace add-comment command calls the typed domain
 Jobs API and keeps the mutation journal entry pending until the synced read
 model observes both the canonical `comments` body row and the
+domain-owned `work-item-comment-bodies` projection row plus the
 `work-item-comments` edge row for the returned comment id. The UI derives author
 display only by joining `comment.actorId` to the synced
 `product-activity-actors` projection; Better Auth user/member rows never cross

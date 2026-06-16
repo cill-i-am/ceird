@@ -418,7 +418,7 @@ describe("jobs data plane", () => {
         "work-item-activity",
         "work-item-visits",
         "work-item-comments",
-        "comments",
+        "work-item-comment-bodies",
       ],
     });
     expect(graph.detail.projectionFollowUps).toStrictEqual(
@@ -470,7 +470,7 @@ describe("jobs data plane", () => {
     });
     expect(graph.comments).toMatchObject({
       collection: "job-comment-bodies",
-      shapeName: "comments",
+      shapeName: "work-item-comment-bodies",
     });
     for (const contract of [
       graph.activity,
@@ -763,7 +763,6 @@ describe("jobs data plane", () => {
       comments: [
         toJobCommentElectricRow({
           actorId,
-          authorUserId: "user_taylor",
           body: "Ready for dispatch",
           createdAt: "2026-06-15T10:40:00.000Z",
           id: commentId,
@@ -1198,7 +1197,6 @@ describe("jobs data plane", () => {
     commentBodies.set([
       toJobCommentElectricRow({
         actorId: actor.id,
-        authorUserId,
         body: "Ready for dispatch",
         createdAt: "2026-06-15T10:40:00.000Z",
         id: commentId,
@@ -1250,7 +1248,6 @@ describe("jobs data plane", () => {
         commentBodies: makeSynchronouslyConfirmingCollection([
           toJobCommentElectricRow({
             actorId: actor.id,
-            authorUserId,
             body: response.body,
             createdAt: response.createdAt,
             id: commentId,
@@ -1421,6 +1418,21 @@ describe("jobs data plane", () => {
     expect(
       toJobCommentElectricRow({
         actorId: "66666666-6666-4666-8666-666666666666",
+        body: "Ready for dispatch",
+        createdAt: "2026-06-15T10:40:00.000Z",
+        id: commentId,
+        updatedAt: "2026-06-15T10:40:00.000Z",
+        authorUserId: userId,
+        updatedByUserId: null,
+      })
+    ).toMatchObject({
+      actorId: "66666666-6666-4666-8666-666666666666",
+      body: "Ready for dispatch",
+      id: commentId,
+    });
+    expect(
+      toJobCommentElectricRow({
+        actorId: "66666666-6666-4666-8666-666666666666",
         authorUserId: userId,
         body: "Ready for dispatch",
         createdAt: "2026-06-15T10:40:00.000Z",
@@ -1428,12 +1440,18 @@ describe("jobs data plane", () => {
         updatedAt: "2026-06-15T10:40:00.000Z",
         updatedByUserId: null,
       })
-    ).toMatchObject({
-      actorId: "66666666-6666-4666-8666-666666666666",
-      authorUserId: userId,
-      body: "Ready for dispatch",
-      id: commentId,
-    });
+    ).not.toHaveProperty("authorUserId");
+    expect(
+      toJobCommentElectricRow({
+        actorId: "66666666-6666-4666-8666-666666666666",
+        authorUserId: userId,
+        body: "Ready for dispatch",
+        createdAt: "2026-06-15T10:40:00.000Z",
+        id: commentId,
+        updatedAt: "2026-06-15T10:40:00.000Z",
+        updatedByUserId: null,
+      })
+    ).not.toHaveProperty("updatedByUserId");
     const productActor = toProductActivityActorElectricRow({
       displayDetail: "Dispatch",
       displayName: "Taylor Member",

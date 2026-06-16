@@ -116,7 +116,8 @@ Exports the shared contract for calling the private domain Worker:
   authorization DTO schemas, and typed sync authorization errors used by
   `apps/domain`, `apps/sync`, and the public API boundary guard; named product
   shapes include raw domain tables and product-safe projections such as
-  `site-active-job-summaries` and `site-comment-bodies`
+  `site-active-job-summaries`, `site-comment-bodies`, and
+  `work-item-comment-bodies`
 
 Keep product repositories, Drizzle schema, authorization, action execution, and
 audit behavior out of this package. Those are owned by `apps/domain`; this

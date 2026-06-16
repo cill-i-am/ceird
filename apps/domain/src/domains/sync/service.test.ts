@@ -82,10 +82,6 @@ const expectedShapeDefinitions = {
     scope: "organization-user",
     table: "agent_threads",
   },
-  comments: {
-    scope: "organization",
-    table: "comments",
-  },
   contacts: {
     scope: "organization",
     table: "contacts",
@@ -134,6 +130,10 @@ const expectedShapeDefinitions = {
   "work-item-activity": {
     scope: "organization",
     table: "work_item_activity",
+  },
+  "work-item-comment-bodies": {
+    scope: "organization",
+    table: "work_item_comment_bodies",
   },
   "work-item-collaborators": {
     scope: "organization",

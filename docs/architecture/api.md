@@ -631,18 +631,23 @@ single `comments` table and keeps target ownership in separate join tables:
 - `site_comment_bodies` is the Sites-specific product-safe Electric projection
   of site comment body rows. It carries comment id, organization id, product
   `actor_id`, body, and timestamps, but not Better Auth/user-table ids.
+- `work_item_comment_bodies` is the Jobs-specific product-safe Electric
+  projection for browser job comment bodies with the same product actor boundary.
 
 The core `comments` row owns author, organization, body, creation timestamp,
 and edit metadata (`updated_at`, `updated_by_user_id`). Target join tables own
-the target foreign key and ordering timestamp. Database triggers enforce exactly
-one ownership target per comment, validate that comment authors/editors are
-members of the comment organization without pinning historical comments to
-membership rows after a member is removed, and delete a shared comment after its
-ownership row is removed.
+the target foreign key and ordering timestamp. The raw `comments` table remains
+domain-private for browser sync; app-facing Electric comment bodies use
+projection rows that expose product actor ids instead of Better Auth/user-table
+ids. Database triggers enforce exactly one ownership target per comment,
+validate that comment authors/editors are members of the comment organization
+without pinning historical comments to membership rows after a member is
+removed, and delete a shared comment after its ownership row is removed.
 
 Job comment writes go through `JobsService.addComment`. The service creates the
-shared comment row and `work_item_comments` edge in the domain transaction,
-returns a DTO with the product-safe actor projection, and records a
+shared comment row, `work_item_comments` edge, and `work_item_comment_bodies`
+projection row in the domain transaction, returns a DTO with the product-safe
+actor projection, and records a
 `comment.created` global activity event targeted at the comment. App and sync
 clients join comments to actors through `product_activity_actors`; Better Auth
 user/member tables remain private to the domain actor resolver and projection

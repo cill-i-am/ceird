@@ -108,8 +108,16 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
           inner join comments
             on comments.id = work_item_comments.comment_id
             and comments.organization_id = work_item_comments.organization_id
+          left join product_activity_actor_sources member_actor_sources
+            on comments.actor_id is null
+            and member_actor_sources.organization_id = comments.organization_id
+            and member_actor_sources.kind = 'member'
+            and member_actor_sources.user_id = comments.author_user_id
           left join product_activity_actors
-            on product_activity_actors.id = comments.actor_id
+            on product_activity_actors.id = coalesce(
+              comments.actor_id,
+              member_actor_sources.actor_id
+            )
             and product_activity_actors.organization_id = comments.organization_id
           where work_item_comments.organization_id = ${organizationId}
             and work_item_comments.work_item_id = ${workItemId}
@@ -159,6 +167,25 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
               ${input.workItemId}
             from inserted_comment
             returning *
+          ),
+          inserted_body as (
+            insert into work_item_comment_bodies (
+              id,
+              organization_id,
+              actor_id,
+              body,
+              created_at,
+              updated_at
+            )
+            select
+              inserted_comment.id,
+              inserted_comment.organization_id,
+              inserted_comment.actor_id,
+              inserted_comment.body,
+              inserted_comment.created_at,
+              inserted_comment.updated_at
+            from inserted_comment
+            returning *
           )
           select
             inserted_comment.id,
@@ -175,6 +202,9 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
           from inserted_comment
           inner join inserted_ownership
             on inserted_ownership.comment_id = inserted_comment.id
+          inner join inserted_body
+            on inserted_body.id = inserted_comment.id
+            and inserted_body.organization_id = inserted_comment.organization_id
           left join product_activity_actors
             on product_activity_actors.id = inserted_comment.actor_id
             and product_activity_actors.organization_id = inserted_comment.organization_id
@@ -209,8 +239,16 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
             inner join comments
               on comments.id = site_comments.comment_id
               and comments.organization_id = site_comments.organization_id
+            left join product_activity_actor_sources member_actor_sources
+              on comments.actor_id is null
+              and member_actor_sources.organization_id = comments.organization_id
+              and member_actor_sources.kind = 'member'
+              and member_actor_sources.user_id = comments.author_user_id
             left join product_activity_actors
-              on product_activity_actors.id = comments.actor_id
+              on product_activity_actors.id = coalesce(
+                comments.actor_id,
+                member_actor_sources.actor_id
+              )
               and product_activity_actors.organization_id = comments.organization_id
             where site_comments.organization_id = ${organizationId}
               and site_comments.site_id = ${siteId}
@@ -257,8 +295,16 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
           left join comments
             on comments.id = site_comments.comment_id
             and comments.organization_id = site_comments.organization_id
+          left join product_activity_actor_sources member_actor_sources
+            on comments.actor_id is null
+            and member_actor_sources.organization_id = comments.organization_id
+            and member_actor_sources.kind = 'member'
+            and member_actor_sources.user_id = comments.author_user_id
           left join product_activity_actors
-            on product_activity_actors.id = comments.actor_id
+            on product_activity_actors.id = coalesce(
+              comments.actor_id,
+              member_actor_sources.actor_id
+            )
             and product_activity_actors.organization_id = comments.organization_id
           order by site_comments.created_at asc nulls last,
             site_comments.comment_id asc nulls last
@@ -420,6 +466,12 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
       Context.Service.Shape<typeof CommentsRepository>["listForSite"]
     >
   ) => CommentsRepository.use((service) => service.listForSite(...args));
+  static readonly listForExistingSite = (
+    ...args: Parameters<
+      Context.Service.Shape<typeof CommentsRepository>["listForExistingSite"]
+    >
+  ) =>
+    CommentsRepository.use((service) => service.listForExistingSite(...args));
   static readonly listForWorkItem = (
     ...args: Parameters<
       Context.Service.Shape<typeof CommentsRepository>["listForWorkItem"]
