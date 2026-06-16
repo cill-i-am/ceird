@@ -1462,17 +1462,22 @@ export function createJobsWorkspaceReadModelHealth({
       snapshots: healthSources.map((health) => health.current),
       subscriptionName,
     });
+  let snapshot = computeCurrent();
+  const refreshSnapshot = () => {
+    snapshot = computeCurrent();
+    return snapshot;
+  };
 
   return {
     get current() {
-      return computeCurrent();
+      return snapshot;
     },
-    markFallbackActive: () => computeCurrent(),
-    markReady: () => computeCurrent(),
-    markUnavailable: () => computeCurrent(),
+    markFallbackActive: () => refreshSnapshot(),
+    markReady: () => refreshSnapshot(),
+    markUnavailable: () => refreshSnapshot(),
     subscribe: (listener) => {
       const unsubscribes = healthSources.map((health) =>
-        health.subscribe(() => listener(computeCurrent()))
+        health.subscribe(() => listener(refreshSnapshot()))
       );
 
       return () => {

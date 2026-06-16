@@ -29,6 +29,7 @@ import {
   createJobsWorkspaceCommandRunner,
   createJobsWorkspaceCommentCommandRunner,
   createJobsWorkspaceReadModelContracts,
+  createJobsWorkspaceReadModelHealth,
   deriveJobsWorkspaceDetail,
   deriveJobsWorkspaceVisibleRows,
   createJobsListSeed,
@@ -592,6 +593,70 @@ describe("jobs data plane", () => {
       status: "unavailable",
       subscriptionName: "jobs-workspace-list",
     });
+  });
+
+  it("keeps the Jobs workspace read model health snapshot stable between source updates", () => {
+    const jobsHealth = createDataPlaneCollectionHealth({
+      collection: "jobs",
+      collectionId: "jobs",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "jobs",
+    });
+    const labelsHealth = createDataPlaneCollectionHealth({
+      collection: "labels",
+      collectionId: "labels",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "labels",
+    });
+    const assignmentsHealth = createDataPlaneCollectionHealth({
+      collection: "job-label-assignments",
+      collectionId: "job-label-assignments",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "work-item-labels",
+    });
+    const sitesHealth = createDataPlaneCollectionHealth({
+      collection: "job-sites",
+      collectionId: "job-sites",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "sites",
+    });
+    const contactsHealth = createDataPlaneCollectionHealth({
+      collection: "job-contacts",
+      collectionId: "job-contacts",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "contacts",
+    });
+    const readModelHealth = createJobsWorkspaceReadModelHealth({
+      collectionHealth: {
+        contactSummaries: contactsHealth,
+        jobLabelAssignments: assignmentsHealth,
+        jobs: jobsHealth,
+        labels: labelsHealth,
+        siteSummaries: sitesHealth,
+      },
+      collectionId: "jobs-workspace-list",
+      subscriptionName: "jobs-workspace-list",
+    });
+    const listener =
+      vi.fn<(snapshot: ReturnType<typeof readModelHealth.markReady>) => void>();
+
+    expect(readModelHealth.current).toBe(readModelHealth.current);
+
+    const unsubscribe = readModelHealth.subscribe(listener);
+    const initial = readModelHealth.current;
+    jobsHealth.markReady();
+    const afterJobsReady = readModelHealth.current;
+
+    expect(afterJobsReady).not.toBe(initial);
+    expect(readModelHealth.current).toBe(afterJobsReady);
+    expect(listener).toHaveBeenLastCalledWith(afterJobsReady);
+
+    unsubscribe();
   });
 
   it("keeps the Jobs workspace read model connecting until every required collection is ready", () => {
