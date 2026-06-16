@@ -8,6 +8,7 @@ import type {
   ProductActorId,
 } from "@ceird/identity-core";
 import type { WorkItemIdType } from "@ceird/jobs-core";
+import type { LabelIdType } from "@ceird/labels-core";
 import type { SiteIdType } from "@ceird/sites-core";
 import type { HotkeyCallback, UseHotkeyOptions } from "@tanstack/react-hotkeys";
 /* oxlint-disable vitest/prefer-import-in-mock */
@@ -87,6 +88,7 @@ describe("organization activity page", () => {
         <OrganizationActivityPage
           actorsState={makeCollectionState("product-activity-actors", actors)}
           eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
           search={{}}
           onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
         />
@@ -119,6 +121,7 @@ describe("organization activity page", () => {
         <OrganizationActivityPage
           actorsState={makeCollectionState("product-activity-actors", actors)}
           eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
           search={{}}
           onSearchChange={onSearchChange}
         />
@@ -135,6 +138,7 @@ describe("organization activity page", () => {
         <OrganizationActivityPage
           actorsState={makeCollectionState("product-activity-actors", actors)}
           eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
           search={{ eventType: "site.updated", targetType: "site" }}
           onSearchChange={onSearchChange}
         />
@@ -153,6 +157,7 @@ describe("organization activity page", () => {
         <OrganizationActivityPage
           actorsState={makeCollectionState("product-activity-actors", actors)}
           eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
           search={{ status: "failed" }}
           onSearchChange={onSearchChange}
         />
@@ -180,6 +185,7 @@ describe("organization activity page", () => {
           <OrganizationActivityPage
             actorsState={makeCollectionState("product-activity-actors", actors)}
             eventsState={eventsState}
+            currentOrganizationRole="member"
             search={{}}
             state={state}
             onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
@@ -250,35 +256,27 @@ describe("organization activity page", () => {
         <OrganizationActivityPage
           actorsState={makeCollectionState("product-activity-actors", actors)}
           eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
           search={{ eventType: "job.created" }}
           onSearchChange={onSearchChange}
         />
       );
 
       await screen.findByText("Boiler inspection created");
-      const getHotkeyCallback = (id: string) => {
-        const call = mockedUseAppHotkey.mock.calls
-          .toReversed()
-          .find(([hotkeyId]) => hotkeyId === id);
 
-        expect(call).toBeDefined();
-
-        return call?.[1] as () => void;
-      };
-
-      act(() => getHotkeyCallback("activitySearch")());
+      act(() => getLatestHotkeyCallback("activitySearch")());
       expect(screen.getByLabelText("Event type")).toHaveFocus();
 
-      act(() => getHotkeyCallback("activityClearFilters")());
+      act(() => getLatestHotkeyCallback("activityClearFilters")());
       expect(onSearchChange).toHaveBeenCalledWith({});
 
-      act(() => getHotkeyCallback("activityNextRow")());
+      act(() => getLatestHotkeyCallback("activityNextRow")());
       await waitFor(() =>
         expect(
           screen.getByRole("link", { name: "Open Boiler inspection created" })
         ).toHaveFocus()
       );
-      act(() => getHotkeyCallback("activityOpenSelectedRow")());
+      act(() => getLatestHotkeyCallback("activityOpenSelectedRow")());
       expect(mockedNavigate).toHaveBeenCalledWith({
         search: {
           sheets: [
@@ -289,6 +287,119 @@ describe("organization activity page", () => {
           ],
         },
         to: "/jobs",
+      });
+    }
+  );
+
+  it(
+    "opens site rows to the site detail workspace sheet",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const { OrganizationActivityPage } =
+        await import("./organization-activity-page");
+
+      render(
+        <OrganizationActivityPage
+          actorsState={makeCollectionState("product-activity-actors", actors)}
+          eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
+          search={{ eventType: "site.updated" }}
+          onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
+        />
+      );
+
+      const updatedSiteRow = await screen.findByText("Gate access changed");
+      expect(updatedSiteRow).toBeVisible();
+      expect(
+        screen.getByRole("link", { name: "Open Gate access changed" })
+      ).toHaveAttribute("href", "/sites");
+
+      act(() => getLatestHotkeyCallback("activityOpenSelectedRow")());
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        search: {
+          sheets: [
+            {
+              kind: "site.detail",
+              siteId: "55555555-5555-4555-8555-555555555555",
+            },
+          ],
+        },
+        to: "/sites",
+      });
+    }
+  );
+
+  it(
+    "does not expose admin-only label navigation to ordinary members",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const { OrganizationActivityPage } =
+        await import("./organization-activity-page");
+
+      render(
+        <OrganizationActivityPage
+          actorsState={makeCollectionState("product-activity-actors", actors)}
+          eventsState={makeCollectionState(
+            "activity-events",
+            labelActivityEvents
+          )}
+          currentOrganizationRole="member"
+          search={{}}
+          onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
+        />
+      );
+
+      const memberLabelRow = await screen.findByText("Safety label changed");
+      expect(memberLabelRow).toBeVisible();
+      expect(
+        screen.queryByRole("link", { name: "Open Safety label changed" })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: "No supported destination for Safety label changed",
+        })
+      ).toBeDisabled();
+
+      act(() => getLatestHotkeyCallback("activityOpenSelectedRow")());
+      expect(mockedNavigate).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
+    "allows label rows to open label settings for administrators",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const { OrganizationActivityPage } =
+        await import("./organization-activity-page");
+
+      render(
+        <OrganizationActivityPage
+          actorsState={makeCollectionState("product-activity-actors", actors)}
+          eventsState={makeCollectionState(
+            "activity-events",
+            labelActivityEvents
+          )}
+          currentOrganizationRole="admin"
+          search={{}}
+          onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
+        />
+      );
+
+      const adminLabelRow = await screen.findByText("Safety label changed");
+      expect(adminLabelRow).toBeVisible();
+      expect(
+        screen.getByRole("link", { name: "Open Safety label changed" })
+      ).toHaveAttribute("href", "/organization/settings/labels");
+
+      act(() => getLatestHotkeyCallback("activityOpenSelectedRow")());
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/organization/settings/labels",
       });
     }
   );
@@ -345,6 +456,36 @@ const activityEvents = [
     targetType: "site",
   },
 ] satisfies readonly ProductActivityEvent[];
+
+const labelActivityEvents = [
+  {
+    actorId: jordanActorId,
+    createdAt: "2026-04-30T11:30:00.000Z",
+    display: {
+      detail: "Safety label color and description were updated.",
+      summary: "Safety label changed",
+    },
+    eventType: "label.updated",
+    id: "33333333-3333-4333-8333-333333333333" as ActivityEventIdType,
+    organizationId,
+    retainedUntil: "2026-05-30T11:30:00.000Z",
+    sourceId: "66666666-6666-4666-8666-666666666666",
+    sourceType: "label",
+    status: "synced",
+    targetId: "66666666-6666-4666-8666-666666666666" as LabelIdType,
+    targetType: "label",
+  },
+] satisfies readonly ProductActivityEvent[];
+
+function getLatestHotkeyCallback(id: HotkeyId) {
+  const call = mockedUseAppHotkey.mock.calls
+    .toReversed()
+    .find(([hotkeyId]) => hotkeyId === id);
+
+  expect(call).toBeDefined();
+
+  return call?.[1] as () => void;
+}
 
 function makeCollectionState<Item extends object>(
   collection: "activity-events" | "product-activity-actors",

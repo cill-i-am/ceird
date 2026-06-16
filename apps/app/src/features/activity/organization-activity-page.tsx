@@ -11,7 +11,8 @@ import type {
   ActivityEventType,
   ProductActivityEvent,
 } from "@ceird/activity-core";
-import type { ProductActor } from "@ceird/identity-core";
+import { isAdministrativeOrganizationRole } from "@ceird/identity-core";
+import type { OrganizationRole, ProductActor } from "@ceird/identity-core";
 import type { WorkItemIdType } from "@ceird/jobs-core";
 import type { SiteIdType } from "@ceird/sites-core";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -87,6 +88,7 @@ export interface ActivityCollectionStateLike<Item extends object> {
 
 export interface OrganizationActivityPageProps {
   readonly actorsState?: ActivityCollectionStateLike<ProductActor> | undefined;
+  readonly currentOrganizationRole?: OrganizationRole | undefined;
   readonly eventsState?:
     | ActivityCollectionStateLike<ProductActivityEvent>
     | undefined;
@@ -136,6 +138,7 @@ const STATUS_LABELS = {
 
 export function OrganizationActivityPage({
   actorsState,
+  currentOrganizationRole,
   eventsState,
   onSearchChange,
   search,
@@ -174,6 +177,9 @@ export function OrganizationActivityPage({
   const rowRefs = useRef<(HTMLAnchorElement | HTMLButtonElement | null)[]>([]);
   const canShowRows =
     feedState === "ready" || feedState === "degraded" || feedState === "stale";
+  const canNavigateLabels =
+    currentOrganizationRole !== undefined &&
+    isAdministrativeOrganizationRole(currentOrganizationRole);
 
   useEffect(() => {
     setSelectedRowIndex((current) =>
@@ -224,7 +230,7 @@ export function OrganizationActivityPage({
       const selectedRow = rows[selectedRowIndex];
 
       if (selectedRow) {
-        openActivityRow(selectedRow, navigate);
+        openActivityRow(selectedRow, navigate, { canNavigateLabels });
       }
     },
     { enabled: rows.length > 0 }
@@ -281,11 +287,11 @@ export function OrganizationActivityPage({
           ) : null}
           <ActivityFeedStateView
             canShowRows={canShowRows}
+            canNavigateLabels={canNavigateLabels}
             hasFilters={hasFilters}
             rows={rows}
             selectedRowIndex={selectedRowIndex}
             state={feedState}
-            onOpenRow={(row) => openActivityRow(row, navigate)}
             setRowRef={(index, node) => {
               rowRefs.current[index] = node;
             }}
@@ -403,8 +409,8 @@ function ActivityFilters({
 
 function ActivityFeedStateView({
   canShowRows,
+  canNavigateLabels,
   hasFilters,
-  onOpenRow,
   rows,
   selectedRowIndex,
   setRowRef,
@@ -412,8 +418,8 @@ function ActivityFeedStateView({
   state,
 }: {
   readonly canShowRows: boolean;
+  readonly canNavigateLabels: boolean;
   readonly hasFilters: boolean;
-  readonly onOpenRow: (row: ActivityFeedRow) => void;
   readonly rows: readonly ActivityFeedRow[];
   readonly selectedRowIndex: number;
   readonly setRowRef: (
@@ -450,10 +456,10 @@ function ActivityFeedStateView({
           {rows.map((row, index) => (
             <ActivityRow
               key={row.event.id}
+              canNavigateLabels={canNavigateLabels}
               row={row}
               selected={index === selectedRowIndex}
               setActionRef={(node) => setRowRef(index, node)}
-              onOpen={() => onOpenRow(row)}
               onSelect={() => setSelectedRowIndex(index)}
             />
           ))}
@@ -510,13 +516,13 @@ function ActivityFeedStateView({
 }
 
 function ActivityRow({
-  onOpen,
+  canNavigateLabels,
   onSelect,
   row,
   selected,
   setActionRef,
 }: {
-  readonly onOpen: () => void;
+  readonly canNavigateLabels: boolean;
   readonly onSelect: () => void;
   readonly row: ActivityFeedRow;
   readonly selected: boolean;
@@ -525,7 +531,7 @@ function ActivityRow({
   ) => void;
 }) {
   const { actor, event } = row;
-  const link = getActivityTargetLink(event);
+  const link = getActivityTargetLink(event, { canNavigateLabels });
 
   return (
     <li
@@ -567,8 +573,8 @@ function ActivityRow({
           size="icon-sm"
           type="button"
           variant="ghost"
-          aria-label={`Activity row for ${event.display.summary}`}
-          onClick={onOpen}
+          aria-label={`No supported destination for ${event.display.summary}`}
+          disabled
         >
           <ExternalLink aria-hidden="true" />
         </Button>
@@ -947,7 +953,8 @@ function buildActiveActivityFilterLabels(search: ActivitySearch) {
 }
 
 function getActivityTargetLink(
-  event: ProductActivityEvent
+  event: ProductActivityEvent,
+  options: { readonly canNavigateLabels: boolean }
 ): ActivityTargetLink | null {
   if (event.targetType === "job") {
     return {
@@ -966,6 +973,10 @@ function getActivityTargetLink(
   }
 
   if (event.targetType === "label") {
+    if (!options.canNavigateLabels) {
+      return null;
+    }
+
     return {
       kind: "label",
       label: event.display.route?.label ?? event.display.summary,
@@ -985,9 +996,10 @@ function getActivityTargetLink(
 
 function openActivityRow(
   row: ActivityFeedRow,
-  navigate: ReturnType<typeof useNavigate>
+  navigate: ReturnType<typeof useNavigate>,
+  options: { readonly canNavigateLabels: boolean }
 ) {
-  const link = getActivityTargetLink(row.event);
+  const link = getActivityTargetLink(row.event, options);
 
   if (!link) {
     return;

@@ -37,6 +37,7 @@ export const Route = createFileRoute("/_app/_org/activity")({
 function ActivityRoute() {
   const dataPlaneSession = useDataPlaneSession();
   const search = Route.useSearch();
+  const { currentOrganizationRole } = Route.useRouteContext();
   const navigate = useNavigate({ from: "/activity" });
 
   return (
@@ -45,6 +46,7 @@ function ActivityRoute() {
         scope: dataPlaneSession.scope,
         session: dataPlaneSession,
       })}
+      currentOrganizationRole={currentOrganizationRole}
       eventsState={getOrCreateActivityEventsCollectionState({
         scope: dataPlaneSession.scope,
         session: dataPlaneSession,
