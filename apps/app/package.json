@@ -27,6 +27,7 @@
     "@better-auth/oauth-provider": "1.6.16",
     "@ceird/activity-core": "workspace:*",
     "@ceird/agents-core": "workspace:*",
+    "@ceird/comments-core": "workspace:*",
     "@ceird/domain-core": "workspace:*",
     "@ceird/identity-core": "workspace:*",
     "@ceird/jobs-core": "workspace:^",

@@ -21,6 +21,7 @@ export const DATA_PLANE_COLLECTION_NAMES = [
   "product-member-actor-summaries",
   "sites",
   "site-active-job-summaries",
+  "site-comment-bodies",
   "site-comments",
   "site-label-assignments",
   "site-related-jobs",

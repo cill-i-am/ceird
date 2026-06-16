@@ -155,16 +155,19 @@ marked as a preview route in the UI, and fails closed with explicit
 unavailable/degraded states instead of reading the old Sites Query Collection
 path. Its first live slice renders the Sites workspace list/detail from a
 browser-safe Electric read-model module, joining site rows, shared labels,
-site-label assignments, related jobs, and the domain-owned active-job summary
-projection in the feature data-plane layer. Search text, filter, sort, and the
-selected detail row are route-backed search state with local selected-site and
-recent-search restoration as convenience hooks; future saved views should attach
-to those route search fields instead of adding parallel view state.
-Site create, site update, and label assignment/removal are domain-backed
-commands exposed by the same feature data-plane module. The route shows
-pending, synced, and failed write feedback while waiting for Electric collection
-observation, and registers create/save/cancel shortcuts through the shared
-hotkey layer instead of local key listeners.
+site-label assignments, related jobs, domain-owned active-job summaries, site
+comment edges, shared comment bodies, and product-safe actors in the feature
+data-plane layer. Comment author display is derived from
+`product-activity-actors`; Better Auth user/member tables stay outside the
+browser read graph. Search text, filter, sort, and the selected detail row are
+route-backed search state with local selected-site and recent-search restoration
+as convenience hooks; future saved views should attach to those route search
+fields instead of adding parallel view state.
+Site create, site update, label assignment/removal, and add-comment writes are
+domain-backed commands exposed by the same feature data-plane module. The route
+shows pending, synced, and failed write feedback while waiting for Electric
+collection observation, and registers create/save/cancel/comment shortcuts
+through the shared hotkey layer instead of local key listeners.
 
 The Electric-native Jobs workspace uses the Jobs feature data-plane command
 runner for create, status, priority/update, reopen, assignee clearing, and job
@@ -261,7 +264,7 @@ the package-local fallback and `local` when no Alchemy metadata is available.
 | `features/jobs`            | Jobs list, create flow, detail drawer/sheet, state effects, API client bridge, saved views, location display, maps, collaborators, labels, comments, and visits.                                                                                                                                                                                                                                                                                                                                                                                       |
 | `features/jobs-workspace`  | Electric-native Jobs workspace preview route, live list controls, URL-backed detail state, realtime comments with product-safe actors, health/permission states, saved-view-ready route state, domain-backed job/label commands with Electric row-observation feedback plus preserved server txid metadata, comment commands with Electric body/edge observation feedback, and shortcut affordances. It consumes feature-owned data-plane helpers and must not instantiate raw Electric streams or raw TanStack DB collection APIs in route/view code. |
 | `features/sites`           | Sites list, site create flow, detail sheet, and site API state. The first Sites index refresh intentionally uses only supported site fields: name, address, and map readiness. Status, labels, lead, open job counts, saved views, updated timestamps, archive state, and bulk selection are product follow-ups, not placeholder UI.                                                                                                                                                                                                                   |
-| `features/sites-workspace` | Electric-native Sites workspace preview route, browser-safe Electric read-model contracts, live list/detail derivation, domain-backed create/update/label commands with Electric row-observation feedback plus preserved server txid metadata, permission/unavailable/degraded states, saved search/detail restoration hooks, and shortcut affordances. Route/view code consumes the feature data-plane module rather than constructing raw Electric streams directly.                                                                                 |
+| `features/sites-workspace` | Electric-native Sites workspace preview route, browser-safe Electric read-model contracts, live list/detail/comment derivation, realtime comments with product-safe actors, domain-backed create/update/label/comment commands with Electric row-observation feedback plus preserved server txid metadata where available, permission/unavailable/degraded states, saved search/detail restoration hooks, and shortcut affordances. Route/view code consumes the feature data-plane module rather than constructing raw Electric streams directly.     |
 | `features/activity`        | Global organization Activity route, Electric-backed activity event and product-safe actor read-model contracts, local feed filters, health states, and activity row navigation.                                                                                                                                                                                                                                                                                                                                                                        |
 | `features/settings`        | User settings page schemas, search, profile/email/password forms, account security sessions, and 2FA settings UI.                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `features/command-bar`     | Command palette UI and global app actions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |

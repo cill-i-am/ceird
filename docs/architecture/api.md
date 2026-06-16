@@ -645,9 +645,13 @@ clients join comments to actors through `product_activity_actors`; Better Auth
 user/member tables remain private to the domain actor resolver and projection
 maintenance path.
 
-Site comments are internal-only at the service authorization layer for now.
-Site `accessNotes` remain part of the site record and are not deprecated by the
-comments API.
+Site comment writes go through `SitesService.addComment`. The service creates
+the shared comment row and `site_comments` edge in the domain transaction,
+returns a DTO with the same product-safe actor projection, and records a
+`site.comment_created` event so the global Activity read model remains
+compatible with site-scoped comments. Site comments are internal-only at the
+service authorization layer for now. Site `accessNotes` remain part of the site
+record and are not deprecated by the comments API.
 
 ## Jobs API Endpoints
 

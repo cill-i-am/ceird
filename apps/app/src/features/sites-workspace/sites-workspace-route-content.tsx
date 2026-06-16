@@ -15,6 +15,7 @@ import {
   LeftToRightListBulletIcon,
   Location01Icon,
   MapsSquare01Icon,
+  Message01Icon,
   PencilEdit02Icon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
@@ -53,7 +54,12 @@ import {
 } from "./sites-workspace-data-plane";
 import type {
   SiteActiveJobSummaryElectricRow,
+  SiteCommentBodyRow,
+  SiteCommentEdgeRow,
+  SitesWorkspaceCommentCommandResult,
+  SitesWorkspaceDetailCommentItem,
   SiteLabelAssignmentElectricRow,
+  SitesWorkspaceProductActorRow,
   SitesWorkspaceCommandCollections,
   SitesWorkspaceCommandResult,
   SitesWorkspaceVisibleRow,
@@ -86,8 +92,24 @@ type WorkspaceWriteStatus =
       readonly message: string;
       readonly siteId?: string | undefined;
     };
+type CommentWriteStatus =
+  | { readonly kind: "idle" }
+  | { readonly kind: "pending"; readonly message: string }
+  | {
+      readonly kind: "synced";
+      readonly message: string;
+      readonly observation: SitesWorkspaceCommentCommandResult["electricObservation"];
+    }
+  | {
+      readonly error: string;
+      readonly kind: "failed";
+      readonly message: string;
+    };
 
 const IDLE_WRITE_STATUS = { kind: "idle" } satisfies WorkspaceWriteStatus;
+const IDLE_COMMENT_WRITE_STATUS = {
+  kind: "idle",
+} satisfies CommentWriteStatus;
 const EMPTY_COMMAND_ACTIONS: readonly CommandAction[] = [];
 const EMPTY_COLLECTION_ITEMS: readonly never[] = [];
 
@@ -197,17 +219,24 @@ function SitesWorkspaceShell({
   const readModel = useSitesWorkspaceReadModel();
   const createFormRef = React.useRef<HTMLFormElement>(null);
   const editFormRef = React.useRef<HTMLFormElement>(null);
+  const commentFormRef = React.useRef<HTMLFormElement>(null);
+  const commentInputRef = React.useRef<HTMLTextAreaElement>(null);
   const query = workspaceSearch.query ?? "";
   const filter = workspaceSearch.filter ?? "all";
   const sort = workspaceSearch.sort ?? "name";
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [commentDraft, setCommentDraft] = React.useState("");
+  const [commentWriteStatus, setCommentWriteStatus] =
+    React.useState<CommentWriteStatus>(IDLE_COMMENT_WRITE_STATUS);
   const [editingSiteId, setEditingSiteId] = React.useState<string>();
   const [writeStatus, setWriteStatus] =
     React.useState<WorkspaceWriteStatus>(IDLE_WRITE_STATUS);
   const [restoredSelectedSiteId, setRestoredSelectedSiteId] =
     useRestoredSelectedSiteId();
-  const selectedSiteId =
-    workspaceSearch.selectedSiteId ?? restoredSelectedSiteId;
+  const selectedSiteId = resolveSelectedSiteId(
+    workspaceSearch.selectedSiteId,
+    restoredSelectedSiteId
+  );
   const recentSearches = useRecentSitesSearches(query);
   const setQuery = React.useCallback(
     (nextQuery: string) =>
@@ -255,10 +284,13 @@ function SitesWorkspaceShell({
 
     return deriveSitesWorkspaceVisibleRows({
       activeJobSummaries: readModel.activeJobSummaries,
+      actors: readModel.actors,
+      commentBodies: readModel.commentBodies,
       filter,
       labels: readModel.labels,
       query,
       relatedJobs: readModel.relatedJobs,
+      siteCommentEdges: readModel.siteCommentEdges,
       siteLabelAssignments: readModel.siteLabelAssignments,
       sites: readModel.sites,
       sort,
@@ -268,8 +300,11 @@ function SitesWorkspaceShell({
     filter,
     query,
     readModel.activeJobSummaries,
+    readModel.actors,
+    readModel.commentBodies,
     readModel.labels,
     readModel.relatedJobs,
+    readModel.siteCommentEdges,
     readModel.siteLabelAssignments,
     readModel.sites,
     sort,
@@ -280,7 +315,13 @@ function SitesWorkspaceShell({
   );
   const formOpen = createOpen || editingSiteId !== undefined;
   const writePending = writeStatus.kind === "pending";
+  const commentPending = commentWriteStatus.kind === "pending";
   const formActionsEnabled = formOpen && !writePending;
+  const commentShortcutsEnabled = areSiteCommentShortcutsEnabled({
+    formOpen,
+    selectedRow,
+    status,
+  });
 
   React.useEffect(
     () => () => {
@@ -288,6 +329,10 @@ function SitesWorkspaceShell({
     },
     []
   );
+  React.useEffect(() => {
+    setCommentDraft("");
+    setCommentWriteStatus(IDLE_COMMENT_WRITE_STATUS);
+  }, [selectedRow?.site.id]);
 
   const beginCreate = React.useCallback(() => {
     if (writePending) {
@@ -318,6 +363,15 @@ function SitesWorkspaceShell({
 
     editFormRef.current?.requestSubmit();
   }, [createOpen, writePending]);
+  const cancelComment = React.useCallback(() => {
+    if (commentPending) {
+      return;
+    }
+
+    setCommentDraft("");
+    setCommentWriteStatus(IDLE_COMMENT_WRITE_STATUS);
+    commentInputRef.current?.focus();
+  }, [commentPending]);
 
   React.useEffect(() => {
     if (visibleRows.length === 0) {
@@ -362,6 +416,36 @@ function SitesWorkspaceShell({
   });
   useAppHotkey("sitesWorkspaceCancel", cancelForm, {
     enabled: formActionsEnabled,
+  });
+  useAppHotkey(
+    "sitesWorkspaceComment",
+    () => {
+      commentInputRef.current?.focus();
+    },
+    {
+      conflictBehavior: "allow",
+      enabled: commentShortcutsEnabled,
+    }
+  );
+  useAppHotkey(
+    "sitesWorkspaceSubmitComment",
+    () => {
+      commentFormRef.current?.requestSubmit();
+    },
+    {
+      conflictBehavior: "allow",
+      enabled:
+        commentShortcutsEnabled &&
+        commentDraft.trim().length > 0 &&
+        !commentPending,
+    }
+  );
+  useAppHotkey("sitesWorkspaceCancelComment", cancelComment, {
+    conflictBehavior: "allow",
+    enabled:
+      commentShortcutsEnabled &&
+      commentDraft.trim().length > 0 &&
+      !commentPending,
   });
 
   const submitCreate = React.useCallback(
@@ -522,6 +606,55 @@ function SitesWorkspaceShell({
     },
     [commandRunner, selectedRow, writePending]
   );
+  const submitComment = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+
+      if (!selectedRow) {
+        return;
+      }
+
+      const body = commentDraft.trim();
+      if (body.length === 0) {
+        setCommentWriteStatus({
+          error: "Comment text is required.",
+          kind: "failed",
+          message: "Comment failed",
+        });
+        return;
+      }
+
+      setCommentWriteStatus({
+        kind: "pending",
+        message: "Adding site comment and waiting for realtime sync",
+      });
+      const exit = await commandRunner.addSiteComment(selectedRow.site.id, {
+        body,
+      });
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      if (Exit.isSuccess(exit)) {
+        setCommentDraft("");
+        setCommentWriteStatus({
+          kind: "synced",
+          message: "Comment synced",
+          observation: exit.value.electricObservation,
+        });
+        window.setTimeout(() => commentInputRef.current?.focus(), 0);
+        return;
+      }
+
+      setCommentWriteStatus({
+        error: getCommentWriteErrorMessage(exit.cause),
+        kind: "failed",
+        message: "Comment failed",
+      });
+    },
+    [commandRunner, commentDraft, selectedRow]
+  );
 
   const commandActions = React.useMemo<readonly CommandAction[]>(() => {
     if (status !== "ready" || writePending) {
@@ -565,6 +698,18 @@ function SitesWorkspaceShell({
         : [
             {
               group: "Current page",
+              icon: Message01Icon,
+              id: "sites-workspace-focus-comment",
+              priority: 72,
+              run: () => {
+                commentInputRef.current?.focus();
+              },
+              scope: "route",
+              shortcut: HOTKEYS.sitesWorkspaceComment,
+              title: `Comment on ${selectedRow.site.name}`,
+            } satisfies CommandAction,
+            {
+              group: "Current page",
               icon: PencilEdit02Icon,
               id: "sites-workspace-edit-site",
               priority: 70,
@@ -577,6 +722,7 @@ function SitesWorkspaceShell({
     ];
   }, [
     beginCreate,
+    commentInputRef,
     readModel.labels,
     selectedRow,
     status,
@@ -716,6 +862,11 @@ function SitesWorkspaceShell({
         </div>
         <SiteDetailPanel
           allLabels={readModel.labels}
+          commentDraft={commentDraft}
+          commentFormRef={commentFormRef}
+          commentInputRef={commentInputRef}
+          commentPending={commentPending}
+          commentWriteStatus={commentWriteStatus}
           editing={editingSiteId === selectedRow?.site.id}
           editFormRef={editFormRef}
           pending={writeStatus.kind === "pending"}
@@ -724,12 +875,15 @@ function SitesWorkspaceShell({
           totalRows={visibleRows.length}
           writeStatus={writeStatus}
           onCancelEdit={cancelForm}
+          onCancelComment={cancelComment}
+          onCommentDraftChange={setCommentDraft}
           onEdit={() => {
             if (selectedRow) {
               setEditingSiteId(selectedRow.site.id);
               setCreateOpen(false);
             }
           }}
+          onSubmitComment={(event) => void submitComment(event)}
           onSubmitEdit={submitUpdate}
           onToggleLabel={toggleLabel}
         />
@@ -761,6 +915,9 @@ function useSitesWorkspaceReadModel() {
       sitesState.activeJobSummaries.health,
       sitesState.relatedJobs.health,
       sitesState.labels.health,
+      sitesState.actors.health,
+      sitesState.siteCommentEdges.health,
+      sitesState.commentBodies.health,
     ],
     [sitesState]
   );
@@ -768,12 +925,21 @@ function useSitesWorkspaceReadModel() {
   const collections = React.useMemo(
     () =>
       ({
+        commentBodies: sitesState.commentBodies
+          .collection as unknown as SitesWorkspaceCommandCollections["commentBodies"],
+        commentEdges: sitesState.siteCommentEdges
+          .collection as unknown as SitesWorkspaceCommandCollections["commentEdges"],
         siteLabelAssignments: sitesState.siteLabelAssignments
           .collection as unknown as SitesWorkspaceCommandCollections["siteLabelAssignments"],
         sites: sitesState.sites
           .collection as unknown as SitesWorkspaceCommandCollections["sites"],
       }) satisfies SitesWorkspaceCommandCollections,
-    [sitesState.siteLabelAssignments.collection, sitesState.sites.collection]
+    [
+      sitesState.commentBodies.collection,
+      sitesState.siteCommentEdges.collection,
+      sitesState.siteLabelAssignments.collection,
+      sitesState.sites.collection,
+    ]
   );
 
   return {
@@ -781,6 +947,14 @@ function useSitesWorkspaceReadModel() {
       sitesState.activeJobSummaries.collection,
       EMPTY_COLLECTION_ITEMS
     ) as unknown as readonly SiteActiveJobSummaryElectricRow[],
+    actors: useHydratedCollectionItems(
+      sitesState.actors.collection,
+      EMPTY_COLLECTION_ITEMS
+    ) as unknown as readonly SitesWorkspaceProductActorRow[],
+    commentBodies: useHydratedCollectionItems(
+      sitesState.commentBodies.collection,
+      EMPTY_COLLECTION_ITEMS
+    ) as unknown as readonly SiteCommentBodyRow[],
     collections,
     health,
     labels: useHydratedCollectionItems(
@@ -797,6 +971,10 @@ function useSitesWorkspaceReadModel() {
       sitesState.siteLabelAssignments.collection,
       EMPTY_COLLECTION_ITEMS
     ) as unknown as readonly SiteLabelAssignmentElectricRow[],
+    siteCommentEdges: useHydratedCollectionItems(
+      sitesState.siteCommentEdges.collection,
+      EMPTY_COLLECTION_ITEMS
+    ) as unknown as readonly SiteCommentEdgeRow[],
     sites: useHydratedCollectionItems(
       sitesState.sites.collection,
       EMPTY_COLLECTION_ITEMS
@@ -862,6 +1040,25 @@ function useRestoredSelectedSiteId() {
   );
 
   return [selectedSiteId, setSelectedSiteId] as const;
+}
+
+function resolveSelectedSiteId(
+  routeSelectedSiteId: string | undefined,
+  restoredSelectedSiteId: string | undefined
+) {
+  return routeSelectedSiteId ?? restoredSelectedSiteId;
+}
+
+function areSiteCommentShortcutsEnabled({
+  formOpen,
+  selectedRow,
+  status,
+}: {
+  readonly formOpen: boolean;
+  readonly selectedRow: SitesWorkspaceVisibleRow | undefined;
+  readonly status: SyncPresentationStatus;
+}) {
+  return status === "ready" && selectedRow !== undefined && !formOpen;
 }
 
 function useRecentSitesSearches(query: string) {
@@ -1296,8 +1493,54 @@ function MutationInlineStatus({
   );
 }
 
+function CommentWriteStatusAlert({
+  status,
+}: {
+  readonly status: CommentWriteStatus;
+}) {
+  if (status.kind === "idle") {
+    return null;
+  }
+
+  if (status.kind === "failed") {
+    return (
+      <Alert className="mt-3" liveRegion="polite" variant="destructive">
+        <HugeiconsIcon aria-hidden icon={Alert02Icon} strokeWidth={2} />
+        <AlertTitle>{status.message}</AlertTitle>
+        <AlertDescription>{status.error}</AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert className="mt-3" liveRegion="polite">
+      <HugeiconsIcon
+        aria-hidden
+        icon={
+          status.kind === "pending" ? Database01Icon : CheckmarkCircle02Icon
+        }
+        strokeWidth={2}
+      />
+      <AlertTitle>
+        {status.kind === "pending" ? "Comment pending" : "Comment synced"}
+      </AlertTitle>
+      <AlertDescription>
+        {status.message}
+        {status.kind === "synced"
+          ? ` (${formatCommentObservation(status.observation)})`
+          : ""}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 function SiteDetailPanel({
   allLabels,
+  commentDraft,
+  commentFormRef,
+  commentInputRef,
+  commentPending,
+  commentWriteStatus,
   editing,
   editFormRef,
   pending,
@@ -1305,16 +1548,27 @@ function SiteDetailPanel({
   status,
   totalRows,
   writeStatus,
+  onCancelComment,
   onCancelEdit,
+  onCommentDraftChange,
   onEdit,
+  onSubmitComment,
   onSubmitEdit,
   onToggleLabel,
 }: {
   readonly allLabels: readonly Label[];
+  readonly commentDraft: string;
+  readonly commentFormRef: React.RefObject<HTMLFormElement | null>;
+  readonly commentInputRef: React.RefObject<HTMLTextAreaElement | null>;
+  readonly commentPending: boolean;
+  readonly commentWriteStatus: CommentWriteStatus;
   readonly editing: boolean;
   readonly editFormRef: React.RefObject<HTMLFormElement | null>;
+  readonly onCancelComment: () => void;
   readonly onCancelEdit: () => void;
+  readonly onCommentDraftChange: (draft: string) => void;
   readonly onEdit: () => void;
+  readonly onSubmitComment: (event: React.FormEvent<HTMLFormElement>) => void;
   readonly onSubmitEdit: (event: React.FormEvent<HTMLFormElement>) => void;
   readonly onToggleLabel: (label: Label, assigned: boolean) => void;
   readonly pending: boolean;
@@ -1492,7 +1746,134 @@ function SiteDetailPanel({
           </ul>
         )}
       </section>
+
+      <SiteCommentsSection
+        commentDraft={commentDraft}
+        commentInputRef={commentInputRef}
+        commentPending={commentPending}
+        commentWriteStatus={commentWriteStatus}
+        comments={row.comments}
+        formRef={commentFormRef}
+        siteName={row.site.name}
+        onCancelComment={onCancelComment}
+        onCommentDraftChange={onCommentDraftChange}
+        onSubmitComment={onSubmitComment}
+      />
     </aside>
+  );
+}
+
+function SiteCommentsSection({
+  commentDraft,
+  commentInputRef,
+  commentPending,
+  commentWriteStatus,
+  comments,
+  formRef,
+  onCancelComment,
+  onCommentDraftChange,
+  onSubmitComment,
+  siteName,
+}: {
+  readonly commentDraft: string;
+  readonly commentInputRef: React.RefObject<HTMLTextAreaElement | null>;
+  readonly commentPending: boolean;
+  readonly commentWriteStatus: CommentWriteStatus;
+  readonly comments: readonly SitesWorkspaceDetailCommentItem[];
+  readonly formRef: React.RefObject<HTMLFormElement | null>;
+  readonly onCancelComment: () => void;
+  readonly onCommentDraftChange: (draft: string) => void;
+  readonly onSubmitComment: (event: React.FormEvent<HTMLFormElement>) => void;
+  readonly siteName: string;
+}) {
+  return (
+    <section className="min-w-0 rounded-md border border-border/60 bg-background p-3">
+      <div className="flex items-center justify-between gap-3">
+        <SectionHeading icon={Message01Icon} title="Comments" />
+        <Badge variant="outline">{comments.length}</Badge>
+      </div>
+      <CommentWriteStatusAlert status={commentWriteStatus} />
+      {comments.length === 0 ? (
+        <p className="mt-3 text-sm/6 text-muted-foreground">
+          No comments are synced for this site yet.
+        </p>
+      ) : (
+        <ul aria-label="Synced site comments" className="mt-3 grid gap-2">
+          {comments.map(({ actor, comment }) => (
+            <li className="rounded-md bg-muted/50 p-3 text-sm" key={comment.id}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate font-medium">
+                  {actor ? formatProductActor(actor) : "Unknown actor"}
+                </span>
+                <time
+                  className="text-xs text-muted-foreground"
+                  dateTime={comment.createdAt}
+                >
+                  {formatShortDate(comment.createdAt)}
+                </time>
+              </div>
+              <p className="mt-2 text-sm/6 whitespace-pre-wrap">
+                {comment.body}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        ref={formRef}
+        aria-label={`Add comment to ${siteName}`}
+        className="mt-4 grid gap-2"
+        onSubmit={onSubmitComment}
+      >
+        <label className="sr-only" htmlFor="sites-workspace-comment">
+          Comment
+        </label>
+        <Textarea
+          ref={commentInputRef}
+          autoComplete="off"
+          disabled={commentPending}
+          id="sites-workspace-comment"
+          name="comment"
+          onChange={(event) => onCommentDraftChange(event.currentTarget.value)}
+          placeholder="Add a site update…"
+          value={commentDraft}
+        />
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            aria-label="Submit comment"
+            disabled={commentPending || commentDraft.trim().length === 0}
+            type="submit"
+          >
+            <HugeiconsIcon
+              aria-hidden
+              icon={CheckmarkCircle02Icon}
+              strokeWidth={2}
+            />
+            Submit
+            <ShortcutHint
+              decorative
+              hotkey={HOTKEYS.sitesWorkspaceSubmitComment.hotkey}
+              label={HOTKEYS.sitesWorkspaceSubmitComment.label}
+            />
+          </Button>
+          <Button
+            aria-label="Cancel comment"
+            disabled={commentPending || commentDraft.trim().length === 0}
+            onClick={onCancelComment}
+            type="button"
+            variant="outline"
+          >
+            <HugeiconsIcon aria-hidden icon={Cancel01Icon} strokeWidth={2} />
+            Cancel
+            <ShortcutHint
+              decorative
+              hotkey={HOTKEYS.sitesWorkspaceCancelComment.hotkey}
+              label={HOTKEYS.sitesWorkspaceCancelComment.label}
+            />
+          </Button>
+        </div>
+      </form>
+    </section>
   );
 }
 
@@ -1624,6 +2005,16 @@ function getWorkspaceWriteErrorMessage(cause: Cause.Cause<unknown>) {
   return "The site command could not be confirmed.";
 }
 
+function getCommentWriteErrorMessage(cause: Cause.Cause<unknown>) {
+  const error = Cause.squash(cause);
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "The site comment could not be confirmed by realtime sync.";
+}
+
 function getMutationInlineStatusLabel(
   status: Exclude<WorkspaceWriteStatus, { readonly kind: "idle" }>
 ) {
@@ -1649,6 +2040,32 @@ function formatWorkspaceWriteObservation(
   }
 
   return `${collection} observed in live data after server txid ${status.serverTxid}`;
+}
+
+function formatProductActor(actor: SitesWorkspaceProductActorRow): string {
+  return actor.displayDetail
+    ? `${actor.displayName} · ${actor.displayDetail}`
+    : actor.displayName;
+}
+
+function formatCommentObservation(
+  observation: SitesWorkspaceCommentCommandResult["electricObservation"]
+) {
+  const body = formatObservationKind(observation.commentBody);
+  const edge = formatObservationKind(observation.commentEdge);
+
+  return body === edge ? `${body} by Electric` : `body ${body}, edge ${edge}`;
+}
+
+function formatObservationKind(value: "already-reflected" | "observed-change") {
+  return value === "already-reflected" ? "already reflected" : "observed";
+}
+
+function formatShortDate(value: string): string {
+  return new Intl.DateTimeFormat("en", {
+    day: "2-digit",
+    month: "short",
+  }).format(new Date(value));
 }
 
 function NoWorkspaceAccess() {

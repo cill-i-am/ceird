@@ -4,7 +4,14 @@ import type { Label } from "@ceird/labels-core";
 import type { SiteOption } from "@ceird/sites-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { QueryClient } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Exit } from "effect";
 import { Effect } from "effect";
@@ -17,13 +24,23 @@ import { CommandBarProvider } from "#/features/command-bar/command-bar";
 import type * as SitesDataPlane from "./sites-workspace-data-plane";
 import type {
   SiteActiveJobSummaryElectricRow,
+  SiteCommentBodyRow,
+  SiteCommentEdgeRow,
+  SitesWorkspaceCommentCommandResult,
   SitesWorkspaceCommandResult,
   SiteLabelAssignmentElectricRow,
+  SitesWorkspaceProductActorRow,
 } from "./sites-workspace-data-plane";
 import {
   resolveWorkspaceStatus,
   SitesWorkspaceRouteContent,
 } from "./sites-workspace-route-content";
+
+function getModEnterKeyboardInput() {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? "{Meta>}{Enter}{/Meta}"
+    : "{Control>}{Enter}{/Control}";
+}
 
 type SitesWorkspaceCommandRunner = ReturnType<
   typeof SitesDataPlane.createSitesWorkspaceCommandRunner
@@ -345,7 +362,7 @@ describe(SitesWorkspaceRouteContent, () => {
       )
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /cancel/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^cancel$/i })).toBeDisabled();
 
     await user.keyboard("{Meta>}{Enter}{/Meta}");
     await user.keyboard("{Escape}");
@@ -474,6 +491,135 @@ describe(SitesWorkspaceRouteContent, () => {
     ).toBeEnabled();
   });
 
+  it("renders synced site comments with product-safe actors", async () => {
+    const readModel = createReadyReadModelState({
+      actors: [caseyActor],
+      commentBodies: [dublinComment],
+      siteCommentEdges: [dublinCommentEdge],
+      sites: [dublinSite],
+    });
+    sitesDataPlaneMock.readModelState = readModel;
+    sitesDataPlaneMock.commandRunner = createMockCommandRunner();
+
+    renderSitesWorkspace({ shellState: "ready" });
+
+    await expect(
+      screen.findByText("Gate 4 reopened after contractor sign-off.")
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("Casey Morgan · Operations")).toBeInTheDocument();
+    expect(screen.queryByText("user_123")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("list", { name: /synced site comments/i })
+    ).toBeInTheDocument();
+  });
+
+  it("adds a site comment with keyboard focus, pending, and synced states", async () => {
+    const user = userEvent.setup();
+    const readModel = createReadyReadModelState({
+      actors: [caseyActor],
+      sites: [dublinSite],
+    });
+    const commandRunner = createMockCommandRunner();
+    const commentCommand = deferredCommentCommand();
+    sitesDataPlaneMock.readModelState = readModel;
+    sitesDataPlaneMock.commandRunner = commandRunner;
+    commandRunner.addSiteComment.mockReturnValueOnce(commentCommand.promise);
+
+    renderSitesWorkspace({ shellState: "ready" });
+    await screen.findByRole("heading", { name: "Dublin Port" });
+
+    await user.keyboard("m");
+    const commentInput = screen.getByLabelText("Comment");
+    expect(commentInput).toHaveFocus();
+    await user.type(commentInput, "Gate 4 reopened after contractor sign-off.");
+    await user.keyboard(getModEnterKeyboardInput());
+
+    expect(commandRunner.addSiteComment).toHaveBeenCalledExactlyOnceWith(
+      dublinSite.id,
+      { body: "Gate 4 reopened after contractor sign-off." }
+    );
+    expect(screen.getByText("Comment pending")).toBeInTheDocument();
+    expect(
+      screen.getByText("Adding site comment and waiting for realtime sync")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /submit/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeDisabled();
+
+    await user.keyboard(getModEnterKeyboardInput());
+    expect(commandRunner.addSiteComment).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      readModel.commentBodies.collection.upsert(dublinComment);
+      readModel.siteCommentEdges.collection.upsert(dublinCommentEdge);
+      commentCommand.resolve(makeCommentSuccess(dublinComment));
+      await commentCommand.promise;
+    });
+
+    await expect(
+      screen.findByText("Comment synced")
+    ).resolves.toBeInTheDocument();
+    expect(
+      screen.getByText("Comment synced (observed by Electric)")
+    ).toBeInTheDocument();
+    expect(commentInput).toHaveValue("");
+    await waitFor(() => expect(commentInput).toHaveFocus());
+    expect(
+      screen.getByText("Gate 4 reopened after contractor sign-off.")
+    ).toBeInTheDocument();
+  });
+
+  it("keeps comment text retryable after add-comment failure", async () => {
+    const user = userEvent.setup();
+    const readModel = createReadyReadModelState({ sites: [dublinSite] });
+    const commandRunner = createMockCommandRunner();
+    const commentCommand = deferredCommentCommand();
+    sitesDataPlaneMock.readModelState = readModel;
+    sitesDataPlaneMock.commandRunner = commandRunner;
+    commandRunner.addSiteComment.mockReturnValueOnce(commentCommand.promise);
+
+    renderSitesWorkspace({ shellState: "ready" });
+    await screen.findByRole("heading", { name: "Dublin Port" });
+
+    const commentInput = screen.getByLabelText("Comment");
+    await user.type(commentInput, "Please retry this comment.");
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    await act(async () => {
+      commentCommand.resolve(await makeCommentFailure("Electric timed out"));
+      await commentCommand.promise;
+    });
+
+    await expect(
+      screen.findByText("Comment failed")
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("Electric timed out")).toBeInTheDocument();
+    expect(commentInput).toHaveValue("Please retry this comment.");
+    expect(screen.getByRole("button", { name: /submit/i })).toBeEnabled();
+  });
+
+  it("renders live site comments from another session without manual refresh", async () => {
+    const readModel = createReadyReadModelState({ sites: [dublinSite] });
+    sitesDataPlaneMock.readModelState = readModel;
+    sitesDataPlaneMock.commandRunner = createMockCommandRunner();
+
+    renderSitesWorkspace({ shellState: "ready" });
+    await screen.findByRole("heading", { name: "Dublin Port" });
+    expect(
+      screen.getByText("No comments are synced for this site yet.")
+    ).toBeInTheDocument();
+
+    act(() => {
+      readModel.actors.collection.upsert(caseyActor);
+      readModel.commentBodies.collection.upsert(dublinComment);
+      readModel.siteCommentEdges.collection.upsert(dublinCommentEdge);
+    });
+
+    await expect(
+      screen.findByText("Gate 4 reopened after contractor sign-off.")
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("Casey Morgan · Operations")).toBeInTheDocument();
+  });
+
   it("keeps the original row visible and edit form retryable after confirmation failure", async () => {
     const user = userEvent.setup();
     const readModel = createReadyReadModelState({
@@ -556,28 +702,42 @@ function renderSitesWorkspace({
 }
 
 function createReadyReadModelState({
+  actors = [],
   activeJobSummaries = [],
+  commentBodies = [],
   labels = [],
   relatedJobs = [],
+  siteCommentEdges = [],
   siteLabelAssignments = [],
   sites = [],
 }: {
   readonly activeJobSummaries?: readonly SiteActiveJobSummaryElectricRow[];
+  readonly actors?: readonly SitesWorkspaceProductActorRow[];
+  readonly commentBodies?: readonly SiteCommentBodyRow[];
   readonly labels?: readonly Label[];
   readonly relatedJobs?: readonly JobListItem[];
+  readonly siteCommentEdges?: readonly SiteCommentEdgeRow[];
   readonly siteLabelAssignments?: readonly SiteLabelAssignmentElectricRow[];
   readonly sites?: readonly SiteOption[];
 }) {
+  const actorsCollection =
+    createFakeHydratedCollection<SitesWorkspaceProductActorRow>(
+      (actor) => actor.id
+    );
   const activeJobSummariesCollection =
     createFakeHydratedCollection<SiteActiveJobSummaryElectricRow>(
       (summary) => summary.siteId
     );
+  const commentBodiesCollection =
+    createFakeHydratedCollection<SiteCommentBodyRow>((comment) => comment.id);
   const labelsCollection = createFakeHydratedCollection<Label>(
     (label) => label.id
   );
   const relatedJobsCollection = createFakeHydratedCollection<JobListItem>(
     (job) => job.id
   );
+  const siteCommentEdgesCollection =
+    createFakeHydratedCollection<SiteCommentEdgeRow>((edge) => edge.id);
   const siteLabelAssignmentsCollection =
     createFakeHydratedCollection<SiteLabelAssignmentElectricRow>(
       (assignment) => `${assignment.siteId}:${assignment.labelId}`
@@ -586,14 +746,23 @@ function createReadyReadModelState({
     (site) => site.id
   );
 
+  for (const actor of actors) {
+    actorsCollection.upsert(actor);
+  }
   for (const summary of activeJobSummaries) {
     activeJobSummariesCollection.upsert(summary);
+  }
+  for (const comment of commentBodies) {
+    commentBodiesCollection.upsert(comment);
   }
   for (const label of labels) {
     labelsCollection.upsert(label);
   }
   for (const job of relatedJobs) {
     relatedJobsCollection.upsert(job);
+  }
+  for (const edge of siteCommentEdges) {
+    siteCommentEdgesCollection.upsert(edge);
   }
   for (const assignment of siteLabelAssignments) {
     siteLabelAssignmentsCollection.upsert(assignment);
@@ -607,8 +776,17 @@ function createReadyReadModelState({
       "site-active-job-summaries",
       activeJobSummariesCollection
     ),
+    actors: collectionState("product-activity-actors", actorsCollection),
+    commentBodies: collectionState(
+      "site-comment-bodies",
+      commentBodiesCollection
+    ),
     labels: collectionState("labels", labelsCollection),
     relatedJobs: collectionState("site-related-jobs", relatedJobsCollection),
+    siteCommentEdges: collectionState(
+      "site-comments",
+      siteCommentEdgesCollection
+    ),
     siteLabelAssignments: collectionState(
       "site-label-assignments",
       siteLabelAssignmentsCollection
@@ -666,6 +844,7 @@ function createFakeHydratedCollection<Item extends object>(
 
 function createMockCommandRunner() {
   return {
+    addSiteComment: vi.fn<SitesWorkspaceCommandRunner["addSiteComment"]>(),
     assignSiteLabel: vi.fn<SitesWorkspaceCommandRunner["assignSiteLabel"]>(),
     createSite: vi.fn<SitesWorkspaceCommandRunner["createSite"]>(),
     removeSiteLabel: vi.fn<SitesWorkspaceCommandRunner["removeSiteLabel"]>(),
@@ -676,6 +855,12 @@ function createMockCommandRunner() {
 function deferredCommand() {
   return Promise.withResolvers<
     Exit.Exit<SitesWorkspaceCommandResult, unknown>
+  >();
+}
+
+function deferredCommentCommand() {
+  return Promise.withResolvers<
+    Exit.Exit<SitesWorkspaceCommentCommandResult, unknown>
   >();
 }
 
@@ -698,10 +883,37 @@ function makeSuccess(
   );
 }
 
+function makeCommentSuccess(
+  comment: SiteCommentBodyRow
+): Exit.Exit<SitesWorkspaceCommentCommandResult, unknown> {
+  return Effect.runSync(
+    Effect.exit(
+      Effect.succeed({
+        ...comment,
+        actor: caseyActor,
+        authorName: caseyActor.displayName,
+        electricObservation: {
+          commentBody: "observed-change",
+          commentEdge: "observed-change",
+        },
+        siteId: dublinSite.id,
+      } as SitesWorkspaceCommentCommandResult)
+    )
+  );
+}
+
 function makeFailure(
   message: string
 ): Promise<Exit.Exit<SitesWorkspaceCommandResult, unknown>> {
   return Effect.runPromiseExit<SitesWorkspaceCommandResult, Error>(
+    Effect.fail(new Error(message))
+  );
+}
+
+function makeCommentFailure(
+  message: string
+): Promise<Exit.Exit<SitesWorkspaceCommentCommandResult, unknown>> {
+  return Effect.runPromiseExit<SitesWorkspaceCommentCommandResult, Error>(
     Effect.fail(new Error(message))
   );
 }
@@ -720,6 +932,29 @@ const dublinSite = makeSite({
   name: "Dublin Port",
   updatedAt: "2026-06-02T00:00:00.000Z",
 });
+
+const caseyActor = {
+  displayDetail: "Operations",
+  displayName: "Casey Morgan",
+  id: "99999999-1111-4111-8111-999999999999",
+  kind: "member",
+} as unknown as SitesWorkspaceProductActorRow;
+
+const dublinComment = {
+  actorId: caseyActor.id,
+  authorUserId: "user_123",
+  body: "Gate 4 reopened after contractor sign-off.",
+  createdAt: "2026-06-05T10:30:00.000Z",
+  id: "77777777-7777-4777-8777-777777777777",
+  updatedAt: "2026-06-05T10:30:00.000Z",
+} as unknown as SiteCommentBodyRow;
+
+const dublinCommentEdge = {
+  commentId: dublinComment.id,
+  createdAt: dublinComment.createdAt,
+  id: `${dublinSite.id}:${dublinComment.id}`,
+  siteId: dublinSite.id,
+} satisfies SiteCommentEdgeRow;
 
 function makeSite({
   accessNotes,

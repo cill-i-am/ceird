@@ -226,6 +226,9 @@ importers:
       '@ceird/agents-core':
         specifier: workspace:*
         version: link:../../packages/agents-core
+      '@ceird/comments-core':
+        specifier: workspace:*
+        version: link:../../packages/comments-core
       '@ceird/domain-core':
         specifier: workspace:*
         version: link:../../packages/domain-core
