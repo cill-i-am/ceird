@@ -26,6 +26,7 @@ const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
+const SITE_COMMENT_BODIES_MIGRATION = "20260616111854_fat_black_bird";
 const NULL_ACTOR_BACKFILL_MIGRATION = "20260616120807_wakeful_ezekiel";
 
 describe("comments repository", () => {
@@ -374,6 +375,92 @@ describe("comments repository", () => {
         id: siteCommentId,
       },
     ]);
+  });
+
+  it("creates the safe site projection when a preview stage missed the earlier projection migration", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "missing_site_projection_repair",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Comments integration database unavailable; skipping missing site projection repair coverage"
+      );
+    }
+
+    await applyMigrationsBefore(
+      testDatabase.url,
+      SITE_COMMENT_BODIES_MIGRATION
+    );
+
+    const organizationId = decodeOrganizationId(randomUUID());
+    const userId = decodeUserId(`missing_site_projection_${Date.now()}`);
+    const siteId = decodeSiteId(randomUUID());
+    const siteCommentId = randomUUID();
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Missing Site Projection Repair",
+      });
+      await seedUser(pool, {
+        id: userId,
+        name: "Taylor Repair",
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "member",
+        userId,
+      });
+      await seedSite(pool, {
+        id: siteId,
+        name: "Repair Site",
+        organizationId,
+      });
+      await seedNullActorComment(pool, {
+        body: "Repair existing site comment",
+        commentId: siteCommentId,
+        organizationId,
+        userId,
+      });
+      await seedSiteCommentEdge(pool, {
+        commentId: siteCommentId,
+        organizationId,
+        siteId,
+      });
+    });
+
+    await applyMigration(testDatabase.url, NULL_ACTOR_BACKFILL_MIGRATION);
+
+    await withPool(testDatabase.url, async (pool) => {
+      const projection = await pool.query<{
+        actor_id: string;
+        body: string;
+        id: string;
+      }>(
+        `select id, actor_id, body
+         from site_comment_bodies
+         where organization_id = $1
+           and id = $2`,
+        [organizationId, siteCommentId]
+      );
+
+      expect(projection.rows).toStrictEqual([
+        {
+          actor_id: expect.any(String),
+          body: "Repair existing site comment",
+          id: siteCommentId,
+        },
+      ]);
+    });
   });
 });
 
