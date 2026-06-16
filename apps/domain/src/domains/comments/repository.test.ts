@@ -278,27 +278,19 @@ describe("comments repository", () => {
         organizationId,
         title: "Existing job",
       });
-      await seedNullActorComment(pool, {
+      await seedNullActorSiteComment(pool, {
         body: "Existing site comment",
         commentId: siteCommentId,
         organizationId,
+        siteId,
         userId,
       });
-      await seedSiteCommentEdge(pool, {
-        commentId: siteCommentId,
-        organizationId,
-        siteId,
-      });
-      await seedNullActorComment(pool, {
+      await seedNullActorWorkItemComment(pool, {
         body: "Existing work item comment",
         commentId: workItemCommentId,
         organizationId,
-        userId,
-      });
-      await seedWorkItemCommentEdge(pool, {
-        commentId: workItemCommentId,
-        organizationId,
         workItemId,
+        userId,
       });
     });
 
@@ -425,16 +417,12 @@ describe("comments repository", () => {
         name: "Repair Site",
         organizationId,
       });
-      await seedNullActorComment(pool, {
+      await seedNullActorSiteComment(pool, {
         body: "Repair existing site comment",
         commentId: siteCommentId,
         organizationId,
-        userId,
-      });
-      await seedSiteCommentEdge(pool, {
-        commentId: siteCommentId,
-        organizationId,
         siteId,
+        userId,
       });
     });
 
@@ -495,9 +483,7 @@ async function seedOrganization(
     [
       input.id,
       input.name,
-      `${input.name.toLowerCase().replaceAll(" ", "-")}-${randomUUID()
-        .replaceAll("-", "")
-        .slice(0, 12)}`,
+      `org-${randomUUID().replaceAll("-", "").slice(0, 24)}`,
     ]
   );
 }
@@ -577,7 +563,57 @@ async function seedWorkItem(
   );
 }
 
-async function seedNullActorComment(
+async function seedNullActorSiteComment(
+  pool: Pool,
+  input: {
+    readonly body: string;
+    readonly commentId: string;
+    readonly organizationId: string;
+    readonly siteId: string;
+    readonly userId: string;
+  }
+) {
+  await withCommentOwnershipSeedTransaction(pool, async () => {
+    await insertNullActorComment(pool, input);
+    await pool.query(
+      `insert into site_comments (
+         comment_id,
+         organization_id,
+         site_id,
+         created_at
+       )
+       values ($1, $2, $3, now())`,
+      [input.commentId, input.organizationId, input.siteId]
+    );
+  });
+}
+
+async function seedNullActorWorkItemComment(
+  pool: Pool,
+  input: {
+    readonly body: string;
+    readonly commentId: string;
+    readonly organizationId: string;
+    readonly userId: string;
+    readonly workItemId: string;
+  }
+) {
+  await withCommentOwnershipSeedTransaction(pool, async () => {
+    await insertNullActorComment(pool, input);
+    await pool.query(
+      `insert into work_item_comments (
+         comment_id,
+         organization_id,
+         work_item_id,
+         created_at
+       )
+       values ($1, $2, $3, now())`,
+      [input.commentId, input.organizationId, input.workItemId]
+    );
+  });
+}
+
+async function insertNullActorComment(
   pool: Pool,
   input: {
     readonly body: string;
@@ -601,44 +637,19 @@ async function seedNullActorComment(
   );
 }
 
-async function seedSiteCommentEdge(
+async function withCommentOwnershipSeedTransaction(
   pool: Pool,
-  input: {
-    readonly commentId: string;
-    readonly organizationId: string;
-    readonly siteId: string;
-  }
+  seed: () => Promise<void>
 ) {
-  await pool.query(
-    `insert into site_comments (
-       comment_id,
-       organization_id,
-       site_id,
-       created_at
-     )
-     values ($1, $2, $3, now())`,
-    [input.commentId, input.organizationId, input.siteId]
-  );
-}
-
-async function seedWorkItemCommentEdge(
-  pool: Pool,
-  input: {
-    readonly commentId: string;
-    readonly organizationId: string;
-    readonly workItemId: string;
+  await pool.query("begin");
+  try {
+    await pool.query("set constraints all deferred");
+    await seed();
+    await pool.query("commit");
+  } catch (error) {
+    await pool.query("rollback");
+    throw error;
   }
-) {
-  await pool.query(
-    `insert into work_item_comments (
-       comment_id,
-       organization_id,
-       work_item_id,
-       created_at
-     )
-     values ($1, $2, $3, now())`,
-    [input.commentId, input.organizationId, input.workItemId]
-  );
 }
 
 async function runCommentsRepositoryEffect<Value, Error, Requirements>(
