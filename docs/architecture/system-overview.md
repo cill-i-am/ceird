@@ -177,8 +177,12 @@ account, and member tables stay outside the sync registry.
 `activity_events` is the domain-owned global feed read model. It stores stable
 product-facing event ids, organization scope, event and target metadata,
 product-safe actor references, display payloads, status, creation time, and
-`retained_until`. Repository retention keeps the feed bounded to the last 30
-days and latest 5,000 events per organization.
+`retained_until`. The named `activity-events` Electric shape is a bounded recent
+projection: domain authorization injects `organization_id = $1 AND
+retained_until > $2`, where `$2` is the domain-computed 30-day retention cutoff.
+Repository retention also prunes expired rows and keeps only the latest 5,000
+events per organization, which is the guardrail that cannot be represented as an
+Electric predicate.
 
 Migrations live in `apps/domain/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses

@@ -1,5 +1,8 @@
+import {
+  ACTIVITY_EVENTS_SYNC_WHERE,
+  SYNC_SHAPE_NAMES,
+} from "@ceird/domain-core";
 import type { SyncShapeName } from "@ceird/domain-core";
-import { SYNC_SHAPE_NAMES } from "@ceird/domain-core";
 import { decodeOrganizationId, decodeUserId } from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
@@ -69,6 +72,7 @@ const expectedShapeDefinitions = {
   "activity-events": {
     scope: "organization",
     table: "activity_events",
+    where: ACTIVITY_EVENTS_SYNC_WHERE,
   },
   "agent-action-runs": {
     scope: "organization-user",
@@ -171,9 +175,18 @@ describe("SyncAuthorizationService", () => {
           "organization_id = $1 AND user_id = $2"
         );
       } else {
-        expect(authorization.params).toStrictEqual({
-          "1": "org_sync",
-        });
+        if (shapeName === "activity-events") {
+          expect(authorization.params).toMatchObject({
+            "1": "org_sync",
+          });
+          expect(
+            Date.parse(readRequiredActivityRetainedAfter(authorization.params))
+          ).not.toBeNaN();
+        } else {
+          expect(authorization.params).toStrictEqual({
+            "1": "org_sync",
+          });
+        }
         expect(authorization.where).toBe(
           "where" in definition ? definition.where : "organization_id = $1"
         );
@@ -211,6 +224,29 @@ describe("SyncAuthorizationService", () => {
       userId: "user_sync",
       where: "organization_id = $1 AND archived_at IS NULL",
     });
+  });
+
+  it("authorizes the activity events shape as a bounded retained projection", async () => {
+    const before = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const authorization = await runWithActor(authorizeShape("activity-events"));
+    const after = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const retainedAfterMs = Date.parse(
+      readRequiredActivityRetainedAfter(authorization.params)
+    );
+
+    expect(authorization).toMatchObject({
+      organizationId: "org_sync",
+      params: {
+        "1": "org_sync",
+      },
+      shape: "activity-events",
+      scope: "organization",
+      table: "activity_events",
+      userId: "user_sync",
+      where: ACTIVITY_EVENTS_SYNC_WHERE,
+    });
+    expect(retainedAfterMs).toBeGreaterThanOrEqual(before);
+    expect(retainedAfterMs).toBeLessThanOrEqual(after);
   });
 
   it("limits per-user agent shapes to the current user", async () => {
@@ -325,3 +361,14 @@ describe("SyncAuthorizationService", () => {
     }
   });
 });
+
+function readRequiredActivityRetainedAfter(params: unknown) {
+  const retainedAfter =
+    params !== null && typeof params === "object" && "2" in params
+      ? (params as { readonly "2"?: unknown })["2"]
+      : undefined;
+
+  expect(retainedAfter).toBeTypeOf("string");
+
+  return typeof retainedAfter === "string" ? retainedAfter : "";
+}

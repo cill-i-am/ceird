@@ -4,7 +4,7 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { Schema } from "effect";
 
 import {
-  COMPLETE_TENANT_COLLECTION,
+  filteredQueryCollectionCompleteness,
   syncBackedCollectionCompleteness,
 } from "#/data-plane/collection-contract";
 import type { DataPlaneCollectionHealth } from "#/data-plane/collection-health";
@@ -80,7 +80,21 @@ export function createActivityEventsElectricContract(
   return defineElectricCollectionContract({
     collection: "activity-events",
     completeness: syncBackedCollectionCompleteness({
-      covers: COMPLETE_TENANT_COLLECTION,
+      covers: filteredQueryCollectionCompleteness({
+        filters: [
+          {
+            field: "retainedUntil",
+            operator: "custom",
+            value: "retained_until > domain retention cutoff",
+          },
+          {
+            field: "organizationRecentLimit",
+            operator: "custom",
+            value: "latest 5000 retained rows per organization",
+          },
+        ],
+        queryName: "activity-events.recent-retained",
+      }),
       source: "electric",
       subscriptionName: "activity-events",
     }),

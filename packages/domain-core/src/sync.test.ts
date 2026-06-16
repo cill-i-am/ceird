@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 
 import {
+  ACTIVITY_EVENTS_SYNC_WHERE,
   ACTIVE_LABELS_SYNC_WHERE,
   isSyncInternalPath,
   makeSyncShapeAuthorizationPath,
@@ -84,25 +85,43 @@ describe("domain sync boundary contracts", () => {
       organizationId: "org_123",
       params: {
         "1": "org_123",
+        "2": "2026-05-17T00:00:00.000Z",
       },
       shape: "activity-events",
       scope: "organization",
       table: "activity_events",
       userId: "user_123",
-      where: "organization_id = $1",
+      where: ACTIVITY_EVENTS_SYNC_WHERE,
     });
 
     expect(authorization).toStrictEqual({
       organizationId: "org_123",
       params: {
         "1": "org_123",
+        "2": "2026-05-17T00:00:00.000Z",
       },
       shape: "activity-events",
       scope: "organization",
       table: "activity_events",
       userId: "user_123",
-      where: "organization_id = $1",
+      where: "organization_id = $1 AND retained_until > $2",
     });
+  });
+
+  it("rejects unbounded activity events shape definitions", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(SyncShapeAuthorizationSchema)({
+        organizationId: "org_123",
+        params: {
+          "1": "org_123",
+        },
+        shape: "activity-events",
+        scope: "organization",
+        table: "activity_events",
+        userId: "user_123",
+        where: "organization_id = $1",
+      })
+    ).toThrow();
   });
 
   it("decodes per-user authorized Electric shape definitions", () => {

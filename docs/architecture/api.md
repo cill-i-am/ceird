@@ -439,6 +439,11 @@ The named `labels` shape is the active organization-label definition stream:
 the domain-approved predicate is
 `organization_id = $1 AND archived_at IS NULL`, matching the public labels list
 contract without letting browser callers provide `where` or `params` values.
+The named `activity-events` shape is the global feed's bounded recent
+projection: the domain-approved predicate is
+`organization_id = $1 AND retained_until > $2`, with `$2` computed by the
+domain Worker from the 30-day activity retention rule. Browser callers cannot
+provide the cutoff, table, predicate, params, or Electric source secret.
 
 ## Observability
 
@@ -839,10 +844,13 @@ lookup keys out of synced product data.
 Global feed activity uses `activity_events`, a bounded product-facing read model
 owned by the activity domain. Rows carry stable ids, organization scope, event
 and target metadata, a product-safe `actor_id`, display payload, status,
-created time, and `retained_until`. The repository prunes expired rows and
-keeps only the latest 5,000 events per organization. Product write paths emit
-into this model through follow-up activity issues rather than in the projection
-and shape slice.
+created time, and `retained_until`. The public Electric shape is bounded by a
+domain-owned `retained_until` cutoff predicate, while the repository prunes
+expired rows and keeps only the latest 5,000 events per organization. The
+latest-5,000 guardrail is enforced by retention cleanup because Electric shape
+predicates cannot express an ordered per-organization limit. Product write paths
+emit into this model through follow-up activity issues rather than in the
+projection and shape slice.
 Route-aware proximity adds indexes for the hot ranking paths: active jobs can
 reuse the existing `work_items_organization_active_updated_at_idx`, site active
 job summaries use `work_items_organization_site_active_priority_idx`, and mapped

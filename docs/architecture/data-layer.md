@@ -204,10 +204,14 @@ after the parent deploy can skip it through the copied `neon_migrations` record.
 
 The global activity feed uses the domain-owned `activity_events` read model and
 the named `activity-events` Electric shape. The table is intentionally bounded:
-repository writes prune rows past the 30-day `retained_until` window and clamp
-each organization to the latest 5,000 feed rows. Browser collections consume
-that named shape through the data-plane Electric factory and shared health
-surface; they do not request arbitrary Electric predicates for feed windowing.
+domain authorization injects `organization_id = $1 AND retained_until > $2` for
+the public shape, with `$2` computed from the 30-day retention rule. Repository
+writes prune rows past that `retained_until` window and clamp each organization
+to the latest 5,000 feed rows; that ordered cap is enforced in repository
+retention because it is not representable as a fixed Electric shape predicate.
+Browser collections consume that named recent-retained projection through the
+data-plane Electric factory and shared health surface; they do not request
+arbitrary Electric predicates for feed windowing.
 
 The root Alchemy stack, runtime apps, and shared domain packages now use the
 same Effect 4 beta line. Runtime code imports Effect 4 HTTP, SQL, AI, and
@@ -330,7 +334,10 @@ that browser sync clients may request. The domain Worker authorizes each shape
 through `/sync/internal/shapes/:shapeName/authorize`, using the same current
 organization actor resolution as the HTTP API. Most shapes receive an
 `organization_id = $1` predicate. Agent thread and action-run shapes add
-`user_id = $2` so users only sync their own agent records.
+`user_id = $2` so users only sync their own agent records. The
+`activity-events` shape adds `retained_until > $2` with a server-computed
+30-day cutoff so the public feed sync path cannot mirror stale tenant history
+when cleanup lags.
 
 The public sync Worker accepts Electric-compatible shape requests at
 `/v1/shape?shape=<name>` and `/v1/shapes/<name>`. It strips caller-controlled

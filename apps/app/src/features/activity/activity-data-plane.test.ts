@@ -40,7 +40,22 @@ describe("activity data plane", () => {
     expect(createActivityEventsElectricContract(scope)).toMatchObject({
       collection: "activity-events",
       completeness: {
-        covers: { mode: "complete-tenant" },
+        covers: {
+          filters: [
+            {
+              field: "retainedUntil",
+              operator: "custom",
+              value: "retained_until > domain retention cutoff",
+            },
+            {
+              field: "organizationRecentLimit",
+              operator: "custom",
+              value: "latest 5000 retained rows per organization",
+            },
+          ],
+          mode: "filtered-query",
+          queryName: "activity-events.recent-retained",
+        },
         mode: "sync-backed",
         source: "electric",
         subscriptionName: "activity-events",

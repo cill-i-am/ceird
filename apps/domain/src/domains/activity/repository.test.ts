@@ -45,7 +45,8 @@ describe("activity events repository", () => {
     const otherOrganizationId = decodeOrganizationId(randomUUID());
     const actorId = decodeProductActorId(randomUUID());
     const otherActorId = decodeProductActorId(randomUUID());
-    const createdAt = new Date("2026-06-15T12:00:00.000Z");
+    const now = new Date();
+    const createdAt = addMinutes(now, -60);
 
     await withPool(testDatabase.url, async (pool) => {
       await seedOrganization(pool, {
@@ -115,7 +116,7 @@ describe("activity events repository", () => {
       testDatabase.url,
       ActivityEventsRepository.use((repository) =>
         repository.listRecent(organizationId, {
-          now: new Date("2026-06-16T00:00:00.000Z"),
+          now,
         })
       )
     );
@@ -127,7 +128,7 @@ describe("activity events repository", () => {
       },
       eventType: "job.priority_changed",
       organizationId,
-      retainedUntil: "2026-07-15T12:00:00.000Z",
+      retainedUntil: addDays(createdAt, 30).toISOString(),
       sourceId: "job-activity-1",
       sourceType: "job_activity",
       status: "synced",
@@ -149,6 +150,8 @@ describe("activity events repository", () => {
     const actorId = decodeProductActorId(randomUUID());
     const firstId = decodeActivityEventId(randomUUID());
     const secondId = decodeActivityEventId(randomUUID());
+    const firstCreatedAt = addMinutes(new Date(), -10);
+    const secondCreatedAt = addMinutes(firstCreatedAt, 5);
 
     await withPool(testDatabase.url, async (pool) => {
       await seedOrganization(pool, {
@@ -167,7 +170,7 @@ describe("activity events repository", () => {
       ActivityEventsRepository.use((repository) =>
         repository.recordEvent({
           actorId,
-          createdAt: new Date("2026-06-15T12:00:00.000Z"),
+          createdAt: firstCreatedAt,
           display: {
             summary: "Agent action pending",
           },
@@ -187,7 +190,7 @@ describe("activity events repository", () => {
       ActivityEventsRepository.use((repository) =>
         repository.recordEvent({
           actorId,
-          createdAt: new Date("2026-06-15T12:05:00.000Z"),
+          createdAt: secondCreatedAt,
           display: {
             summary: "Agent action synced",
           },
@@ -220,6 +223,7 @@ describe("activity events repository", () => {
 
     const organizationId = decodeOrganizationId(randomUUID());
     const actorId = decodeProductActorId(randomUUID());
+    const now = new Date();
 
     await withPool(testDatabase.url, async (pool) => {
       await seedOrganization(pool, {
@@ -234,6 +238,7 @@ describe("activity events repository", () => {
       await seedActivityEventRows(pool, {
         actorId,
         count: ACTIVITY_FEED_MAX_EVENTS_PER_ORG + 5,
+        createdAt: addMinutes(now, -5),
         organizationId,
       });
     });
@@ -243,7 +248,7 @@ describe("activity events repository", () => {
       ActivityEventsRepository.use((repository) =>
         repository.recordEvent({
           actorId,
-          createdAt: new Date("2026-05-01T12:00:00.000Z"),
+          createdAt: addDays(now, -31),
           display: {
             summary: "Expired job event",
           },
@@ -260,10 +265,7 @@ describe("activity events repository", () => {
     await runActivityEventsRepositoryEffect(
       testDatabase.url,
       ActivityEventsRepository.use((repository) =>
-        repository.applyRetention(
-          organizationId,
-          new Date("2026-06-16T00:00:00.000Z")
-        )
+        repository.applyRetention(organizationId, now)
       )
     );
 
@@ -282,7 +284,7 @@ describe("activity events repository", () => {
       ActivityEventsRepository.use((repository) =>
         repository.listRecent(organizationId, {
           limit: 10,
-          now: new Date("2026-06-16T00:00:00.000Z"),
+          now,
         })
       )
     );
@@ -376,6 +378,7 @@ async function seedActivityEventRows(
   input: {
     readonly actorId: string;
     readonly count: number;
+    readonly createdAt: Date;
     readonly organizationId: string;
   }
 ) {
@@ -411,8 +414,22 @@ async function seedActivityEventRows(
     [
       input.organizationId,
       input.actorId,
-      "2026-06-15T12:00:00.000Z",
+      input.createdAt.toISOString(),
       input.count,
     ]
   );
+}
+
+function addMinutes(date: Date, minutes: number): Date {
+  const next = new Date(date);
+  next.setUTCMinutes(next.getUTCMinutes() + minutes);
+
+  return next;
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+
+  return next;
 }

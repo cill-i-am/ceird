@@ -3,7 +3,9 @@ export {
   makeDomainServiceClient,
 } from "./service-binding.js";
 export {
+  ACTIVITY_EVENTS_SYNC_WHERE,
   ACTIVE_LABELS_SYNC_WHERE,
+  ActivityEventsSyncShapeAuthorizationParamsSchema,
   isSyncInternalPath,
   makeSyncShapeAuthorizationPath,
   ORGANIZATION_SYNC_WHERE,
@@ -33,6 +35,7 @@ export type {
   DomainServiceBinding,
 } from "./service-binding.js";
 export type {
+  ActivityEventsSyncShapeAuthorizationParams,
   OrganizationSyncShapeAuthorization,
   OrganizationSyncShapeAuthorizationParams,
   OrganizationUserSyncShapeAuthorization,

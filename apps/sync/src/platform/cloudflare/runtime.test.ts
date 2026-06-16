@@ -1,5 +1,8 @@
+import {
+  ACTIVITY_EVENTS_SYNC_WHERE,
+  SyncShapeAuthorizationSchema,
+} from "@ceird/domain-core";
 import type { SyncShapeName } from "@ceird/domain-core";
-import { SyncShapeAuthorizationSchema } from "@ceird/domain-core";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Logger, Redacted, References, Schema } from "effect";
 
@@ -54,22 +57,38 @@ function makeJobsAuthorization() {
   });
 }
 
+function makeActivityEventsAuthorization() {
+  return makeAuthorization({
+    organizationId: "org_sync",
+    params: {
+      "1": "org_sync",
+      "2": "2026-05-17T00:00:00.000Z",
+    },
+    shape: "activity-events",
+    table: "activity_events",
+    userId: "user_sync",
+    where: ACTIVITY_EVENTS_SYNC_WHERE,
+  });
+}
+
 function makeAuthorization(input: {
   readonly organizationId: string;
-  readonly shape: "jobs" | "sites";
-  readonly table: "work_items" | "sites";
+  readonly params?: Record<string, string> | undefined;
+  readonly shape: "activity-events" | "jobs" | "sites";
+  readonly table: "activity_events" | "work_items" | "sites";
   readonly userId: string;
+  readonly where?: string | undefined;
 }) {
   return Schema.decodeUnknownSync(SyncShapeAuthorizationSchema)({
     organizationId: input.organizationId,
-    params: {
+    params: input.params ?? {
       "1": input.organizationId,
     },
     shape: input.shape,
     scope: "organization",
     table: input.table,
     userId: input.userId,
-    where: "organization_id = $1",
+    where: input.where ?? "organization_id = $1",
   });
 }
 
@@ -278,6 +297,45 @@ describe("Sync Worker runtime", () => {
     expect(electricUrl.searchParams.get("params[1]")).toBe("org_sync");
     expect(electricUrl.searchParams.get("secret")).toBe("electric-secret");
     expect(forwardedRequests[0].headers.get("cookie")).toBeNull();
+  });
+
+  it("forwards the activity events shape as a bounded retained projection", async () => {
+    const forwardedRequests: Request[] = [];
+    const response = await handleSyncWorkerFetch(
+      new Request(
+        "https://sync.example.com/v1/shapes/activity-events?offset=-1&table=activity_events&where=organization_id%20%3D%20%241&params%5B2%5D=1900-01-01T00%3A00%3A00.000Z",
+        {
+          headers: {
+            cookie: "ceird=auth",
+            origin: "https://app.example.com",
+          },
+        }
+      ),
+      baseEnv,
+      makeExecutionContext(),
+      {
+        authorizeShape: () => Effect.succeed(makeActivityEventsAuthorization()),
+        fetchElectric: (request) =>
+          Effect.sync(() => {
+            forwardedRequests.push(request);
+
+            return Response.json([{ headers: { control: "up-to-date" } }]);
+          }),
+      }
+    ).pipe(Effect.runPromise);
+
+    expect(response.status).toBe(200);
+    expect(forwardedRequests).toHaveLength(1);
+
+    const electricUrl = new URL(forwardedRequests[0].url);
+    expect(electricUrl.searchParams.get("table")).toBe("activity_events");
+    expect(electricUrl.searchParams.get("where")).toBe(
+      ACTIVITY_EVENTS_SYNC_WHERE
+    );
+    expect(electricUrl.searchParams.get("params[1]")).toBe("org_sync");
+    expect(electricUrl.searchParams.get("params[2]")).toBe(
+      "2026-05-17T00:00:00.000Z"
+    );
   });
 
   it("reuses successful same-user authorization grants for the short TTL", async () => {
