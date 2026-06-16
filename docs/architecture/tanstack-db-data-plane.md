@@ -68,6 +68,16 @@ collaborators, activity, visits, comment edges, and comment bodies without
 constructing raw Electric streams in feature UI. Member/actor display names and
 site-level active job rollups remain domain-owned projection follow-ups rather
 than browser business-rule recomputation.
+The `/jobs-workspace` live list consumes that graph through
+`features/jobs-workspace/jobs-workspace-live-list.ts`, which creates the
+Electric collections through the data-plane boundary, subscribes with the
+shared live-query wrapper, joins labels/sites/contacts locally, and exposes
+route-backed search, filters, sort, recent-search, and saved-view-ready hooks.
+The list read model aggregates health across all five required list shapes and
+derives visible rows only after jobs, label assignments, labels, sites, and
+contacts are all healthy and live-query ready. When the graph is disabled,
+unavailable, or not fully ready, the workspace reports that shared graph health
+directly and does not activate the legacy Jobs Query Collection fallback.
 The jobs primary route collection has a conservative Electric read canary behind
 that same fallback wrapper. It is disabled by default and must be opted in
 through the jobs data-plane sync options, so a configured `VITE_SYNC_ORIGIN`
