@@ -1,0 +1,27 @@
+{
+  "name": "@ceird/activity-core",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./domain": "./src/domain.ts",
+    "./dto": "./src/dto.ts",
+    "./ids": "./src/ids.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --globals"
+  },
+  "dependencies": {
+    "@ceird/identity-core": "workspace:*",
+    "effect": "4.0.0-beta.79"
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.86.2",
+    "@effect/vitest": "4.0.0-beta.79",
+    "@types/node": "^25.9.3",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

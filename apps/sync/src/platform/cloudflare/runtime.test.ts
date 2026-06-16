@@ -1,5 +1,8 @@
+import {
+  ACTIVITY_EVENTS_SYNC_WHERE,
+  SyncShapeAuthorizationSchema,
+} from "@ceird/domain-core";
 import type { SyncShapeName } from "@ceird/domain-core";
-import { SyncShapeAuthorizationSchema } from "@ceird/domain-core";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Logger, Redacted, References, Schema } from "effect";
 
@@ -54,22 +57,40 @@ function makeJobsAuthorization() {
   });
 }
 
+function makeActivityEventsAuthorization(
+  retainedAfter = "2026-06-16T00:00:00.000Z"
+) {
+  return makeAuthorization({
+    organizationId: "org_sync",
+    params: {
+      "1": "org_sync",
+      "2": retainedAfter,
+    },
+    shape: "activity-events",
+    table: "activity_events",
+    userId: "user_sync",
+    where: ACTIVITY_EVENTS_SYNC_WHERE,
+  });
+}
+
 function makeAuthorization(input: {
   readonly organizationId: string;
-  readonly shape: "jobs" | "sites";
-  readonly table: "work_items" | "sites";
+  readonly params?: Record<string, string> | undefined;
+  readonly shape: "activity-events" | "jobs" | "sites";
+  readonly table: "activity_events" | "work_items" | "sites";
   readonly userId: string;
+  readonly where?: string | undefined;
 }) {
   return Schema.decodeUnknownSync(SyncShapeAuthorizationSchema)({
     organizationId: input.organizationId,
-    params: {
+    params: input.params ?? {
       "1": input.organizationId,
     },
     shape: input.shape,
     scope: "organization",
     table: input.table,
     userId: input.userId,
-    where: "organization_id = $1",
+    where: input.where ?? "organization_id = $1",
   });
 }
 
@@ -280,6 +301,51 @@ describe("Sync Worker runtime", () => {
     expect(forwardedRequests[0].headers.get("cookie")).toBeNull();
   });
 
+  it("forwards the activity events shape as a bounded retained projection", async () => {
+    const forwardedRequests: Request[] = [];
+    const response = await handleSyncWorkerFetch(
+      new Request(
+        "https://sync.example.com/v1/shapes/activity-events?offset=-1&table=activity_events&where=organization_id%20%3D%20%241&params%5B2%5D=1900-01-01T00%3A00%3A00.000Z",
+        {
+          headers: {
+            cookie: "ceird=auth",
+            origin: "https://app.example.com",
+          },
+        }
+      ),
+      baseEnv,
+      makeExecutionContext(),
+      {
+        authorizeShape: () => Effect.succeed(makeActivityEventsAuthorization()),
+        fetchElectric: (request) =>
+          Effect.sync(() => {
+            forwardedRequests.push(request);
+
+            return Response.json([{ headers: { control: "up-to-date" } }]);
+          }),
+      }
+    ).pipe(Effect.runPromise);
+
+    expect(response.status).toBe(200);
+    expect(forwardedRequests).toHaveLength(1);
+
+    const electricUrl = new URL(forwardedRequests[0].url);
+    expect(electricUrl.searchParams.get("table")).toBe("activity_events");
+    expect(electricUrl.searchParams.get("where")).toBe(
+      ACTIVITY_EVENTS_SYNC_WHERE
+    );
+    expect(electricUrl.searchParams.get("params[1]")).toBe("org_sync");
+    expect(electricUrl.searchParams.get("params[2]")).toBe(
+      "2026-06-16T00:00:00.000Z"
+    );
+    expect(Date.parse("2026-06-15T23:59:59.999Z")).toBeLessThanOrEqual(
+      Date.parse(electricUrl.searchParams.get("params[2]") ?? "")
+    );
+    expect(Date.parse("2026-06-16T00:00:00.001Z")).toBeGreaterThan(
+      Date.parse(electricUrl.searchParams.get("params[2]") ?? "")
+    );
+  });
+
   it("reuses successful same-user authorization grants for the short TTL", async () => {
     const forwardedOrganizations: string[] = [];
     const authorizeShape = vi.fn(() => Effect.succeed(makeJobsAuthorization()));
@@ -320,6 +386,62 @@ describe("Sync Worker runtime", () => {
     expect(authorizeShape).toHaveBeenCalledTimes(1);
     expect(fetchElectric).toHaveBeenCalledTimes(2);
     expect(forwardedOrganizations).toStrictEqual(["org_sync", "org_sync"]);
+  });
+
+  it("does not cache time-sensitive activity events authorization cutoffs", async () => {
+    const forwardedRetainedCutoffs: string[] = [];
+    const authorizeShape = vi
+      .fn()
+      .mockReturnValueOnce(
+        Effect.succeed(
+          makeActivityEventsAuthorization("2026-06-16T00:00:00.000Z")
+        )
+      )
+      .mockReturnValueOnce(
+        Effect.succeed(
+          makeActivityEventsAuthorization("2026-06-16T00:00:05.000Z")
+        )
+      );
+    const fetchElectric = vi.fn((request: Request) =>
+      Effect.sync(() => {
+        forwardedRetainedCutoffs.push(
+          new URL(request.url).searchParams.get("params[2]") ?? ""
+        );
+
+        return Response.json([{ headers: { control: "up-to-date" } }]);
+      })
+    );
+    const dependencies = {
+      authorizeShape,
+      fetchElectric,
+      now: () => 1000,
+    };
+
+    for (const offset of ["-1", "0_0"]) {
+      const response = await handleSyncWorkerFetch(
+        new Request(
+          `https://sync.example.com/v1/shapes/activity-events?offset=${offset}`,
+          {
+            headers: {
+              cookie: "ceird.session=user-a",
+              origin: "https://app.example.com",
+            },
+          }
+        ),
+        baseEnv,
+        makeExecutionContext(),
+        dependencies
+      ).pipe(Effect.runPromise);
+
+      expect(response.status).toBe(200);
+    }
+
+    expect(authorizeShape).toHaveBeenCalledTimes(2);
+    expect(fetchElectric).toHaveBeenCalledTimes(2);
+    expect(forwardedRetainedCutoffs).toStrictEqual([
+      "2026-06-16T00:00:00.000Z",
+      "2026-06-16T00:00:05.000Z",
+    ]);
   });
 
   it("isolates cached grants by auth fingerprint and organization", async () => {

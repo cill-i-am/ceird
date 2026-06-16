@@ -4,6 +4,7 @@ import { queryCollectionOptions } from "@tanstack/query-db-collection";
 import { createCollection } from "@tanstack/react-db";
 
 export const DATA_PLANE_COLLECTION_NAMES = [
+  "activity-events",
   "jobs",
   "job-activity",
   "job-comment-bodies",

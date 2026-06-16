@@ -1,3 +1,20 @@
+/* eslint-disable max-classes-per-file -- Activity actor and event repositories share the same domain projection boundary. */
+
+import {
+  ACTIVITY_FEED_MAX_EVENTS_PER_ORG,
+  ACTIVITY_FEED_RETENTION_DAYS,
+  ProductActivityEventDisplayPayloadSchema,
+  ProductActivityEventSchema,
+} from "@ceird/activity-core";
+import type {
+  ActivityEventId,
+  ActivityEventSourceType,
+  ActivityEventStatus,
+  ActivityEventTargetType,
+  ActivityEventType,
+  ProductActivityEvent,
+  ProductActivityEventDisplayPayload,
+} from "@ceird/activity-core";
 import {
   ProductActorSchema,
   UserId as UserIdSchema,
@@ -11,7 +28,10 @@ import type {
 import { Context, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-import { generateProductActorId } from "./id-generation.js";
+import {
+  generateActivityEventId,
+  generateProductActorId,
+} from "./id-generation.js";
 
 interface ProductActorRow {
   readonly display_detail: string | null;
@@ -26,13 +46,188 @@ interface MemberSourceRow extends ProductActorRow {
   readonly source_user_id: string;
 }
 
+interface ActivityEventRow {
+  readonly actor_id: string;
+  readonly created_at: Date;
+  readonly display: unknown;
+  readonly event_type: string;
+  readonly id: string;
+  readonly organization_id: string;
+  readonly retained_until: Date;
+  readonly source_id: string;
+  readonly source_type: string;
+  readonly status: string;
+  readonly target_id: string;
+  readonly target_type: string;
+}
+
 export interface ResolveMemberActorInput {
   readonly organizationId: OrganizationId;
   readonly userId: UserId;
 }
 
+export interface RecordActivityEventInput {
+  readonly actorId: ProductActorId;
+  readonly createdAt?: Date | undefined;
+  readonly display: ProductActivityEventDisplayPayload;
+  readonly eventType: ActivityEventType;
+  readonly id?: ActivityEventId | undefined;
+  readonly organizationId: OrganizationId;
+  readonly sourceId: string;
+  readonly sourceType: ActivityEventSourceType;
+  readonly status?: ActivityEventStatus | undefined;
+  readonly targetId: string;
+  readonly targetType: ActivityEventTargetType;
+}
+
+export interface ListRecentActivityEventsQuery {
+  readonly limit?: number | undefined;
+  readonly now?: Date | undefined;
+}
+
 const decodeProductActor = Schema.decodeUnknownSync(ProductActorSchema);
+const decodeProductActivityEvent = Schema.decodeUnknownSync(
+  ProductActivityEventSchema
+);
+const decodeProductActivityEventDisplay = Schema.decodeUnknownSync(
+  ProductActivityEventDisplayPayloadSchema
+);
 const decodeUserId = Schema.decodeUnknownSync(UserIdSchema);
+
+export class ActivityEventsRepository extends Context.Service<ActivityEventsRepository>()(
+  "@ceird/domains/activity/ActivityEventsRepository",
+  {
+    make: Effect.gen(function* ActivityEventsRepositoryLive() {
+      const sql = yield* SqlClient.SqlClient;
+
+      const recordEvent = Effect.fn("ActivityEventsRepository.recordEvent")(
+        function* (input: RecordActivityEventInput) {
+          const event = normalizeRecordActivityEventInput(input);
+          yield* Effect.annotateCurrentSpan(
+            "organizationId",
+            event.organizationId
+          );
+          yield* Effect.annotateCurrentSpan("activityEventId", event.id);
+          yield* Effect.annotateCurrentSpan(
+            "activityEventType",
+            event.eventType
+          );
+
+          const rows = yield* sql<ActivityEventRow>`
+            insert into activity_events (
+              id,
+              organization_id,
+              event_type,
+              target_type,
+              target_id,
+              actor_id,
+              source_type,
+              source_id,
+              display,
+              status,
+              created_at,
+              retained_until
+            )
+            values (
+              ${event.id},
+              ${event.organizationId},
+              ${event.eventType},
+              ${event.targetType},
+              ${event.targetId},
+              ${event.actorId},
+              ${event.sourceType},
+              ${event.sourceId},
+              ${JSON.stringify(event.display)}::jsonb,
+              ${event.status},
+              ${event.createdAt},
+              ${event.retainedUntil}
+            )
+            on conflict (organization_id, source_type, source_id) do update
+            set
+              actor_id = excluded.actor_id,
+              display = excluded.display,
+              event_type = excluded.event_type,
+              retained_until = greatest(
+                activity_events.retained_until,
+                excluded.retained_until
+              ),
+              status = excluded.status,
+              target_id = excluded.target_id,
+              target_type = excluded.target_type
+            returning *
+          `;
+
+          yield* applyRetention(event.organizationId);
+
+          const row = yield* getRequiredRow(rows, "activity event");
+
+          return mapActivityEventRow(row);
+        }
+      );
+
+      const listRecent = Effect.fn("ActivityEventsRepository.listRecent")(
+        function* (
+          organizationId: OrganizationId,
+          query: ListRecentActivityEventsQuery = {}
+        ) {
+          const limit = clampActivityEventLimit(query.limit);
+          const now = query.now ?? new Date();
+
+          const rows = yield* sql<ActivityEventRow>`
+            select *
+            from activity_events
+            where organization_id = ${organizationId}
+              and retained_until > ${now}
+            order by created_at desc, id desc
+            limit ${limit}
+          `;
+
+          return rows.map(mapActivityEventRow);
+        }
+      );
+
+      const applyRetention = Effect.fn(
+        "ActivityEventsRepository.applyRetention"
+      )(function* (organizationId: OrganizationId, now: Date = new Date()) {
+        yield* sql`
+          delete from activity_events
+          where organization_id = ${organizationId}
+            and retained_until <= ${now}
+        `;
+
+        yield* sql`
+          delete from activity_events
+          where id in (
+            select id
+            from (
+              select
+                id,
+                row_number() over (
+                  partition by organization_id
+                  order by created_at desc, id desc
+                ) as retained_rank
+              from activity_events
+              where organization_id = ${organizationId}
+            ) ranked_activity_events
+            where retained_rank > ${ACTIVITY_FEED_MAX_EVENTS_PER_ORG}
+          )
+        `;
+      });
+
+      return {
+        applyRetention,
+        listRecent,
+        recordEvent,
+      };
+    }),
+  }
+) {
+  static readonly DefaultWithoutDependencies = Layer.effect(
+    ActivityEventsRepository,
+    ActivityEventsRepository.make
+  );
+  static readonly Default = ActivityEventsRepository.DefaultWithoutDependencies;
+}
 
 export class ProductActivityActorsRepository extends Context.Service<ProductActivityActorsRepository>()(
   "@ceird/domains/activity/ProductActivityActorsRepository",
@@ -215,6 +410,60 @@ function mapProductActorRow(row: ProductActorRow): ProductActor {
             label: row.route_label,
           },
   });
+}
+
+function normalizeRecordActivityEventInput(input: RecordActivityEventInput) {
+  const createdAt = input.createdAt ?? new Date();
+  const display = decodeProductActivityEventDisplay(input.display);
+
+  return {
+    actorId: input.actorId,
+    createdAt,
+    display,
+    eventType: input.eventType,
+    id: input.id ?? generateActivityEventId(),
+    organizationId: input.organizationId,
+    retainedUntil: addDays(createdAt, ACTIVITY_FEED_RETENTION_DAYS),
+    sourceId: input.sourceId,
+    sourceType: input.sourceType,
+    status: input.status ?? "synced",
+    targetId: input.targetId,
+    targetType: input.targetType,
+  } satisfies Required<RecordActivityEventInput> & {
+    readonly retainedUntil: Date;
+  };
+}
+
+function mapActivityEventRow(row: ActivityEventRow): ProductActivityEvent {
+  return decodeProductActivityEvent({
+    actorId: row.actor_id,
+    createdAt: row.created_at.toISOString(),
+    display: row.display,
+    eventType: row.event_type,
+    id: row.id,
+    organizationId: row.organization_id,
+    retainedUntil: row.retained_until.toISOString(),
+    sourceId: row.source_id,
+    sourceType: row.source_type,
+    status: row.status,
+    targetId: row.target_id,
+    targetType: row.target_type,
+  });
+}
+
+function clampActivityEventLimit(limit: number | undefined): number {
+  if (limit === undefined) {
+    return 100;
+  }
+
+  return Math.min(Math.max(Math.trunc(limit), 1), 500);
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+
+  return next;
 }
 
 function nullableToUndefined<Value>(value: Value | null): Value | undefined {

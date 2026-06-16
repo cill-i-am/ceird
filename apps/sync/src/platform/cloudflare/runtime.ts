@@ -324,7 +324,7 @@ function makeCachedShapeAuthorizer(
     Effect.gen(function* () {
       const ttlMs = yield* readSyncAuthorizationCacheTtlMs(env);
 
-      if (ttlMs === 0) {
+      if (ttlMs === 0 || !isSyncAuthorizationCacheable(shapeName)) {
         return yield* authorizeAndValidateShape(
           authorizeShape,
           request,
@@ -381,6 +381,10 @@ function makeCachedShapeAuthorizer(
         },
       })
     );
+}
+
+function isSyncAuthorizationCacheable(shapeName: SyncShapeName) {
+  return shapeName !== "activity-events";
 }
 
 function authorizeAndValidateShape(

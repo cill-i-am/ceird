@@ -1,3 +1,17 @@
+import {
+  ACTIVITY_EVENT_SOURCE_TYPES,
+  ACTIVITY_EVENT_STATUSES,
+  ACTIVITY_EVENT_TARGET_TYPES,
+  ACTIVITY_EVENT_TYPES,
+} from "@ceird/activity-core";
+import type {
+  ActivityEventId,
+  ActivityEventSourceType,
+  ActivityEventStatus,
+  ActivityEventTargetType,
+  ActivityEventType,
+  ProductActivityEventDisplayPayload,
+} from "@ceird/activity-core";
 import { PRODUCT_ACTOR_KINDS } from "@ceird/identity-core";
 import type {
   OrganizationId,
@@ -14,17 +28,33 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 import { agentThread } from "../agents/schema.js";
 import { organization, user } from "../identity/authentication/schema.js";
-import { generateProductActorId } from "./id-generation.js";
+import {
+  generateActivityEventId,
+  generateProductActorId,
+} from "./id-generation.js";
 
 const activityTimestamp = (name: string) =>
   timestamp(name, { withTimezone: true }).notNull().defaultNow();
 
 const productActorKindValuesSql = sql.raw(
   PRODUCT_ACTOR_KINDS.map((value) => `'${value}'`).join(", ")
+);
+const activityEventTypeValuesSql = sql.raw(
+  ACTIVITY_EVENT_TYPES.map((value) => `'${value}'`).join(", ")
+);
+const activityEventTargetTypeValuesSql = sql.raw(
+  ACTIVITY_EVENT_TARGET_TYPES.map((value) => `'${value}'`).join(", ")
+);
+const activityEventSourceTypeValuesSql = sql.raw(
+  ACTIVITY_EVENT_SOURCE_TYPES.map((value) => `'${value}'`).join(", ")
+);
+const activityEventStatusValuesSql = sql.raw(
+  ACTIVITY_EVENT_STATUSES.map((value) => `'${value}'`).join(", ")
 );
 
 export const productActivityActor = pgTable(
@@ -140,7 +170,97 @@ export const productActivityActorSource = pgTable(
   ]
 );
 
+export const activityEvent = pgTable(
+  "activity_events",
+  {
+    id: uuid("id")
+      .$type<ActivityEventId>()
+      .primaryKey()
+      .$defaultFn(generateActivityEventId),
+    organizationId: text("organization_id")
+      .$type<OrganizationId>()
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    eventType: text("event_type").$type<ActivityEventType>().notNull(),
+    targetType: text("target_type").$type<ActivityEventTargetType>().notNull(),
+    targetId: text("target_id").notNull(),
+    actorId: uuid("actor_id").$type<ProductActorId>().notNull(),
+    sourceType: text("source_type").$type<ActivityEventSourceType>().notNull(),
+    sourceId: text("source_id").notNull(),
+    display: jsonb("display")
+      .$type<ProductActivityEventDisplayPayload>()
+      .notNull(),
+    status: text("status").$type<ActivityEventStatus>().notNull(),
+    createdAt: activityTimestamp("created_at"),
+    retainedUntil: timestamp("retained_until", {
+      withTimezone: true,
+    }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.actorId, table.organizationId],
+      foreignColumns: [
+        productActivityActor.id,
+        productActivityActor.organizationId,
+      ],
+      name: "activity_events_actor_org_fk",
+    }),
+    check(
+      "activity_events_event_type_chk",
+      sql`${table.eventType} in (${activityEventTypeValuesSql})`
+    ),
+    check(
+      "activity_events_target_type_chk",
+      sql`${table.targetType} in (${activityEventTargetTypeValuesSql})`
+    ),
+    check(
+      "activity_events_source_type_chk",
+      sql`${table.sourceType} in (${activityEventSourceTypeValuesSql})`
+    ),
+    check(
+      "activity_events_status_chk",
+      sql`${table.status} in (${activityEventStatusValuesSql})`
+    ),
+    check(
+      "activity_events_retained_until_after_created_chk",
+      sql`${table.retainedUntil} > ${table.createdAt}`
+    ),
+    uniqueIndex("activity_events_id_org_idx").on(
+      table.id,
+      table.organizationId
+    ),
+    uniqueIndex("activity_events_org_source_idx").on(
+      table.organizationId,
+      table.sourceType,
+      table.sourceId
+    ),
+    index("activity_events_org_created_idx").on(
+      table.organizationId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("activity_events_org_retained_until_idx").on(
+      table.organizationId,
+      table.retainedUntil
+    ),
+    index("activity_events_org_target_created_idx").on(
+      table.organizationId,
+      table.targetType,
+      table.targetId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("activity_events_org_event_created_idx").on(
+      table.organizationId,
+      table.eventType,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+  ]
+);
+
 export const activitySchema = {
+  activityEvent,
   productActivityActor,
   productActivityActorSource,
 };

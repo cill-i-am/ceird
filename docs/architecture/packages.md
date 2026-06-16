@@ -7,6 +7,22 @@ application. Keep package APIs narrow and source-backed. Move code into a
 package when more than one workspace needs the same runtime contract or domain
 primitive.
 
+## `@ceird/activity-core`
+
+Path: `packages/activity-core`
+
+Exports shared global activity feed contracts:
+
+- `ActivityEventId`
+- activity event, target, source, and status literals
+- v1 retention constants: 30 days and latest 5,000 events per organization
+- product-safe activity event display payload and row DTO schemas
+
+Use this package when app, domain, sync-facing tests, and future feed emitters
+need the same product-facing activity event contract. Keep SQL repositories,
+authorization, product write-path emission, sync authorization, and UI behavior
+out of this package.
+
 ## `@ceird/comments-core`
 
 Path: `packages/comments-core`
@@ -244,6 +260,7 @@ Current intended dependency direction:
 
 ```text
 apps/app
+  -> @ceird/activity-core
   -> @ceird/identity-core
   -> @ceird/jobs-core
   -> @ceird/sites-core
@@ -251,6 +268,7 @@ apps/app
   -> @ceird/proximity-core
 
 apps/domain
+  -> @ceird/activity-core
   -> @ceird/agents-core
   -> @ceird/comments-core
   -> @ceird/identity-core
@@ -311,6 +329,9 @@ packages/comments-core
 packages/labels-core
   -> @ceird/identity-core
 
+packages/activity-core
+  -> @ceird/identity-core
+
 packages/worker-observability
   -> effect
 ```
@@ -330,6 +351,7 @@ applicable:
 
 ```bash
 pnpm --filter @ceird/identity-core test
+pnpm --filter @ceird/activity-core test
 pnpm --filter @ceird/agents-core test
 pnpm --filter @ceird/comments-core test
 pnpm --filter @ceird/domain-core test

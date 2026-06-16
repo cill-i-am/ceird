@@ -202,6 +202,19 @@ migration the same directory name as the canonical `apps/domain/drizzle`
 migration. Existing preview branches can apply the SQL, and branches forked
 after the parent deploy can skip it through the copied `neon_migrations` record.
 
+The global activity feed uses the domain-owned `activity_events` read model and
+the named `activity-events` Electric shape. The table is intentionally bounded:
+domain authorization injects `organization_id = $1 AND retained_until > $2` for
+the public shape, with `$2` set to the domain Worker's current time.
+`retained_until` already encodes the 30-day retention rule, so the public shape
+excludes stale rows even if cleanup has not run yet. Repository writes also
+prune rows past that `retained_until` window and clamp each organization to the
+latest 5,000 feed rows; that ordered cap is enforced in repository retention
+because it is not representable as a fixed Electric shape predicate. Browser
+collections consume that named recent-retained projection through the data-plane
+Electric factory and shared health surface; they do not request arbitrary
+Electric predicates for feed windowing.
+
 The root Alchemy stack, runtime apps, and shared domain packages now use the
 same Effect 4 beta line. Runtime code imports Effect 4 HTTP, SQL, AI, and
 platform APIs from their current stable or unstable package locations, while
@@ -323,7 +336,10 @@ that browser sync clients may request. The domain Worker authorizes each shape
 through `/sync/internal/shapes/:shapeName/authorize`, using the same current
 organization actor resolution as the HTTP API. Most shapes receive an
 `organization_id = $1` predicate. Agent thread and action-run shapes add
-`user_id = $2` so users only sync their own agent records.
+`user_id = $2` so users only sync their own agent records. The
+`activity-events` shape adds `retained_until > $2` with a server current-time
+cutoff so the public feed sync path cannot mirror stale tenant history when
+cleanup lags.
 
 The public sync Worker accepts Electric-compatible shape requests at
 `/v1/shape?shape=<name>` and `/v1/shapes/<name>`. It strips caller-controlled
@@ -344,8 +360,10 @@ scope, table, predicate, and params returned by the domain Worker, and cached
 entries are only reused for the same requested shape. Authorization failures,
 malformed payloads, unknown shapes, and domain/service errors are never cached;
 expired or absent grants call the domain Worker live and keep fail-closed
-behavior. Active membership invalidation is intentionally out of scope for v1,
-so revocation exposure is bounded by the short TTL.
+behavior. The `activity-events` shape is not cached because its retained cutoff
+is time-sensitive and must be refreshed for each public shape request. Active
+membership invalidation is intentionally out of scope for v1, so revocation
+exposure is bounded by the short TTL.
 Pull-request previews and ephemeral push-to-main cloud E2E now provision the
 full Worker, Durable Object, Container, R2, and Neon path. Their deploy
 workflows run an authenticated sync canary through `PLAYWRIGHT_SYNC_URL` after

@@ -63,6 +63,7 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy deploy --env-file .env.local --stage main
 | `apps/domain`                   | Private Ceird domain Worker that owns product services, persistence, authorization, action execution, audit, auth, and migrations. |
 | `apps/mcp`                      | Standalone MCP adapter Worker that forwards MCP traffic through the same private `DOMAIN` service binding.                         |
 | `apps/sync`                     | Public Electric SQL sync Worker plus Cloudflare Container runtime for domain-layer shape replication.                              |
+| `packages/activity-core`        | Shared global activity event ids, runtime DTO schemas, taxonomy literals, and retention constants for the realtime feed.           |
 | `packages/agents-core`          | Shared agent thread IDs, action contracts, instance-name helpers, and connect-token schemas.                                       |
 | `packages/comments-core`        | Shared comment IDs and DTO schemas used by job and site comments.                                                                  |
 | `packages/domain-core`          | Shared private Domain Worker service-binding contract and client helpers.                                                          |
