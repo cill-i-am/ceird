@@ -34,10 +34,12 @@ Exports shared comment primitives used by target-specific packages:
 - base comment and editable-comment DTO schemas
 - add-comment input/response schemas
 
-Target packages extend the base comment DTO with their own target IDs, such as
-`workItemId` in `@ceird/jobs-core` or `siteId` in `@ceird/sites-core`. Keep
-authorization, SQL ownership rows, and target-specific service behavior out of
-this package.
+The base comment DTOs are domain/shared primitives and may include raw domain
+author ids. Browser-facing target packages define product-safe response DTOs
+with target ids and product actor ids, such as `workItemId` in
+`@ceird/jobs-core` or `siteId` in `@ceird/sites-core`, rather than extending
+raw user-id fields. Keep authorization, SQL ownership rows, and target-specific
+service behavior out of this package.
 
 ## `@ceird/agents-core`
 
@@ -116,7 +118,8 @@ Exports the shared contract for calling the private domain Worker:
   authorization DTO schemas, and typed sync authorization errors used by
   `apps/domain`, `apps/sync`, and the public API boundary guard; named product
   shapes include raw domain tables and product-safe projections such as
-  `site-active-job-summaries`
+  `site-active-job-summaries`, `site-comment-bodies`, and
+  `work-item-comment-bodies`
 
 Keep product repositories, Drizzle schema, authorization, action execution, and
 audit behavior out of this package. Those are owned by `apps/domain`; this
@@ -175,7 +178,8 @@ Exports the shared sites contract:
 - route-aware proximity request/response DTOs for ranking mapped sites and
   previewing one site route by driving time, including active-job summary fields
 - Google Places autocomplete and place-details request/response DTOs
-- site comment DTOs extended from `@ceird/comments-core`
+- product-safe site comment DTOs that reuse `@ceird/comments-core` comment
+  primitives while exposing product actor ids/projections instead of raw user ids
 - site label assignment inputs and endpoints; this package depends on
   `@ceird/labels-core` for label IDs and schemas
 - typed site, access-denied, storage, location provider, and location resolution

@@ -32,6 +32,7 @@ const schemaExportNames = [
   "session",
   "site",
   "siteActiveJobSummary",
+  "siteCommentBody",
   "siteComment",
   "siteContact",
   "siteLabel",
@@ -43,6 +44,7 @@ const schemaExportNames = [
   "workItem",
   "workItemActivity",
   "workItemCollaborator",
+  "workItemCommentBody",
   "workItemComment",
   "workItemLabel",
   "workItemVisit",
@@ -108,6 +110,7 @@ export const rateLimit = requireSchemaExport("rateLimit");
 export const session = requireSchemaExport("session");
 export const site = requireSchemaExport("site");
 export const siteActiveJobSummary = requireSchemaExport("siteActiveJobSummary");
+export const siteCommentBody = requireSchemaExport("siteCommentBody");
 export const siteComment = requireSchemaExport("siteComment");
 export const siteContact = requireSchemaExport("siteContact");
 export const siteLabel = requireSchemaExport("siteLabel");
@@ -119,6 +122,7 @@ export const verification = requireSchemaExport("verification");
 export const workItem = requireSchemaExport("workItem");
 export const workItemActivity = requireSchemaExport("workItemActivity");
 export const workItemCollaborator = requireSchemaExport("workItemCollaborator");
+export const workItemCommentBody = requireSchemaExport("workItemCommentBody");
 export const workItemComment = requireSchemaExport("workItemComment");
 export const workItemLabel = requireSchemaExport("workItemLabel");
 export const workItemVisit = requireSchemaExport("workItemVisit");

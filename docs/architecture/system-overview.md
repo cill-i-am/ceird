@@ -151,21 +151,24 @@ The domain Worker exports a combined Drizzle schema from
 - `activitySchema` contains the product-safe activity actor projection and a
   private source map used by the domain Worker to refresh member, agent, and
   system actor rows.
-- `commentsSchema` contains shared comment rows and target ownership rows for
-  jobs and sites.
+- `commentsSchema` contains shared comment rows, target ownership rows for jobs
+  and sites, and product-safe comment body projections for browser sync.
 - `jobsSchema` contains contacts, work items, activity, visits, labels, and
   collaborators.
 - `sitesSchema` contains sites, site-label assignments, and the
   domain-maintained `site_active_job_summaries` projection. Site access notes
   remain on the site record; site comments are separate internal collaboration
-  records.
+  records with a product-safe `site_comment_bodies` sync projection owned by the
+  comments schema.
 - `agentsSchema` contains agent threads and the agent action-run ledger.
 - `databaseSchema` merges authentication, activity, comments, labels, sites,
   jobs, and agents for the full database runtime.
 
 The sync shape registry lives in `@ceird/domain-core` and covers domain tables
 outside auth, including product-safe projections such as
-`site-active-job-summaries`. Most shapes are organization-scoped with
+`site-active-job-summaries`, `site-comment-bodies`, and
+`work-item-comment-bodies`. Most shapes are
+organization-scoped with
 `organization_id = $1`; agent thread and action-run shapes are additionally
 scoped to the current user. The domain Worker owns the authorization decision
 for each shape, so the public sync Worker never accepts caller-supplied table,

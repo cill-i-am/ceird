@@ -276,13 +276,11 @@ export type JobCommentEdgeRow = Schema.Schema.Type<
 >;
 
 export const JobsWorkspaceCommentRowSchema = Schema.Struct({
-  actorId: Schema.optional(ProductActorId),
-  authorUserId: UserId,
+  actorId: ProductActorId,
   body: Schema.String,
   createdAt: IsoDateTimeString,
   id: CommentId,
   updatedAt: IsoDateTimeString,
-  updatedByUserId: Schema.optional(UserId),
 });
 export type JobsWorkspaceCommentRow = Schema.Schema.Type<
   typeof JobsWorkspaceCommentRowSchema
@@ -561,7 +559,7 @@ export interface JobsWorkspaceDetailContract {
     "work-item-activity",
     "work-item-visits",
     "work-item-comments",
-    "comments",
+    "work-item-comment-bodies",
   ];
 }
 
@@ -1653,7 +1651,7 @@ export function createJobsWorkspaceDetailContract(): JobsWorkspaceDetailContract
       "work-item-activity",
       "work-item-visits",
       "work-item-comments",
-      "comments",
+      "work-item-comment-bodies",
     ],
   };
 }
@@ -1956,11 +1954,17 @@ async function awaitJobCommentConfirmation({
   ]);
 
   return Exit.succeed({
-    ...response,
+    actor: response.actor,
+    actorId: response.actorId,
+    authorName: response.authorName,
+    body: response.body,
+    createdAt: response.createdAt,
     electricObservation: {
       commentBody: commentBody.kind,
       commentEdge: commentEdge.kind,
     },
+    id: response.id,
+    workItemId: response.workItemId,
   } satisfies JobsWorkspaceCommentCommandResult);
 }
 
@@ -2265,12 +2269,12 @@ export function createJobCommentsElectricContract(
     completeness: syncBackedCollectionCompleteness({
       covers: COMPLETE_TENANT_COLLECTION,
       source: "electric",
-      subscriptionName: "comments",
+      subscriptionName: "work-item-comment-bodies",
     }),
     getKey: (comment: JobsWorkspaceCommentRow) => comment.id,
-    id: `${jobsWorkspaceCollectionId(scope, "comments")}:electric`,
+    id: `${jobsWorkspaceCollectionId(scope, "work-item-comment-bodies")}:electric`,
     schema: Schema.toStandardSchemaV1(JobsWorkspaceCommentRowSchema),
-    shapeName: "comments",
+    shapeName: "work-item-comment-bodies",
     shapeOptions: {
       transformer: toJobCommentElectricRow,
     },
@@ -2769,15 +2773,12 @@ export function toJobCommentElectricRow(
   row: Record<string, unknown>
 ): JobsWorkspaceCommentRow {
   const item: JobsElectricRow = {
-    authorUserId: String(row.authorUserId),
+    actorId: String(row.actorId),
     body: String(row.body),
     createdAt: String(row.createdAt),
     id: String(row.id),
     updatedAt: String(row.updatedAt),
   };
-
-  addOptionalString(item, "actorId", row.actorId);
-  addOptionalString(item, "updatedByUserId", row.updatedByUserId);
 
   return Schema.decodeUnknownSync(JobsWorkspaceCommentRowSchema)(item);
 }

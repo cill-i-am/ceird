@@ -119,8 +119,86 @@ export const siteComment = pgTable(
   ]
 );
 
+export const siteCommentBody = pgTable(
+  "site_comment_bodies",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").notNull(),
+    body: text("body").notNull(),
+    createdAt: commentsTimestamp("created_at"),
+    updatedAt: commentsTimestamp("updated_at"),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.id, table.organizationId],
+      foreignColumns: [comment.id, comment.organizationId],
+      name: "site_comment_bodies_comment_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.actorId, table.organizationId],
+      foreignColumns: [
+        productActivityActor.id,
+        productActivityActor.organizationId,
+      ],
+      name: "site_comment_bodies_actor_org_fk",
+    }),
+    index("site_comment_bodies_organization_created_at_idx").on(
+      table.organizationId,
+      table.createdAt.asc(),
+      table.id.asc()
+    ),
+    index("site_comment_bodies_actor_id_idx").on(
+      table.organizationId,
+      table.actorId
+    ),
+  ]
+);
+
+export const workItemCommentBody = pgTable(
+  "work_item_comment_bodies",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").notNull(),
+    body: text("body").notNull(),
+    createdAt: commentsTimestamp("created_at"),
+    updatedAt: commentsTimestamp("updated_at"),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.id, table.organizationId],
+      foreignColumns: [comment.id, comment.organizationId],
+      name: "work_item_comment_bodies_comment_org_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.actorId, table.organizationId],
+      foreignColumns: [
+        productActivityActor.id,
+        productActivityActor.organizationId,
+      ],
+      name: "work_item_comment_bodies_actor_org_fk",
+    }),
+    index("work_item_comment_bodies_organization_created_at_idx").on(
+      table.organizationId,
+      table.createdAt.asc(),
+      table.id.asc()
+    ),
+    index("work_item_comment_bodies_actor_id_idx").on(
+      table.organizationId,
+      table.actorId
+    ),
+  ]
+);
+
 export const commentsSchema = {
   comment,
+  siteCommentBody,
   siteComment,
+  workItemCommentBody,
   workItemComment,
 };

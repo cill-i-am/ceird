@@ -1,4 +1,9 @@
-import { AddCommentInputSchema, CommentSchema } from "@ceird/comments-core";
+import {
+  AddCommentInputSchema,
+  CommentBodySchema,
+  CommentId,
+} from "@ceird/comments-core";
+import { ProductActorId, ProductActorSchema } from "@ceird/identity-core";
 import { LabelId, LabelSchema } from "@ceird/labels-core";
 import {
   ProximityLimitSchema,
@@ -150,8 +155,15 @@ export const SiteDetailSchema = SiteOptionSchema;
 export type SiteDetail = Schema.Schema.Type<typeof SiteDetailSchema>;
 
 export const SiteCommentSchema = Schema.Struct({
-  ...CommentSchema.fields,
+  actor: Schema.optional(ProductActorSchema),
+  actorId: ProductActorId,
+  authorName: Schema.optional(Schema.String),
+  body: CommentBodySchema,
+  createdAt: IsoDateTimeString,
+  id: CommentId,
   siteId: SiteId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 export type SiteComment = Schema.Schema.Type<typeof SiteCommentSchema>;
 
@@ -167,6 +179,8 @@ export type AddSiteCommentResponse = Schema.Schema.Type<
 
 export const SiteCommentsResponseSchema = Schema.Struct({
   comments: Schema.Array(SiteCommentSchema),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 export type SiteCommentsResponse = Schema.Schema.Type<
   typeof SiteCommentsResponseSchema

@@ -1,9 +1,24 @@
+import type { CommentIdType } from "@ceird/comments-core";
+import {
+  CommentBodySchema,
+  CommentId,
+  IsoDateTimeString,
+} from "@ceird/comments-core";
+import {
+  ProductActorDisplayDetail,
+  ProductActorDisplayName,
+  ProductActorId,
+  ProductActorKind,
+  ProductActorRoute,
+} from "@ceird/identity-core";
 import type { JobListItem } from "@ceird/jobs-core";
 import { JobListItemSchema } from "@ceird/jobs-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
 import { LabelSchema } from "@ceird/labels-core";
 import type {
   AssignSiteLabelInput,
+  AddSiteCommentInput,
+  AddSiteCommentResponse,
   CreateSiteInput,
   SiteActiveJobPriority,
   SiteIdType,
@@ -12,6 +27,7 @@ import type {
   UpdateSiteInput,
 } from "@ceird/sites-core";
 import {
+  SiteId,
   SiteActiveJobPrioritySchema,
   SiteOptionSchema,
 } from "@ceird/sites-core";
@@ -58,6 +74,26 @@ const SiteLabelAssignmentElectricRowSchema = Schema.Struct({
   organizationId: Schema.String,
   siteId: Schema.String,
 });
+const ProductActivityActorElectricRowSchema = Schema.Struct({
+  displayDetail: Schema.optional(ProductActorDisplayDetail),
+  displayName: ProductActorDisplayName,
+  id: ProductActorId,
+  kind: ProductActorKind,
+  route: Schema.optional(ProductActorRoute),
+});
+const SiteCommentEdgeElectricRowSchema = Schema.Struct({
+  commentId: CommentId,
+  createdAt: IsoDateTimeString,
+  id: Schema.String,
+  siteId: SiteId,
+});
+const SiteCommentBodyElectricRowSchema = Schema.Struct({
+  actorId: ProductActorId,
+  body: CommentBodySchema,
+  createdAt: IsoDateTimeString,
+  id: CommentId,
+  updatedAt: IsoDateTimeString,
+});
 const SiteOptionElectricStandardSchema = Schema.toStandardSchemaV1(
   SiteOptionSchema
 ) as unknown as StandardSchemaV1<unknown, SitesWorkspaceElectricRow>;
@@ -71,6 +107,15 @@ const SiteRelatedJobElectricStandardSchema = Schema.toStandardSchemaV1(
   JobListItemSchema
 ) as unknown as StandardSchemaV1<unknown, SitesWorkspaceElectricRow>;
 const LabelElectricStandardSchema = Schema.toStandardSchemaV1(LabelSchema);
+const ProductActivityActorElectricStandardSchema = Schema.toStandardSchemaV1(
+  ProductActivityActorElectricRowSchema
+) as unknown as StandardSchemaV1<unknown, SitesWorkspaceProductActorRow>;
+const SiteCommentEdgeElectricStandardSchema = Schema.toStandardSchemaV1(
+  SiteCommentEdgeElectricRowSchema
+) as unknown as StandardSchemaV1<unknown, SiteCommentEdgeRow>;
+const SiteCommentBodyElectricStandardSchema = Schema.toStandardSchemaV1(
+  SiteCommentBodyElectricRowSchema
+) as unknown as StandardSchemaV1<unknown, SiteCommentBodyRow>;
 const SITES_WORKSPACE_MUTATION_CONFIRMATION_TIMEOUT_MS = 10_000;
 
 interface SitesWorkspaceObservableCollection<Item> {
@@ -82,6 +127,8 @@ interface SitesWorkspaceObservableCollection<Item> {
 }
 
 export interface SitesWorkspaceCommandCollections {
+  readonly commentBodies: SitesWorkspaceObservableCollection<SiteCommentBodyRow> | null;
+  readonly commentEdges: SitesWorkspaceObservableCollection<SiteCommentEdgeRow> | null;
   readonly siteLabelAssignments: SitesWorkspaceObservableCollection<SiteLabelAssignmentElectricRow> | null;
   readonly sites: SitesWorkspaceObservableCollection<SiteOption> | null;
 }
@@ -116,6 +163,46 @@ export type SitesWorkspaceCommandResult = SiteWriteResponse & {
   readonly electricObservation: SitesWorkspaceElectricObservation;
 };
 
+export interface SiteCommentEdgeRow extends SitesWorkspaceElectricRow {
+  readonly commentId: CommentIdType;
+  readonly createdAt: string;
+  readonly id: string;
+  readonly siteId: SiteIdType;
+}
+
+export type SiteCommentBodyRow = Schema.Schema.Type<
+  typeof SiteCommentBodyElectricRowSchema
+> &
+  SitesWorkspaceElectricRow;
+
+export type SitesWorkspaceProductActorRow = Schema.Schema.Type<
+  typeof ProductActivityActorElectricRowSchema
+> &
+  SitesWorkspaceElectricRow;
+
+export interface SitesWorkspaceDetailCommentItem {
+  readonly actor?: SitesWorkspaceProductActorRow | undefined;
+  readonly comment: SiteCommentBodyRow;
+  readonly edge: SiteCommentEdgeRow;
+}
+
+export interface SitesWorkspaceCommentCommandCollections {
+  readonly commentBodies: SitesWorkspaceObservableCollection<SiteCommentBodyRow> | null;
+  readonly commentEdges: SitesWorkspaceObservableCollection<SiteCommentEdgeRow> | null;
+}
+
+export interface SitesWorkspaceCommentElectricObservation {
+  readonly commentBody: "already-reflected" | "observed-change";
+  readonly commentEdge: "already-reflected" | "observed-change";
+}
+
+type SitesWorkspaceSiteCommentResponse = AddSiteCommentResponse;
+
+export type SitesWorkspaceCommentCommandResult =
+  SitesWorkspaceSiteCommentResponse & {
+    readonly electricObservation: SitesWorkspaceCommentElectricObservation;
+  };
+
 export type SitesWorkspaceFilter =
   | "all"
   | "with-active-jobs"
@@ -124,24 +211,70 @@ export type SitesWorkspaceFilter =
 export type SitesWorkspaceSort = "name" | "active-jobs" | "updated";
 
 export interface SitesWorkspaceVisibleRow {
+  readonly comments: readonly SitesWorkspaceDetailCommentItem[];
   readonly relatedJobs: readonly JobListItem[];
   readonly site: SiteOption;
 }
 
 export interface SitesWorkspaceReadModelRows {
   readonly activeJobSummaries: readonly SiteActiveJobSummaryElectricRow[];
+  readonly actors: readonly SitesWorkspaceProductActorRow[];
+  readonly commentBodies: readonly SiteCommentBodyRow[];
   readonly labels: readonly Label[];
   readonly relatedJobs: readonly JobListItem[];
+  readonly siteCommentEdges: readonly SiteCommentEdgeRow[];
   readonly siteLabelAssignments: readonly SiteLabelAssignmentElectricRow[];
   readonly sites: readonly SiteOption[];
 }
 
 export function createSitesWorkspaceCommandRunner({
+  addComment = addBrowserSiteComment,
   collections,
   journal,
   timeoutMs = SITES_WORKSPACE_MUTATION_CONFIRMATION_TIMEOUT_MS,
-}: SitesWorkspaceCommandRunnerOptions) {
+}: SitesWorkspaceCommandRunnerOptions & {
+  readonly addComment?:
+    | ((
+        siteId: SiteIdType,
+        input: AddSiteCommentInput
+      ) => ReturnType<typeof addBrowserSiteComment>)
+    | undefined;
+}) {
   return {
+    addSiteComment: (siteId: SiteIdType, input: AddSiteCommentInput) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["site-comment-bodies", "site-comments"],
+          execute: async (commandInput: {
+            readonly input: AddSiteCommentInput;
+            readonly siteId: SiteIdType;
+          }) => {
+            const exit = await Effect.runPromiseExit(
+              addComment(commandInput.siteId, commandInput.input)
+            );
+
+            if (Exit.isFailure(exit)) {
+              return Exit.failCause(exit.cause);
+            }
+
+            return await catchWorkspaceConfirmationFailure(
+              awaitSiteCommentConfirmation({
+                collections: {
+                  commentBodies: collections.commentBodies,
+                  commentEdges: collections.commentEdges,
+                },
+                response: exit.value,
+                siteId: commandInput.siteId,
+                timeoutMs,
+              })
+            );
+          },
+          name: "sites-workspace.add-comment",
+          optimistic: "none",
+        },
+        { input, siteId },
+        { journal }
+      ),
     assignSiteLabel: (siteId: SiteIdType, input: AssignSiteLabelInput) =>
       executeDataPlaneCommandAction(
         {
@@ -301,10 +434,13 @@ export function getOrCreateSitesWorkspaceReadModelCollectionState({
 
 export function deriveSitesWorkspaceVisibleRows({
   activeJobSummaries,
+  actors,
+  commentBodies,
   filter,
   labels,
   query,
   relatedJobs,
+  siteCommentEdges,
   siteLabelAssignments,
   sites,
   sort,
@@ -320,12 +456,22 @@ export function deriveSitesWorkspaceVisibleRows({
     siteLabelAssignments,
     sites,
   });
+  const actorsById = new Map(actors.map((actor) => [actor.id, actor]));
+  const commentsById = new Map(
+    commentBodies.map((comment) => [comment.id, comment])
+  );
 
   return joinedSites
     .filter((site) => matchesSitesWorkspaceFilter(site, filter))
     .filter((site) => matchesSitesWorkspaceQuery(site, normalizedQuery))
     .toSorted((left, right) => compareSitesWorkspaceRows(left, right, sort))
     .map((site) => ({
+      comments: selectSiteComments({
+        actorsById,
+        commentsById,
+        siteCommentEdges,
+        siteId: site.id,
+      }),
       relatedJobs: selectSiteRelatedJobs(relatedJobs, site.id),
       site,
     }));
@@ -338,6 +484,12 @@ function createSitesWorkspaceReadModelCollections(
     activeJobSummaries: createElectricCollectionFromContract(
       createSiteActiveJobSummariesElectricContract(scope)
     ),
+    actors: createElectricCollectionFromContract(
+      createProductActivityActorsElectricContract(scope)
+    ),
+    commentBodies: createElectricCollectionFromContract(
+      createSiteCommentBodiesElectricContract(scope)
+    ),
     labels: createElectricCollectionFromContract(
       createLabelsElectricContract(scope)
     ),
@@ -346,6 +498,9 @@ function createSitesWorkspaceReadModelCollections(
     ),
     siteLabelAssignments: createElectricCollectionFromContract(
       createSiteLabelAssignmentsElectricContract(scope)
+    ),
+    siteCommentEdges: createElectricCollectionFromContract(
+      createSiteCommentEdgesElectricContract(scope)
     ),
     sites: createElectricCollectionFromContract(
       createSitesElectricContract(scope)
@@ -448,12 +603,71 @@ function createLabelsElectricContract(scope: OrganizationDataScope) {
   });
 }
 
+function createProductActivityActorsElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "product-activity-actors",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "product-activity-actors",
+    }),
+    getKey: (actor: SitesWorkspaceProductActorRow) => actor.id,
+    id: `${sitesWorkspaceCollectionId(scope)}:product-activity-actors`,
+    schema: ProductActivityActorElectricStandardSchema,
+    shapeName: "product-activity-actors",
+    shapeOptions: {
+      transformer: toProductActivityActorElectricRow,
+    },
+  });
+}
+
+function createSiteCommentEdgesElectricContract(scope: OrganizationDataScope) {
+  return defineElectricCollectionContract({
+    collection: "site-comments",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "site-comments",
+    }),
+    getKey: (edge: SiteCommentEdgeRow) => edge.id,
+    id: `${sitesWorkspaceCollectionId(scope)}:site-comments`,
+    schema: SiteCommentEdgeElectricStandardSchema,
+    shapeName: "site-comments",
+    shapeOptions: {
+      transformer: toSiteCommentEdgeElectricRow,
+    },
+  });
+}
+
+function createSiteCommentBodiesElectricContract(scope: OrganizationDataScope) {
+  return defineElectricCollectionContract({
+    collection: "site-comment-bodies",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "site-comment-bodies",
+    }),
+    getKey: (comment: SiteCommentBodyRow) => comment.id,
+    id: `${sitesWorkspaceCollectionId(scope)}:site-comment-bodies`,
+    schema: SiteCommentBodyElectricStandardSchema,
+    shapeName: "site-comment-bodies",
+    shapeOptions: {
+      transformer: toSiteCommentBodyElectricRow,
+    },
+  });
+}
+
 function joinSitesWorkspaceRows({
   activeJobSummaries,
   labels,
   siteLabelAssignments,
   sites,
-}: Omit<SitesWorkspaceReadModelRows, "relatedJobs">): readonly SiteOption[] {
+}: Pick<
+  SitesWorkspaceReadModelRows,
+  "activeJobSummaries" | "labels" | "siteLabelAssignments" | "sites"
+>): readonly SiteOption[] {
   const labelsById = new Map(labels.map((label) => [label.id, label]));
   const labelsBySiteId = new Map<SiteIdType, Label[]>();
 
@@ -496,6 +710,37 @@ function selectSiteRelatedJobs(
   return jobs
     .filter((job) => job.siteId === siteId)
     .toSorted(compareRelatedJobs);
+}
+
+function selectSiteComments({
+  actorsById,
+  commentsById,
+  siteCommentEdges,
+  siteId,
+}: {
+  readonly actorsById: ReadonlyMap<string, SitesWorkspaceProductActorRow>;
+  readonly commentsById: ReadonlyMap<string, SiteCommentBodyRow>;
+  readonly siteCommentEdges: readonly SiteCommentEdgeRow[];
+  readonly siteId: SiteIdType;
+}): readonly SitesWorkspaceDetailCommentItem[] {
+  return siteCommentEdges
+    .filter((edge) => edge.siteId === siteId)
+    .flatMap((edge): SitesWorkspaceDetailCommentItem[] => {
+      const comment = commentsById.get(edge.commentId);
+
+      if (comment === undefined) {
+        return [];
+      }
+
+      return [
+        {
+          actor: actorsById.get(comment.actorId),
+          comment,
+          edge,
+        },
+      ];
+    })
+    .toSorted(compareSiteComments);
 }
 
 function toSiteOptionElectricRow(
@@ -612,6 +857,64 @@ function toLabelElectricRow(row: Record<string, unknown>) {
   };
 }
 
+function toProductActivityActorElectricRow(
+  row: Record<string, unknown>
+): SitesWorkspaceProductActorRow {
+  const actor: SitesWorkspaceElectricRow = {
+    displayName: String(row.displayName),
+    id: String(row.id),
+    kind: String(row.kind),
+  };
+
+  addOptionalString(actor, "displayDetail", row.displayDetail);
+
+  if (
+    row.routeHref !== null &&
+    row.routeHref !== undefined &&
+    row.routeLabel !== null &&
+    row.routeLabel !== undefined
+  ) {
+    actor.route = {
+      href: String(row.routeHref),
+      label: String(row.routeLabel),
+    };
+  }
+
+  return Schema.decodeUnknownSync(ProductActivityActorElectricRowSchema)(
+    actor
+  ) as SitesWorkspaceProductActorRow;
+}
+
+function toSiteCommentEdgeElectricRow(
+  row: Record<string, unknown>
+): SiteCommentEdgeRow {
+  const siteId = String(row.siteId);
+  const commentId = String(row.commentId);
+
+  return Schema.decodeUnknownSync(SiteCommentEdgeElectricRowSchema)({
+    commentId,
+    createdAt: String(row.createdAt),
+    id: `${siteId}:${commentId}`,
+    siteId,
+  }) as SiteCommentEdgeRow;
+}
+
+export function toSiteCommentBodyElectricRow(
+  row: Record<string, unknown>
+): SiteCommentBodyRow {
+  const comment: SitesWorkspaceElectricRow = {
+    actorId: String(row.actorId),
+    body: String(row.body),
+    createdAt: String(row.createdAt),
+    id: String(row.id),
+    updatedAt: String(row.updatedAt),
+  };
+
+  return Schema.decodeUnknownSync(SiteCommentBodyElectricRowSchema)(
+    comment
+  ) as SiteCommentBodyRow;
+}
+
 async function awaitSiteConfirmation({
   collection,
   response,
@@ -635,6 +938,43 @@ async function awaitSiteConfirmation({
       kind: observation.kind,
     })
   );
+}
+
+async function awaitSiteCommentConfirmation({
+  collections,
+  response,
+  siteId,
+  timeoutMs,
+}: {
+  readonly collections: SitesWorkspaceCommentCommandCollections;
+  readonly response: SitesWorkspaceSiteCommentResponse;
+  readonly siteId: SiteIdType;
+  readonly timeoutMs: number;
+}) {
+  const [commentBody, commentEdge] = await Promise.all([
+    waitForWorkspaceCollectionObservation({
+      collection: collections.commentBodies,
+      matches: (comment) =>
+        comment.id === response.id &&
+        comment.body === response.body &&
+        comment.createdAt === response.createdAt,
+      timeoutMs,
+    }),
+    waitForWorkspaceCollectionObservation({
+      collection: collections.commentEdges,
+      matches: (edge) =>
+        edge.commentId === response.id && edge.siteId === siteId,
+      timeoutMs,
+    }),
+  ]);
+
+  return Exit.succeed({
+    ...response,
+    electricObservation: {
+      commentBody: commentBody.kind,
+      commentEdge: commentEdge.kind,
+    },
+  } satisfies SitesWorkspaceCommentCommandResult);
 }
 
 async function catchWorkspaceConfirmationFailure<Success>(
@@ -789,6 +1129,15 @@ function removeBrowserSiteLabelWithConfirmation(
   );
 }
 
+function addBrowserSiteComment(siteId: SiteIdType, input: AddSiteCommentInput) {
+  return runBrowserAppApiRequest("SitesWorkspace.addSiteComment", (client) =>
+    client.sites.addSiteComment({
+      params: { siteId },
+      payload: input,
+    })
+  );
+}
+
 function addOptionalValue(
   target: Record<string, unknown>,
   key: string,
@@ -799,6 +1148,18 @@ function addOptionalValue(
   }
 
   target[key] = value;
+}
+
+function addOptionalString(
+  target: Record<string, SitesWorkspaceElectricRowValue>,
+  key: string,
+  value: unknown
+) {
+  if (value === null || value === undefined) {
+    return;
+  }
+
+  target[key] = String(value);
 }
 
 function matchesSitesWorkspaceFilter(
@@ -884,6 +1245,19 @@ function compareRelatedJobs(left: JobListItem, right: JobListItem) {
   return updatedAtComparison === 0
     ? right.id.localeCompare(left.id)
     : updatedAtComparison;
+}
+
+function compareSiteComments(
+  left: SitesWorkspaceDetailCommentItem,
+  right: SitesWorkspaceDetailCommentItem
+) {
+  const createdAtComparison = left.edge.createdAt.localeCompare(
+    right.edge.createdAt
+  );
+
+  return createdAtComparison === 0
+    ? left.edge.commentId.localeCompare(right.edge.commentId)
+    : createdAtComparison;
 }
 
 function getSiteUpdatedAt(site: SiteOption) {

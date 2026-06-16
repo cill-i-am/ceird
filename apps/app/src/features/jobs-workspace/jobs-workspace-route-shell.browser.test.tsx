@@ -382,7 +382,7 @@ describe("jobs workspace route shell", () => {
           id: "99999999-9999-4999-8999-999999999999",
           kind: "member",
         },
-        authorUserId: "user_taylor",
+        actorId: "99999999-9999-4999-8999-999999999999",
         body: "Customer confirmed.",
         createdAt: "2026-06-15T10:45:00.000Z",
         electricObservation: {
@@ -838,7 +838,6 @@ function makeReadyDetailState(
           },
           comment: {
             actorId: "99999999-9999-4999-8999-999999999999" as ProductActorId,
-            authorUserId: "user_taylor" as UserId,
             body: "Ready for dispatch",
             createdAt: "2026-06-15T10:40:00.000Z",
             id: "55555555-5555-4555-8555-555555555555" as CommentIdType,

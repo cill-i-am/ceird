@@ -22,7 +22,9 @@ export {
 export {
   comment,
   commentsSchema,
+  siteCommentBody,
   siteComment,
+  workItemCommentBody,
   workItemComment,
 } from "../../domains/comments/schema.js";
 export {

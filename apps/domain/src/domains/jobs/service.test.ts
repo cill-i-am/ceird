@@ -1080,8 +1080,13 @@ function makeJobsServiceTestLayer(options: {
           options.calls.addComment += 1;
           return Effect.succeed(
             decodeJobComment({
+              actor: {
+                displayName: "External Contact",
+                id: "99999999-9999-4999-8999-999999999999",
+                kind: "member",
+              },
+              actorId: "99999999-9999-4999-8999-999999999999",
               authorName: "External Contact",
-              authorUserId: externalActor.userId,
               body: "Can we get an update?",
               createdAt: "2026-05-20T10:00:00.000Z",
               id: "33333333-3333-4333-8333-333333333333",
@@ -1151,8 +1156,8 @@ function makeJobsLongCommentActivityTestLayer(options: {
               id: "99999999-9999-4999-8999-999999999999",
               kind: "member",
             },
+            actorId: "99999999-9999-4999-8999-999999999999",
             authorName: "Taylor Member",
-            authorUserId: internalActor.userId,
             body: input.body,
             createdAt: "2026-05-20T10:00:00.000Z",
             id: "33333333-3333-4333-8333-333333333333",

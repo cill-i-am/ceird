@@ -1,5 +1,9 @@
-import { AddCommentInputSchema, CommentSchema } from "@ceird/comments-core";
-import { ProductActorSchema } from "@ceird/identity-core";
+import {
+  AddCommentInputSchema,
+  CommentBodySchema,
+  CommentId,
+} from "@ceird/comments-core";
+import { ProductActorId, ProductActorSchema } from "@ceird/identity-core";
 import { LabelId, LabelNameSchema, LabelSchema } from "@ceird/labels-core";
 import {
   ProximityLimitSchema,
@@ -98,9 +102,14 @@ export const JobListItemSchema = Schema.Struct({
 export type JobListItem = Schema.Schema.Type<typeof JobListItemSchema>;
 
 export const JobCommentSchema = Schema.Struct({
-  ...CommentSchema.fields,
+  actor: Schema.optional(ProductActorSchema),
+  actorId: ProductActorId,
+  authorName: Schema.optional(Schema.String),
+  body: CommentBodySchema,
+  createdAt: IsoDateTimeString,
+  id: CommentId,
   workItemId: WorkItemId,
-});
+}).annotate({ parseOptions: { onExcessProperty: "error" } });
 export type JobComment = Schema.Schema.Type<typeof JobCommentSchema>;
 
 export const JobCollaboratorSchema = Schema.Struct({

@@ -628,26 +628,46 @@ single `comments` table and keeps target ownership in separate join tables:
 
 - `work_item_comments` links comments to jobs.
 - `site_comments` links comments to sites.
+- `site_comment_bodies` is the Sites-specific product-safe Electric projection
+  of site comment body rows. It carries comment id, organization id, product
+  `actor_id`, body, and timestamps, but not Better Auth/user-table ids.
+- `work_item_comment_bodies` is the Jobs-specific product-safe Electric
+  projection for browser job comment bodies with the same product actor boundary.
 
 The core `comments` row owns author, organization, body, creation timestamp,
 and edit metadata (`updated_at`, `updated_by_user_id`). Target join tables own
-the target foreign key and ordering timestamp. Database triggers enforce exactly
-one ownership target per comment, validate that comment authors/editors are
-members of the comment organization without pinning historical comments to
-membership rows after a member is removed, and delete a shared comment after its
-ownership row is removed.
+the target foreign key and ordering timestamp. The raw `comments` table remains
+domain-private for browser sync; app-facing Electric comment bodies use
+projection rows that expose product actor ids instead of Better Auth/user-table
+ids. Database triggers enforce exactly one ownership target per comment,
+validate that comment authors/editors are members of the comment organization
+without pinning historical comments to membership rows after a member is
+removed, and delete a shared comment after its ownership row is removed.
+Legacy rows whose `actor_id` predates the product actor projection are repaired
+to a product actor during migration: active member authors resolve to member
+actors, while readable comments from authors without a current member row resolve
+to an organization-scoped `system` actor labelled "Former team member". This
+keeps historical comments visible through product-safe API/Electric projections
+without exposing Better Auth user ids or leaving a target edge without a body
+projection.
 
 Job comment writes go through `JobsService.addComment`. The service creates the
-shared comment row and `work_item_comments` edge in the domain transaction,
-returns a DTO with the product-safe actor projection, and records a
+shared comment row, `work_item_comments` edge, and `work_item_comment_bodies`
+projection row in the domain transaction, returns a DTO with the product-safe
+actor projection and no raw `authorUserId`/`updatedByUserId`, and records a
 `comment.created` global activity event targeted at the comment. App and sync
 clients join comments to actors through `product_activity_actors`; Better Auth
 user/member tables remain private to the domain actor resolver and projection
 maintenance path.
 
-Site comments are internal-only at the service authorization layer for now.
-Site `accessNotes` remain part of the site record and are not deprecated by the
-comments API.
+Site comment writes go through `SitesService.addComment`. The service creates
+the shared comment row, `site_comments` edge, and `site_comment_bodies`
+projection row in the domain transaction, returns a DTO with the same
+product-safe actor projection and no raw `authorUserId`, and records a
+`site.comment_created` event so the global Activity read model remains
+compatible with site-scoped comments. Site comments are internal-only at the
+service authorization layer for now. Site `accessNotes` remain part of the site
+record and are not deprecated by the comments API.
 
 ## Jobs API Endpoints
 

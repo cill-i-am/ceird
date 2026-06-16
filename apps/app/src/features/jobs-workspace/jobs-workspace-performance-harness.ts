@@ -260,7 +260,6 @@ export function createJobsWorkspacePerformanceFixture(
   );
   const comments = Array.from({ length: counts.comments }, (_, index) => ({
     actorId: actorId(index % counts.memberActors),
-    authorUserId: userId(index % counts.memberActors),
     body: `Comment ${index + 1} for performance detail fixture`,
     createdAt: toIso(generatedAt - index * 45_000),
     id: commentId(index),

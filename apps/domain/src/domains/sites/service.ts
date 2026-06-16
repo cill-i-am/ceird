@@ -14,6 +14,7 @@ import type {
   SiteProximityResponse,
   SiteRoutePreviewInput,
   SiteRoutePreviewResponse,
+  SiteComment,
   SiteWriteResponse,
   UpdateSiteInput,
 } from "@ceird/sites-core";
@@ -31,6 +32,7 @@ import {
 import type { DomainDrizzleStorageFailure } from "../../platform/database/database.js";
 import { withElectricMutationConfirmation } from "../../platform/database/electric-mutation-confirmation.js";
 import type { ElectricMutationConfirmed } from "../../platform/database/electric-mutation-confirmation.js";
+import { ActivityEventsRepository } from "../activity/repository.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
@@ -64,12 +66,17 @@ type OrganizationAuthorizationService = Context.Service.Shape<
   typeof OrganizationAuthorization
 >;
 type SitesRepositoryService = Context.Service.Shape<typeof SitesRepository>;
+const ACTIVITY_DETAIL_MAX_LENGTH = 280;
+const ACTIVITY_ROUTE_LABEL_MAX_LENGTH = 80;
+const ACTIVITY_SUMMARY_MAX_LENGTH = 160;
+const SITE_COMMENT_ACTIVITY_SUMMARY_PREFIX = "Commented on ";
 
 export class SitesService extends Context.Service<SitesService>()(
   "@ceird/domains/sites/SitesService",
   {
     make: Effect.gen(function* SitesServiceLive() {
       const authorization = yield* OrganizationAuthorization;
+      const activityEventsRepository = yield* ActivityEventsRepository;
       const commentsRepository = yield* CommentsRepository;
       const currentOrganizationActor = yield* CurrentOrganizationActor;
       const siteLabelAssignmentsRepository =
@@ -481,19 +488,38 @@ export class SitesService extends Context.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        const comment = yield* commentsRepository
-          .addForSite({
-            authorUserId: actor.userId,
-            body: input.body,
-            organizationId: actor.organizationId,
-            siteId,
-          })
-          .pipe(catchSitesStorageError({ siteId }));
+        return yield* commentsRepository
+          .withTransaction(
+            Effect.gen(function* () {
+              const site = yield* loadSiteDetailOrFail(
+                actor.organizationId,
+                siteId,
+                sitesRepository
+              );
+              const comment = yield* commentsRepository
+                .addForSite({
+                  authorUserId: actor.userId,
+                  body: input.body,
+                  organizationId: actor.organizationId,
+                  siteId,
+                })
+                .pipe(catchSitesStorageError({ siteId }));
+              const siteComment = yield* Option.match(comment, {
+                onNone: () => failSiteNotFound(siteId),
+                onSome: Effect.succeed,
+              });
 
-        return yield* Option.match(comment, {
-          onNone: () => failSiteNotFound(siteId),
-          onSome: Effect.succeed,
-        });
+              yield* recordSiteCommentCreated({
+                actor,
+                activityEventsRepository,
+                comment: siteComment,
+                site,
+              });
+
+              return siteComment;
+            })
+          )
+          .pipe(catchSitesStorageError({ siteId }));
       });
 
       const assignLabel = Effect.fn("SitesService.assignLabel")(function* (
@@ -614,6 +640,7 @@ export class SitesService extends Context.Service<SitesService>()(
   static readonly Default = SitesService.DefaultWithoutDependencies.pipe(
     Layer.provide(
       Layer.mergeAll(
+        ActivityEventsRepository.Default,
         CommentsRepository.Default,
         CurrentOrganizationActor.Default,
         OrganizationAuthorization.Default,
@@ -624,6 +651,65 @@ export class SitesService extends Context.Service<SitesService>()(
       )
     )
   );
+}
+
+function recordSiteCommentCreated({
+  activityEventsRepository,
+  actor,
+  comment,
+  site,
+}: {
+  readonly activityEventsRepository: Context.Service.Shape<
+    typeof ActivityEventsRepository
+  >;
+  readonly actor: OrganizationActor;
+  readonly comment: SiteComment;
+  readonly site: SiteOption;
+}) {
+  if (comment.actor === undefined) {
+    return Effect.void;
+  }
+
+  return activityEventsRepository.recordEvent({
+    actorId: comment.actor.id,
+    display: {
+      detail: summarizeCommentActivityDetail(comment.body),
+      route: {
+        href: `/sites-workspace?selectedSiteId=${site.id}`,
+        label: formatActivityDisplayText(
+          site.name,
+          ACTIVITY_ROUTE_LABEL_MAX_LENGTH
+        ),
+      },
+      summary: formatSiteCommentActivitySummary(site.name),
+    },
+    eventType: "site.comment_created",
+    organizationId: actor.organizationId,
+    sourceId: comment.id,
+    sourceType: "comment",
+    status: "synced",
+    targetId: comment.id,
+    targetType: "comment",
+  });
+}
+
+function summarizeCommentActivityDetail(body: string): string {
+  return formatActivityDisplayText(body, ACTIVITY_DETAIL_MAX_LENGTH);
+}
+
+function formatSiteCommentActivitySummary(siteName: string): string {
+  return `${SITE_COMMENT_ACTIVITY_SUMMARY_PREFIX}${formatActivityDisplayText(
+    siteName,
+    ACTIVITY_SUMMARY_MAX_LENGTH - SITE_COMMENT_ACTIVITY_SUMMARY_PREFIX.length
+  )}`;
+}
+
+function formatActivityDisplayText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  return `${text.slice(0, maxLength - 3)}...`;
 }
 
 function failDestinationUnmapped(

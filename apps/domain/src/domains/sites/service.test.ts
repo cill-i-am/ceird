@@ -1,6 +1,10 @@
+import type { ProductActivityEvent } from "@ceird/activity-core";
+import { ProductActivityEventDisplayPayloadSchema } from "@ceird/activity-core";
+import { CommentId } from "@ceird/comments-core";
 import {
   decodeUserPreferences,
   OrganizationId,
+  ProductActorId,
   UserId,
   UserPreferencesStorageError,
 } from "@ceird/identity-core";
@@ -17,6 +21,7 @@ import type {
   IsoDateTimeStringType,
   SiteLatitude,
   SiteLongitude,
+  SiteComment,
   SiteProximityFilters,
 } from "@ceird/sites-core";
 import {
@@ -36,6 +41,8 @@ import {
   configProviderFromMap,
   withConfigProvider,
 } from "../../test/effect-test-helpers.js";
+import { ActivityEventsRepository } from "../activity/repository.js";
+import type { RecordActivityEventInput } from "../activity/repository.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
@@ -63,6 +70,8 @@ type ContextService<Service> = Service extends {
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeGooglePlaceId = Schema.decodeUnknownSync(GooglePlaceId);
 const decodeLabelId = Schema.decodeUnknownSync(LabelId);
+const decodeProductActorId = Schema.decodeUnknownSync(ProductActorId);
+const decodeCommentId = Schema.decodeUnknownSync(CommentId);
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
@@ -177,6 +186,139 @@ describe("SitesService contracts", () => {
       name: "Laydown yard",
       organizationId: actor.organizationId,
     });
+  });
+
+  it("adds site comments with product-safe actors and records Activity compatibility events", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111121");
+    const site = decodeSiteOption({
+      displayLocation: "Dublin Port",
+      hasUsableCoordinates: false,
+      id: siteId,
+      labels: [],
+      locationStatus: "unverified",
+      name: "Dublin Port",
+      updatedAt: "2026-06-15T09:00:00.000Z",
+    });
+    const comment = {
+      actor: {
+        displayDetail: "Team member",
+        displayName: "Taylor Member",
+        id: decodeProductActorId("99999999-9999-4999-8999-999999999999"),
+        kind: "member",
+      },
+      actorId: decodeProductActorId("99999999-9999-4999-8999-999999999999"),
+      authorName: "Taylor Member",
+      body: "Bring the dock gate key.",
+      createdAt: "2026-06-15T09:10:00.000Z",
+      id: decodeCommentId("55555555-5555-4555-8555-555555555555"),
+      siteId,
+    } satisfies SiteComment;
+    let addInput:
+      | Parameters<ContextService<typeof CommentsRepository>["addForSite"]>[0]
+      | undefined;
+    const recordedEvents: RecordActivityEventInput[] = [];
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.addComment(siteId, { body: "Bring the dock gate key." })
+      ),
+      {
+        addCommentForSite: (input) => {
+          addInput = input;
+          return Effect.succeed(Option.some(comment));
+        },
+        getOptionById: () => Effect.succeed(Option.some(site)),
+        recordActivityEvent: (input) => {
+          recordedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
+      }
+    );
+
+    expect(result).toStrictEqual(comment);
+    expect(addInput).toMatchObject({
+      authorUserId: actor.userId,
+      body: "Bring the dock gate key.",
+      organizationId: actor.organizationId,
+      siteId,
+    });
+    expect(recordedEvents).toStrictEqual([
+      expect.objectContaining({
+        actorId: comment.actor.id,
+        display: {
+          detail: "Bring the dock gate key.",
+          route: {
+            href: `/sites-workspace?selectedSiteId=${siteId}`,
+            label: "Dublin Port",
+          },
+          summary: "Commented on Dublin Port",
+        },
+        eventType: "site.comment_created",
+        organizationId: actor.organizationId,
+        sourceId: comment.id,
+        sourceType: "comment",
+        status: "synced",
+        targetId: comment.id,
+        targetType: "comment",
+      }),
+    ]);
+  });
+
+  it("adds site comments for long valid site names without rolling back Activity validation", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111122");
+    const longSiteName = `Dublin Port ${"North Yard ".repeat(24)}`.trim();
+    const site = decodeSiteOption({
+      displayLocation: "Dublin Port",
+      hasUsableCoordinates: false,
+      id: siteId,
+      labels: [],
+      locationStatus: "unverified",
+      name: longSiteName,
+      updatedAt: "2026-06-15T09:00:00.000Z",
+    });
+    const comment = {
+      actor: {
+        displayDetail: "Team member",
+        displayName: "Taylor Member",
+        id: decodeProductActorId("99999999-9999-4999-8999-999999999999"),
+        kind: "member",
+      },
+      actorId: decodeProductActorId("99999999-9999-4999-8999-999999999999"),
+      authorName: "Taylor Member",
+      body: "Bring the dock gate key.",
+      createdAt: "2026-06-15T09:10:00.000Z",
+      id: decodeCommentId("55555555-5555-4555-8555-555555555556"),
+      siteId,
+    } satisfies SiteComment;
+    const recordedEvents: RecordActivityEventInput[] = [];
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.addComment(siteId, { body: "Bring the dock gate key." })
+      ),
+      {
+        addCommentForSite: () => Effect.succeed(Option.some(comment)),
+        getOptionById: () => Effect.succeed(Option.some(site)),
+        recordActivityEvent: (input) => {
+          Schema.decodeUnknownSync(ProductActivityEventDisplayPayloadSchema)(
+            input.display
+          );
+          recordedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
+      }
+    );
+
+    expect(result).toStrictEqual(comment);
+    expect(recordedEvents).toHaveLength(1);
+    expect(recordedEvents[0]?.display.route?.href).toBe(
+      `/sites-workspace?selectedSiteId=${siteId}`
+    );
+    expect(recordedEvents[0]?.display.route?.label.length).toBeLessThanOrEqual(
+      80
+    );
+    expect(recordedEvents[0]?.display.summary).toMatch(/^Commented on /);
+    expect(recordedEvents[0]?.display.summary.length).toBeLessThanOrEqual(160);
   });
 
   it("does not call the location provider for manual locations", async () => {
@@ -1274,6 +1416,7 @@ describe("SitesService contracts", () => {
 });
 
 type TestSitesServiceRequirements =
+  | ActivityEventsRepository
   | CommentsRepository
   | CurrentOrganizationActor
   | DomainDrizzleService
@@ -1324,6 +1467,9 @@ function runSitesServiceEffect<Value, Error>(
 }
 
 interface TestSitesDependencies {
+  readonly addCommentForSite: ContextService<
+    typeof CommentsRepository
+  >["addForSite"];
   readonly autocomplete: ContextService<
     typeof SiteLocationProvider
   >["autocomplete"];
@@ -1344,6 +1490,9 @@ interface TestSitesDependencies {
     input: RoutePreviewInput
   ) => ReturnType<ContextService<typeof RouteProvider>["previewRoute"]>;
   readonly rankRoutes: ContextService<typeof RouteProvider>["rankRoutes"];
+  readonly recordActivityEvent: ContextService<
+    typeof ActivityEventsRepository
+  >["recordEvent"];
   readonly routeProximityLocationEnabled: boolean;
   readonly resolvePlace: ContextService<
     typeof SiteLocationProvider
@@ -1362,8 +1511,26 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
 
   return Layer.mergeAll(
     Layer.succeed(
+      ActivityEventsRepository,
+      ActivityEventsRepository.of({
+        applyRetention: () => Effect.void,
+        listRecent: () => Effect.succeed([]),
+        recordEvent:
+          options.recordActivityEvent ??
+          (() =>
+            Effect.die("ActivityEventsRepository.recordEvent not stubbed")),
+      } as unknown as ContextService<typeof ActivityEventsRepository>)
+    ),
+    Layer.succeed(
       CommentsRepository,
-      CommentsRepository.of({} as ContextService<typeof CommentsRepository>)
+      CommentsRepository.of({
+        addForSite:
+          options.addCommentForSite ??
+          (() => Effect.die("CommentsRepository.addForSite not stubbed")),
+        withTransaction: <Value, Error, Requirements>(
+          effect: Effect.Effect<Value, Error, Requirements>
+        ) => effect,
+      } as unknown as ContextService<typeof CommentsRepository>)
     ),
     Layer.succeed(
       CurrentOrganizationActor,

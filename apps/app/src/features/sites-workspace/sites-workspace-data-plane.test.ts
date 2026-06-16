@@ -1,8 +1,14 @@
+import { CommentId } from "@ceird/comments-core";
 import type { OrganizationId } from "@ceird/identity-core";
+import { ProductActorId } from "@ceird/identity-core";
 import type { JobListItem } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
-import type { SiteOption, SiteWriteResponse } from "@ceird/sites-core";
-import { Effect, Exit } from "effect";
+import type {
+  AddSiteCommentResponse,
+  SiteOption,
+  SiteWriteResponse,
+} from "@ceird/sites-core";
+import { Effect, Exit, Schema } from "effect";
 
 import { createDataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
@@ -12,13 +18,22 @@ import {
   createSitesWorkspaceCommandRunner,
   deriveSitesWorkspaceVisibleRows,
   getOrCreateSitesWorkspaceReadModelCollectionState,
+  toSiteCommentBodyElectricRow,
 } from "./sites-workspace-data-plane";
-import type { SiteLabelAssignmentElectricRow } from "./sites-workspace-data-plane";
+import type {
+  SiteCommentBodyRow,
+  SiteCommentEdgeRow,
+  SiteLabelAssignmentElectricRow,
+  SitesWorkspaceProductActorRow,
+} from "./sites-workspace-data-plane";
 
 const appApiMock = vi.hoisted(() => ({
   runBrowserAppApiRequest:
     vi.fn<() => Effect.Effect<unknown, unknown, never>>(),
 }));
+
+const decodeCommentId = Schema.decodeUnknownSync(CommentId);
+const decodeProductActorId = Schema.decodeUnknownSync(ProductActorId);
 
 vi.mock(import("#/features/api/app-api-client"), () => ({
   runBrowserAppApiRequest:
@@ -85,6 +100,25 @@ describe("sites workspace data plane", () => {
     title: "Yard inspection",
     updatedAt: "2026-06-03T00:00:00.000Z",
   } as unknown as JobListItem;
+  const productActor = {
+    displayDetail: "Team member",
+    displayName: "Taylor Member",
+    id: decodeProductActorId("99999999-9999-4999-8999-999999999999"),
+    kind: "member",
+  } satisfies SitesWorkspaceProductActorRow;
+  const dublinComment = {
+    actorId: productActor.id,
+    body: "Bring the dock gate key.",
+    createdAt: "2026-06-02T09:30:00.000Z",
+    id: decodeCommentId("77777777-7777-4777-8777-777777777777"),
+    updatedAt: "2026-06-02T09:30:00.000Z",
+  } satisfies SiteCommentBodyRow;
+  const dublinCommentEdge = {
+    commentId: dublinComment.id,
+    createdAt: "2026-06-02T09:30:00.000Z",
+    id: `${dublinSite.id}:${dublinComment.id}`,
+    siteId: dublinSite.id,
+  } satisfies SiteCommentEdgeRow;
 
   it("creates disabled Electric collections for the browser-safe workspace graph during server render", () => {
     const state = getOrCreateSitesWorkspaceReadModelCollectionState({
@@ -110,6 +144,38 @@ describe("sites workspace data plane", () => {
       status: "disabled",
       subscriptionName: "site-active-job-summaries",
     });
+    expect(state.siteCommentEdges.health.current).toMatchObject({
+      collection: "site-comments",
+      source: "electric",
+      status: "disabled",
+      subscriptionName: "site-comments",
+    });
+    expect(state.commentBodies.health.current).toMatchObject({
+      collection: "site-comment-bodies",
+      source: "electric",
+      status: "disabled",
+      subscriptionName: "site-comment-bodies",
+    });
+    expect(state.actors.health.current).toMatchObject({
+      collection: "product-activity-actors",
+      source: "electric",
+      status: "disabled",
+      subscriptionName: "product-activity-actors",
+    });
+  });
+
+  it("maps site comment bodies to product-safe actor rows without raw user ids", () => {
+    const comment = toSiteCommentBodyElectricRow({
+      actorId: productActor.id,
+      body: "Bring the dock gate key.",
+      createdAt: "2026-06-02T09:30:00.000Z",
+      id: dublinComment.id,
+      updatedAt: "2026-06-02T09:30:00.000Z",
+    });
+
+    expect(comment).toStrictEqual(dublinComment);
+    expect(comment).not.toHaveProperty("authorUserId");
+    expect(comment).not.toHaveProperty("updatedByUserId");
   });
 
   it("derives selection-ready visible rows from the actual Sites workspace graph inputs", () => {
@@ -130,10 +196,13 @@ describe("sites workspace data plane", () => {
           updatedAt: "2026-06-01T00:00:00.000Z",
         },
       ],
+      actors: [productActor],
+      commentBodies: [dublinComment],
       filter: "with-active-jobs",
       labels: [maintenanceLabel, urgentLabel],
       query: "urgent",
       relatedJobs: [corkJob, dublinJob],
+      siteCommentEdges: [dublinCommentEdge],
       siteLabelAssignments: [
         {
           createdAt: "2026-05-30T00:00:00.000Z",
@@ -159,16 +228,26 @@ describe("sites workspace data plane", () => {
       labels: [urgentLabel],
       name: "Dublin Port",
     });
+    expect(rows[0]?.comments).toStrictEqual([
+      {
+        actor: productActor,
+        comment: dublinComment,
+        edge: dublinCommentEdge,
+      },
+    ]);
     expect(rows[0]?.relatedJobs).toStrictEqual([dublinJob]);
   });
 
   it("sorts two rows by the production updatedAt boundary field", () => {
     const rows = deriveSitesWorkspaceVisibleRows({
       activeJobSummaries: [],
+      actors: [],
+      commentBodies: [],
       filter: "all",
       labels: [],
       query: "",
       relatedJobs: [corkJob, dublinJob],
+      siteCommentEdges: [],
       siteLabelAssignments: [],
       sites: [dublinSite, corkSite],
       sort: "updated",
@@ -184,10 +263,13 @@ describe("sites workspace data plane", () => {
   it("supports needs-location filters", () => {
     const rows = deriveSitesWorkspaceVisibleRows({
       activeJobSummaries: [],
+      actors: [],
+      commentBodies: [],
       filter: "needs-location",
       labels: [],
       query: "",
       relatedJobs: [corkJob, dublinJob],
+      siteCommentEdges: [],
       siteLabelAssignments: [],
       sites: [dublinSite, corkSite],
       sort: "name",
@@ -209,6 +291,12 @@ describe("sites workspace data plane", () => {
 
     const command = createSitesWorkspaceCommandRunner({
       collections: {
+        commentBodies: createFakeCollection<SiteCommentBodyRow>(
+          (comment) => comment.id
+        ),
+        commentEdges: createFakeCollection<SiteCommentEdgeRow>(
+          (edge) => edge.id
+        ),
         siteLabelAssignments: createFakeCollection(
           (assignment) => `${assignment.siteId}:${assignment.labelId}`
         ),
@@ -260,6 +348,12 @@ describe("sites workspace data plane", () => {
 
     const exit = await createSitesWorkspaceCommandRunner({
       collections: {
+        commentBodies: createFakeCollection<SiteCommentBodyRow>(
+          (comment) => comment.id
+        ),
+        commentEdges: createFakeCollection<SiteCommentEdgeRow>(
+          (edge) => edge.id
+        ),
         siteLabelAssignments: createFakeCollection(
           (assignment) => `${assignment.siteId}:${assignment.labelId}`
         ),
@@ -286,6 +380,12 @@ describe("sites workspace data plane", () => {
 
     const exit = await createSitesWorkspaceCommandRunner({
       collections: {
+        commentBodies: createFakeCollection<SiteCommentBodyRow>(
+          (comment) => comment.id
+        ),
+        commentEdges: createFakeCollection<SiteCommentEdgeRow>(
+          (edge) => edge.id
+        ),
         siteLabelAssignments: createFakeCollection(
           (assignment) => `${assignment.siteId}:${assignment.labelId}`
         ),
@@ -303,12 +403,94 @@ describe("sites workspace data plane", () => {
     expect(journal.entries()[0]?.error).toBeInstanceOf(Error);
   });
 
+  it("keeps add-comment pending until the site comment edge and safe body projection are observed", async () => {
+    const commentBodies = createFakeCollection<SiteCommentBodyRow>(
+      (comment) => comment.id
+    );
+    const commentEdges = createFakeCollection<SiteCommentEdgeRow>(
+      (edge) => edge.id
+    );
+    const journal = createDataPlaneMutationJournal({
+      createId: () => "mutation_comment_1",
+      now: () => 200,
+    });
+    const response = {
+      actor: productActor,
+      actorId: productActor.id,
+      authorName: productActor.displayName,
+      body: dublinComment.body,
+      createdAt: dublinComment.createdAt,
+      id: dublinComment.id,
+      siteId: dublinSite.id,
+    } satisfies AddSiteCommentResponse;
+    appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
+      Effect.succeed(response)
+    );
+
+    const command = createSitesWorkspaceCommandRunner({
+      collections: {
+        commentBodies,
+        commentEdges,
+        siteLabelAssignments: createFakeCollection(
+          (assignment) => `${assignment.siteId}:${assignment.labelId}`
+        ),
+        sites: createFakeCollection<SiteOption>((site) => site.id),
+      },
+      journal,
+      timeoutMs: 100,
+    }).addSiteComment(dublinSite.id, {
+      body: "Bring the dock gate key.",
+    });
+
+    expect(journal.entries()).toMatchObject([
+      {
+        affectedCollections: ["site-comment-bodies", "site-comments"],
+        commandName: "sites-workspace.add-comment",
+        status: "pending",
+      },
+    ]);
+
+    globalThis.setTimeout(() => {
+      commentBodies.upsert(dublinComment);
+      commentEdges.upsert(dublinCommentEdge);
+    }, 0);
+    const exit = await command;
+
+    expect(Exit.isSuccess(exit)).toBeTruthy();
+    if (Exit.isFailure(exit)) {
+      throw new Error("Expected add-comment command to succeed");
+    }
+    expect(exit.value).toMatchObject({
+      electricObservation: {
+        commentBody: "observed-change",
+        commentEdge: "observed-change",
+      },
+      id: dublinComment.id,
+      siteId: dublinSite.id,
+    });
+    expect(exit.value).not.toHaveProperty("authorUserId");
+    expect(journal.entries()).toMatchObject([
+      {
+        commandName: "sites-workspace.add-comment",
+        output: response,
+        status: "success",
+      },
+    ]);
+    expect(journal.entries()[0]?.output).not.toHaveProperty("authorUserId");
+  });
+
   it("confirms site label assignment and removal through the assignment collection", async () => {
     const assignments = createFakeCollection<SiteLabelAssignmentElectricRow>(
       (assignment) => `${assignment.siteId}:${assignment.labelId}`
     );
     const commandRunner = createSitesWorkspaceCommandRunner({
       collections: {
+        commentBodies: createFakeCollection<SiteCommentBodyRow>(
+          (comment) => comment.id
+        ),
+        commentEdges: createFakeCollection<SiteCommentEdgeRow>(
+          (edge) => edge.id
+        ),
         siteLabelAssignments: assignments,
         sites: createFakeCollection<SiteOption>((site) => site.id),
       },
@@ -388,6 +570,12 @@ describe("sites workspace data plane", () => {
 
     const exit = await createSitesWorkspaceCommandRunner({
       collections: {
+        commentBodies: createFakeCollection<SiteCommentBodyRow>(
+          (comment) => comment.id
+        ),
+        commentEdges: createFakeCollection<SiteCommentEdgeRow>(
+          (edge) => edge.id
+        ),
         siteLabelAssignments: assignments,
         sites: createFakeCollection<SiteOption>((site) => site.id),
       },
@@ -416,6 +604,12 @@ describe("sites workspace data plane", () => {
 
     const exit = await createSitesWorkspaceCommandRunner({
       collections: {
+        commentBodies: createFakeCollection<SiteCommentBodyRow>(
+          (comment) => comment.id
+        ),
+        commentEdges: createFakeCollection<SiteCommentEdgeRow>(
+          (edge) => edge.id
+        ),
         siteLabelAssignments: createFakeCollection(
           (assignment) => `${assignment.siteId}:${assignment.labelId}`
         ),

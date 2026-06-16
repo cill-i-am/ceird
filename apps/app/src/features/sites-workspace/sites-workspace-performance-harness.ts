@@ -448,10 +448,13 @@ function deriveRows(
 ) {
   return deriveSitesWorkspaceVisibleRows({
     activeJobSummaries: fixture.activeJobSummaries,
+    actors: [],
+    commentBodies: [],
     filter: options.filter,
     labels: fixture.labels,
     query: options.query,
     relatedJobs: fixture.relatedJobs,
+    siteCommentEdges: [],
     siteLabelAssignments: fixture.siteLabelAssignments,
     sites: fixture.sites,
     sort: options.sort,

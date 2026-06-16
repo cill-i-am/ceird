@@ -25,7 +25,8 @@ Current collection roots are `activity-events`, `product-activity-actors`,
 `jobs`, `job-activity`, `job-comment-bodies`, `job-comments`, `job-contacts`,
 `job-options`, `job-label-assignments`, `job-details`, `job-collaborators`,
 `job-sites`, `job-visits`, `sites`, `site-active-job-summaries`,
-`site-comments`, `site-label-assignments`, `site-related-jobs`, and `labels`.
+`site-comment-bodies`, `site-comments`, `site-label-assignments`,
+`site-related-jobs`, and `labels`.
 The legacy jobs primary route collection and legacy Sites route collection are
 eager bounded Query Collections for their first cursor pages. The
 Electric-native Sites read model uses named Electric contracts for
@@ -73,7 +74,8 @@ explicit in `apps/app/src/features/jobs/jobs-data-plane.ts` through
 domain-approved `jobs`, `work-item-labels`, `labels`, `sites`, and `contacts`
 shapes. Its detail graph adds `work-item-collaborators`,
 `product-activity-actors`, `product-member-actor-summaries`,
-`work-item-activity`, `work-item-visits`, `work-item-comments`, and `comments`.
+`work-item-activity`, `work-item-visits`, `work-item-comments`, and
+`work-item-comment-bodies`.
 Each shape is a complete-tenant, organization/viewer/role-scoped Electric
 collection with shared health state; local live queries can join job rows,
 label assignments, label definitions, site summaries, contact summaries,
@@ -174,12 +176,18 @@ fallback. The `/sites-workspace` route uses a browser-safe feature data-plane
 module under `features/sites-workspace` so the client route does not import the
 legacy Sites module's server-backed query collection helpers. That workspace
 read model requests the named `sites`, `site-labels`,
-`site-active-job-summaries`, `jobs`, and `labels` shapes, joins shared label
-definitions through site-label assignments, derives visible rows from local
-search/filter/sort state, and selects related jobs from the synced jobs row set.
-The synced `sites` row transformer carries the shared `SiteOption.updatedAt`
-boundary field so the workspace's recently-updated sort is backed by production
-site data rather than a view-local fallback.
+`site-active-job-summaries`, `jobs`, `labels`, `site-comments`,
+`site-comment-bodies`, and `product-activity-actors` shapes. It joins shared
+label definitions through
+site-label assignments, derives visible rows from local search/filter/sort
+state, selects related jobs from the synced jobs row set, and renders selected
+site comments by joining `site-comments` edge rows to the domain-owned
+`site-comment-bodies` projection and product-safe actors. Comment author
+display comes only from
+`product-activity-actors`; Better Auth user/member rows remain private to the
+domain. The synced `sites` row transformer carries the shared
+`SiteOption.updatedAt` boundary field so the workspace's recently-updated sort
+is backed by production site data rather than a view-local fallback.
 The current visible-row helper derives over hydrated TanStack DB
 collection snapshots inside the feature data-plane boundary rather than adding a
 separate TanStack DB derived collection: each input collection is already a live
@@ -254,7 +262,7 @@ runtime is hydrated and `VITE_SYNC_ORIGIN` is configured.
 Collection keys include organization id, viewer user id, and role because API
 responses can vary by authorization scope. Product roots must not be nested
 under each other accidentally; for example `site-comments` and
-`site-related-jobs` are separate roots from `sites` so TanStack Query prefix
+`site-comment-bodies` are separate roots from `sites` so TanStack Query prefix
 matching never treats detail-side collections as site rows.
 
 The organization route owns the session lifecycle. Feature providers such as
@@ -330,12 +338,23 @@ widening the command implementation, not by bypassing the data plane.
 The Electric-native Jobs workspace add-comment command calls the typed domain
 Jobs API and keeps the mutation journal entry pending until the synced read
 model observes both the canonical `comments` body row and the
+domain-owned `work-item-comment-bodies` projection row plus the
 `work-item-comments` edge row for the returned comment id. The UI derives author
 display only by joining `comment.actorId` to the synced
 `product-activity-actors` projection; Better Auth user/member rows never cross
 the browser sync boundary. If either row is already reflected the runner records
 that separately from an observed live change, and confirmation timeouts mark the
 write failed while leaving Electric collection data authoritative.
+
+The Electric-native Sites workspace add-comment command follows the same
+domain-write/Electric-confirmation pattern for site-scoped comments. It calls
+the typed Sites API, records both `site-comment-bodies` and `site-comments` as
+affected collection roots, and resolves only after the synced read model
+observes the product-safe `site-comment-bodies` row and the `site-comments`
+edge row for the returned comment id. The route shows pending, synced, and
+failed composer feedback, keeps the synced read model authoritative for
+other-session or agent-created comments, and derives actor display through
+`product-activity-actors`.
 
 Electric-backed mutation handlers are enabled for the first narrow write slice
 that needs replication confirmation: organization label definition create,
@@ -355,9 +374,11 @@ invariants. Site create, update, assign-label, and remove-label commands call
 the typed Sites API, receive `{ site, mutation: { txid } }`, keep the command
 pending in the mutation journal, and resolve only after the relevant Electric
 collection observes the committed row: `sites` for create/update and
-`site-label-assignments` for assignment changes. The Sites shapes expose the
-product rows, not Electric txid stream metadata, so the route presents this as
-row-state observation while preserving the server txid for diagnostics. If the
+`site-label-assignments` for assignment changes, and the paired
+`site-comment-bodies`/`site-comments` rows for comment writes. The Sites shapes
+expose the product rows, not Electric txid stream metadata, so the route
+presents this as row-state observation while preserving the server txid for
+diagnostics where the domain response includes one. If the
 row state was already reflected, for example an idempotent assign/remove race,
 the runner records that as already reflected instead of claiming Electric
 observed the returned txid. Confirmation timeout or failure records the command
