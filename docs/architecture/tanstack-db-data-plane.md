@@ -99,8 +99,14 @@ read model requests the named `sites`, `site-labels`,
 `site-active-job-summaries`, `jobs`, and `labels` shapes, joins shared label
 definitions through site-label assignments, derives visible rows from local
 search/filter/sort state, and selects related jobs from the synced jobs row set.
-Callers consume shared health from the Electric collection factory and show
-explicit unavailable/degraded states when sync is disabled or unavailable.
+The current visible-row helper derives over hydrated TanStack DB
+collection snapshots inside the feature data-plane boundary rather than adding a
+separate TanStack DB derived collection: each input collection is already a live
+subscription, the route needs route-backed local query/filter/sort state, and a
+second collection layer would not change sync coverage or health semantics in
+this slice. Callers consume shared health from the Electric collection factory
+and show explicit unavailable/degraded states when sync is disabled or
+unavailable.
 
 ## Collection Health
 

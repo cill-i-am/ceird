@@ -146,18 +146,6 @@ export interface SitesElectricReadModelCollectionState {
   readonly collections: SitesElectricReadModelCollections;
 }
 
-export type SitesWorkspaceFilter =
-  | "all"
-  | "with-active-jobs"
-  | "needs-location";
-
-export type SitesWorkspaceSort = "name" | "active-jobs" | "updated";
-
-export interface SitesWorkspaceVisibleRow {
-  readonly relatedJobs: readonly JobListItem[];
-  readonly site: SiteOption;
-}
-
 interface SitesListPageScope {
   readonly cursor?: SiteListCursorType | undefined;
   readonly limit: number;
@@ -403,39 +391,6 @@ export function selectSiteRelatedJobs(
   return jobs
     .filter((job) => job.siteId === siteId)
     .toSorted(compareRelatedJobs);
-}
-
-export function deriveSitesWorkspaceVisibleRows({
-  activeJobSummaries,
-  filter,
-  labels,
-  query,
-  relatedJobs,
-  siteLabelAssignments,
-  sites,
-  sort,
-}: SitesElectricReadModelRows & {
-  readonly filter: SitesWorkspaceFilter;
-  readonly query: string;
-  readonly relatedJobs: readonly JobListItem[];
-  readonly sort: SitesWorkspaceSort;
-}): readonly SitesWorkspaceVisibleRow[] {
-  const normalizedQuery = normalizeSitesWorkspaceQuery(query);
-  const joinedSites = joinSitesElectricReadModel({
-    activeJobSummaries,
-    labels,
-    siteLabelAssignments,
-    sites,
-  });
-
-  return joinedSites
-    .filter((site) => matchesSitesWorkspaceFilter(site, filter))
-    .filter((site) => matchesSitesWorkspaceQuery(site, normalizedQuery))
-    .toSorted((left, right) => compareSitesWorkspaceRows(left, right, sort))
-    .map((site) => ({
-      relatedJobs: selectSiteRelatedJobs(relatedJobs, site.id),
-      site,
-    }));
 }
 
 function createSitesElectricContract(scope: OrganizationDataScope) {
@@ -1139,77 +1094,6 @@ function compareRelatedJobs(left: JobListItem, right: JobListItem) {
   return updatedAtComparison === 0
     ? right.id.localeCompare(left.id)
     : updatedAtComparison;
-}
-
-function normalizeSitesWorkspaceQuery(query: string) {
-  return query.trim().toLocaleLowerCase();
-}
-
-function matchesSitesWorkspaceFilter(
-  site: SiteOption,
-  filter: SitesWorkspaceFilter
-) {
-  if (filter === "with-active-jobs") {
-    return (site.activeJobCount ?? 0) > 0;
-  }
-
-  if (filter === "needs-location") {
-    return !site.hasUsableCoordinates;
-  }
-
-  return true;
-}
-
-function matchesSitesWorkspaceQuery(site: SiteOption, query: string) {
-  if (query.length === 0) {
-    return true;
-  }
-
-  const searchableText = [
-    site.name,
-    site.displayLocation,
-    site.formattedAddress,
-    site.accessNotes,
-    ...site.labels.map((label) => label.name),
-  ]
-    .filter((value): value is string => typeof value === "string")
-    .join(" ")
-    .toLocaleLowerCase();
-
-  return searchableText.includes(query);
-}
-
-function compareSitesWorkspaceRows(
-  left: SiteOption,
-  right: SiteOption,
-  sort: SitesWorkspaceSort
-) {
-  if (sort === "active-jobs") {
-    const activeJobComparison =
-      (right.activeJobCount ?? 0) - (left.activeJobCount ?? 0);
-
-    if (activeJobComparison !== 0) {
-      return activeJobComparison;
-    }
-  }
-
-  if (sort === "updated") {
-    const leftUpdatedAt = getSiteUpdatedAt(left);
-    const rightUpdatedAt = getSiteUpdatedAt(right);
-    const updatedAtComparison = rightUpdatedAt.localeCompare(leftUpdatedAt);
-
-    if (updatedAtComparison !== 0) {
-      return updatedAtComparison;
-    }
-  }
-
-  return compareSiteOptions(left, right);
-}
-
-function getSiteUpdatedAt(site: SiteOption) {
-  return "updatedAt" in site && typeof site.updatedAt === "string"
-    ? site.updatedAt
-    : "";
 }
 
 interface DisposableCollectionState {

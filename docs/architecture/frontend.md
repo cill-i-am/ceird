@@ -156,7 +156,10 @@ unavailable/degraded states instead of reading the old Sites Query Collection
 path. Its first live slice renders the Sites workspace list/detail from a
 browser-safe Electric read-model module, joining site rows, shared labels,
 site-label assignments, related jobs, and the domain-owned active-job summary
-projection in the feature data-plane layer.
+projection in the feature data-plane layer. Search text, filter, sort, and the
+selected detail row are route-backed search state with local selected-site and
+recent-search restoration as convenience hooks; future saved views should attach
+to those route search fields instead of adding parallel view state.
 
 The authenticated app shell also mounts the global Ceird Agent entry point in
 `features/agent/global-agent-chat.tsx`. It is app-level rather than

@@ -17,7 +17,6 @@ import { getDataPlaneSessionKey } from "#/data-plane/session";
 
 import {
   createSiteCommentsSeed,
-  deriveSitesWorkspaceVisibleRows,
   createSitesElectricReadModelCollections,
   createSitesElectricReadModelContracts,
   createSitesListSeed,
@@ -381,66 +380,5 @@ describe("sites data plane", () => {
     const related = selectSiteRelatedJobs(jobs, site.id);
 
     expect(related.map((job) => job.title)).toStrictEqual(["Gate repair"]);
-  });
-
-  it("derives visible Sites workspace rows with search, filters, sorting, labels, summaries, and related jobs", () => {
-    const quietSite = {
-      ...site,
-      displayLocation: "Cork Yard",
-      id: "66666666-6666-4666-8666-666666666666",
-      name: "Cork Yard",
-    } as unknown as SiteOption;
-    const relatedJob = {
-      createdAt: "2026-05-30T00:00:00.000Z",
-      id: "44444444-4444-4444-8444-444444444444",
-      kind: "job",
-      labels: [],
-      priority: "medium",
-      siteId: site.id,
-      status: "new",
-      title: "Gate repair",
-      updatedAt: "2026-05-31T00:00:00.000Z",
-    } as unknown as JobListItem;
-
-    const rows = deriveSitesWorkspaceVisibleRows({
-      activeJobSummaries: [
-        {
-          activeJobCount: 3,
-          highestActiveJobPriority: "urgent",
-          organizationId: "org_123",
-          siteId: site.id,
-          updatedAt: "2026-06-01T00:00:00.000Z",
-        },
-        {
-          activeJobCount: 0,
-          organizationId: "org_123",
-          siteId: quietSite.id,
-          updatedAt: "2026-05-30T00:00:00.000Z",
-        },
-      ],
-      filter: "with-active-jobs",
-      labels: [urgentLabel],
-      query: "urgent",
-      relatedJobs: [relatedJob],
-      siteLabelAssignments: [
-        {
-          createdAt: "2026-05-30T00:00:00.000Z",
-          labelId: urgentLabel.id,
-          organizationId: "org_123",
-          siteId: site.id,
-        },
-      ],
-      sites: [quietSite, site],
-      sort: "active-jobs",
-    });
-
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.site).toMatchObject({
-      activeJobCount: 3,
-      highestActiveJobPriority: "urgent",
-      labels: [urgentLabel],
-      name: "Dublin Port",
-    });
-    expect(rows[0]?.relatedJobs).toStrictEqual([relatedJob]);
   });
 });

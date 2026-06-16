@@ -48,11 +48,14 @@ import {
 import type {
   SiteActiveJobSummaryElectricRow,
   SiteLabelAssignmentElectricRow,
-  SitesWorkspaceFilter,
-  SitesWorkspaceSort,
   SitesWorkspaceVisibleRow,
 } from "./sites-workspace-data-plane";
-import type { SitesWorkspaceShellState } from "./sites-workspace-search";
+import type {
+  SitesWorkspaceFilter,
+  SitesWorkspaceSearch,
+  SitesWorkspaceShellState,
+  SitesWorkspaceSort,
+} from "./sites-workspace-search";
 
 type SyncPresentationStatus = "connecting" | "ready" | "stale" | "unavailable";
 
@@ -76,12 +79,16 @@ const SORT_OPTIONS = [
 
 export function SitesWorkspaceRouteContent({
   currentOrganizationRole,
-  onShellStateChange,
-  shellState,
+  shellState: _shellState,
+  workspaceSearch,
+  onWorkspaceSearchChange,
 }: {
   readonly currentOrganizationRole?: OrganizationRole | undefined;
-  readonly onShellStateChange: (state: SitesWorkspaceShellState) => void;
+  readonly onWorkspaceSearchChange: (
+    search: Partial<Omit<SitesWorkspaceSearch, "shell">>
+  ) => void;
   readonly shellState: SitesWorkspaceShellState;
+  readonly workspaceSearch: SitesWorkspaceSearch;
 }) {
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const canUseWorkspace =
@@ -92,9 +99,8 @@ export function SitesWorkspaceRouteContent({
     searchInputRef.current?.focus();
   }, []);
   const prepareSiteCreation = React.useCallback(() => {
-    onShellStateChange("ready");
     searchInputRef.current?.focus();
-  }, [onShellStateChange]);
+  }, []);
 
   useAppHotkey("sitesWorkspaceSearch", focusSearch, {
     enabled: canUseWorkspace,
@@ -166,7 +172,8 @@ export function SitesWorkspaceRouteContent({
       {canUseWorkspace ? (
         <SitesWorkspaceShell
           searchInputRef={searchInputRef}
-          shellState={shellState}
+          workspaceSearch={workspaceSearch}
+          onWorkspaceSearchChange={onWorkspaceSearchChange}
         />
       ) : (
         <NoWorkspaceAccess />
@@ -176,18 +183,53 @@ export function SitesWorkspaceRouteContent({
 }
 
 function SitesWorkspaceShell({
+  onWorkspaceSearchChange,
   searchInputRef,
-  shellState,
+  workspaceSearch,
 }: {
+  readonly onWorkspaceSearchChange: (
+    search: Partial<Omit<SitesWorkspaceSearch, "shell">>
+  ) => void;
   readonly searchInputRef: React.RefObject<HTMLInputElement | null>;
-  readonly shellState: SitesWorkspaceShellState;
+  readonly workspaceSearch: SitesWorkspaceSearch;
 }) {
   const readModel = useSitesWorkspaceReadModel();
-  const [query, setQuery] = React.useState("");
-  const [filter, setFilter] = React.useState<SitesWorkspaceFilter>("all");
-  const [sort, setSort] = React.useState<SitesWorkspaceSort>("name");
-  const [selectedSiteId, setSelectedSiteId] = useRestoredSelectedSiteId();
+  const query = workspaceSearch.query ?? "";
+  const filter = workspaceSearch.filter ?? "all";
+  const sort = workspaceSearch.sort ?? "name";
+  const [restoredSelectedSiteId, setRestoredSelectedSiteId] =
+    useRestoredSelectedSiteId();
+  const selectedSiteId =
+    workspaceSearch.selectedSiteId ?? restoredSelectedSiteId;
   const recentSearches = useRecentSitesSearches(query);
+  const setQuery = React.useCallback(
+    (nextQuery: string) =>
+      onWorkspaceSearchChange({
+        query: nextQuery.trim().length === 0 ? undefined : nextQuery,
+      }),
+    [onWorkspaceSearchChange]
+  );
+  const setFilter = React.useCallback(
+    (nextFilter: SitesWorkspaceFilter) =>
+      onWorkspaceSearchChange({
+        filter: nextFilter === "all" ? undefined : nextFilter,
+      }),
+    [onWorkspaceSearchChange]
+  );
+  const setSort = React.useCallback(
+    (nextSort: SitesWorkspaceSort) =>
+      onWorkspaceSearchChange({
+        sort: nextSort === "name" ? undefined : nextSort,
+      }),
+    [onWorkspaceSearchChange]
+  );
+  const setSelectedSiteId = React.useCallback(
+    (siteId: string | undefined) => {
+      setRestoredSelectedSiteId(siteId);
+      onWorkspaceSearchChange({ selectedSiteId: siteId });
+    },
+    [onWorkspaceSearchChange, setRestoredSelectedSiteId]
+  );
 
   const visibleRows = React.useMemo(
     () =>
@@ -254,7 +296,6 @@ function SitesWorkspaceShell({
   });
 
   const status = resolveWorkspaceStatus({
-    forcedShellState: shellState,
     health: readModel.health,
     hasRows: readModel.sites.length > 0,
   });
@@ -541,24 +582,18 @@ function parseStoredRecentSearches(stored: string | null): readonly string[] {
 }
 
 function resolveWorkspaceStatus({
-  forcedShellState,
   hasRows,
   health,
 }: {
-  readonly forcedShellState: SitesWorkspaceShellState;
   readonly hasRows: boolean;
   readonly health: readonly DataPlaneCollectionHealthSnapshot[];
 }): SyncPresentationStatus {
-  if (forcedShellState === "loading") {
-    return "connecting";
-  }
-
-  if (forcedShellState === "ready" || forcedShellState === "empty") {
-    return "ready";
-  }
-
   if (health.some((snapshot) => snapshot.status === "unavailable")) {
     return hasRows ? "stale" : "unavailable";
+  }
+
+  if (health.some((snapshot) => snapshot.status === "disabled")) {
+    return "unavailable";
   }
 
   if (health.some((snapshot) => snapshot.status === "connecting")) {

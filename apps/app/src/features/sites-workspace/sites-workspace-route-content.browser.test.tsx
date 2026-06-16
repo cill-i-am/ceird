@@ -1,7 +1,7 @@
 import type { OrganizationId } from "@ceird/identity-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { QueryClient } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 
@@ -13,7 +13,7 @@ import { SitesWorkspaceRouteContent } from "./sites-workspace-route-content";
 
 describe(SitesWorkspaceRouteContent, () => {
   it("renders the gated realtime shell for internal roles", () => {
-    renderSitesWorkspace();
+    renderSitesWorkspace({ shellState: "ready" });
 
     expect(
       screen.getByRole("heading", { name: "Sites workspace" })
@@ -26,6 +26,9 @@ describe(SitesWorkspaceRouteContent, () => {
     expect(
       screen.getAllByText("Realtime sites unavailable").length
     ).toBeGreaterThan(0);
+    expect(
+      screen.queryByText("Live Sites read model ready")
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText(/server-render|missing-sync-origin/)
     ).toBeInTheDocument();
@@ -43,33 +46,64 @@ describe(SitesWorkspaceRouteContent, () => {
     ).not.toBeInTheDocument();
   });
 
-  it("can render a connecting state from the route state hook", () => {
+  it("does not let forced loading shell state mask disabled sync health", () => {
     renderSitesWorkspace({ shellState: "loading" });
 
-    expect(screen.getByText("Connecting to live Sites")).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Sites workspace loading")
-    ).toBeInTheDocument();
+      screen.getAllByText("Realtime sites unavailable").length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByText("Connecting to live Sites")
+    ).not.toBeInTheDocument();
   });
 
   it("registers keyboard access for search and create affordances", async () => {
     const user = userEvent.setup();
-    const onShellStateChange =
+    const onWorkspaceSearchChange =
       vi.fn<
         React.ComponentProps<
           typeof SitesWorkspaceRouteContent
-        >["onShellStateChange"]
+        >["onWorkspaceSearchChange"]
       >();
 
-    renderSitesWorkspace({ onShellStateChange });
+    renderSitesWorkspace({ onWorkspaceSearchChange });
 
     await user.keyboard("n");
-    expect(onShellStateChange).toHaveBeenCalledWith("ready");
+    expect(onWorkspaceSearchChange).not.toHaveBeenCalled();
+    expect(
+      screen.getAllByText("Realtime sites unavailable").length
+    ).toBeGreaterThan(0);
 
     await user.keyboard("/");
     expect(
       screen.getByRole("searchbox", { name: /search sites workspace/i })
     ).toHaveFocus();
+  });
+
+  it("routes search input changes through the workspace search hook", () => {
+    const onWorkspaceSearchChange =
+      vi.fn<
+        React.ComponentProps<
+          typeof SitesWorkspaceRouteContent
+        >["onWorkspaceSearchChange"]
+      >();
+
+    renderSitesWorkspace({
+      onWorkspaceSearchChange,
+      workspaceSearch: { query: "Dub" },
+    });
+
+    const searchInput = screen.getByRole("searchbox", {
+      name: /search sites workspace/i,
+    });
+
+    expect(searchInput).toHaveValue("Dub");
+
+    fireEvent.change(searchInput, { target: { value: "Cork" } });
+
+    expect(onWorkspaceSearchChange).toHaveBeenLastCalledWith({
+      query: "Cork",
+    });
   });
 
   it("exposes route commands with discoverable shortcuts", async () => {
@@ -91,12 +125,13 @@ describe(SitesWorkspaceRouteContent, () => {
 
 function renderSitesWorkspace({
   currentOrganizationRole = "owner",
-  onShellStateChange = vi.fn<
+  onWorkspaceSearchChange = vi.fn<
     React.ComponentProps<
       typeof SitesWorkspaceRouteContent
-    >["onShellStateChange"]
+    >["onWorkspaceSearchChange"]
   >(),
   shellState = "unavailable",
+  workspaceSearch = {},
 }: Partial<React.ComponentProps<typeof SitesWorkspaceRouteContent>> = {}) {
   const queryClient = new QueryClient();
 
@@ -113,7 +148,8 @@ function renderSitesWorkspace({
         <CommandBarProvider>
           <SitesWorkspaceRouteContent
             currentOrganizationRole={currentOrganizationRole}
-            onShellStateChange={onShellStateChange}
+            workspaceSearch={workspaceSearch}
+            onWorkspaceSearchChange={onWorkspaceSearchChange}
             shellState={shellState}
           />
         </CommandBarProvider>
