@@ -196,6 +196,49 @@ The organization route owns the session lifecycle. Feature providers such as
 session registry and should not instantiate raw TanStack DB collections
 directly.
 
+## Sites Performance Harness
+
+The Electric-native Sites workspace has a repeatable larger-organization
+evidence path under `apps/app`. The local synthetic harness is
+`apps/app/src/features/sites-workspace/sites-workspace-performance-harness.ts`
+and runs with:
+
+```bash
+pnpm --filter app perf:sites-workspace
+```
+
+It creates the TSK-200 fixture shape in memory: 1,000 sites, 5,000 related job
+rows, 100 labels, roughly three label assignments per site, active-job summary
+rows for every site, a realistic active/completed/canceled job status mix, and
+queries that exercise label joins, related-job detail selection, active-job
+summary updates, local search, filters, and sorts through
+`deriveSitesWorkspaceVisibleRows(...)`. The JSON report records p95/mean/min/max
+interaction timings, recomputation input/output row counts, process heap
+movement, CPU usage when available, and recommendations for projection or query
+changes before cutover.
+
+The browser/stage harness is `apps/app/e2e/sites-workspace-performance.test.ts`
+and is opt-in so ordinary package-local Playwright runs do not require
+provider-mutating setup:
+
+```bash
+SITES_WORKSPACE_PERF_STAGE=1 \
+PLAYWRIGHT_BASE_URL=<alchemy-app-url> \
+PLAYWRIGHT_API_URL=<alchemy-api-url> \
+DATA_PLANE_PERF_OUTPUT=artifacts/sites-workspace-performance.ndjson \
+pnpm --filter app e2e -- sites-workspace-performance.test.ts
+```
+
+When a prepared stage already has the agreed seeded organization, pass
+`SITES_WORKSPACE_PERF_EMAIL`, `SITES_WORKSPACE_PERF_PASSWORD`, and
+`SITES_WORKSPACE_PERF_EXPECT_SEEDED=1` to run against that account. The test
+records time from route navigation to the `Live Sites read model ready` state,
+visible row count, browser heap observation when Chrome exposes it, and local
+search/filter/sort/detail timings. It fails if the workspace is unavailable or
+if initial ready exceeds the TSK-200 5s blocker threshold. Creating or mutating
+an Alchemy stage and seeding the organization remain explicit operator actions;
+the harness only consumes an already-approved target.
+
 ## Commands
 
 Browser writes are named server-confirmed data-plane commands. Every command
