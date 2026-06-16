@@ -388,7 +388,7 @@ describe("organization labels settings page", () => {
     });
     expect(createInput).toHaveFocus();
     await user.type(createInput, "Plaster");
-    await user.keyboard("{Meta>}{Enter}{/Meta}");
+    await user.keyboard(getModEnterKeyboardInput());
     await expect(screen.findByText("Plaster")).resolves.toBeVisible();
 
     await user.click(
@@ -411,7 +411,7 @@ describe("organization labels settings page", () => {
     await user.click(
       await screen.findByRole("menuitem", { name: /edit label/i })
     );
-    await user.keyboard("{Meta>}{Shift>}{Backspace}{/Shift}{/Meta}");
+    await user.keyboard(getModShiftBackspaceKeyboardInput());
     expect(screen.getByText("Archive this label?")).toBeVisible();
     expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(
       "Urgent"
@@ -444,6 +444,18 @@ function renderLabelsPage({
       organizationRole={organizationRole}
     />
   );
+}
+
+function getModEnterKeyboardInput() {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? "{Meta>}{Enter}{/Meta}"
+    : "{Control>}{Enter}{/Control}";
+}
+
+function getModShiftBackspaceKeyboardInput() {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? "{Meta>}{Shift>}{Backspace}{/Shift}{/Meta}"
+    : "{Control>}{Shift>}{Backspace}{/Shift}{/Control}";
 }
 
 function LabelsPageHarness({
