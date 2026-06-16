@@ -723,12 +723,20 @@ export class JobsService extends Context.Service<JobsService>()(
                 );
               }
 
-              return yield* jobsRepository.addComment({
+              const comment = yield* jobsRepository.addComment({
                 authorUserId: actor.userId,
                 body: input.body,
                 organizationId: actor.organizationId,
                 workItemId,
               });
+
+              yield* activityRecorder.recordCommentCreated(
+                actor,
+                existing,
+                comment
+              );
+
+              return comment;
             })
           )
           .pipe(

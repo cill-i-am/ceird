@@ -601,7 +601,7 @@ The jobs service flow is:
 2. Map actor resolution failures to access-denied errors.
 3. Enforce authorization for the requested operation.
 4. Read or mutate through repositories.
-5. Record activity for auditable changes.
+5. Record work-item activity or global activity events for auditable changes.
 6. Return DTOs defined in the owning shared core package. Jobs write commands
    return server-confirmed rows plus PostgreSQL/Electric mutation metadata so
    Electric-backed clients can wait for synced collection observation without
@@ -636,6 +636,14 @@ one ownership target per comment, validate that comment authors/editors are
 members of the comment organization without pinning historical comments to
 membership rows after a member is removed, and delete a shared comment after its
 ownership row is removed.
+
+Job comment writes go through `JobsService.addComment`. The service creates the
+shared comment row and `work_item_comments` edge in the domain transaction,
+returns a DTO with the product-safe actor projection, and records a
+`comment.created` global activity event targeted at the comment. App and sync
+clients join comments to actors through `product_activity_actors`; Better Auth
+user/member tables remain private to the domain actor resolver and projection
+maintenance path.
 
 Site comments are internal-only at the service authorization layer for now.
 Site `accessNotes` remain part of the site record and are not deprecated by the
@@ -872,9 +880,10 @@ created time, and `retained_until`. The public Electric shape is bounded by a
 domain-owned `retained_until` cutoff predicate, while the repository prunes
 expired rows and keeps only the latest 5,000 events per organization. The
 latest-5,000 guardrail is enforced by retention cleanup because Electric shape
-predicates cannot express an ordered per-organization limit. Product write paths
-emit into this model through follow-up activity issues rather than in the
-projection and shape slice.
+predicates cannot express an ordered per-organization limit. Job comment writes
+emit `comment.created` rows into this model through the jobs activity recorder;
+additional product write paths adopt this projection through their owning
+activity issues rather than in the projection and shape slice.
 Route-aware proximity adds indexes for the hot ranking paths: active jobs can
 reuse the existing `work_items_organization_active_updated_at_idx`, site active
 job summaries use `work_items_organization_site_active_priority_idx`, and mapped

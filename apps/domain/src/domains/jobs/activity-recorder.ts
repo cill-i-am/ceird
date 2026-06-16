@@ -2,11 +2,13 @@
 import type {
   Job,
   JobActivityPayload,
+  JobComment,
   VisitIdType as VisitId,
 } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
 import { Context, Effect, Layer } from "effect";
 
+import { ActivityEventsRepository } from "../activity/repository.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import { JobsRepository } from "./repositories.js";
 
@@ -14,6 +16,7 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
   "@ceird/domains/jobs/JobsActivityRecorder",
   {
     make: Effect.gen(function* JobsActivityRecorderLive() {
+      const activityEvents = yield* ActivityEventsRepository;
       const repository = yield* JobsRepository;
 
       const recordCreated = Effect.fn("JobsActivityRecorder.recordCreated")(
@@ -142,7 +145,35 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
         });
       });
 
+      const recordCommentCreated = Effect.fn(
+        "JobsActivityRecorder.recordCommentCreated"
+      )(function* (actor: OrganizationActor, job: Job, comment: JobComment) {
+        if (comment.actor === undefined) {
+          return;
+        }
+
+        yield* activityEvents.recordEvent({
+          actorId: comment.actor.id,
+          display: {
+            detail: comment.body,
+            route: {
+              href: `/jobs-workspace?job=${job.id}`,
+              label: job.title,
+            },
+            summary: `Commented on ${job.title}`,
+          },
+          eventType: "comment.created",
+          organizationId: actor.organizationId,
+          sourceId: comment.id,
+          sourceType: "comment",
+          status: "synced",
+          targetId: comment.id,
+          targetType: "comment",
+        });
+      });
+
       return {
+        recordCommentCreated,
         recordCreated,
         recordLabelAssigned,
         recordLabelRemoved,
@@ -161,7 +192,9 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
   );
   static readonly Default =
     JobsActivityRecorder.DefaultWithoutDependencies.pipe(
-      Layer.provide(JobsRepository.Default)
+      Layer.provide(
+        Layer.mergeAll(ActivityEventsRepository.Default, JobsRepository.Default)
+      )
     );
 }
 

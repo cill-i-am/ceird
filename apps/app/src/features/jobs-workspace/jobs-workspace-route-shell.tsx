@@ -5,7 +5,10 @@ import type { LabelIdType } from "@ceird/labels-core";
 import {
   Alert01Icon,
   Briefcase01Icon,
+  Cancel01Icon,
+  CheckmarkCircle02Icon,
   DatabaseSync01Icon,
+  Message01Icon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -13,6 +16,7 @@ import { Cause, Exit, Option } from "effect";
 import * as React from "react";
 
 import { AppPageHeader } from "#/components/app-page-header";
+import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import {
@@ -24,6 +28,7 @@ import {
 } from "#/components/ui/empty";
 import { Input } from "#/components/ui/input";
 import { Skeleton } from "#/components/ui/skeleton";
+import { Textarea } from "#/components/ui/textarea";
 import type { DataPlaneCollectionHealthSnapshot } from "#/data-plane/collection-health";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
@@ -135,6 +140,23 @@ declare global {
       | undefined;
   }
 }
+
+type CommentWriteStatus =
+  | { readonly kind: "idle" }
+  | { readonly kind: "pending"; readonly message: string }
+  | {
+      readonly kind: "synced";
+      readonly message: string;
+      readonly observation: string;
+    }
+  | {
+      readonly error: string;
+      readonly kind: "failed";
+      readonly message: string;
+    };
+const IDLE_COMMENT_WRITE_STATUS = {
+  kind: "idle",
+} satisfies CommentWriteStatus;
 
 function clearedSearchParam(): undefined {
   return undefined;
@@ -322,9 +344,6 @@ function JobsWorkspaceLiveRouteShell({
   useAppHotkey("jobsWorkspaceOpenDetail", openSelectedDetail, {
     enabled: hotkeysEnabled && liveList.rows.length > 0,
   });
-  useAppHotkey("jobsWorkspaceCloseDetail", closeDetail, {
-    enabled: hotkeysEnabled && detailOpen,
-  });
   useAppHotkey("jobsWorkspaceCycleSort", () => onSortChange(nextSort(sort)), {
     enabled: hotkeysEnabled,
   });
@@ -350,6 +369,7 @@ function JobsWorkspaceLiveRouteShell({
       void handleCreateJob();
     },
     {
+      conflictBehavior: "allow",
       enabled:
         hotkeysEnabled &&
         liveList.isReady &&
@@ -713,6 +733,7 @@ function JobsWorkspaceLiveRouteShell({
             <JobDetailPanel
               ref={detailPanelRef}
               detailState={liveDetail}
+              hotkeysEnabled={hotkeysEnabled}
               onClose={closeDetail}
             />
           ) : (
@@ -891,11 +912,142 @@ const JobDetailPanel = React.forwardRef<
   HTMLElement,
   {
     readonly detailState: ReturnType<typeof useJobsWorkspaceLiveDetail>;
+    readonly hotkeysEnabled: boolean;
     readonly onClose: () => void;
   }
->(function JobDetailPanel({ detailState, onClose }, ref) {
+>(function JobDetailPanel({ detailState, hotkeysEnabled, onClose }, ref) {
   const { detail } = detailState;
-  const body = renderJobDetailPanelBody(detailState);
+  const commentFormRef = React.useRef<HTMLFormElement>(null);
+  const commentInputRef = React.useRef<HTMLTextAreaElement>(null);
+  const mountedRef = React.useRef(true);
+  const [commentDraft, setCommentDraft] = React.useState("");
+  const [commentWriteStatus, setCommentWriteStatus] =
+    React.useState<CommentWriteStatus>(IDLE_COMMENT_WRITE_STATUS);
+  const commentPending = commentWriteStatus.kind === "pending";
+
+  React.useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    []
+  );
+  React.useEffect(() => {
+    setCommentDraft("");
+    setCommentWriteStatus(IDLE_COMMENT_WRITE_STATUS);
+  }, [detail?.job.id]);
+
+  const cancelComment = React.useCallback(() => {
+    if (commentPending) {
+      return;
+    }
+
+    setCommentDraft("");
+    setCommentWriteStatus(IDLE_COMMENT_WRITE_STATUS);
+    commentInputRef.current?.focus();
+  }, [commentPending]);
+  const submitComment = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+
+      if (!detail) {
+        return;
+      }
+
+      const bodyText = commentDraft.trim();
+      if (bodyText.length === 0) {
+        setCommentWriteStatus({
+          error: "Comment text is required.",
+          kind: "failed",
+          message: "Comment failed",
+        });
+        return;
+      }
+
+      setCommentWriteStatus({
+        kind: "pending",
+        message: "Adding comment and waiting for realtime sync",
+      });
+      const exit = await detailState.addComment(detail.job.id, {
+        body: bodyText,
+      });
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      if (Exit.isSuccess(exit)) {
+        setCommentDraft("");
+        setCommentWriteStatus({
+          kind: "synced",
+          message: "Comment synced",
+          observation: formatCommentObservation(exit.value.electricObservation),
+        });
+        commentInputRef.current?.focus();
+        return;
+      }
+
+      setCommentWriteStatus({
+        error: getCommentWriteErrorMessage(exit.cause),
+        kind: "failed",
+        message: "Comment failed",
+      });
+    },
+    [commentDraft, detail, detailState]
+  );
+
+  useAppHotkey(
+    "jobsWorkspaceComment",
+    () => {
+      commentInputRef.current?.focus();
+    },
+    {
+      conflictBehavior: "allow",
+      enabled: hotkeysEnabled && detail !== undefined,
+    }
+  );
+  useAppHotkey(
+    "jobsWorkspaceSubmitComment",
+    () => {
+      commentFormRef.current?.requestSubmit();
+    },
+    {
+      enabled:
+        hotkeysEnabled &&
+        detail !== undefined &&
+        commentDraft.trim().length > 0 &&
+        !commentPending,
+    }
+  );
+  useAppHotkey("jobsWorkspaceCloseDetail", onClose, {
+    conflictBehavior: "allow",
+    enabled:
+      hotkeysEnabled &&
+      detail !== undefined &&
+      commentDraft.trim().length === 0 &&
+      !commentPending,
+  });
+  useAppHotkey(
+    "jobsWorkspaceCancelComment",
+    () => {
+      cancelComment();
+    },
+    {
+      conflictBehavior: "allow",
+      enabled:
+        hotkeysEnabled && commentDraft.trim().length > 0 && !commentPending,
+    }
+  );
+  const body = renderJobDetailPanelBody({
+    commentDraft,
+    commentInputRef,
+    commentPending,
+    commentWriteStatus,
+    detailState,
+    formRef: commentFormRef,
+    onCancelComment: cancelComment,
+    onCommentDraftChange: setCommentDraft,
+    onSubmitComment: (event) => void submitComment(event),
+  });
 
   return (
     <section
@@ -928,9 +1080,27 @@ const JobDetailPanel = React.forwardRef<
   );
 });
 
-function renderJobDetailPanelBody(
-  detailState: ReturnType<typeof useJobsWorkspaceLiveDetail>
-) {
+function renderJobDetailPanelBody({
+  commentDraft,
+  commentInputRef,
+  commentPending,
+  commentWriteStatus,
+  detailState,
+  formRef,
+  onCancelComment,
+  onCommentDraftChange,
+  onSubmitComment,
+}: {
+  readonly commentDraft: string;
+  readonly commentInputRef: React.RefObject<HTMLTextAreaElement | null>;
+  readonly commentPending: boolean;
+  readonly commentWriteStatus: CommentWriteStatus;
+  readonly detailState: ReturnType<typeof useJobsWorkspaceLiveDetail>;
+  readonly formRef: React.RefObject<HTMLFormElement | null>;
+  readonly onCancelComment: () => void;
+  readonly onCommentDraftChange: (draft: string) => void;
+  readonly onSubmitComment: (event: React.FormEvent<HTMLFormElement>) => void;
+}) {
   const { detail, health } = detailState;
 
   if (!detailState.isCollectionGraphAvailable) {
@@ -1017,6 +1187,17 @@ function renderJobDetailPanelBody(
 
       <JobVisitsSection detail={detail} />
       <JobActivitySection detail={detail} />
+      <JobCommentsSection
+        commentDraft={commentDraft}
+        commentInputRef={commentInputRef}
+        commentPending={commentPending}
+        commentWriteStatus={commentWriteStatus}
+        detail={detail}
+        formRef={formRef}
+        onCancelComment={onCancelComment}
+        onCommentDraftChange={onCommentDraftChange}
+        onSubmitComment={onSubmitComment}
+      />
     </>
   );
 }
@@ -1094,6 +1275,160 @@ function JobActivitySection({ detail }: { readonly detail: ReadyJobDetail }) {
         </ul>
       )}
     </section>
+  );
+}
+
+function JobCommentsSection({
+  commentDraft,
+  commentInputRef,
+  commentPending,
+  commentWriteStatus,
+  detail,
+  formRef,
+  onCancelComment,
+  onCommentDraftChange,
+  onSubmitComment,
+}: {
+  readonly commentDraft: string;
+  readonly commentInputRef: React.RefObject<HTMLTextAreaElement | null>;
+  readonly commentPending: boolean;
+  readonly commentWriteStatus: CommentWriteStatus;
+  readonly detail: ReadyJobDetail;
+  readonly formRef: React.RefObject<HTMLFormElement | null>;
+  readonly onCancelComment: () => void;
+  readonly onCommentDraftChange: (draft: string) => void;
+  readonly onSubmitComment: (event: React.FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <section
+      aria-label="Job comments"
+      className="rounded-md border border-border/70 p-4"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 font-heading text-sm font-medium">
+          <HugeiconsIcon aria-hidden icon={Message01Icon} strokeWidth={2} />
+          Comments
+        </h3>
+        <Badge variant="outline">{detail.commentCount}</Badge>
+      </div>
+      <CommentWriteStatusAlert status={commentWriteStatus} />
+      {detail.comments.length === 0 ? (
+        <p className="mt-3 text-sm/6 text-muted-foreground">
+          No comments are synced for this job yet.
+        </p>
+      ) : (
+        <ul aria-label="Synced job comments" className="mt-3 grid gap-2">
+          {detail.comments.map(({ actor, comment }) => (
+            <li className="rounded-md bg-muted/50 p-3 text-sm" key={comment.id}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate font-medium">
+                  {actor ? formatProductActor(actor) : "Unknown actor"}
+                </span>
+                <time
+                  className="text-xs text-muted-foreground"
+                  dateTime={comment.createdAt}
+                >
+                  {formatShortDate(comment.createdAt)}
+                </time>
+              </div>
+              <p className="mt-2 text-sm/6 whitespace-pre-wrap">
+                {comment.body}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        ref={formRef}
+        aria-label={`Add comment to ${detail.job.title}`}
+        className="mt-4 grid gap-2"
+        onSubmit={onSubmitComment}
+      >
+        <label className="sr-only" htmlFor="jobs-workspace-comment">
+          Comment
+        </label>
+        <Textarea
+          ref={commentInputRef}
+          autoComplete="off"
+          id="jobs-workspace-comment"
+          name="comment"
+          onChange={(event) => onCommentDraftChange(event.currentTarget.value)}
+          placeholder="Add a job update…"
+          value={commentDraft}
+        />
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            disabled={commentPending || commentDraft.trim().length === 0}
+            type="submit"
+          >
+            <HugeiconsIcon
+              aria-hidden
+              icon={CheckmarkCircle02Icon}
+              strokeWidth={2}
+            />
+            Submit
+            <ShortcutHint
+              decorative
+              hotkey={HOTKEYS.jobsWorkspaceSubmitComment.hotkey}
+              label={HOTKEYS.jobsWorkspaceSubmitComment.label}
+            />
+          </Button>
+          <Button
+            disabled={commentPending || commentDraft.trim().length === 0}
+            onClick={onCancelComment}
+            type="button"
+            variant="outline"
+          >
+            <HugeiconsIcon aria-hidden icon={Cancel01Icon} strokeWidth={2} />
+            Cancel
+            <ShortcutHint
+              decorative
+              hotkey={HOTKEYS.jobsWorkspaceCancelComment.hotkey}
+              label={HOTKEYS.jobsWorkspaceCancelComment.label}
+            />
+          </Button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function CommentWriteStatusAlert({
+  status,
+}: {
+  readonly status: CommentWriteStatus;
+}) {
+  if (status.kind === "idle") {
+    return null;
+  }
+
+  if (status.kind === "failed") {
+    return (
+      <Alert className="mt-3" liveRegion="polite" variant="destructive">
+        <HugeiconsIcon aria-hidden icon={Alert01Icon} strokeWidth={2} />
+        <AlertTitle>{status.message}</AlertTitle>
+        <AlertDescription>{status.error}</AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert className="mt-3" liveRegion="polite">
+      <HugeiconsIcon
+        aria-hidden
+        icon={
+          status.kind === "pending" ? DatabaseSync01Icon : CheckmarkCircle02Icon
+        }
+        strokeWidth={2}
+      />
+      <AlertTitle>
+        {status.kind === "pending" ? "Comment pending" : "Comment synced"}
+      </AlertTitle>
+      <AlertDescription>
+        {status.message}
+        {status.kind === "synced" ? ` (${status.observation})` : ""}
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -1561,6 +1896,28 @@ function formatProductActor(actor: IdentityCore.ProductActor): string {
   return actor.displayDetail
     ? `${actor.displayName} · ${actor.displayDetail}`
     : actor.displayName;
+}
+
+function formatCommentObservation(observation: {
+  readonly commentBody: "already-reflected" | "observed-change";
+  readonly commentEdge: "already-reflected" | "observed-change";
+}): string {
+  const body = formatObservationKind(observation.commentBody);
+  const edge = formatObservationKind(observation.commentEdge);
+
+  return body === edge ? `${body} by Electric` : `body ${body}, edge ${edge}`;
+}
+
+function formatObservationKind(value: "already-reflected" | "observed-change") {
+  return value === "already-reflected" ? "already reflected" : "observed";
+}
+
+function getCommentWriteErrorMessage(cause: Cause.Cause<unknown>): string {
+  const error = Cause.squash(cause);
+
+  return error instanceof Error
+    ? error.message
+    : "The comment could not be confirmed by realtime sync.";
 }
 
 function formatLongDate(value: string): string {

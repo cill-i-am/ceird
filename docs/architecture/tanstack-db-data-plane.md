@@ -101,12 +101,14 @@ directly and does not activate the legacy Jobs Query Collection fallback.
 The same route opens URL-backed detail state through `detailJobId` and consumes
 `features/jobs-workspace/jobs-workspace-live-detail.ts`, deriving selected job
 metadata, labels, site/contact summaries, collaborators, visits, activity, and a
-comments-ready count from the Electric detail graph. Assignee and coordinator
-display are joined from the synced `product-member-actor-summaries` projection
-by member `userId`; the UI shows an unavailable summary state when that
-projection is absent rather than synthesizing names from raw identifiers. Detail
-health is aggregated separately from list health so list readiness is not gated
-by the wider record-local activity/comment graph.
+rendered comments with product-safe actors from the Electric detail graph.
+Assignee and coordinator display are joined from the synced
+`product-member-actor-summaries` projection by member `userId`; comment author
+display is joined from `product-activity-actors` by `comment.actorId`. The UI
+shows an unavailable summary state when a required projection is absent rather
+than synthesizing names from raw identifiers. Detail health is aggregated
+separately from list health so list readiness is not gated by the wider
+record-local activity/comment graph.
 `pnpm --filter app perf:jobs-workspace` runs the Jobs live-query performance
 harness in `features/jobs-workspace/jobs-workspace-performance-harness.ts`.
 The default fixture matches the TSK-200 Jobs budget shape: 5,000 jobs, 1,000
@@ -324,6 +326,16 @@ Successful commands reconcile canonical server output through feature-owned
 data-plane helpers. Failures are recorded in the session mutation journal and
 leave collection state unchanged. Optimistic commands can be added later by
 widening the command implementation, not by bypassing the data plane.
+
+The Electric-native Jobs workspace add-comment command calls the typed domain
+Jobs API and keeps the mutation journal entry pending until the synced read
+model observes both the canonical `comments` body row and the
+`work-item-comments` edge row for the returned comment id. The UI derives author
+display only by joining `comment.actorId` to the synced
+`product-activity-actors` projection; Better Auth user/member rows never cross
+the browser sync boundary. If either row is already reflected the runner records
+that separately from an observed live change, and confirmation timeouts mark the
+write failed while leaving Electric collection data authoritative.
 
 Electric-backed mutation handlers are enabled for the first narrow write slice
 that needs replication confirmation: organization label definition create,

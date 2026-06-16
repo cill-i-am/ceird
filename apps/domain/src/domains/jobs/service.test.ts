@@ -246,7 +246,11 @@ describe("JobsService contracts", () => {
   });
 
   it("denies read-only external collaborators when adding comments", async () => {
-    const calls = { addComment: 0, withTransaction: 0 };
+    const calls = {
+      addComment: 0,
+      recordCommentCreated: 0,
+      withTransaction: 0,
+    };
     const exit = await Effect.runPromiseExit(
       Effect.gen(function* () {
         const jobs = yield* JobsService;
@@ -271,7 +275,11 @@ describe("JobsService contracts", () => {
   });
 
   it("allows comment-level external collaborators to add comments", async () => {
-    const calls = { addComment: 0, withTransaction: 0 };
+    const calls = {
+      addComment: 0,
+      recordCommentCreated: 0,
+      withTransaction: 0,
+    };
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const jobs = yield* JobsService;
@@ -293,6 +301,7 @@ describe("JobsService contracts", () => {
     expect(result.body).toBe("Can we get an update?");
     expect(calls.withTransaction).toBe(1);
     expect(calls.addComment).toBe(1);
+    expect(calls.recordCommentCreated).toBe(1);
   });
 
   it("returns empty scoped options for external collaborators with no accessible option data", async () => {
@@ -987,7 +996,11 @@ function makeGrant(
 }
 
 function makeJobsServiceTestLayer(options: {
-  readonly calls: { addComment: number; withTransaction: number };
+  readonly calls: {
+    addComment: number;
+    recordCommentCreated: number;
+    withTransaction: number;
+  };
   readonly grant: JobCollaborator;
 }) {
   return Layer.mergeAll(
@@ -1014,7 +1027,12 @@ function makeJobsServiceTestLayer(options: {
     JobsAuthorization.Default,
     Layer.succeed(
       JobsActivityRecorder,
-      JobsActivityRecorder.of({} as ContextService<typeof JobsActivityRecorder>)
+      JobsActivityRecorder.of({
+        recordCommentCreated: () => {
+          options.calls.recordCommentCreated += 1;
+          return Effect.void;
+        },
+      } as unknown as ContextService<typeof JobsActivityRecorder>)
     ),
     Layer.succeed(
       JobsRepository,
