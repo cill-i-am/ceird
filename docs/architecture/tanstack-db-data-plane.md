@@ -82,8 +82,12 @@ bodies without constructing raw Electric streams in feature UI. Assignment and
 coordinator display joins use the domain-owned
 `product-member-actor-summaries` shape rather than synthesizing names from raw
 user identifiers or relying on the generic activity actor shape to expose source
-keys. Site-level active job rollups remain domain-owned projection follow-ups
-rather than browser business-rule recomputation.
+keys. The domain write path materializes that summary projection when jobs are
+created or patched with assignee/coordinator users, and the projection migration
+backfills existing job member references, so detail rendering does not depend on
+those users having previously emitted comments or activity. Site-level active
+job rollups remain domain-owned projection follow-ups rather than browser
+business-rule recomputation.
 The `/jobs-workspace` live list consumes the list graph through
 `features/jobs-workspace/jobs-workspace-live-list.ts`, which creates the
 Electric collections through the data-plane boundary, subscribes with the

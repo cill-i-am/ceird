@@ -939,10 +939,18 @@ export class JobsRepository extends Context.Service<JobsRepository>()(
 
         if (input.assigneeId !== undefined && input.assigneeId !== null) {
           yield* ensureOrganizationMember(organizationId, input.assigneeId);
+          yield* actors.ensureMemberActor({
+            organizationId,
+            userId: input.assigneeId,
+          });
         }
 
         if (input.coordinatorId !== undefined && input.coordinatorId !== null) {
           yield* ensureOrganizationMember(organizationId, input.coordinatorId);
+          yield* actors.ensureMemberActor({
+            organizationId,
+            userId: input.coordinatorId,
+          });
         }
       });
 

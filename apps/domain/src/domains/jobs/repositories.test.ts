@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 import {
   ContactId,
@@ -14,6 +16,7 @@ import type { Pool } from "pg";
 import { AppEffectSqlRuntimeLive } from "../../platform/database/database.js";
 import {
   applyAllMigrations,
+  applyMigration,
   canConnect,
   createTestDatabase,
   withPool,
@@ -29,6 +32,8 @@ const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
 const decodeWorkItemId = Schema.decodeUnknownSync(WorkItemId);
+const PRODUCT_MEMBER_ACTOR_SUMMARIES_MIGRATION =
+  "20260616044629_product_member_actor_summaries";
 
 describe("jobs repository", () => {
   const cleanup: (() => Promise<void>)[] = [];
@@ -909,6 +914,199 @@ describe("jobs repository", () => {
     });
   });
 
+  it("materializes member actor summaries for assigned jobs without prior activity actors", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "jobs_repo" });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping assignment summary projection coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    const organizationId = decodeOrganizationId(randomUUID());
+    const creatorUserId = decodeUserId(`jobs_summary_creator_${Date.now()}`);
+    const assigneeUserId = decodeUserId(`jobs_summary_assignee_${Date.now()}`);
+    const coordinatorUserId = decodeUserId(
+      `jobs_summary_coordinator_${Date.now()}`
+    );
+    const reassigneeUserId = decodeUserId(
+      `jobs_summary_reassignee_${Date.now()}`
+    );
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Jobs Assignment Summaries",
+      });
+      await seedUser(pool, {
+        id: creatorUserId,
+        name: "Summary Creator",
+      });
+      await seedUser(pool, {
+        id: assigneeUserId,
+        name: "Never Activity Assignee",
+      });
+      await seedUser(pool, {
+        id: coordinatorUserId,
+        name: "Never Activity Coordinator",
+      });
+      await seedUser(pool, {
+        id: reassigneeUserId,
+        name: "Never Activity Reassignee",
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "admin",
+        userId: creatorUserId,
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "member",
+        userId: assigneeUserId,
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "member",
+        userId: coordinatorUserId,
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "member",
+        userId: reassigneeUserId,
+      });
+
+      await expectMemberActorSummaries(pool, organizationId, {});
+    });
+
+    const job = await runJobsRepositoryEffect(
+      testDatabase.url,
+      JobsRepository.create({
+        assigneeId: assigneeUserId,
+        coordinatorId: coordinatorUserId,
+        createdByUserId: creatorUserId,
+        organizationId,
+        title: "Assigned before any activity",
+      })
+    );
+
+    await withPool(testDatabase.url, async (pool) => {
+      await expectMemberActorSummaries(pool, organizationId, {
+        [assigneeUserId]: "Never Activity Assignee",
+        [coordinatorUserId]: "Never Activity Coordinator",
+      });
+    });
+
+    await runJobsRepositoryEffect(
+      testDatabase.url,
+      JobsRepository.patch(organizationId, job.id, {
+        assigneeId: reassigneeUserId,
+      })
+    );
+
+    await withPool(testDatabase.url, async (pool) => {
+      await expectMemberActorSummaries(pool, organizationId, {
+        [assigneeUserId]: "Never Activity Assignee",
+        [coordinatorUserId]: "Never Activity Coordinator",
+        [reassigneeUserId]: "Never Activity Reassignee",
+      });
+    });
+  });
+
+  it("backfills member actor summaries for existing assigned jobs", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({ prefix: "jobs_repo" });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Jobs integration database unavailable; skipping assignment summary migration coverage"
+      );
+    }
+
+    await applyMigrationsBefore(
+      testDatabase.url,
+      PRODUCT_MEMBER_ACTOR_SUMMARIES_MIGRATION
+    );
+
+    const organizationId = decodeOrganizationId(randomUUID());
+    const creatorUserId = decodeUserId(`jobs_backfill_creator_${Date.now()}`);
+    const assigneeUserId = decodeUserId(`jobs_backfill_assignee_${Date.now()}`);
+    const coordinatorUserId = decodeUserId(
+      `jobs_backfill_coordinator_${Date.now()}`
+    );
+    const workItemId = decodeWorkItemId(randomUUID());
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Jobs Assignment Backfill",
+      });
+      await seedUser(pool, {
+        id: creatorUserId,
+        name: "Backfill Creator",
+      });
+      await seedUser(pool, {
+        id: assigneeUserId,
+        name: "Backfill Assignee",
+      });
+      await seedUser(pool, {
+        id: coordinatorUserId,
+        name: "Backfill Coordinator",
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "admin",
+        userId: creatorUserId,
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "member",
+        userId: assigneeUserId,
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "member",
+        userId: coordinatorUserId,
+      });
+      await seedWorkItem(pool, {
+        assigneeId: assigneeUserId,
+        coordinatorId: coordinatorUserId,
+        createdByUserId: creatorUserId,
+        id: workItemId,
+        organizationId,
+        title: "Assigned before summary migration",
+      });
+    });
+
+    await applyMigration(
+      testDatabase.url,
+      PRODUCT_MEMBER_ACTOR_SUMMARIES_MIGRATION
+    );
+
+    await withPool(testDatabase.url, async (pool) => {
+      await expectMemberActorSummaries(pool, organizationId, {
+        [assigneeUserId]: "Backfill Assignee",
+        [coordinatorUserId]: "Backfill Coordinator",
+      });
+    });
+  });
+
   it("serializes site active-job summaries for concurrent transactional first active jobs", async (context: {
     skip: (note?: string) => never;
   }) => {
@@ -1032,6 +1230,72 @@ async function expectSiteActiveJobSummaries(
       )
     ).toStrictEqual(expected);
   });
+}
+
+async function expectMemberActorSummaries(
+  pool: Pool,
+  organizationId: string,
+  expected: Record<string, string>
+) {
+  const rows = await pool.query<{
+    readonly display_name: string;
+    readonly source_user_id: string;
+    readonly summary_user_id: string;
+  }>(
+    `select
+       summaries.user_id as summary_user_id,
+       summaries.display_name,
+       sources.user_id as source_user_id
+     from product_member_actor_summaries summaries
+     inner join product_activity_actor_sources sources
+       on sources.actor_id = summaries.actor_id
+      and sources.organization_id = summaries.organization_id
+      and sources.kind = 'member'
+     where summaries.organization_id = $1
+     order by summaries.user_id asc`,
+    [organizationId]
+  );
+
+  expect(
+    Object.fromEntries(
+      rows.rows.map((row) => [
+        row.summary_user_id,
+        {
+          displayName: row.display_name,
+          sourceUserId: row.source_user_id,
+        },
+      ])
+    )
+  ).toStrictEqual(
+    Object.fromEntries(
+      Object.entries(expected).map(([userId, displayName]) => [
+        userId,
+        {
+          displayName,
+          sourceUserId: userId,
+        },
+      ])
+    )
+  );
+}
+
+async function applyMigrationsBefore(
+  databaseUrl: string,
+  migrationName: string
+) {
+  const migrationDirectory = path.resolve(process.cwd(), "drizzle");
+  const entries = await fs.readdir(migrationDirectory, {
+    withFileTypes: true,
+  });
+  const migrationNames = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => name < migrationName)
+    .toSorted();
+
+  for (const name of migrationNames) {
+    await applyMigration(databaseUrl, name);
+  }
 }
 
 async function seedOrganization(
@@ -1192,7 +1456,9 @@ async function seedLabel(
 async function seedWorkItem(
   pool: Pool,
   input: {
+    readonly assigneeId?: string;
     readonly contactId?: string;
+    readonly coordinatorId?: string;
     readonly createdByUserId: string;
     readonly id: string;
     readonly organizationId: string;
@@ -1210,17 +1476,21 @@ async function seedWorkItem(
        priority,
        site_id,
        contact_id,
+       assignee_id,
+       coordinator_id,
        created_at,
        updated_at,
        created_by_user_id
      )
-     values ($1, $2, 'job', $3, 'new', 'none', $4, $5, now(), now(), $6)`,
+     values ($1, $2, 'job', $3, 'new', 'none', $4, $5, $6, $7, now(), now(), $8)`,
     [
       input.id,
       input.organizationId,
       input.title,
       input.siteId ?? null,
       input.contactId ?? null,
+      input.assigneeId ?? null,
+      input.coordinatorId ?? null,
       input.createdByUserId,
     ]
   );

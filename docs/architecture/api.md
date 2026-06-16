@@ -844,9 +844,11 @@ actor rows from Better Auth user/member data when comments or activity are
 written. Assignment/coordinator summaries use the separate
 `product_member_actor_summaries` projection, which carries the job-visible
 member `user_id` plus product-safe actor display/routing fields for Electric
-joins. The private `product_activity_actor_sources` table keeps agent-thread,
-system, and source lookup keys out of synced product data and is not
-shape-authorized.
+joins. Job create/patch writes also materialize that projection for
+assignee/coordinator users, and the migration backfills existing job member
+references. The private `product_activity_actor_sources` table keeps
+agent-thread, system, and source lookup keys out of synced product data and is
+not shape-authorized.
 Global feed activity uses `activity_events`, a bounded product-facing read model
 owned by the activity domain. Rows carry stable ids, organization scope, event
 and target metadata, a product-safe `actor_id`, display payload, status,

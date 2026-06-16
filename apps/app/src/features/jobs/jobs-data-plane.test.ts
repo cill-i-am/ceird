@@ -862,6 +862,64 @@ describe("jobs data plane", () => {
     });
   });
 
+  it("derives assignment summaries from member summary rows without activity actor rows", () => {
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+
+    const detail = deriveJobsWorkspaceDetail({
+      activity: [],
+      actors: [],
+      collaborators: [],
+      comments: [],
+      contacts: [],
+      jobComments: [],
+      jobs: [
+        toJobsWorkspaceJobRow({
+          assigneeId: "user_never_activity_assignee",
+          coordinatorId: "user_never_activity_coordinator",
+          createdAt: "2026-06-15T10:00:00.000Z",
+          createdByUserId: "user_123",
+          id: workItemId,
+          kind: "job",
+          priority: "high",
+          status: "new",
+          title: "Assigned without activity",
+          updatedAt: "2026-06-15T11:00:00.000Z",
+        }),
+      ],
+      labelAssignments: [],
+      labels: [],
+      memberActorSummaries: [
+        toProductMemberActorSummaryElectricRow({
+          actorId: "66666666-6666-4666-8666-666666666666",
+          displayDetail: "Team member",
+          displayName: "Never Activity Assignee",
+          userId: "user_never_activity_assignee",
+        }),
+        toProductMemberActorSummaryElectricRow({
+          actorId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          displayDetail: "Team member",
+          displayName: "Never Activity Coordinator",
+          userId: "user_never_activity_coordinator",
+        }),
+      ],
+      selectedJobId: workItemId,
+      sites: [],
+      visits: [],
+    });
+
+    expect(detail).toMatchObject({
+      assignee: {
+        displayName: "Never Activity Assignee",
+        userId: "user_never_activity_assignee",
+      },
+      coordinator: {
+        displayName: "Never Activity Coordinator",
+        userId: "user_never_activity_coordinator",
+      },
+      job: { id: workItemId, title: "Assigned without activity" },
+    });
+  });
+
   it("maps product-safe Electric rows for the jobs workspace graph", () => {
     const workItemId = "11111111-1111-4111-8111-111111111111";
     const labelId = "22222222-2222-4222-8222-222222222222";
