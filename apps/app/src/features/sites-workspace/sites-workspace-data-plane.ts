@@ -196,10 +196,7 @@ export interface SitesWorkspaceCommentElectricObservation {
   readonly commentEdge: "already-reflected" | "observed-change";
 }
 
-type SitesWorkspaceSiteCommentResponse = Omit<
-  AddSiteCommentResponse,
-  "authorUserId"
->;
+type SitesWorkspaceSiteCommentResponse = AddSiteCommentResponse;
 
 export type SitesWorkspaceCommentCommandResult =
   SitesWorkspaceSiteCommentResponse & {
@@ -260,15 +257,13 @@ export function createSitesWorkspaceCommandRunner({
               return Exit.failCause(exit.cause);
             }
 
-            const response = toSitesWorkspaceSiteCommentResponse(exit.value);
-
             return await catchWorkspaceConfirmationFailure(
               awaitSiteCommentConfirmation({
                 collections: {
                   commentBodies: collections.commentBodies,
                   commentEdges: collections.commentEdges,
                 },
-                response,
+                response: exit.value,
                 siteId: commandInput.siteId,
                 timeoutMs,
               })
@@ -652,12 +647,12 @@ function createSiteCommentBodiesElectricContract(scope: OrganizationDataScope) {
     completeness: syncBackedCollectionCompleteness({
       covers: COMPLETE_TENANT_COLLECTION,
       source: "electric",
-      subscriptionName: "comments",
+      subscriptionName: "site-comment-bodies",
     }),
     getKey: (comment: SiteCommentBodyRow) => comment.id,
-    id: `${sitesWorkspaceCollectionId(scope)}:comments`,
+    id: `${sitesWorkspaceCollectionId(scope)}:site-comment-bodies`,
     schema: SiteCommentBodyElectricStandardSchema,
-    shapeName: "comments",
+    shapeName: "site-comment-bodies",
     shapeOptions: {
       transformer: toSiteCommentBodyElectricRow,
     },
@@ -918,14 +913,6 @@ export function toSiteCommentBodyElectricRow(
   return Schema.decodeUnknownSync(SiteCommentBodyElectricRowSchema)(
     comment
   ) as SiteCommentBodyRow;
-}
-
-function toSitesWorkspaceSiteCommentResponse(
-  response: AddSiteCommentResponse
-): SitesWorkspaceSiteCommentResponse {
-  const { authorUserId: _authorUserId, ...productSafeResponse } = response;
-
-  return productSafeResponse;
 }
 
 async function awaitSiteConfirmation({

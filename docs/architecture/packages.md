@@ -116,7 +116,7 @@ Exports the shared contract for calling the private domain Worker:
   authorization DTO schemas, and typed sync authorization errors used by
   `apps/domain`, `apps/sync`, and the public API boundary guard; named product
   shapes include raw domain tables and product-safe projections such as
-  `site-active-job-summaries`
+  `site-active-job-summaries` and `site-comment-bodies`
 
 Keep product repositories, Drizzle schema, authorization, action execution, and
 audit behavior out of this package. Those are owned by `apps/domain`; this
@@ -175,7 +175,8 @@ Exports the shared sites contract:
 - route-aware proximity request/response DTOs for ranking mapped sites and
   previewing one site route by driving time, including active-job summary fields
 - Google Places autocomplete and place-details request/response DTOs
-- site comment DTOs extended from `@ceird/comments-core`
+- product-safe site comment DTOs that reuse `@ceird/comments-core` comment
+  primitives while exposing product actor ids/projections instead of raw user ids
 - site label assignment inputs and endpoints; this package depends on
   `@ceird/labels-core` for label IDs and schemas
 - typed site, access-denied, storage, location provider, and location resolution

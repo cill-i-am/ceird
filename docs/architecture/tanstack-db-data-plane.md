@@ -175,12 +175,14 @@ fallback. The `/sites-workspace` route uses a browser-safe feature data-plane
 module under `features/sites-workspace` so the client route does not import the
 legacy Sites module's server-backed query collection helpers. That workspace
 read model requests the named `sites`, `site-labels`,
-`site-active-job-summaries`, `jobs`, `labels`, `site-comments`, `comments`, and
-`product-activity-actors` shapes. It joins shared label definitions through
+`site-active-job-summaries`, `jobs`, `labels`, `site-comments`,
+`site-comment-bodies`, and `product-activity-actors` shapes. It joins shared
+label definitions through
 site-label assignments, derives visible rows from local search/filter/sort
 state, selects related jobs from the synced jobs row set, and renders selected
-site comments by joining `site-comments` edge rows to shared `comments` bodies
-and product-safe actors. Comment author display comes only from
+site comments by joining `site-comments` edge rows to the domain-owned
+`site-comment-bodies` projection and product-safe actors. Comment author
+display comes only from
 `product-activity-actors`; Better Auth user/member rows remain private to the
 domain. The synced `sites` row transformer carries the shared
 `SiteOption.updatedAt` boundary field so the workspace's recently-updated sort
@@ -346,10 +348,10 @@ The Electric-native Sites workspace add-comment command follows the same
 domain-write/Electric-confirmation pattern for site-scoped comments. It calls
 the typed Sites API, records both `site-comment-bodies` and `site-comments` as
 affected collection roots, and resolves only after the synced read model
-observes the shared `comments` body row and the `site-comments` edge row for
-the returned comment id. The route shows pending, synced, and failed composer
-feedback, keeps the synced read model authoritative for other-session or
-agent-created comments, and derives actor display through
+observes the product-safe `site-comment-bodies` row and the `site-comments`
+edge row for the returned comment id. The route shows pending, synced, and
+failed composer feedback, keeps the synced read model authoritative for
+other-session or agent-created comments, and derives actor display through
 `product-activity-actors`.
 
 Electric-backed mutation handlers are enabled for the first narrow write slice

@@ -1,6 +1,6 @@
 import { CommentId } from "@ceird/comments-core";
 import type { OrganizationId } from "@ceird/identity-core";
-import { ProductActorId, UserId } from "@ceird/identity-core";
+import { ProductActorId } from "@ceird/identity-core";
 import type { JobListItem } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
 import type {
@@ -34,7 +34,6 @@ const appApiMock = vi.hoisted(() => ({
 
 const decodeCommentId = Schema.decodeUnknownSync(CommentId);
 const decodeProductActorId = Schema.decodeUnknownSync(ProductActorId);
-const decodeUserId = Schema.decodeUnknownSync(UserId);
 
 vi.mock(import("#/features/api/app-api-client"), () => ({
   runBrowserAppApiRequest:
@@ -155,7 +154,7 @@ describe("sites workspace data plane", () => {
       collection: "site-comment-bodies",
       source: "electric",
       status: "disabled",
-      subscriptionName: "comments",
+      subscriptionName: "site-comment-bodies",
     });
     expect(state.actors.health.current).toMatchObject({
       collection: "product-activity-actors",
@@ -168,12 +167,10 @@ describe("sites workspace data plane", () => {
   it("maps site comment bodies to product-safe actor rows without raw user ids", () => {
     const comment = toSiteCommentBodyElectricRow({
       actorId: productActor.id,
-      authorUserId: decodeUserId("user_taylor"),
       body: "Bring the dock gate key.",
       createdAt: "2026-06-02T09:30:00.000Z",
       id: dublinComment.id,
       updatedAt: "2026-06-02T09:30:00.000Z",
-      updatedByUserId: decodeUserId("user_admin"),
     });
 
     expect(comment).toStrictEqual(dublinComment);
@@ -406,7 +403,7 @@ describe("sites workspace data plane", () => {
     expect(journal.entries()[0]?.error).toBeInstanceOf(Error);
   });
 
-  it("keeps add-comment pending until the site comment edge and shared body are observed", async () => {
+  it("keeps add-comment pending until the site comment edge and safe body projection are observed", async () => {
     const commentBodies = createFakeCollection<SiteCommentBodyRow>(
       (comment) => comment.id
     );
@@ -419,21 +416,13 @@ describe("sites workspace data plane", () => {
     });
     const response = {
       actor: productActor,
+      actorId: productActor.id,
       authorName: productActor.displayName,
-      authorUserId: decodeUserId("user_taylor"),
       body: dublinComment.body,
       createdAt: dublinComment.createdAt,
       id: dublinComment.id,
       siteId: dublinSite.id,
     } satisfies AddSiteCommentResponse;
-    const productSafeResponse = {
-      actor: productActor,
-      authorName: productActor.displayName,
-      body: dublinComment.body,
-      createdAt: dublinComment.createdAt,
-      id: dublinComment.id,
-      siteId: dublinSite.id,
-    };
     appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
       Effect.succeed(response)
     );
@@ -483,7 +472,7 @@ describe("sites workspace data plane", () => {
     expect(journal.entries()).toMatchObject([
       {
         commandName: "sites-workspace.add-comment",
-        output: productSafeResponse,
+        output: response,
         status: "success",
       },
     ]);

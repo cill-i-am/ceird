@@ -337,6 +337,25 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
               ${input.siteId}
             from inserted_comment
             returning *
+          ),
+          inserted_body as (
+            insert into site_comment_bodies (
+              id,
+              organization_id,
+              actor_id,
+              body,
+              created_at,
+              updated_at
+            )
+            select
+              inserted_comment.id,
+              inserted_comment.organization_id,
+              inserted_comment.actor_id,
+              inserted_comment.body,
+              inserted_comment.created_at,
+              inserted_comment.updated_at
+            from inserted_comment
+            returning *
           )
           select
             inserted_comment.id,
@@ -353,6 +372,9 @@ export class CommentsRepository extends Context.Service<CommentsRepository>()(
           from inserted_comment
           inner join inserted_ownership
             on inserted_ownership.comment_id = inserted_comment.id
+          inner join inserted_body
+            on inserted_body.id = inserted_comment.id
+            and inserted_body.organization_id = inserted_comment.organization_id
           left join product_activity_actors
             on product_activity_actors.id = inserted_comment.actor_id
             and product_activity_actors.organization_id = inserted_comment.organization_id
@@ -429,8 +451,8 @@ function mapSiteCommentRow(row: SiteCommentRow): SiteComment {
   const actor = mapProductActorProjection(row);
   return decodeSiteComment({
     actor,
+    actorId: actor?.id,
     authorName: actor?.displayName,
-    authorUserId: row.author_user_id,
     body: row.body,
     createdAt: row.created_at.toISOString(),
     id: row.id,

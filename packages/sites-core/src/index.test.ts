@@ -279,9 +279,15 @@ describe("sites-core", () => {
     const decodeResponse = Schema.decodeUnknownSync(SiteCommentsResponseSchema);
 
     const comment = decodeComment({
+      actor: {
+        displayDetail: "Team member",
+        displayName: "Ciara",
+        id: "99999999-9999-4999-8999-999999999999",
+        kind: "member",
+      },
+      actorId: "99999999-9999-4999-8999-999999999999",
       id: "77777777-7777-4777-8777-777777777777",
       siteId: "22222222-2222-4222-8222-222222222222",
-      authorUserId: "user_123",
       authorName: "Ciara",
       body: "Gate code changed.",
       createdAt: "2026-05-16T09:30:00.000Z",
@@ -293,6 +299,17 @@ describe("sites-core", () => {
     expect(decodeResponse({ comments: [comment] })).toStrictEqual({
       comments: [comment],
     });
+    expect(() =>
+      decodeResponse({
+        comments: [
+          {
+            ...comment,
+            authorUserId: "user_123",
+            updatedByUserId: "user_456",
+          },
+        ],
+      })
+    ).toThrow(/[Uu]nexpected/);
   });
 
   it("documents site comment and label API operations", () => {

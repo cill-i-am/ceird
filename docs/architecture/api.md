@@ -628,6 +628,9 @@ single `comments` table and keeps target ownership in separate join tables:
 
 - `work_item_comments` links comments to jobs.
 - `site_comments` links comments to sites.
+- `site_comment_bodies` is the Sites-specific product-safe Electric projection
+  of site comment body rows. It carries comment id, organization id, product
+  `actor_id`, body, and timestamps, but not Better Auth/user-table ids.
 
 The core `comments` row owns author, organization, body, creation timestamp,
 and edit metadata (`updated_at`, `updated_by_user_id`). Target join tables own
@@ -646,8 +649,9 @@ user/member tables remain private to the domain actor resolver and projection
 maintenance path.
 
 Site comment writes go through `SitesService.addComment`. The service creates
-the shared comment row and `site_comments` edge in the domain transaction,
-returns a DTO with the same product-safe actor projection, and records a
+the shared comment row, `site_comments` edge, and `site_comment_bodies`
+projection row in the domain transaction, returns a DTO with the same
+product-safe actor projection and no raw `authorUserId`, and records a
 `site.comment_created` event so the global Activity read model remains
 compatible with site-scoped comments. Site comments are internal-only at the
 service authorization layer for now. Site `accessNotes` remain part of the site

@@ -156,8 +156,8 @@ unavailable/degraded states instead of reading the old Sites Query Collection
 path. Its first live slice renders the Sites workspace list/detail from a
 browser-safe Electric read-model module, joining site rows, shared labels,
 site-label assignments, related jobs, domain-owned active-job summaries, site
-comment edges, shared comment bodies, and product-safe actors in the feature
-data-plane layer. Comment author display is derived from
+comment edges, domain-owned product-safe comment bodies, and product-safe
+actors in the feature data-plane layer. Comment author display is derived from
 `product-activity-actors`; Better Auth user/member tables stay outside the
 browser read graph. Search text, filter, sort, and the selected detail row are
 route-backed search state with local selected-site and recent-search restoration
