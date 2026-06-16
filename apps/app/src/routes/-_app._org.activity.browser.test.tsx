@@ -1,115 +1,59 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
 import type { OrganizationRole } from "@ceird/identity-core";
-import type { OrganizationActivityQuery } from "@ceird/jobs-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
 
-type ActivityLookupMock = (
-  query?: OrganizationActivityQuery
-) => Promise<unknown>;
-type JobMemberOptionsLookupMock = () => Promise<unknown>;
-
 const organizationId = decodeOrganizationId("org_123");
 
-const {
-  mockedGetCurrentServerJobMemberOptions,
-  mockedListCurrentServerOrganizationActivity,
-} = vi.hoisted(() => ({
-  mockedGetCurrentServerJobMemberOptions: vi.fn<JobMemberOptionsLookupMock>(),
-  mockedListCurrentServerOrganizationActivity: vi.fn<ActivityLookupMock>(),
-}));
-
-vi.mock("#/features/jobs/jobs-server", () => ({
-  getCurrentServerJobMemberOptions: mockedGetCurrentServerJobMemberOptions,
-  listCurrentServerOrganizationActivity:
-    mockedListCurrentServerOrganizationActivity,
-}));
-
-describe("activity route loader", () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it.each<OrganizationRole>(["owner", "admin"])(
-    "loads organization activity and options for %s users with filters",
+describe("activity route access and search", () => {
+  it.each<OrganizationRole>(["owner", "admin", "member"])(
+    "allows %s users to view organization activity",
     {
       timeout: 10_000,
     },
     async (role) => {
-      const activity = {
-        items: [],
-        nextCursor: undefined,
-      };
-      const options = {
-        members: [],
-      };
-      mockedListCurrentServerOrganizationActivity.mockResolvedValue(activity);
-      mockedGetCurrentServerJobMemberOptions.mockResolvedValue(options);
-
-      const [{ decodeActivitySearch }, { loadActivityRouteData }] =
-        await Promise.all([
-          import("./_app._org.activity"),
-          import("#/features/activity/activity-route-loader"),
-        ]);
-      const search = decodeActivitySearch({
-        actorUserId: "user_taylor",
-        eventType: "job_created",
-        fromDate: "2026-04-01",
-        jobTitle: "Boiler",
-        toDate: "2026-04-28",
-      });
-
-      await expect(
-        loadActivityRouteData(
-          {
-            activeOrganizationId: organizationId,
-            activeOrganizationSync: {
-              required: false,
-              targetOrganizationId: organizationId,
-            },
-            currentOrganizationRole: role,
-          },
-          search
-        )
-      ).resolves.toStrictEqual({
-        activity,
-        options,
-      });
-      expect(mockedListCurrentServerOrganizationActivity).toHaveBeenCalledWith(
-        search
-      );
-      expect(mockedGetCurrentServerJobMemberOptions).toHaveBeenCalledOnce();
-    }
-  );
-
-  it.each<OrganizationRole>(["member", "external"])(
-    "redirects %s users away from organization activity",
-    {
-      timeout: 10_000,
-    },
-    async (role) => {
-      const { loadActivityRouteData } =
+      const { assertActivityRouteAccess } =
         await import("#/features/activity/activity-route-loader");
-      const result = loadActivityRouteData(
-        {
+
+      expect(() =>
+        assertActivityRouteAccess({
           activeOrganizationId: organizationId,
           activeOrganizationSync: {
             required: false,
             targetOrganizationId: organizationId,
           },
           currentOrganizationRole: role,
-        },
-        {}
-      );
+        })
+      ).not.toThrow();
+    }
+  );
 
-      await expect(result).rejects.toMatchObject({
-        options: { to: "/" },
-      });
-      await expect(result).rejects.toSatisfy(isRedirect);
-      expect(
-        mockedListCurrentServerOrganizationActivity
-      ).not.toHaveBeenCalled();
-      expect(mockedGetCurrentServerJobMemberOptions).not.toHaveBeenCalled();
+  it(
+    "redirects external users away from organization activity",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const { assertActivityRouteAccess } =
+        await import("#/features/activity/activity-route-loader");
+
+      let thrown: unknown;
+
+      try {
+        assertActivityRouteAccess({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: false,
+            targetOrganizationId: organizationId,
+          },
+          currentOrganizationRole: "external",
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toMatchObject({ options: { to: "/jobs" } });
+      expect(thrown).toSatisfy(isRedirect);
     }
   );
 
@@ -119,33 +63,18 @@ describe("activity route loader", () => {
       timeout: 10_000,
     },
     async () => {
-      const { loadActivityRouteData } =
+      const { assertActivityRouteAccess } =
         await import("#/features/activity/activity-route-loader");
 
-      await expect(
-        loadActivityRouteData(
-          {
-            activeOrganizationId: organizationId,
-            activeOrganizationSync: {
-              required: true,
-              targetOrganizationId: organizationId,
-            },
+      expect(() =>
+        assertActivityRouteAccess({
+          activeOrganizationId: organizationId,
+          activeOrganizationSync: {
+            required: true,
+            targetOrganizationId: organizationId,
           },
-          {}
-        )
-      ).resolves.toStrictEqual({
-        activity: {
-          items: [],
-          nextCursor: undefined,
-        },
-        options: {
-          members: [],
-        },
-      });
-      expect(
-        mockedListCurrentServerOrganizationActivity
-      ).not.toHaveBeenCalled();
-      expect(mockedGetCurrentServerJobMemberOptions).not.toHaveBeenCalled();
+        })
+      ).not.toThrow();
     }
   );
 
@@ -158,20 +87,16 @@ describe("activity route loader", () => {
       const { decodeActivitySearch, getActivityRouteLoaderDeps } =
         await import("./_app._org.activity");
       const search = decodeActivitySearch({
-        actorUserId: "user_taylor",
-        eventType: "job_created",
-        fromDate: "2026-04-01",
-        jobTitle: "  Boiler  ",
-        toDate: "2026-04-28",
-        unknown: "ignored",
+        eventType: "job.created",
+        ignored: "value",
+        status: "pending",
+        targetType: "job",
       });
 
       expect(getActivityRouteLoaderDeps(search)).toStrictEqual({
-        actorUserId: "user_taylor",
-        eventType: "job_created",
-        fromDate: "2026-04-01",
-        jobTitle: "Boiler",
-        toDate: "2026-04-28",
+        eventType: "job.created",
+        status: "pending",
+        targetType: "job",
       });
     }
   );
@@ -186,34 +111,26 @@ describe("activity route loader", () => {
 
       expect(
         decodeActivitySearch({
-          actorUserId: "",
           eventType: "not_real",
-          fromDate: "2026-02-31",
           ignored: "value",
-          jobTitle: "   ",
-          toDate: "tomorrow",
+          status: "later",
+          targetType: "member",
         })
       ).toStrictEqual({
-        actorUserId: undefined,
         eventType: undefined,
-        fromDate: undefined,
-        jobTitle: undefined,
-        toDate: undefined,
+        status: undefined,
+        targetType: undefined,
       });
       expect(
         decodeActivitySearch({
-          actorUserId: "user_taylor",
-          eventType: "job_created",
-          fromDate: "2026-04-01",
-          jobTitle: "  Boiler  ",
-          toDate: "2026-04-28",
+          eventType: "site.updated",
+          status: "synced",
+          targetType: "site",
         })
       ).toStrictEqual({
-        actorUserId: "user_taylor",
-        eventType: "job_created",
-        fromDate: "2026-04-01",
-        jobTitle: "Boiler",
-        toDate: "2026-04-28",
+        eventType: "site.updated",
+        status: "synced",
+        targetType: "site",
       });
     }
   );

@@ -285,8 +285,8 @@ describe("site header", () => {
     ]);
   });
 
-  it.each(["owner", "admin"] as const)(
-    "enables the activity route hotkey for %s role",
+  it.each(["owner", "admin", "member"] as const)(
+    "enables the activity route hotkey for internal %s role",
     { timeout: 10_000 },
     async (role) => {
       const user = userEvent.setup();
@@ -302,18 +302,16 @@ describe("site header", () => {
 
       expect(mockedNavigate).toHaveBeenCalledWith({
         search: {
-          actorUserId: undefined,
           eventType: undefined,
-          fromDate: undefined,
-          jobTitle: undefined,
-          toDate: undefined,
+          status: undefined,
+          targetType: undefined,
         },
         to: "/activity",
       });
     }
   );
 
-  it.each(["member", undefined] as const)(
+  it.each([undefined] as const)(
     "does not enable the activity route hotkey for %s role",
     { timeout: 10_000 },
     async (role) => {

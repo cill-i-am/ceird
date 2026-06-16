@@ -26,7 +26,7 @@ Current visible routes:
 | `/location-access`                 | `location-access.tsx`                        | Authenticated, shellless, skippable location-access onboarding.              |
 | `/create-organization`             | `create-organization.tsx`                    | Create a team and optionally invite initial members.                         |
 | `/settings`                        | `_app.settings.tsx`                          | User profile, email, password, and account security settings.                |
-| `/activity`                        | `_app._org.activity.tsx`                     | Organization activity feed.                                                  |
+| `/activity`                        | `_app._org.activity.tsx`                     | Internal organization activity feed from Electric-backed activity events.    |
 | `/jobs`                            | `_app._org.jobs.tsx`                         | Jobs list and saved views.                                                   |
 | `/jobs-workspace`                  | `_app._org.jobs-workspace.tsx`               | Electric-native Jobs workspace preview shell.                                |
 | `/members`                         | `_app._org.members.tsx`                      | Organization members and invitations.                                        |
@@ -249,7 +249,7 @@ the package-local fallback and `local` when no Alchemy metadata is available.
 | `features/jobs-workspace`  | Electric-native Jobs workspace preview route, live list controls, health/permission states, saved-view-ready route state, and shortcut affordances. It consumes feature-owned data-plane helpers and must not instantiate raw Electric streams or raw TanStack DB collection APIs in route/view code.                                           |
 | `features/sites`           | Sites list, site create flow, detail sheet, and site API state. The first Sites index refresh intentionally uses only supported site fields: name, address, and map readiness. Status, labels, lead, open job counts, saved views, updated timestamps, archive state, and bulk selection are product follow-ups, not placeholder UI.            |
 | `features/sites-workspace` | Electric-native Sites workspace preview route, browser-safe Electric read-model contracts, live list/detail derivation, permission/unavailable/degraded states, saved search/detail restoration hooks, and shortcut affordances. Route/view code consumes the feature data-plane module rather than constructing raw Electric streams directly. |
-| `features/activity`        | Organization activity feed search and formatting.                                                                                                                                                                                                                                                                                               |
+| `features/activity`        | Global organization Activity route, Electric-backed activity event and product-safe actor read-model contracts, local feed filters, health states, and activity row navigation.                                                                                                                                                                 |
 | `features/settings`        | User settings page schemas, search, profile/email/password forms, account security sessions, and 2FA settings UI.                                                                                                                                                                                                                               |
 | `features/command-bar`     | Command palette UI and global app actions.                                                                                                                                                                                                                                                                                                      |
 | `features/agent`           | App-level Ceird Agent launcher, thread API helpers, Agent Worker origin resolution, responsive chat drawer, and chat E2E page object.                                                                                                                                                                                                           |
@@ -458,6 +458,13 @@ an explicit SSR strategy. The current migrated slices are:
   where the primary Sites route collection is a bounded cursor page,
   site-related job subsets are bounded page/filter collections, and site
   comments are lazy per-site collections exposed through public reader hooks.
+- `features/activity/activity-data-plane.ts`, where the global Activity route
+  reads the bounded `activity-events` Electric shape and the complete-tenant
+  `product-activity-actors` shape, joins product-safe actors locally, and
+  applies event/entity/status filters over synced rows without caller-supplied
+  Electric predicates. The Activity route is available to internal organization
+  members and surfaces connecting, ready, empty, unavailable, stale, degraded,
+  and permission-aware states.
 - `features/labels/labels-data-plane.ts`, where organization labels have a
   first-class scoped collection so job/site label commands declare and update a
   real data-plane root, plus a Settings Labels helper that consumes the active

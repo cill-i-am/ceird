@@ -1,4 +1,12 @@
-import type { OrganizationId } from "@ceird/identity-core";
+import type {
+  ActivityEventIdType,
+  ProductActivityEvent,
+} from "@ceird/activity-core";
+import type {
+  OrganizationId,
+  ProductActor,
+  ProductActorId,
+} from "@ceird/identity-core";
 import { describe, expect, it, vi } from "vitest";
 
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
@@ -7,7 +15,12 @@ import {
   activityEventsCollectionId,
   activityEventsCollectionKey,
   createActivityEventsElectricContract,
+  createProductActivityActorsElectricContract,
+  deriveActivityFeedRows,
   getOrCreateActivityEventsCollectionState,
+  getOrCreateProductActivityActorsCollectionState,
+  productActivityActorsCollectionId,
+  productActivityActorsCollectionKey,
 } from "./activity-data-plane";
 
 describe("activity data plane", () => {
@@ -36,6 +49,21 @@ describe("activity data plane", () => {
     );
   });
 
+  it("uses scoped product activity actor collection identity", () => {
+    expect(productActivityActorsCollectionKey(scope)).toStrictEqual([
+      "product-activity-actors",
+      "organization",
+      "org_123",
+      "user",
+      "user_123",
+      "role",
+      "owner",
+    ]);
+    expect(productActivityActorsCollectionId(scope)).toBe(
+      "organization:org_123:user:user_123:role:owner:product-activity-actors"
+    );
+  });
+
   it("defines the named Electric contract for global activity events", () => {
     expect(createActivityEventsElectricContract(scope)).toMatchObject({
       collection: "activity-events",
@@ -61,6 +89,21 @@ describe("activity data plane", () => {
         subscriptionName: "activity-events",
       },
       shapeName: "activity-events",
+    });
+  });
+
+  it("defines the named Electric contract for product-safe activity actors", () => {
+    expect(createProductActivityActorsElectricContract(scope)).toMatchObject({
+      collection: "product-activity-actors",
+      completeness: {
+        covers: {
+          mode: "complete-tenant",
+        },
+        mode: "sync-backed",
+        source: "electric",
+        subscriptionName: "product-activity-actors",
+      },
+      shapeName: "product-activity-actors",
     });
   });
 
@@ -116,4 +159,112 @@ describe("activity data plane", () => {
       session.registry.has(activityEventsCollectionId(scope))
     ).toBeTruthy();
   });
+
+  it("reuses product activity actor state through the data-plane registry", () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+    const session = {
+      mutationJournal: { entries: [] },
+      queryClient: {},
+      registry: new Map<string, unknown>(),
+      scope,
+    };
+
+    const first = getOrCreateProductActivityActorsCollectionState({
+      scope,
+      session: session as never,
+      sync: {
+        runtime: {
+          fetch: (() =>
+            Promise.resolve(new Response("ok"))) as unknown as typeof fetch,
+          isBrowser: true,
+        },
+      },
+    });
+    const second = getOrCreateProductActivityActorsCollectionState({
+      scope,
+      session: session as never,
+    });
+
+    expect(second).toBe(first);
+    expect(
+      session.registry.has(productActivityActorsCollectionId(scope))
+    ).toBeTruthy();
+  });
+
+  it("derives locally filtered feed rows with product-safe actor display", () => {
+    const actorId = "77777777-7777-4777-8777-777777777777" as ProductActorId;
+    const actors = [
+      {
+        displayName: "Taylor Owner",
+        id: actorId,
+        kind: "member",
+      },
+    ] satisfies readonly ProductActor[];
+    const events = [
+      makeActivityEvent({
+        actorId,
+        createdAt: "2026-04-28T10:15:00.000Z",
+        eventType: "job.created",
+        id: "11111111-1111-4111-8111-111111111111" as ActivityEventIdType,
+        targetType: "job",
+      }),
+      makeActivityEvent({
+        actorId,
+        createdAt: "2026-04-29T10:15:00.000Z",
+        eventType: "site.updated",
+        id: "22222222-2222-4222-8222-222222222222" as ActivityEventIdType,
+        targetType: "site",
+      }),
+    ] satisfies readonly ProductActivityEvent[];
+
+    expect(
+      deriveActivityFeedRows({
+        actors,
+        events,
+        filters: {
+          eventType: "site.updated",
+          targetType: "site",
+        },
+      })
+    ).toStrictEqual([
+      {
+        actor: actors[0],
+        event: events[1],
+      },
+    ]);
+    expect(
+      deriveActivityFeedRows({
+        actors,
+        events,
+        filters: {},
+      }).map((row) => row.event.id)
+    ).toStrictEqual([
+      "22222222-2222-4222-8222-222222222222",
+      "11111111-1111-4111-8111-111111111111",
+    ]);
+  });
 });
+
+function makeActivityEvent(
+  overrides: Pick<
+    ProductActivityEvent,
+    "actorId" | "createdAt" | "eventType" | "id" | "targetType"
+  >
+): ProductActivityEvent {
+  return {
+    actorId: overrides.actorId,
+    createdAt: overrides.createdAt,
+    display: {
+      summary: "Activity summary",
+    },
+    eventType: overrides.eventType,
+    id: overrides.id,
+    organizationId: "org_123" as OrganizationId,
+    retainedUntil: "2026-05-28T10:15:00.000Z",
+    sourceId: overrides.id,
+    sourceType: overrides.targetType === "site" ? "site" : "job_activity",
+    status: "synced",
+    targetId: overrides.id,
+    targetType: overrides.targetType,
+  };
+}

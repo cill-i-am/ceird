@@ -67,7 +67,7 @@ function getBaseShortcutScopes(
   }
 
   if (pathname === "/activity") {
-    return ["global"];
+    return ["global", "activity"];
   }
 
   if (pathname === "/organization/settings/labels") {

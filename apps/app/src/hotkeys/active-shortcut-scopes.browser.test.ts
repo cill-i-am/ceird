@@ -73,8 +73,11 @@ describe("active shortcut scopes", () => {
     ]);
   });
 
-  it("uses only global shortcut scope on read-only activity routes", () => {
-    expect(getActiveShortcutScopes("/activity")).toStrictEqual(["global"]);
+  it("uses the activity shortcut scope on the global activity route", () => {
+    expect(getActiveShortcutScopes("/activity")).toStrictEqual([
+      "global",
+      "activity",
+    ]);
     expect(getActiveShortcutScopes("/organization/security")).toStrictEqual([
       "global",
     ]);
