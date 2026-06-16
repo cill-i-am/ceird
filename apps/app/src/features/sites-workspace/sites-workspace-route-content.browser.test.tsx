@@ -1,20 +1,77 @@
 import type { OrganizationId } from "@ceird/identity-core";
+import type { JobListItem } from "@ceird/jobs-core";
+import type { Label } from "@ceird/labels-core";
+import type { SiteOption, SiteWriteResponse } from "@ceird/sites-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { QueryClient } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { Exit } from "effect";
+import { Effect } from "effect";
 import type * as React from "react";
 
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { DataPlaneProvider } from "#/data-plane/session";
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
 
+import type * as SitesDataPlane from "./sites-workspace-data-plane";
+import type {
+  SiteActiveJobSummaryElectricRow,
+  SiteLabelAssignmentElectricRow,
+} from "./sites-workspace-data-plane";
 import {
   resolveWorkspaceStatus,
   SitesWorkspaceRouteContent,
 } from "./sites-workspace-route-content";
 
+type SitesWorkspaceCommandRunner = ReturnType<
+  typeof SitesDataPlane.createSitesWorkspaceCommandRunner
+>;
+
+const sitesDataPlaneMock = vi.hoisted(() => ({
+  commandRunner: undefined as
+    | ReturnType<typeof createMockCommandRunner>
+    | undefined,
+  readModelState: undefined as
+    | ReturnType<typeof createReadyReadModelState>
+    | undefined,
+}));
+
+vi.mock(import("./sites-workspace-data-plane"), async (importOriginal) => {
+  const actual = await importOriginal();
+
+  return {
+    ...actual,
+    createSitesWorkspaceCommandRunner: vi.fn<
+      typeof SitesDataPlane.createSitesWorkspaceCommandRunner
+    >(
+      (options) =>
+        (sitesDataPlaneMock.commandRunner ??
+          actual.createSitesWorkspaceCommandRunner(options)) as ReturnType<
+          typeof SitesDataPlane.createSitesWorkspaceCommandRunner
+        >
+    ),
+    getOrCreateSitesWorkspaceReadModelCollectionState: vi.fn<
+      typeof SitesDataPlane.getOrCreateSitesWorkspaceReadModelCollectionState
+    >(
+      (options) =>
+        (sitesDataPlaneMock.readModelState ??
+          actual.getOrCreateSitesWorkspaceReadModelCollectionState(
+            options
+          )) as ReturnType<
+          typeof SitesDataPlane.getOrCreateSitesWorkspaceReadModelCollectionState
+        >
+    ),
+  };
+});
+
 describe(SitesWorkspaceRouteContent, () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    sitesDataPlaneMock.commandRunner = undefined;
+    sitesDataPlaneMock.readModelState = undefined;
+  });
+
   it("renders the gated realtime shell for internal roles", () => {
     renderSitesWorkspace({ shellState: "ready" });
 
@@ -157,6 +214,266 @@ describe(SitesWorkspaceRouteContent, () => {
       screen.queryByRole("option", { name: /new site/i })
     ).not.toBeInTheDocument();
   });
+
+  it("creates a site through the shared save shortcut with pending and synced states", async () => {
+    const user = userEvent.setup();
+    const readModel = createReadyReadModelState({
+      labels: [maintenanceLabel],
+      sites: [dublinSite],
+    });
+    const commandRunner = createMockCommandRunner();
+    const createCommand = deferredCommand();
+    sitesDataPlaneMock.readModelState = readModel;
+    sitesDataPlaneMock.commandRunner = commandRunner;
+    commandRunner.createSite.mockReturnValueOnce(createCommand.promise);
+
+    renderSitesWorkspace({ shellState: "ready" });
+    await screen.findByText("Live Sites read model ready");
+
+    await user.keyboard("n");
+    const createForm = await screen.findByRole("form", {
+      name: /create site/i,
+    });
+    await user.type(within(createForm).getByLabelText("Name"), "Galway Depot");
+    await user.type(
+      within(createForm).getByLabelText("Access notes"),
+      "Ring reception"
+    );
+
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+
+    expect(commandRunner.createSite).toHaveBeenCalledWith({
+      accessNotes: "Ring reception",
+      name: "Galway Depot",
+    });
+    expect(screen.getByText("Site mutation pending")).toBeInTheDocument();
+    expect(
+      screen.getByText("Creating site and waiting for Electric confirmation")
+    ).toBeInTheDocument();
+    expect(
+      within(createForm).getByRole("button", { name: /save/i })
+    ).toBeDisabled();
+    expect(
+      within(createForm).getByRole("button", { name: /cancel/i })
+    ).toBeDisabled();
+
+    const galwaySite = makeSite({
+      accessNotes: "Ring reception",
+      displayLocation: "Galway Depot",
+      id: "99999999-9999-4999-8999-999999999999",
+      name: "Galway Depot",
+      updatedAt: "2026-06-03T00:00:00.000Z",
+    });
+    await act(async () => {
+      readModel.sites.collection.upsert(galwaySite);
+      createCommand.resolve(makeSuccess(galwaySite, 1001));
+      await createCommand.promise;
+    });
+
+    await expect(screen.findByText("Site synced")).resolves.toBeInTheDocument();
+    expect(
+      screen.getByText("Site synced: Galway Depot (txid 1001)")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("form", { name: /create site/i })
+    ).not.toBeInTheDocument();
+    await expect(
+      screen.findByRole("button", { name: /galway depot/i })
+    ).resolves.toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("updates the selected site through shared save/cancel keyboard behavior", async () => {
+    const user = userEvent.setup();
+    const readModel = createReadyReadModelState({
+      labels: [maintenanceLabel],
+      sites: [dublinSite],
+    });
+    const commandRunner = createMockCommandRunner();
+    const updateCommand = deferredCommand();
+    sitesDataPlaneMock.readModelState = readModel;
+    sitesDataPlaneMock.commandRunner = commandRunner;
+    commandRunner.updateSite.mockReturnValueOnce(updateCommand.promise);
+
+    renderSitesWorkspace({ shellState: "ready" });
+    await screen.findByRole("heading", { name: "Dublin Port" });
+
+    await user.click(screen.getByRole("button", { name: /^edit$/i }));
+    expect(screen.getByText("Edit site")).toBeInTheDocument();
+    await user.clear(screen.getByLabelText("Name"));
+    await user.type(screen.getByLabelText("Name"), "Dublin North");
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByText("Edit site")).not.toBeInTheDocument();
+    expect(commandRunner.updateSite).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Dublin Port" })
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^edit$/i }));
+    await user.clear(screen.getByLabelText("Name"));
+    await user.type(screen.getByLabelText("Name"), "Dublin North");
+    await user.keyboard("{Meta>}{Enter}{/Meta}");
+
+    expect(commandRunner.updateSite).toHaveBeenCalledWith(dublinSite.id, {
+      accessNotes: dublinSite.accessNotes,
+      name: "Dublin North",
+    });
+    expect(screen.getByText("Site mutation pending")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Saving Dublin Port and waiting for Electric confirmation"
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeDisabled();
+
+    const updatedSite = {
+      ...dublinSite,
+      name: "Dublin North",
+      updatedAt: "2026-06-04T00:00:00.000Z",
+    } satisfies SiteOption;
+    await act(async () => {
+      readModel.sites.collection.upsert(updatedSite);
+      updateCommand.resolve(makeSuccess(updatedSite, 1002));
+      await updateCommand.promise;
+    });
+
+    await expect(screen.findByText("Site synced")).resolves.toBeInTheDocument();
+    expect(
+      screen.getByText("Site synced: Dublin North (txid 1002)")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Edit site")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Dublin North" })
+    ).toBeInTheDocument();
+  });
+
+  it("assigns and removes labels through pending and Electric-synced states", async () => {
+    const user = userEvent.setup();
+    const readModel = createReadyReadModelState({
+      labels: [maintenanceLabel],
+      sites: [dublinSite],
+    });
+    const commandRunner = createMockCommandRunner();
+    const assignCommand = deferredCommand();
+    const removeCommand = deferredCommand();
+    sitesDataPlaneMock.readModelState = readModel;
+    sitesDataPlaneMock.commandRunner = commandRunner;
+    commandRunner.assignSiteLabel.mockReturnValueOnce(assignCommand.promise);
+    commandRunner.removeSiteLabel.mockReturnValueOnce(removeCommand.promise);
+
+    renderSitesWorkspace({ shellState: "ready" });
+    await screen.findByRole("heading", { name: "Dublin Port" });
+
+    await user.click(
+      screen.getByRole("button", { name: /assign maintenance/i })
+    );
+
+    expect(commandRunner.assignSiteLabel).toHaveBeenCalledWith(dublinSite.id, {
+      labelId: maintenanceLabel.id,
+    });
+    expect(screen.getByText("Site mutation pending")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Assigning Maintenance and waiting for Electric confirmation"
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /assign maintenance/i })
+    ).toBeDisabled();
+
+    await act(async () => {
+      readModel.siteLabelAssignments.collection.upsert({
+        createdAt: "2026-06-04T00:00:00.000Z",
+        labelId: maintenanceLabel.id,
+        organizationId: "org_123",
+        siteId: dublinSite.id,
+      });
+      assignCommand.resolve(makeSuccess(dublinSite, 1003));
+      await assignCommand.promise;
+    });
+
+    await expect(
+      screen.findByText("Maintenance label synced (txid 1003)")
+    ).resolves.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /remove maintenance/i })
+    ).toBeEnabled();
+
+    await user.click(
+      screen.getByRole("button", { name: /remove maintenance/i })
+    );
+
+    expect(commandRunner.removeSiteLabel).toHaveBeenCalledWith(
+      dublinSite.id,
+      maintenanceLabel.id
+    );
+    expect(
+      screen.getByText(
+        "Removing Maintenance and waiting for Electric confirmation"
+      )
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      readModel.siteLabelAssignments.collection.delete(
+        `${dublinSite.id}:${maintenanceLabel.id}`
+      );
+      removeCommand.resolve(makeSuccess(dublinSite, 1004));
+      await removeCommand.promise;
+    });
+
+    await expect(
+      screen.findByText("Maintenance label synced (txid 1004)")
+    ).resolves.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /assign maintenance/i })
+    ).toBeEnabled();
+  });
+
+  it("keeps the original row visible and edit form retryable after confirmation failure", async () => {
+    const user = userEvent.setup();
+    const readModel = createReadyReadModelState({
+      labels: [maintenanceLabel],
+      sites: [dublinSite],
+    });
+    const commandRunner = createMockCommandRunner();
+    const updateCommand = deferredCommand();
+    sitesDataPlaneMock.readModelState = readModel;
+    sitesDataPlaneMock.commandRunner = commandRunner;
+    commandRunner.updateSite.mockReturnValueOnce(updateCommand.promise);
+
+    renderSitesWorkspace({ shellState: "ready" });
+    await screen.findByRole("heading", { name: "Dublin Port" });
+
+    await user.click(screen.getByRole("button", { name: /^edit$/i }));
+    await user.clear(screen.getByLabelText("Name"));
+    await user.type(screen.getByLabelText("Name"), "Dublin North");
+    await user.click(screen.getByRole("button", { name: /save/i }));
+
+    expect(screen.getByText("Site mutation pending")).toBeInTheDocument();
+
+    await act(async () => {
+      updateCommand.resolve(
+        await makeFailure("Electric confirmation timed out")
+      );
+      await updateCommand.promise;
+    });
+
+    await expect(
+      screen.findByText("Save site failed")
+    ).resolves.toBeInTheDocument();
+    expect(
+      screen.getByText("Electric confirmation timed out")
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Dublin North")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /dublin port/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /dublin north/i })
+    ).not.toBeInTheDocument();
+  });
 });
 
 function renderSitesWorkspace({
@@ -192,6 +509,185 @@ function renderSitesWorkspace({
       </DataPlaneProvider>
     </HotkeysProvider>
   );
+}
+
+function createReadyReadModelState({
+  activeJobSummaries = [],
+  labels = [],
+  relatedJobs = [],
+  siteLabelAssignments = [],
+  sites = [],
+}: {
+  readonly activeJobSummaries?: readonly SiteActiveJobSummaryElectricRow[];
+  readonly labels?: readonly Label[];
+  readonly relatedJobs?: readonly JobListItem[];
+  readonly siteLabelAssignments?: readonly SiteLabelAssignmentElectricRow[];
+  readonly sites?: readonly SiteOption[];
+}) {
+  const activeJobSummariesCollection =
+    createFakeHydratedCollection<SiteActiveJobSummaryElectricRow>(
+      (summary) => summary.siteId
+    );
+  const labelsCollection = createFakeHydratedCollection<Label>(
+    (label) => label.id
+  );
+  const relatedJobsCollection = createFakeHydratedCollection<JobListItem>(
+    (job) => job.id
+  );
+  const siteLabelAssignmentsCollection =
+    createFakeHydratedCollection<SiteLabelAssignmentElectricRow>(
+      (assignment) => `${assignment.siteId}:${assignment.labelId}`
+    );
+  const sitesCollection = createFakeHydratedCollection<SiteOption>(
+    (site) => site.id
+  );
+
+  for (const summary of activeJobSummaries) {
+    activeJobSummariesCollection.upsert(summary);
+  }
+  for (const label of labels) {
+    labelsCollection.upsert(label);
+  }
+  for (const job of relatedJobs) {
+    relatedJobsCollection.upsert(job);
+  }
+  for (const assignment of siteLabelAssignments) {
+    siteLabelAssignmentsCollection.upsert(assignment);
+  }
+  for (const site of sites) {
+    sitesCollection.upsert(site);
+  }
+
+  return {
+    activeJobSummaries: collectionState(
+      "site-active-job-summaries",
+      activeJobSummariesCollection
+    ),
+    labels: collectionState("labels", labelsCollection),
+    relatedJobs: collectionState("site-related-jobs", relatedJobsCollection),
+    siteLabelAssignments: collectionState(
+      "site-label-assignments",
+      siteLabelAssignmentsCollection
+    ),
+    sites: collectionState("sites", sitesCollection),
+  };
+}
+
+function collectionState<Item extends object>(
+  collection: Parameters<typeof collectionHealth>[0],
+  fakeCollection: ReturnType<typeof createFakeHydratedCollection<Item>>
+) {
+  return {
+    collection: fakeCollection,
+    health: {
+      current: collectionHealth(collection, "ready"),
+      subscribe: () => () => null,
+    },
+  };
+}
+
+function createFakeHydratedCollection<Item extends object>(
+  getKey: (item: Item) => string | number
+) {
+  const rows = new Map<string | number, Item>();
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
+
+  return {
+    delete: (key: string | number) => {
+      rows.delete(key);
+      emit();
+    },
+    entries: () => rows.entries(),
+    status: "ready",
+    subscribeChanges: (callback: () => void) => {
+      listeners.add(callback);
+      return {
+        requestSnapshot: callback,
+        unsubscribe: () => {
+          listeners.delete(callback);
+        },
+      };
+    },
+    upsert: (item: Item) => {
+      rows.set(getKey(item), item);
+      emit();
+    },
+  };
+}
+
+function createMockCommandRunner() {
+  return {
+    assignSiteLabel: vi.fn<SitesWorkspaceCommandRunner["assignSiteLabel"]>(),
+    createSite: vi.fn<SitesWorkspaceCommandRunner["createSite"]>(),
+    removeSiteLabel: vi.fn<SitesWorkspaceCommandRunner["removeSiteLabel"]>(),
+    updateSite: vi.fn<SitesWorkspaceCommandRunner["updateSite"]>(),
+  };
+}
+
+function deferredCommand() {
+  return Promise.withResolvers<Exit.Exit<SiteWriteResponse, unknown>>();
+}
+
+function makeSuccess(
+  site: SiteOption,
+  txid: number
+): Exit.Exit<SiteWriteResponse, unknown> {
+  return Effect.runSync(
+    Effect.exit(Effect.succeed({ mutation: { txid }, site }))
+  );
+}
+
+function makeFailure(
+  message: string
+): Promise<Exit.Exit<SiteWriteResponse, unknown>> {
+  return Effect.runPromiseExit<SiteWriteResponse, Error>(
+    Effect.fail(new Error(message))
+  );
+}
+
+const maintenanceLabel = {
+  createdAt: "2026-06-01T00:00:00.000Z",
+  id: "88888888-8888-4888-8888-888888888888",
+  name: "Maintenance",
+  updatedAt: "2026-06-01T00:00:00.000Z",
+} as unknown as Label;
+
+const dublinSite = makeSite({
+  accessNotes: "Gate 4",
+  displayLocation: "Dublin Port",
+  id: "22222222-2222-4222-8222-222222222222",
+  name: "Dublin Port",
+  updatedAt: "2026-06-02T00:00:00.000Z",
+});
+
+function makeSite({
+  accessNotes,
+  displayLocation,
+  id,
+  name,
+  updatedAt,
+}: {
+  readonly accessNotes?: string | undefined;
+  readonly displayLocation: string;
+  readonly id: string;
+  readonly name: string;
+  readonly updatedAt: string;
+}): SiteOption {
+  return {
+    ...(accessNotes === undefined ? {} : { accessNotes }),
+    displayLocation,
+    hasUsableCoordinates: false,
+    id,
+    labels: [],
+    locationStatus: "unverified",
+    name,
+    updatedAt,
+  } as unknown as SiteOption;
 }
 
 function collectionHealth(

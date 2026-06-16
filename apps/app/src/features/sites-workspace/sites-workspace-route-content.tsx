@@ -87,6 +87,7 @@ type WorkspaceWriteStatus =
 
 const IDLE_WRITE_STATUS = { kind: "idle" } satisfies WorkspaceWriteStatus;
 const EMPTY_COMMAND_ACTIONS: readonly CommandAction[] = [];
+const EMPTY_COLLECTION_ITEMS: readonly never[] = [];
 
 const FILTER_OPTIONS = [
   { label: "All", value: "all" },
@@ -350,6 +351,7 @@ function SitesWorkspaceShell({
   const submitCreate = React.useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
+      const form = event.currentTarget;
       const formData = new FormData(event.currentTarget);
       const name = String(formData.get("name") ?? "").trim();
       const accessNotes = String(formData.get("accessNotes") ?? "").trim();
@@ -385,7 +387,7 @@ function SitesWorkspaceShell({
           siteId: exit.value.site.id,
           txid: exit.value.mutation.txid,
         });
-        event.currentTarget.reset();
+        form.reset();
         return;
       }
 
@@ -747,7 +749,7 @@ function useSitesWorkspaceReadModel() {
   return {
     activeJobSummaries: useHydratedCollectionItems(
       sitesState.activeJobSummaries.collection,
-      []
+      EMPTY_COLLECTION_ITEMS
     ) as unknown as readonly SiteActiveJobSummaryElectricRow[],
     collections,
     health,
@@ -755,19 +757,19 @@ function useSitesWorkspaceReadModel() {
       sitesState.labels.collection as unknown as Parameters<
         typeof useHydratedCollectionItems<Label>
       >[0],
-      []
+      EMPTY_COLLECTION_ITEMS
     ) as readonly Label[],
     relatedJobs: useHydratedCollectionItems(
       sitesState.relatedJobs.collection,
-      []
+      EMPTY_COLLECTION_ITEMS
     ) as unknown as readonly JobListItem[],
     siteLabelAssignments: useHydratedCollectionItems(
       sitesState.siteLabelAssignments.collection,
-      []
+      EMPTY_COLLECTION_ITEMS
     ) as unknown as readonly SiteLabelAssignmentElectricRow[],
     sites: useHydratedCollectionItems(
       sitesState.sites.collection,
-      []
+      EMPTY_COLLECTION_ITEMS
     ) as unknown as readonly SiteOption[],
   };
 }
