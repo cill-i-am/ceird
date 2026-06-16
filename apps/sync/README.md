@@ -50,6 +50,8 @@ fingerprint of auth-bearing request identity material such as cookies or bearer
 tokens, plus routing context; raw cookies and tokens are never stored. Failed,
 malformed, or unavailable authorization responses are not cached, so absent or
 expired grants fall back to the live domain authorization path and fail closed.
+The `activity-events` shape bypasses this cache because its retained cutoff is a
+server current-time parameter that must be refreshed on every request.
 
 ## Important Paths
 

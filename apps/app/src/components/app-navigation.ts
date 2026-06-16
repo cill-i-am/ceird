@@ -71,10 +71,10 @@ const APP_PRIMARY_NAV_ITEMS = [
     url: "/sites",
   },
   {
-    access: "administrators",
+    access: "internal",
     icon: Activity01Icon,
     id: "activity",
-    keywords: ["audit", "history", "changes"],
+    keywords: ["feed", "history", "changes"],
     title: "Activity",
     url: "/activity",
   },

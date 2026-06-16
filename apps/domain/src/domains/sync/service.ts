@@ -93,9 +93,15 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
           return yield* decodeSyncShapeAuthorization(authorization);
         }
 
-        const params = {
-          "1": actor.organizationId,
-        };
+        const params =
+          shapeName === "activity-events"
+            ? {
+                "1": actor.organizationId,
+                "2": makeActivityEventsRetainedAfterNow(),
+              }
+            : {
+                "1": actor.organizationId,
+              };
 
         const authorization = {
           ...baseAuthorization,
@@ -119,6 +125,10 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
     SyncAuthorizationService.DefaultWithoutDependencies.pipe(
       Layer.provide(CurrentOrganizationActor.Default)
     );
+}
+
+function makeActivityEventsRetainedAfterNow(now: Date = new Date()) {
+  return now.toISOString();
 }
 
 function decodeSyncShapeAuthorization(input: unknown) {

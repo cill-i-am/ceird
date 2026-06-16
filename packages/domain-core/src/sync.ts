@@ -9,8 +9,20 @@ const SyncOrganizationId = Schema.NonEmptyString.pipe(
 const SyncUserId = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/identity-core/UserId")
 );
+const ISO_DATE_TIME_UTC_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+const SyncIsoDateTimeString = Schema.String.pipe(
+  Schema.refine(
+    (value): value is string =>
+      ISO_DATE_TIME_UTC_PATTERN.test(value) && !Number.isNaN(Date.parse(value)),
+    {
+      message: "Expected an ISO-8601 UTC datetime string",
+    }
+  )
+);
 
 export const SYNC_SHAPE_NAMES = [
+  "activity-events",
   "agent-action-runs",
   "agent-threads",
   "comments",
@@ -52,8 +64,15 @@ export const ORGANIZATION_USER_SYNC_WHERE =
   "organization_id = $1 AND user_id = $2" as const;
 export const ACTIVE_LABELS_SYNC_WHERE =
   "organization_id = $1 AND archived_at IS NULL" as const;
+export const ACTIVITY_EVENTS_SYNC_WHERE =
+  "organization_id = $1 AND retained_until > $2" as const;
 
 export const SYNC_SHAPE_AUTHORIZATION_DEFINITIONS = {
+  "activity-events": {
+    scope: "organization",
+    table: "activity_events",
+    where: ACTIVITY_EVENTS_SYNC_WHERE,
+  },
   "agent-action-runs": {
     scope: "organization-user",
     table: "agent_action_runs",
@@ -148,6 +167,14 @@ export type OrganizationSyncShapeAuthorizationParams = Schema.Schema.Type<
   typeof OrganizationSyncShapeAuthorizationParamsSchema
 >;
 
+export const ActivityEventsSyncShapeAuthorizationParamsSchema = Schema.Struct({
+  "1": SyncOrganizationId,
+  "2": SyncIsoDateTimeString,
+});
+export type ActivityEventsSyncShapeAuthorizationParams = Schema.Schema.Type<
+  typeof ActivityEventsSyncShapeAuthorizationParamsSchema
+>;
+
 export const OrganizationUserSyncShapeAuthorizationParamsSchema = Schema.Struct(
   {
     "1": SyncOrganizationId,
@@ -174,6 +201,18 @@ function makeOrganizationShapeAuthorizationSchema<
   });
 }
 
+function makeActivityEventsShapeAuthorizationSchema() {
+  return Schema.Struct({
+    organizationId: SyncOrganizationId,
+    params: ActivityEventsSyncShapeAuthorizationParamsSchema,
+    shape: Schema.Literal("activity-events"),
+    scope: Schema.Literal("organization"),
+    table: Schema.Literal("activity_events"),
+    userId: SyncUserId,
+    where: Schema.Literal(ACTIVITY_EVENTS_SYNC_WHERE),
+  });
+}
+
 function makeOrganizationUserShapeAuthorizationSchema<
   const Shape extends SyncShapeName,
   const Table extends string,
@@ -190,6 +229,7 @@ function makeOrganizationUserShapeAuthorizationSchema<
 }
 
 export const OrganizationSyncShapeAuthorizationSchema = Schema.Union([
+  makeActivityEventsShapeAuthorizationSchema(),
   makeOrganizationShapeAuthorizationSchema("comments", "comments"),
   makeOrganizationShapeAuthorizationSchema("contacts", "contacts"),
   makeOrganizationShapeAuthorizationSchema("jobs", "work_items"),

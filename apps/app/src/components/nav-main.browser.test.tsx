@@ -249,7 +249,7 @@ describe("nav main", () => {
 
       expect(
         getPrimaryNavItemsForRole("member").map((item) => item.url)
-      ).toStrictEqual(["/", "/jobs", "/jobs-workspace", "/sites"]);
+      ).toStrictEqual(["/", "/jobs", "/jobs-workspace", "/sites", "/activity"]);
       expect(
         getPrimaryNavItemsForRole("external").map((item) => item.url)
       ).toStrictEqual(["/jobs"]);

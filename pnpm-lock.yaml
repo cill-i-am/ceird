@@ -220,6 +220,9 @@ importers:
       '@better-auth/oauth-provider':
         specifier: 1.6.16
         version: 1.6.16(4f64b9a932f10cd07f1a0b30e8d13683)
+      '@ceird/activity-core':
+        specifier: workspace:*
+        version: link:../../packages/activity-core
       '@ceird/agents-core':
         specifier: workspace:*
         version: link:../../packages/agents-core
@@ -428,6 +431,9 @@ importers:
       '@better-auth/oauth-provider':
         specifier: 1.6.16
         version: 1.6.16(4f64b9a932f10cd07f1a0b30e8d13683)
+      '@ceird/activity-core':
+        specifier: workspace:*
+        version: link:../../packages/activity-core
       '@ceird/agents-core':
         specifier: workspace:*
         version: link:../../packages/agents-core
@@ -583,6 +589,31 @@ importers:
         version: 8.0.16(@types/node@25.9.3)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0)
       vitest:
         specifier: 4.1.8
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@25.9.3)(@vitest/browser-playwright@4.1.8)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0)
+
+  packages/activity-core:
+    dependencies:
+      '@ceird/identity-core':
+        specifier: workspace:*
+        version: link:../identity-core
+      effect:
+        specifier: 4.0.0-beta.79
+        version: 4.0.0-beta.79
+    devDependencies:
+      '@effect/language-service':
+        specifier: ^0.86.2
+        version: 0.86.2
+      '@effect/vitest':
+        specifier: 4.0.0-beta.79
+        version: 4.0.0-beta.79(effect@4.0.0-beta.79)(vitest@4.1.8)
+      '@types/node':
+        specifier: ^25.9.3
+        version: 25.9.3
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@25.9.3)(@vitest/browser-playwright@4.1.8)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4)(yaml@2.9.0)
 
   packages/agents-core:

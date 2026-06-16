@@ -500,7 +500,7 @@ describe("app sidebar", () => {
   );
 
   it(
-    "hides administrator navigation for member role",
+    "shows internal activity and hides administrator navigation for member role",
     {
       timeout: 10_000,
     },
@@ -525,9 +525,10 @@ describe("app sidebar", () => {
         "href",
         "/sites"
       );
-      expect(
-        screen.queryByRole("link", { name: /activity/i })
-      ).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /activity/i })).toHaveAttribute(
+        "href",
+        "/activity"
+      );
       expect(
         screen.queryByRole("link", { name: /members/i })
       ).not.toBeInTheDocument();

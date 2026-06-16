@@ -1,6 +1,7 @@
 import { tsImport } from "tsx/esm/api";
 
 const schemaExportNames = [
+  "activityEvent",
   "account",
   "activitySchema",
   "agentActionRun",
@@ -68,6 +69,7 @@ function requireSchemaExport(name: SchemaExportName) {
 }
 
 export const account = requireSchemaExport("account");
+export const activityEvent = requireSchemaExport("activityEvent");
 export const activitySchema = requireSchemaExport("activitySchema");
 export const agentActionRun = requireSchemaExport("agentActionRun");
 export const agentsSchema = requireSchemaExport("agentsSchema");

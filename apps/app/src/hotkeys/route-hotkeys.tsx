@@ -22,7 +22,10 @@ export function RouteHotkeys({
       ),
     [currentOrganizationRole]
   );
-  const canUseAdministratorHotkeys = primaryNavigationUrls.has("/activity");
+  const canUseAdministratorHotkeys = primaryNavigationUrls.has(
+    "/organization/security"
+  );
+  const canUseActivityHotkey = primaryNavigationUrls.has("/activity");
   const canUseInternalHotkeys = primaryNavigationUrls.has("/");
   const canUseJobsWorkspaceHotkey =
     primaryNavigationUrls.has("/jobs-workspace");
@@ -80,6 +83,23 @@ export function RouteHotkeys({
   });
 
   useAppHotkeySequence(
+    "goActivity",
+    () => {
+      React.startTransition(() => {
+        navigate({
+          search: {
+            eventType: undefined,
+            status: undefined,
+            targetType: undefined,
+          },
+          to: "/activity",
+        });
+      });
+    },
+    { enabled: canUseActivityHotkey }
+  );
+
+  useAppHotkeySequence(
     "goMap",
     () => {
       React.startTransition(() => {
@@ -94,21 +114,6 @@ export function RouteHotkeys({
 
 function AdministratorRouteHotkeys() {
   const navigate = useNavigate({ from: "/" });
-
-  useAppHotkeySequence("goActivity", () => {
-    React.startTransition(() => {
-      navigate({
-        to: "/activity",
-        search: {
-          actorUserId: undefined,
-          eventType: undefined,
-          fromDate: undefined,
-          jobTitle: undefined,
-          toDate: undefined,
-        },
-      });
-    });
-  });
 
   useAppHotkeySequence("goMembers", () => {
     React.startTransition(() => {

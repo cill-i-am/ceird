@@ -1,72 +1,38 @@
-import type { ProductActorId } from "@ceird/identity-core";
 import type {
-  ActivityIdType,
-  OrganizationActivityItem,
-  OrganizationActivityListResponse,
-  UserIdType,
-  VisitIdType,
-  WorkItemIdType,
-} from "@ceird/jobs-core";
+  ActivityEventIdType,
+  ProductActivityEvent,
+} from "@ceird/activity-core";
+import type {
+  OrganizationId,
+  ProductActor,
+  ProductActorId,
+} from "@ceird/identity-core";
+import type { WorkItemIdType } from "@ceird/jobs-core";
 import type { LabelIdType } from "@ceird/labels-core";
+import type { SiteIdType } from "@ceird/sites-core";
+import type { HotkeyCallback, UseHotkeyOptions } from "@tanstack/react-hotkeys";
 /* oxlint-disable vitest/prefer-import-in-mock */
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
-import type { ActivitySearch } from "./activity-search";
+import { createDataPlaneCollectionHealth } from "#/data-plane/collection-health";
+import type { HotkeyId } from "#/hotkeys/hotkey-registry";
 
-const taylorUserId = "user_taylor" as UserIdType;
-const jordanUserId = "user_jordan" as UserIdType;
+import type { ActivitySearch } from "./activity-search";
+import type { ActivityCollectionStateLike } from "./organization-activity-page";
+
+const organizationId = "org_123" as OrganizationId;
 const taylorActorId = "77777777-7777-4777-8777-777777777777" as ProductActorId;
 const jordanActorId = "88888888-8888-4888-8888-888888888888" as ProductActorId;
-
-const mixedActivity = {
-  items: [
-    makeActivityItem({
-      actorId: taylorActorId,
-      actorName: "Taylor Owner",
-      createdAt: "2026-04-28T10:15:00.000Z",
-      eventType: "job_created",
-      id: "activity_job_created" as ActivityIdType,
-      jobTitle: "Inspect boiler",
-      payload: {
-        eventType: "job_created",
-        kind: "job",
-        priority: "none",
-        title: "Inspect boiler",
-      },
-      workItemId: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
-    }),
-    makeActivityItem({
-      actorId: jordanActorId,
-      actorName: "Jordan Admin",
-      createdAt: "2026-04-27T09:00:00.000Z",
-      eventType: "label_added",
-      id: "activity_label_added" as ActivityIdType,
-      jobTitle: "Paint lobby",
-      payload: {
-        eventType: "label_added",
-        labelId: "22222222-2222-4222-8222-222222222222" as LabelIdType,
-        labelName: "Urgent",
-      },
-      workItemId: "22222222-2222-4222-8222-222222222222" as WorkItemIdType,
-    }),
-    makeActivityItem({
-      actorId: taylorActorId,
-      actorName: "Taylor Owner",
-      createdAt: "2026-04-26T08:00:00.000Z",
-      eventType: "visit_logged",
-      id: "activity_visit_logged" as ActivityIdType,
-      jobTitle: "Replace pump",
-      payload: {
-        eventType: "visit_logged",
-        visitId: "33333333-3333-4333-8333-333333333333" as VisitIdType,
-      },
-      workItemId: "33333333-3333-4333-8333-333333333333" as WorkItemIdType,
-    }),
-  ],
-  nextCursor: undefined,
-} satisfies OrganizationActivityListResponse;
+const mockedNavigate = vi.hoisted(() =>
+  vi.fn<(...args: unknown[]) => Promise<void>>()
+);
+const mockedUseAppHotkey = vi.hoisted(() =>
+  vi.fn<
+    (id: HotkeyId, callback: HotkeyCallback, options?: UseHotkeyOptions) => void
+  >()
+);
 
 vi.mock(import("@tanstack/react-router"), async (importActual) => {
   const actual = await importActual();
@@ -75,25 +41,42 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
     ...actual,
     Link: (({
       children,
-      params,
-      search: _search,
+      href,
+      onClick,
       to,
       ...props
     }: ComponentProps<"a"> & {
-      params?: { jobId?: string };
       search?: unknown;
       to?: string;
     }) => (
-      <a href={to?.replace("$jobId", params?.jobId ?? "")} {...props}>
+      <a
+        href={href ?? to}
+        onClick={(event) => {
+          event.preventDefault();
+          onClick?.(event);
+        }}
+        {...props}
+      >
         {children}
       </a>
     )) as typeof actual.Link,
+    useNavigate: () => mockedNavigate,
   };
 });
 
+vi.mock(import("#/hotkeys/use-app-hotkey"), () => ({
+  useAppHotkey: mockedUseAppHotkey,
+}));
+
 describe("organization activity page", () => {
+  beforeEach(() => {
+    mockedNavigate.mockClear();
+    mockedNavigate.mockResolvedValue();
+    mockedUseAppHotkey.mockClear();
+  });
+
   it(
-    "renders activity rows and filters",
+    "renders joined Electric activity rows, actor display, and target links",
     {
       timeout: 10_000,
     },
@@ -103,76 +86,29 @@ describe("organization activity page", () => {
 
       render(
         <OrganizationActivityPage
-          activity={{
-            items: [
-              {
-                actor: {
-                  displayDetail: "Team member",
-                  displayName: "Taylor Owner",
-                  id: taylorActorId,
-                  kind: "member",
-                },
-                createdAt: "2026-04-28T10:15:00.000Z",
-                eventType: "job_created",
-                id: "activity_123" as ActivityIdType,
-                jobTitle: "Inspect boiler",
-                payload: {
-                  eventType: "job_created",
-                  kind: "job",
-                  priority: "none",
-                  title: "Inspect boiler",
-                },
-                workItemId:
-                  "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
-              },
-            ],
-            nextCursor: undefined,
-          }}
-          onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
-          options={{
-            members: [
-              {
-                id: "user_taylor" as UserIdType,
-                name: "Taylor Owner",
-              },
-            ],
-          }}
+          actorsState={makeCollectionState("product-activity-actors", actors)}
+          eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
           search={{}}
+          onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
         />
       );
 
-      expect(
-        screen.getByRole("heading", { name: "Activity" })
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("heading", { name: "Activity timeline" })
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText(
-          "Audit trail for job changes, visits, labels, and comments."
-        )
-      ).not.toBeInTheDocument();
-      expect(screen.getByText("1 event shown")).toBeInTheDocument();
-      expect(
-        screen.getByText("Taylor Owner created the job.")
-      ).toBeInTheDocument();
-      expect(screen.getByLabelText("Actor")).toBeInTheDocument();
+      const createdRow = await screen.findByText("Boiler inspection created");
+      expect(createdRow).toBeVisible();
+      expect(screen.getByText("Taylor Owner (Team member)")).toBeVisible();
+      expect(screen.getByText("Jordan Admin (Team member)")).toBeVisible();
+      expect(screen.getByText("2 events")).toBeVisible();
+      expect(screen.getAllByRole("link", { name: /open/i })).toHaveLength(2);
       expect(screen.getByLabelText("Event type")).toBeInTheDocument();
-      expect(screen.getByLabelText("From date")).toBeInTheDocument();
-      expect(screen.getByLabelText("To date")).toBeInTheDocument();
-      expect(screen.getByLabelText("Job title")).toBeInTheDocument();
-      expect(screen.getByLabelText("Activity filters")).toHaveClass(
-        "grid-cols-2",
-        "lg:grid-cols-[minmax(8rem,1fr)_minmax(9rem,1fr)_8.5rem_8.5rem_minmax(10rem,1.1fr)]"
-      );
-      expect(
-        screen.getByRole("link", { name: "Inspect boiler" })
-      ).toHaveAttribute("href", "/jobs");
+      expect(screen.getByLabelText("Entity type")).toBeInTheDocument();
+      expect(screen.getByLabelText("Status")).toBeInTheDocument();
+      expect(screen.getByText("Realtime ready")).toBeVisible();
     }
   );
 
   it(
-    "does not show stale event rows after the event type filter changes",
+    "filters synced rows locally by event, entity, and status",
     {
       timeout: 10_000,
     },
@@ -181,316 +117,419 @@ describe("organization activity page", () => {
       const onSearchChange = vi.fn<(search: ActivitySearch) => void>();
       const { OrganizationActivityPage } =
         await import("./organization-activity-page");
-
       const { rerender } = render(
         <OrganizationActivityPage
-          activity={mixedActivity}
-          onSearchChange={onSearchChange}
-          options={{
-            members: [
-              {
-                id: taylorUserId,
-                name: "Taylor Owner",
-              },
-              {
-                id: jordanUserId,
-                name: "Jordan Admin",
-              },
-            ],
-          }}
+          actorsState={makeCollectionState("product-activity-actors", actors)}
+          eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
           search={{}}
+          onSearchChange={onSearchChange}
         />
       );
 
-      await user.selectOptions(
-        screen.getByLabelText("Event type"),
-        "visit_logged"
-      );
-
+      await user.selectOptions(screen.getByLabelText("Event type"), [
+        "site.updated",
+      ]);
       expect(onSearchChange).toHaveBeenCalledWith({
-        eventType: "visit_logged",
+        eventType: "site.updated",
       });
 
       rerender(
         <OrganizationActivityPage
-          activity={mixedActivity}
+          actorsState={makeCollectionState("product-activity-actors", actors)}
+          eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
+          search={{ eventType: "site.updated", targetType: "site" }}
           onSearchChange={onSearchChange}
-          options={{
-            members: [
-              {
-                id: taylorUserId,
-                name: "Taylor Owner",
-              },
-              {
-                id: jordanUserId,
-                name: "Jordan Admin",
-              },
-            ],
-          }}
-          search={{ eventType: "visit_logged" }}
         />
       );
 
-      expect(screen.getByLabelText("Event type")).toHaveValue("visit_logged");
-      expect(screen.getByText("1 of 3 events shown")).toBeInTheDocument();
-      expect(screen.getByText("Event type: Visit logged")).toBeInTheDocument();
+      const updatedSiteRow = await screen.findByText("Gate access changed");
+      expect(updatedSiteRow).toBeVisible();
       expect(
-        screen.getByText("Taylor Owner logged a visit.")
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText("Taylor Owner created the job.")
+        screen.queryByText("Boiler inspection created")
       ).not.toBeInTheDocument();
-      expect(
-        screen.queryByText("Jordan Admin added the Urgent label.")
-      ).not.toBeInTheDocument();
-    }
-  );
+      expect(screen.getByText("1 of 2 events")).toBeVisible();
+      expect(screen.getByText("Event: Site updated")).toBeVisible();
+      expect(screen.getByText("Entity: Site")).toBeVisible();
 
-  it.each([
-    {
-      hiddenSummary: "Taylor Owner logged a visit.",
-      search: { fromDate: "2026-04-27" },
-      visibleSummary: "Taylor Owner created the job.",
-    },
-    {
-      hiddenSummary: "Taylor Owner created the job.",
-      search: { toDate: "2026-04-27" },
-      visibleSummary: "Taylor Owner logged a visit.",
-    },
-    {
-      hiddenSummary: "Taylor Owner created the job.",
-      search: { jobTitle: "pump" },
-      visibleSummary: "Taylor Owner logged a visit.",
-    },
-  ] satisfies {
-    hiddenSummary: string;
-    search: ActivitySearch;
-    visibleSummary: string;
-  }[])(
-    "applies current $search filter state to stale loader rows",
-    {
-      timeout: 10_000,
-    },
-    async ({ hiddenSummary, search, visibleSummary }) => {
-      const { OrganizationActivityPage } =
-        await import("./organization-activity-page");
-
-      render(
+      rerender(
         <OrganizationActivityPage
-          activity={mixedActivity}
-          onSearchChange={vi.fn<(nextSearch: ActivitySearch) => void>()}
-          options={{
-            members: [
-              {
-                id: taylorUserId,
-                name: "Taylor Owner",
-              },
-              {
-                id: jordanUserId,
-                name: "Jordan Admin",
-              },
-            ],
-          }}
-          search={search}
+          actorsState={makeCollectionState("product-activity-actors", actors)}
+          eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
+          search={{ status: "failed" }}
+          onSearchChange={onSearchChange}
         />
       );
 
-      expect(screen.getByText(visibleSummary)).toBeInTheDocument();
-      expect(screen.queryByText(hiddenSummary)).not.toBeInTheDocument();
+      const noMatchesMessage = await screen.findByText("No matching activity");
+      expect(noMatchesMessage).toBeVisible();
+      expect(screen.getByText("Status: Failed")).toBeVisible();
     }
   );
 
   it(
-    "renders a first-run empty state when the timeline is blank",
+    "handles connecting, empty, unavailable, stale, degraded, and permission-aware states",
     {
       timeout: 10_000,
     },
     async () => {
       const { OrganizationActivityPage } =
         await import("./organization-activity-page");
+      const renderPage = (
+        eventsState: ActivityCollectionStateLike<ProductActivityEvent>,
+        state?: ComponentProps<typeof OrganizationActivityPage>["state"]
+      ) =>
+        render(
+          <OrganizationActivityPage
+            actorsState={makeCollectionState("product-activity-actors", actors)}
+            eventsState={eventsState}
+            currentOrganizationRole="member"
+            search={{}}
+            state={state}
+            onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
+          />
+        );
 
-      render(
-        <OrganizationActivityPage
-          activity={{
-            items: [],
-            nextCursor: undefined,
-          }}
-          onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
-          options={{
-            members: [],
-          }}
-          search={{}}
-        />
+      const connecting = renderPage(
+        makeCollectionState("activity-events", [], "connecting")
       );
+      const connectingMessage = await screen.findByText(
+        "Connecting to realtime activity"
+      );
+      expect(connectingMessage).toBeVisible();
+      connecting.unmount();
 
-      expect(
-        screen.getByRole("heading", { name: "Activity timeline" })
-      ).toBeInTheDocument();
-      expect(screen.getByText("No activity recorded yet.")).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          "Create or update a job and this timeline becomes the audit trail for the workspace."
-        )
-      ).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Open jobs" })).toHaveAttribute(
-        "href",
-        "/jobs"
+      const empty = renderPage(makeCollectionState("activity-events", []));
+      const emptyMessage = await screen.findByText("No activity recorded yet");
+      expect(emptyMessage).toBeVisible();
+      empty.unmount();
+
+      const unavailable = renderPage(
+        makeCollectionState("activity-events", [], "unavailable")
       );
-      expect(screen.queryByLabelText("Actor")).not.toBeInTheDocument();
-      expect(screen.queryByLabelText("Event type")).not.toBeInTheDocument();
-      expect(screen.queryByLabelText("Job title")).not.toBeInTheDocument();
-      expect(screen.queryByText("Clear filters")).not.toBeInTheDocument();
+      const unavailableMessages = await screen.findAllByText(
+        "Realtime activity unavailable"
+      );
+      expect(unavailableMessages[0]).toBeVisible();
+      unavailable.unmount();
+
+      const stale = renderPage(
+        makeCollectionState("activity-events", activityEvents, "unavailable")
+      );
+      const staleMessage = await screen.findByText(
+        "Showing last synced activity"
+      );
+      expect(staleMessage).toBeVisible();
+      expect(screen.getByText("Boiler inspection created")).toBeVisible();
+      stale.unmount();
+
+      const degraded = renderPage(
+        makeCollectionState("activity-events", activityEvents, "degraded")
+      );
+      const degradedMessage = await screen.findByText("Realtime recovered");
+      expect(degradedMessage).toBeVisible();
+      degraded.unmount();
+
+      renderPage(
+        makeCollectionState("activity-events", []),
+        "permission-aware"
+      );
+      const internalActivityMessage =
+        await screen.findByText("Internal activity");
+      expect(internalActivityMessage).toBeVisible();
     }
   );
 
   it(
-    "renders a filtered empty state with a clear action",
+    "registers Activity hotkeys for focus, filter clearing, row selection, and opening",
     {
       timeout: 10_000,
     },
     async () => {
-      const user = userEvent.setup();
       const onSearchChange = vi.fn<(search: ActivitySearch) => void>();
       const { OrganizationActivityPage } =
         await import("./organization-activity-page");
 
       render(
         <OrganizationActivityPage
-          activity={mixedActivity}
+          actorsState={makeCollectionState("product-activity-actors", actors)}
+          eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
+          search={{ eventType: "job.created" }}
           onSearchChange={onSearchChange}
-          options={{
-            members: [
-              {
-                id: taylorUserId,
-                name: "Taylor Owner",
-              },
-              {
-                id: jordanUserId,
-                name: "Jordan Admin",
-              },
-            ],
-          }}
-          search={{ eventType: "status_changed" }}
         />
       );
 
-      expect(screen.getByText("0 of 3 events shown")).toBeInTheDocument();
-      expect(
-        screen.getByText("Event type: Status changed")
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText("No events match these filters.")
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          "Clear filters or adjust the actor, event, date, or job title to widen the audit trail."
-        )
-      ).toBeInTheDocument();
-      expect(screen.getByLabelText("Event type")).toHaveValue("status_changed");
+      await screen.findByText("Boiler inspection created");
 
-      await user.click(screen.getByRole("button", { name: "Clear filters" }));
+      act(() => getLatestHotkeyCallback("activitySearch")());
+      expect(screen.getByLabelText("Event type")).toHaveFocus();
 
-      expect(onSearchChange).toHaveBeenCalledExactlyOnceWith({});
-    }
-  );
+      act(() => getLatestHotkeyCallback("activityClearFilters")());
+      expect(onSearchChange).toHaveBeenCalledWith({});
 
-  it(
-    "commits the job title filter on blur",
-    {
-      timeout: 10_000,
-    },
-    async () => {
-      const user = userEvent.setup();
-      const onSearchChange = vi.fn<(search: ActivitySearch) => void>();
-      const { OrganizationActivityPage } =
-        await import("./organization-activity-page");
-
-      render(
-        <OrganizationActivityPage
-          activity={mixedActivity}
-          onSearchChange={onSearchChange}
-          options={{
-            members: [
-              {
-                id: taylorUserId,
-                name: "Taylor Owner",
-              },
-              {
-                id: jordanUserId,
-                name: "Jordan Admin",
-              },
-            ],
-          }}
-          search={{}}
-        />
+      act(() => getLatestHotkeyCallback("activityNextRow")());
+      await waitFor(() =>
+        expect(
+          screen.getByRole("link", { name: "Open Boiler inspection created" })
+        ).toHaveFocus()
       );
-
-      await user.type(screen.getByLabelText("Job title"), "  Boiler  ");
-
-      expect(onSearchChange).not.toHaveBeenCalled();
-
-      await user.tab();
-
-      expect(onSearchChange).toHaveBeenCalledExactlyOnceWith({
-        jobTitle: "Boiler",
+      act(() => getLatestHotkeyCallback("activityOpenSelectedRow")());
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        search: {
+          sheets: [
+            {
+              jobId: "44444444-4444-4444-8444-444444444444",
+              kind: "job.detail",
+            },
+          ],
+        },
+        to: "/jobs",
       });
     }
   );
 
   it(
-    "resets the committed job title filter when search props change",
+    "opens site rows to the site detail workspace sheet",
     {
       timeout: 10_000,
     },
     async () => {
-      const onSearchChange = vi.fn<(search: ActivitySearch) => void>();
       const { OrganizationActivityPage } =
         await import("./organization-activity-page");
-      const renderActivityPage = (search: ActivitySearch) => (
+
+      render(
         <OrganizationActivityPage
-          activity={mixedActivity}
-          onSearchChange={onSearchChange}
-          options={{
-            members: [
-              {
-                id: taylorUserId,
-                name: "Taylor Owner",
-              },
-              {
-                id: jordanUserId,
-                name: "Jordan Admin",
-              },
-            ],
-          }}
-          search={search}
+          actorsState={makeCollectionState("product-activity-actors", actors)}
+          eventsState={makeCollectionState("activity-events", activityEvents)}
+          currentOrganizationRole="member"
+          search={{ eventType: "site.updated" }}
+          onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
         />
       );
 
-      const { rerender } = render(renderActivityPage({ jobTitle: "boiler" }));
-      expect(screen.getByLabelText("Job title")).toHaveValue("boiler");
+      const updatedSiteRow = await screen.findByText("Gate access changed");
+      expect(updatedSiteRow).toBeVisible();
+      expect(
+        screen.getByRole("link", { name: "Open Gate access changed" })
+      ).toHaveAttribute("href", "/sites");
 
-      rerender(renderActivityPage({}));
+      act(() => getLatestHotkeyCallback("activityOpenSelectedRow")());
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        search: {
+          sheets: [
+            {
+              kind: "site.detail",
+              siteId: "55555555-5555-4555-8555-555555555555",
+            },
+          ],
+        },
+        to: "/sites",
+      });
+    }
+  );
 
-      expect(screen.getByLabelText("Job title")).toHaveValue("");
+  it(
+    "does not expose admin-only label navigation to ordinary members",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const { OrganizationActivityPage } =
+        await import("./organization-activity-page");
+
+      render(
+        <OrganizationActivityPage
+          actorsState={makeCollectionState("product-activity-actors", actors)}
+          eventsState={makeCollectionState(
+            "activity-events",
+            labelActivityEvents
+          )}
+          currentOrganizationRole="member"
+          search={{}}
+          onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
+        />
+      );
+
+      const memberLabelRow = await screen.findByText("Safety label changed");
+      expect(memberLabelRow).toBeVisible();
+      expect(
+        screen.queryByRole("link", { name: "Open Safety label changed" })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: "No supported destination for Safety label changed",
+        })
+      ).toBeDisabled();
+
+      act(() => getLatestHotkeyCallback("activityOpenSelectedRow")());
+      expect(mockedNavigate).not.toHaveBeenCalled();
+    }
+  );
+
+  it(
+    "allows label rows to open label settings for administrators",
+    {
+      timeout: 10_000,
+    },
+    async () => {
+      const { OrganizationActivityPage } =
+        await import("./organization-activity-page");
+
+      render(
+        <OrganizationActivityPage
+          actorsState={makeCollectionState("product-activity-actors", actors)}
+          eventsState={makeCollectionState(
+            "activity-events",
+            labelActivityEvents
+          )}
+          currentOrganizationRole="admin"
+          search={{}}
+          onSearchChange={vi.fn<(search: ActivitySearch) => void>()}
+        />
+      );
+
+      const adminLabelRow = await screen.findByText("Safety label changed");
+      expect(adminLabelRow).toBeVisible();
+      expect(
+        screen.getByRole("link", { name: "Open Safety label changed" })
+      ).toHaveAttribute("href", "/organization/settings/labels");
+
+      act(() => getLatestHotkeyCallback("activityOpenSelectedRow")());
+      expect(mockedNavigate).toHaveBeenCalledWith({
+        to: "/organization/settings/labels",
+      });
     }
   );
 });
 
-function makeActivityItem(
-  item: Omit<OrganizationActivityItem, "actor"> & {
-    readonly actorId: ProductActorId;
-    readonly actorName: string;
+const actors = [
+  {
+    displayDetail: "Team member",
+    displayName: "Taylor Owner",
+    id: taylorActorId,
+    kind: "member",
+  },
+  {
+    displayDetail: "Team member",
+    displayName: "Jordan Admin",
+    id: jordanActorId,
+    kind: "member",
+  },
+] satisfies readonly ProductActor[];
+
+const activityEvents = [
+  {
+    actorId: taylorActorId,
+    createdAt: "2026-04-28T10:15:00.000Z",
+    display: {
+      detail: "Inspect boiler was added to the active job list.",
+      summary: "Boiler inspection created",
+    },
+    eventType: "job.created",
+    id: "11111111-1111-4111-8111-111111111111" as ActivityEventIdType,
+    organizationId,
+    retainedUntil: "2026-05-28T10:15:00.000Z",
+    sourceId: "11111111-1111-4111-8111-111111111111",
+    sourceType: "job_activity",
+    status: "synced",
+    targetId: "44444444-4444-4444-8444-444444444444" as WorkItemIdType,
+    targetType: "job",
+  },
+  {
+    actorId: jordanActorId,
+    createdAt: "2026-04-29T09:30:00.000Z",
+    display: {
+      detail: "Main gate access notes were updated.",
+      summary: "Gate access changed",
+    },
+    eventType: "site.updated",
+    id: "22222222-2222-4222-8222-222222222222" as ActivityEventIdType,
+    organizationId,
+    retainedUntil: "2026-05-29T09:30:00.000Z",
+    sourceId: "55555555-5555-4555-8555-555555555555",
+    sourceType: "site",
+    status: "pending",
+    targetId: "55555555-5555-4555-8555-555555555555" as SiteIdType,
+    targetType: "site",
+  },
+] satisfies readonly ProductActivityEvent[];
+
+const labelActivityEvents = [
+  {
+    actorId: jordanActorId,
+    createdAt: "2026-04-30T11:30:00.000Z",
+    display: {
+      detail: "Safety label color and description were updated.",
+      summary: "Safety label changed",
+    },
+    eventType: "label.updated",
+    id: "33333333-3333-4333-8333-333333333333" as ActivityEventIdType,
+    organizationId,
+    retainedUntil: "2026-05-30T11:30:00.000Z",
+    sourceId: "66666666-6666-4666-8666-666666666666",
+    sourceType: "label",
+    status: "synced",
+    targetId: "66666666-6666-4666-8666-666666666666" as LabelIdType,
+    targetType: "label",
+  },
+] satisfies readonly ProductActivityEvent[];
+
+function getLatestHotkeyCallback(id: HotkeyId) {
+  const call = mockedUseAppHotkey.mock.calls
+    .toReversed()
+    .find(([hotkeyId]) => hotkeyId === id);
+
+  expect(call).toBeDefined();
+
+  return call?.[1] as () => void;
+}
+
+function makeCollectionState<Item extends object>(
+  collection: "activity-events" | "product-activity-actors",
+  items: readonly Item[],
+  status: "connecting" | "degraded" | "ready" | "unavailable" = "ready"
+): ActivityCollectionStateLike<Item> {
+  const health = createDataPlaneCollectionHealth({
+    collection,
+    collectionId: `test:${collection}`,
+    source: "electric",
+    status: status === "ready" || status === "degraded" ? "connecting" : status,
+    subscriptionName: collection,
+  });
+
+  if (status === "ready") {
+    health.markReady();
   }
-): OrganizationActivityItem {
-  const { actorId, actorName, ...activityItem } = item;
+
+  if (status === "degraded") {
+    health.markUnavailable({
+      kind: "network",
+      message: "Temporary sync interruption",
+      retryable: true,
+    });
+    health.markReady();
+  }
 
   return {
-    ...activityItem,
-    actor: {
-      displayDetail: "Team member",
-      displayName: actorName,
-      id: actorId,
-      kind: "member",
-    },
+    collection: makeCollection(items),
+    health,
+  };
+}
+
+function makeCollection<Item extends object>(items: readonly Item[]) {
+  const entries = new Map<string, Item>(
+    items.map((item, index) => [String(index), item])
+  );
+
+  return {
+    entries: () => entries.entries(),
+    status: "ready",
+    subscribeChanges: (_callback: () => void) => ({
+      requestSnapshot: () => {},
+      unsubscribe: () => {},
+    }),
   };
 }

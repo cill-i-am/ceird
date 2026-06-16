@@ -182,9 +182,9 @@ test("instruction topology policy matches canonical nodes and mirrors", () => {
 
   assert.equal(result.ok, true, report);
   assert.deepEqual(result.failures, []);
-  assert.equal(result.policy.canonicalNodes.length, 23);
-  assert.equal(result.expected.canonicalFiles.length, 23);
-  assert.equal(result.expected.mirrorFiles.length, 23);
+  assert.equal(result.policy.canonicalNodes.length, 24);
+  assert.equal(result.expected.canonicalFiles.length, 24);
+  assert.equal(result.expected.mirrorFiles.length, 24);
   assert.match(report, /Instruction topology PASS/);
   assert.match(report, /apps\/sync\/AGENTS\.md/);
   assert.match(report, /packages\/proximity-core\/CLAUDE\.md -> AGENTS\.md/);
