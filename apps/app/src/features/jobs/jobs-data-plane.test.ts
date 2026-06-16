@@ -1,5 +1,7 @@
 import type { OrganizationId, UserId } from "@ceird/identity-core";
 import type {
+  AddJobCommentResponse,
+  CommentIdType,
   ContactIdType,
   Job,
   JobDetailWriteResponse,
@@ -25,6 +27,7 @@ import type { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import {
   aggregateJobsWorkspaceReadModelHealth,
   createJobsWorkspaceCommandRunner,
+  createJobsWorkspaceCommentCommandRunner,
   createJobsWorkspaceReadModelContracts,
   deriveJobsWorkspaceDetail,
   deriveJobsWorkspaceVisibleRows,
@@ -868,6 +871,18 @@ describe("jobs data plane", () => {
       },
       collaborators: [{ roleLabel: "Facilities" }],
       commentCount: 1,
+      comments: [
+        {
+          actor: {
+            displayName: "Taylor Member",
+            route: { href: "/members/user_taylor" },
+          },
+          comment: {
+            body: "Ready for dispatch",
+            id: commentId,
+          },
+        },
+      ],
       contact: { name: "Operations" },
       coordinator: {
         displayName: "Jordan Coordinator",
@@ -1128,6 +1143,139 @@ describe("jobs data plane", () => {
         kind: "observed-change",
       },
       mutation: { txid: 1204 },
+    });
+  });
+
+  it("keeps add-comment pending until comment body and edge collections observe the domain row", async () => {
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+    const commentId = "55555555-5555-4555-8555-555555555555" as CommentIdType;
+    const authorUserId = "user_123" as UserId;
+    const actor = toProductActivityActorElectricRow({
+      displayName: "Taylor Field",
+      id: "77777777-7777-4777-8777-777777777777",
+      kind: "member",
+    });
+    const journal = createDataPlaneMutationJournal({
+      createId: () => "mutation_1",
+    });
+    const commentBodies = makeObservableCollection<
+      ReturnType<typeof toJobCommentElectricRow>
+    >([]);
+    const commentEdges = makeObservableCollection<
+      ReturnType<typeof toJobCommentEdgeRow>
+    >([]);
+    const apiResponse = Promise.withResolvers<AddJobCommentResponse>();
+    const command = createJobsWorkspaceCommentCommandRunner({
+      addComment: () => Effect.promise(() => apiResponse.promise),
+      collections: {
+        commentBodies,
+        commentEdges,
+      },
+      journal,
+    }).addJobComment(workItemId, { body: "Ready for dispatch" });
+
+    expect(journal.entries()).toMatchObject([
+      {
+        affectedCollections: ["job-comments", "job-comment-bodies"],
+        commandName: "jobs-workspace.add-comment",
+        status: "pending",
+      },
+    ]);
+
+    apiResponse.resolve({
+      actor,
+      authorUserId,
+      body: "Ready for dispatch",
+      createdAt: "2026-06-15T10:40:00.000Z",
+      id: commentId,
+      workItemId,
+    });
+    await Promise.all([
+      commentBodies.waitForSubscriber(),
+      commentEdges.waitForSubscriber(),
+    ]);
+
+    commentBodies.set([
+      toJobCommentElectricRow({
+        actorId: actor.id,
+        authorUserId,
+        body: "Ready for dispatch",
+        createdAt: "2026-06-15T10:40:00.000Z",
+        id: commentId,
+        updatedAt: "2026-06-15T10:40:00.000Z",
+      }),
+    ]);
+    commentEdges.set([
+      toJobCommentEdgeRow({
+        commentId,
+        createdAt: "2026-06-15T10:40:00.000Z",
+        workItemId,
+      }),
+    ]);
+
+    await expect(command).resolves.toMatchObject({
+      _tag: "Success",
+      value: {
+        electricObservation: {
+          commentBody: "observed-change",
+          commentEdge: "observed-change",
+        },
+      },
+    });
+    expect(journal.entries()[0]).toMatchObject({
+      status: "success",
+    });
+  });
+
+  it("handles synchronous comment collection confirmation notifications", async () => {
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+    const commentId = "55555555-5555-4555-8555-555555555555" as CommentIdType;
+    const authorUserId = "user_123" as UserId;
+    const actor = toProductActivityActorElectricRow({
+      displayName: "Taylor Field",
+      id: "77777777-7777-4777-8777-777777777777",
+      kind: "member",
+    });
+    const response = {
+      actor,
+      authorUserId,
+      body: "Ready for dispatch",
+      createdAt: "2026-06-15T10:40:00.000Z",
+      id: commentId,
+      workItemId,
+    } satisfies AddJobCommentResponse;
+    const command = createJobsWorkspaceCommentCommandRunner({
+      addComment: () => Effect.succeed(response),
+      collections: {
+        commentBodies: makeSynchronouslyConfirmingCollection([
+          toJobCommentElectricRow({
+            actorId: actor.id,
+            authorUserId,
+            body: response.body,
+            createdAt: response.createdAt,
+            id: commentId,
+            updatedAt: response.createdAt,
+          }),
+        ]),
+        commentEdges: makeSynchronouslyConfirmingCollection([
+          toJobCommentEdgeRow({
+            commentId,
+            createdAt: response.createdAt,
+            workItemId,
+          }),
+        ]),
+      },
+      timeoutMs: 1000,
+    }).addJobComment(workItemId, { body: response.body });
+
+    await expect(command).resolves.toMatchObject({
+      _tag: "Success",
+      value: {
+        electricObservation: {
+          commentBody: "observed-change",
+          commentEdge: "observed-change",
+        },
+      },
     });
   });
 
@@ -1518,6 +1666,54 @@ function createFakeCollection<Item>(getKey: (item: Item) => string): {
     upsert: (item) => {
       rows.set(getKey(item), item);
       emit();
+    },
+  };
+}
+
+function makeObservableCollection<Item>(initialRows: readonly Item[]) {
+  let rows = [...initialRows];
+  const listeners = new Set<() => void>();
+  const subscriber = Promise.withResolvers<null>();
+
+  return {
+    entries: () =>
+      rows.map((row, index) => [index, row] as [number, Item]).values(),
+    set: (nextRows: readonly Item[]) => {
+      rows = [...nextRows];
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+    subscribeChanges: (listener: () => void) => {
+      listeners.add(listener);
+      subscriber.resolve(null);
+
+      return {
+        requestSnapshot: () => listener(),
+        unsubscribe: () => {
+          listeners.delete(listener);
+        },
+      };
+    },
+    waitForSubscriber: () => subscriber.promise,
+  };
+}
+
+function makeSynchronouslyConfirmingCollection<Item>(
+  confirmedRows: readonly Item[]
+) {
+  let rows: readonly Item[] = [];
+
+  return {
+    entries: () =>
+      rows.map((row, index) => [index, row] as [number, Item]).values(),
+    subscribeChanges: (listener: () => void) => {
+      rows = [...confirmedRows];
+      listener();
+
+      return {
+        unsubscribe: vi.fn<() => void>(),
+      };
     },
   };
 }

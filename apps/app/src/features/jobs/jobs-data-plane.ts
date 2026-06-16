@@ -6,6 +6,8 @@ import {
   ProductActorRoute,
 } from "@ceird/identity-core";
 import type {
+  AddJobCommentInput,
+  AddJobCommentResponse,
   AssignJobLabelInput,
   CreateJobInput,
   JobCollaborator,
@@ -123,6 +125,7 @@ export const EMPTY_JOBS_OPTIONS: JobOptionsResponse = {
 
 const JOB_OPTIONS_COLLECTION_ITEM_ID = "job-options";
 const DEFAULT_JOBS_LIST_LIMIT = 50;
+const JOBS_WORKSPACE_COMMENT_CONFIRMATION_TIMEOUT_MS = 10_000;
 const JOBS_WORKSPACE_READ_MODEL_QUERY_NAME = "jobs.workspace.electric";
 const JOBS_WORKSPACE_DETAIL_QUERY_NAME = "jobs.workspace.detail.electric";
 const JOBS_WORKSPACE_MUTATION_CONFIRMATION_TIMEOUT_MS = 10_000;
@@ -135,6 +138,20 @@ type JobsElectricRowValue =
   | readonly JobsElectricRowValue[]
   | { readonly [key: string]: JobsElectricRowValue };
 type JobsElectricRow = Record<string, JobsElectricRowValue>;
+
+interface JobsWorkspaceObservableCollection<Item> {
+  readonly entries: () => Iterable<[string | number, Item]>;
+  readonly subscribeChanges: (
+    callback: () => void
+  ) => JobsWorkspaceObservableSubscription;
+}
+
+interface JobsWorkspaceObservableSubscription {
+  readonly requestSnapshot?:
+    | ((options?: { readonly optimizedOnly?: boolean }) => void)
+    | undefined;
+  readonly unsubscribe: () => void;
+}
 
 interface JobsCollection extends DataPlaneCollectionSnapshot<JobListItem> {
   readonly cleanup: () => Promise<void>;
@@ -167,13 +184,6 @@ type JobsWorkspaceCollection<
   Item extends object,
   Key extends string | number = string,
 > = DataPlaneLiveCollection<Item, Key, Record<string, never>>;
-interface JobsWorkspaceObservableCollection<Item> {
-  entries: () => Iterable<[string | number, Item]>;
-  subscribeChanges: (callback: () => void) => {
-    requestSnapshot?: (options?: { readonly optimizedOnly?: boolean }) => void;
-    unsubscribe: () => void;
-  };
-}
 export type JobsCollectionSyncOptions = Omit<
   CreateDataPlaneFallbackCollectionOptions<JobsCollection, JobsCollection>,
   "createQueryCollection"
@@ -449,10 +459,17 @@ export interface JobsWorkspaceDetailActivityItem {
   readonly actor?: JobsWorkspaceProductActorRow | undefined;
 }
 
+export interface JobsWorkspaceDetailCommentItem {
+  readonly actor?: JobsWorkspaceProductActorRow | undefined;
+  readonly comment: JobsWorkspaceCommentRow;
+  readonly edge: JobCommentEdgeRow;
+}
+
 export interface JobsWorkspaceDetailReadModel {
   readonly activity: readonly JobsWorkspaceDetailActivityItem[];
   readonly assignee?: JobsWorkspaceMemberActorSummaryRow | undefined;
   readonly collaborators: readonly JobCollaborator[];
+  readonly comments: readonly JobsWorkspaceDetailCommentItem[];
   readonly commentCount: number;
   readonly contact?: JobContactSummaryRow | undefined;
   readonly coordinator?: JobsWorkspaceMemberActorSummaryRow | undefined;
@@ -461,6 +478,20 @@ export interface JobsWorkspaceDetailReadModel {
   readonly site?: JobSiteSummaryRow | undefined;
   readonly visits: readonly JobsWorkspaceVisitRow[];
 }
+
+export interface JobsWorkspaceCommentCommandCollections {
+  readonly commentBodies: JobsWorkspaceObservableCollection<JobsWorkspaceCommentRow> | null;
+  readonly commentEdges: JobsWorkspaceObservableCollection<JobCommentEdgeRow> | null;
+}
+
+export interface JobsWorkspaceCommentElectricObservation {
+  readonly commentBody: "already-reflected" | "observed-change";
+  readonly commentEdge: "already-reflected" | "observed-change";
+}
+
+export type JobsWorkspaceCommentCommandResult = AddJobCommentResponse & {
+  readonly electricObservation: JobsWorkspaceCommentElectricObservation;
+};
 
 export interface JobsWorkspaceListContract {
   readonly completeness: ReturnType<typeof jobsWorkspaceListCompleteness>;
@@ -1759,11 +1790,30 @@ export function deriveJobsWorkspaceDetail({
   const memberActorsByUserId = new Map(
     memberActorSummaries.map((summary) => [summary.userId, summary])
   );
-  const commentIdsForJob = new Set(
-    jobComments
-      .filter((edge) => edge.workItemId === job.id)
-      .map((edge) => edge.commentId)
+  const commentsById = new Map(
+    comments.map((comment) => [comment.id, comment])
   );
+  const detailComments = jobComments
+    .filter((edge) => edge.workItemId === job.id)
+    .flatMap((edge): JobsWorkspaceDetailCommentItem[] => {
+      const comment = commentsById.get(edge.commentId);
+
+      if (comment === undefined) {
+        return [];
+      }
+
+      return [
+        {
+          actor:
+            comment.actorId === undefined
+              ? undefined
+              : actorsById.get(comment.actorId),
+          comment,
+          edge,
+        },
+      ];
+    })
+    .toSorted(compareJobsWorkspaceDetailComments);
 
   return {
     activity: activity
@@ -1785,8 +1835,8 @@ export function deriveJobsWorkspaceDetail({
     collaborators: collaborators
       .filter((collaborator) => collaborator.workItemId === job.id)
       .toSorted((left, right) => left.roleLabel.localeCompare(right.roleLabel)),
-    commentCount: comments.filter((comment) => commentIdsForJob.has(comment.id))
-      .length,
+    commentCount: detailComments.length,
+    comments: detailComments,
     contact:
       job.contactId === undefined
         ? undefined
@@ -1813,6 +1863,117 @@ export function deriveJobsWorkspaceDetail({
           : right.visitDate.localeCompare(left.visitDate)
       ),
   };
+}
+
+function compareJobsWorkspaceDetailComments(
+  left: JobsWorkspaceDetailCommentItem,
+  right: JobsWorkspaceDetailCommentItem
+): number {
+  const createdDelta = left.edge.createdAt.localeCompare(right.edge.createdAt);
+
+  return createdDelta === 0
+    ? left.edge.commentId.localeCompare(right.edge.commentId)
+    : createdDelta;
+}
+
+export function createJobsWorkspaceCommentCommandRunner({
+  addComment = addBrowserJobComment,
+  collections,
+  journal,
+  timeoutMs = JOBS_WORKSPACE_COMMENT_CONFIRMATION_TIMEOUT_MS,
+}: {
+  readonly addComment?:
+    | ((
+        workItemId: WorkItemIdType,
+        input: AddJobCommentInput
+      ) => ReturnType<typeof addBrowserJobComment>)
+    | undefined;
+  readonly collections: JobsWorkspaceCommentCommandCollections;
+  readonly journal?: DataPlaneMutationJournal | undefined;
+  readonly timeoutMs?: number | undefined;
+}) {
+  return {
+    addJobComment: (workItemId: WorkItemIdType, input: AddJobCommentInput) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["job-comments", "job-comment-bodies"],
+          execute: async (commandInput: {
+            readonly input: AddJobCommentInput;
+            readonly workItemId: WorkItemIdType;
+          }) => {
+            const exit = await Effect.runPromiseExit(
+              addComment(commandInput.workItemId, commandInput.input)
+            );
+
+            if (Exit.isFailure(exit)) {
+              return Exit.failCause(exit.cause);
+            }
+
+            return await catchJobsWorkspaceConfirmationFailure(
+              awaitJobCommentConfirmation({
+                collections,
+                response: exit.value,
+                timeoutMs,
+                workItemId: commandInput.workItemId,
+              })
+            );
+          },
+          name: "jobs-workspace.add-comment",
+          optimistic: "none",
+        },
+        { input, workItemId },
+        { journal }
+      ),
+  };
+}
+
+async function awaitJobCommentConfirmation({
+  collections,
+  response,
+  timeoutMs,
+  workItemId,
+}: {
+  readonly collections: JobsWorkspaceCommentCommandCollections;
+  readonly response: AddJobCommentResponse;
+  readonly timeoutMs: number;
+  readonly workItemId: WorkItemIdType;
+}) {
+  const [commentBody, commentEdge] = await Promise.all([
+    waitForJobsWorkspaceCollectionObservation({
+      collection: collections.commentBodies,
+      matches: (comment) =>
+        comment.id === response.id &&
+        comment.body === response.body &&
+        comment.createdAt === response.createdAt,
+      timeoutMs,
+    }),
+    waitForJobsWorkspaceCollectionObservation({
+      collection: collections.commentEdges,
+      matches: (edge) =>
+        edge.commentId === response.id && edge.workItemId === workItemId,
+      timeoutMs,
+    }),
+  ]);
+
+  return Exit.succeed({
+    ...response,
+    electricObservation: {
+      commentBody: commentBody.kind,
+      commentEdge: commentEdge.kind,
+    },
+  } satisfies JobsWorkspaceCommentCommandResult);
+}
+
+function addBrowserJobComment(
+  workItemId: WorkItemIdType,
+  input: AddJobCommentInput
+) {
+  return runBrowserAppApiRequest("JobsWorkspace.addJobComment", (client) =>
+    client.jobs.addJobComment({
+      params: { workItemId },
+      payload: input,
+    })
+  );
 }
 
 function normalizeJobsWorkspaceQuery(query: string | undefined): string {
@@ -2225,8 +2386,26 @@ function waitForJobsWorkspaceCollectionObservation<Item>({
   const deferred =
     Promise.withResolvers<Pick<JobsWorkspaceElectricObservation, "kind">>();
   let settled = false;
-  let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
-  const subscription = collection.subscribeChanges(() => {
+  let unsubscribeAfterSubscribe = false;
+  const subscriptionRef: {
+    current?: JobsWorkspaceObservableSubscription | undefined;
+  } = {};
+  const timeout = globalThis.setTimeout(() => {
+    if (settled) {
+      return;
+    }
+
+    settled = true;
+    if (subscriptionRef.current === undefined) {
+      unsubscribeAfterSubscribe = true;
+    } else {
+      subscriptionRef.current.unsubscribe();
+    }
+    deferred.reject(
+      new Error("Timed out waiting for Electric to confirm the job mutation.")
+    );
+  }, timeoutMs);
+  const finishObserved = () => {
     if (!isConfirmed()) {
       return;
     }
@@ -2236,28 +2415,25 @@ function waitForJobsWorkspaceCollectionObservation<Item>({
     }
 
     settled = true;
-    if (timeout !== undefined) {
-      globalThis.clearTimeout(timeout);
+    globalThis.clearTimeout(timeout);
+    if (subscriptionRef.current === undefined) {
+      unsubscribeAfterSubscribe = true;
+    } else {
+      subscriptionRef.current.unsubscribe();
     }
-    subscription.unsubscribe();
     deferred.resolve({ kind: "observed-change" });
+  };
+
+  subscriptionRef.current = collection.subscribeChanges(() => {
+    finishObserved();
   });
-
-  if (!settled) {
-    timeout = globalThis.setTimeout(() => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      subscription.unsubscribe();
-      deferred.reject(
-        new Error("Timed out waiting for Electric to confirm the job mutation.")
-      );
-    }, timeoutMs);
+  if (unsubscribeAfterSubscribe) {
+    subscriptionRef.current.unsubscribe();
   }
 
-  subscription.requestSnapshot?.({ optimizedOnly: false });
+  if (!settled) {
+    subscriptionRef.current.requestSnapshot?.({ optimizedOnly: false });
+  }
 
   return deferred.promise;
 }

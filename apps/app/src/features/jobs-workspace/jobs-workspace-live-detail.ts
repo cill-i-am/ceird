@@ -7,6 +7,7 @@ import type { DataPlaneCollectionHealthSnapshot } from "#/data-plane/collection-
 import { useDataPlaneLiveQuery } from "#/data-plane/live-query";
 import { useDataPlaneSession } from "#/data-plane/session";
 import {
+  createJobsWorkspaceCommentCommandRunner,
   deriveJobsWorkspaceDetail,
   getOrCreateJobsWorkspaceReadModelState,
 } from "#/features/jobs/jobs-data-plane";
@@ -25,6 +26,9 @@ import type {
 } from "#/features/jobs/jobs-data-plane";
 
 export interface JobsWorkspaceLiveDetailState {
+  readonly addComment: ReturnType<
+    typeof createJobsWorkspaceCommentCommandRunner
+  >["addJobComment"];
   readonly detail?: JobsWorkspaceDetailReadModel | undefined;
   readonly graphCounts: {
     readonly activity: number;
@@ -171,8 +175,20 @@ export function useJobsWorkspaceLiveDetail(
         visits: readLiveQueryData<JobsWorkspaceVisitRow>(visitsQuery.data),
       })
     : undefined;
+  const commandRunner = React.useMemo(
+    () =>
+      createJobsWorkspaceCommentCommandRunner({
+        collections: {
+          commentBodies: readModel.comments ?? null,
+          commentEdges: readModel.jobComments ?? null,
+        },
+        journal: session.mutationJournal,
+      }),
+    [readModel.comments, readModel.jobComments, session.mutationJournal]
+  );
 
   return {
+    addComment: commandRunner.addJobComment,
     detail,
     graphCounts: {
       activity: isReady ? readLiveQueryData(activityQuery.data).length : 0,

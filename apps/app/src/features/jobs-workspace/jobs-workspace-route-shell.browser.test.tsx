@@ -1,6 +1,7 @@
 import type { ProductActorId, UserId } from "@ceird/identity-core";
 import type {
   ActivityIdType,
+  CommentIdType,
   ContactIdType,
   Job,
   WorkItemIdType,
@@ -19,6 +20,12 @@ import type { JobsWorkspaceVisibleRow } from "#/features/jobs/jobs-data-plane";
 import type { JobsWorkspaceLiveDetailState } from "./jobs-workspace-live-detail";
 import type { JobsWorkspaceLiveListState } from "./jobs-workspace-live-list";
 import { JobsWorkspaceRouteShell } from "./jobs-workspace-route-shell";
+
+function getModEnterKeyboardInput() {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? "{Meta>}{Enter}{/Meta}"
+    : "{Control>}{Enter}{/Control}";
+}
 
 const liveListState = vi.hoisted<{ current: JobsWorkspaceLiveListState }>(
   () => ({
@@ -54,6 +61,7 @@ const liveDetailState = vi.hoisted<{
   current: JobsWorkspaceLiveDetailState;
 }>(() => ({
   current: {
+    addComment: vi.fn<JobsWorkspaceLiveDetailState["addComment"]>(),
     detail: undefined,
     graphCounts: {
       activity: 0,
@@ -131,6 +139,7 @@ describe("jobs workspace route shell", () => {
       rows: [],
     };
     liveDetailState.current = {
+      addComment: vi.fn<JobsWorkspaceLiveDetailState["addComment"]>(),
       detail: undefined,
       graphCounts: {
         activity: 0,
@@ -325,11 +334,147 @@ describe("jobs workspace route shell", () => {
     expect(screen.getAllByText("Warehouse").length).toBeGreaterThan(1);
     expect(screen.getAllByText("Operations").length).toBeGreaterThan(1);
     expect(screen.getByText("Activity and comments")).toBeVisible();
+    expect(screen.getByText("Ready for dispatch")).toBeVisible();
     expect(
       screen.getAllByText("Taylor Member · Dispatch").length
     ).toBeGreaterThan(1);
     expect(screen.getByText("Jordan Coordinator · Scheduling")).toBeVisible();
     expect(screen.queryByText(/Member [a-z0-9_-]+/i)).not.toBeInTheDocument();
+  });
+
+  it("adds comments through the detail composer with pending and synced feedback", async () => {
+    const user = userEvent.setup();
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+    const commentResponse =
+      Promise.withResolvers<
+        Awaited<ReturnType<JobsWorkspaceLiveDetailState["addComment"]>>
+      >();
+    const addComment = vi.fn<JobsWorkspaceLiveDetailState["addComment"]>(
+      () => commentResponse.promise
+    );
+    liveListState.current = {
+      ...liveListState.current,
+      allRowsCount: 1,
+      rows: [makeWorkspaceRow(workItemId)],
+    };
+    liveDetailState.current = {
+      ...makeReadyDetailState(workItemId),
+      addComment,
+    };
+
+    renderShell({ detailJobId: workItemId });
+
+    await user.keyboard("N");
+    expect(screen.getByLabelText("Comment")).toHaveFocus();
+    await user.type(screen.getByLabelText("Comment"), "Customer confirmed.");
+    await user.keyboard(getModEnterKeyboardInput());
+
+    expect(addComment).toHaveBeenCalledWith(workItemId, {
+      body: "Customer confirmed.",
+    });
+    expect(screen.getByText("Comment pending")).toBeVisible();
+
+    commentResponse.resolve({
+      _tag: "Success",
+      value: {
+        actor: {
+          displayName: "Taylor Member",
+          id: "99999999-9999-4999-8999-999999999999",
+          kind: "member",
+        },
+        authorUserId: "user_taylor",
+        body: "Customer confirmed.",
+        createdAt: "2026-06-15T10:45:00.000Z",
+        electricObservation: {
+          commentBody: "observed-change",
+          commentEdge: "observed-change",
+        },
+        id: "55555555-5555-4555-8555-555555555555",
+        workItemId,
+      },
+    } as Awaited<ReturnType<JobsWorkspaceLiveDetailState["addComment"]>>);
+
+    await expect(screen.findByText("Comment synced")).resolves.toBeVisible();
+    expect(screen.getByLabelText("Comment")).toHaveValue("");
+  });
+
+  it("focuses detail comments instead of creating a hidden draft job", async () => {
+    const user = userEvent.setup();
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+    const createJob =
+      vi.fn<JobsWorkspaceLiveListState["commands"]["createJob"]>();
+    liveListState.current = {
+      ...liveListState.current,
+      allRowsCount: 1,
+      commands: {
+        ...makeCommandStubs(),
+        createJob,
+      },
+      rows: [makeWorkspaceRow(workItemId)],
+    };
+    liveDetailState.current = makeReadyDetailState(workItemId);
+
+    function StatefulDetailShell() {
+      const [detailJobId, setDetailJobId] = React.useState<
+        string | undefined
+      >();
+
+      return (
+        <JobsWorkspaceRouteShell
+          currentOrganizationRole="owner"
+          detailJobId={detailJobId}
+          hotkeysEnabled
+          onDetailJobChange={setDetailJobId}
+          onLabelChange={vi.fn<(labelId: string | undefined) => void>()}
+          onQueryChange={vi.fn<(query: string | undefined) => void>()}
+          onRecentSearchCommit={vi.fn<(query: string | undefined) => void>()}
+          onSortChange={vi.fn<(sort: unknown) => void>()}
+          onStatusChange={vi.fn<(status: unknown) => void>()}
+          onViewChange={vi.fn<(view: unknown) => void>()}
+          sort="updated-desc"
+          view="list"
+        />
+      );
+    }
+
+    render(
+      <HotkeysProvider>
+        <StatefulDetailShell />
+      </HotkeysProvider>
+    );
+
+    await user.type(screen.getByLabelText("New job title"), "Hidden draft");
+    await user.click(
+      screen.getByRole("button", { name: /open detail for fit heat pump/i })
+    );
+    await user.keyboard("N");
+
+    expect(screen.getByLabelText("Comment")).toHaveFocus();
+    expect(createJob).not.toHaveBeenCalled();
+  });
+
+  it("shows failed comment feedback when Electric confirmation fails", async () => {
+    const user = userEvent.setup();
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+    liveListState.current = {
+      ...liveListState.current,
+      allRowsCount: 1,
+      rows: [makeWorkspaceRow(workItemId)],
+    };
+    liveDetailState.current = {
+      ...makeReadyDetailState(workItemId),
+      addComment: vi.fn<JobsWorkspaceLiveDetailState["addComment"]>(() =>
+        Promise.resolve(Exit.fail(new Error("Timed out waiting for Electric")))
+      ),
+    };
+
+    renderShell({ detailJobId: workItemId });
+
+    await user.type(screen.getByLabelText("Comment"), "Needs another visit.");
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    await expect(screen.findByText("Comment failed")).resolves.toBeVisible();
+    expect(screen.getByText("Timed out waiting for Electric")).toBeVisible();
   });
 
   it("describes Enter as opening detail in shortcut help", () => {
@@ -370,6 +515,33 @@ describe("jobs workspace route shell", () => {
       screen.getByText("Realtime job detail is unavailable")
     ).toBeVisible();
     expect(screen.getByText(/Detail sync status: disabled/)).toBeVisible();
+  });
+
+  it("closes an unavailable detail panel with Escape", async () => {
+    const user = userEvent.setup();
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+    const onDetailJobChange = vi.fn<(jobId: string | undefined) => void>();
+    liveListState.current = {
+      ...liveListState.current,
+      allRowsCount: 1,
+      rows: [makeWorkspaceRow(workItemId)],
+    };
+    liveDetailState.current = {
+      ...liveDetailState.current,
+      health: {
+        ...liveDetailState.current.health,
+        disabledReason: "missing-sync-origin",
+        status: "disabled",
+      },
+      isCollectionGraphAvailable: false,
+      isReady: false,
+    };
+
+    renderShell({ detailJobId: workItemId, onDetailJobChange });
+
+    await user.keyboard("{Escape}");
+
+    expect(onDetailJobChange).toHaveBeenCalledWith(undefined);
   });
 
   it("closes detail and restores focus to the opening row action", async () => {
@@ -622,6 +794,7 @@ function makeReadyDetailState(
 ): JobsWorkspaceLiveDetailState {
   return {
     ...liveDetailState.current,
+    addComment: vi.fn<JobsWorkspaceLiveDetailState["addComment"]>(),
     detail: {
       activity: [
         {
@@ -654,7 +827,31 @@ function makeReadyDetailState(
         userId: "user_taylor" as UserId,
       },
       collaborators: [],
-      commentCount: 2,
+      commentCount: 1,
+      comments: [
+        {
+          actor: {
+            displayDetail: "Dispatch",
+            displayName: "Taylor Member",
+            id: "99999999-9999-4999-8999-999999999999" as ProductActorId,
+            kind: "member",
+          },
+          comment: {
+            actorId: "99999999-9999-4999-8999-999999999999" as ProductActorId,
+            authorUserId: "user_taylor" as UserId,
+            body: "Ready for dispatch",
+            createdAt: "2026-06-15T10:40:00.000Z",
+            id: "55555555-5555-4555-8555-555555555555" as CommentIdType,
+            updatedAt: "2026-06-15T10:40:00.000Z",
+          },
+          edge: {
+            commentId: "55555555-5555-4555-8555-555555555555" as CommentIdType,
+            createdAt: "2026-06-15T10:40:00.000Z",
+            id: `${workItemId}:55555555-5555-4555-8555-555555555555`,
+            workItemId,
+          },
+        },
+      ],
       contact: {
         id: "44444444-4444-4444-8444-444444444444" as ContactIdType,
         name: "Operations",
