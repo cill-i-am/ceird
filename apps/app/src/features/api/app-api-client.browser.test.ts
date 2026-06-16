@@ -40,6 +40,7 @@ import type {
   SiteIdType,
   SiteProximityResponse,
   SiteRoutePreviewResponse,
+  SiteWriteResponse,
   SitesOptionsResponse,
 } from "@ceird/sites-core";
 import { Effect, Result, Schema } from "effect";
@@ -137,6 +138,16 @@ const siteLabel: Label = {
 const siteWithLabelResponse: CreateSiteResponse = {
   ...createSiteResponse,
   labels: [siteLabel],
+};
+
+const createSiteWriteResponse: SiteWriteResponse = {
+  mutation: { txid: 801 },
+  site: createSiteResponse,
+};
+
+const siteWithLabelWriteResponse: SiteWriteResponse = {
+  mutation: { txid: 802 },
+  site: siteWithLabelResponse,
 };
 
 const siteOptionsResponse: SitesOptionsResponse = {
@@ -353,7 +364,9 @@ describe("app API client", () => {
   it("creates standalone sites through the shared Ceird API client", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(Response.json(createSiteResponse, { status: 201 }));
+      .mockResolvedValue(
+        Response.json(createSiteWriteResponse, { status: 201 })
+      );
 
     await expect(
       runAppApiClient(
@@ -373,7 +386,7 @@ describe("app API client", () => {
             },
           })
       )
-    ).resolves.toStrictEqual(createSiteResponse);
+    ).resolves.toStrictEqual(createSiteWriteResponse);
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
@@ -533,7 +546,7 @@ describe("app API client", () => {
   it("assigns labels to standalone sites through the shared Ceird API client", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(Response.json(siteWithLabelResponse));
+      .mockResolvedValue(Response.json(siteWithLabelWriteResponse));
 
     await expect(
       runAppApiClient(
@@ -547,7 +560,7 @@ describe("app API client", () => {
             payload: { labelId: siteLabelId },
           })
       )
-    ).resolves.toStrictEqual(siteWithLabelResponse);
+    ).resolves.toStrictEqual(siteWithLabelWriteResponse);
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 
@@ -560,7 +573,7 @@ describe("app API client", () => {
   it("removes labels from standalone sites through the shared Ceird API client", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(Response.json(createSiteResponse));
+      .mockResolvedValue(Response.json(createSiteWriteResponse));
 
     await expect(
       runAppApiClient(
@@ -573,7 +586,7 @@ describe("app API client", () => {
             params: { labelId: siteLabelId, siteId: createSiteResponse.id },
           })
       )
-    ).resolves.toStrictEqual(createSiteResponse);
+    ).resolves.toStrictEqual(createSiteWriteResponse);
 
     const [url, requestInit] = fetchMock.mock.calls[0] ?? [];
 

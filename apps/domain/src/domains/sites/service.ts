@@ -14,6 +14,7 @@ import type {
   SiteProximityResponse,
   SiteRoutePreviewInput,
   SiteRoutePreviewResponse,
+  SiteWriteResponse,
   UpdateSiteInput,
 } from "@ceird/sites-core";
 import {
@@ -28,6 +29,8 @@ import {
   isDomainDrizzleStorageFailure,
 } from "../../platform/database/database.js";
 import type { DomainDrizzleStorageFailure } from "../../platform/database/database.js";
+import { withElectricMutationConfirmation } from "../../platform/database/electric-mutation-confirmation.js";
+import type { ElectricMutationConfirmed } from "../../platform/database/electric-mutation-confirmation.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
@@ -115,37 +118,35 @@ export class SitesService extends Context.Service<SitesService>()(
           options
         );
 
-        return yield* sitesRepository
-          .withTransaction(
-            Effect.gen(function* () {
-              const siteId = yield* sitesRepository.create({
-                ...location,
-                accessNotes: input.accessNotes,
-                name: input.name,
-                organizationId: actor.organizationId,
-              });
-              yield* Effect.annotateCurrentSpan("siteId", siteId);
+        return yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            const siteId = yield* sitesRepository.create({
+              ...location,
+              accessNotes: input.accessNotes,
+              name: input.name,
+              organizationId: actor.organizationId,
+            });
+            yield* Effect.annotateCurrentSpan("siteId", siteId);
 
-              const site = yield* sitesRepository
-                .getOptionById(actor.organizationId, siteId)
-                .pipe(
-                  Effect.flatMap(
-                    Option.match({
-                      onNone: () =>
-                        Effect.die(
-                          new Error(
-                            `Created site could not be loaded: organizationId=${actor.organizationId} siteId=${siteId}`
-                          )
-                        ),
-                      onSome: Effect.succeed,
-                    })
-                  )
-                );
+            const site = yield* sitesRepository
+              .getOptionById(actor.organizationId, siteId)
+              .pipe(
+                Effect.flatMap(
+                  Option.match({
+                    onNone: () =>
+                      Effect.die(
+                        new Error(
+                          `Created site could not be loaded: organizationId=${actor.organizationId} siteId=${siteId}`
+                        )
+                      ),
+                    onSome: Effect.succeed,
+                  })
+                )
+              );
 
-              return site;
-            })
-          )
-          .pipe(catchSitesStorageError());
+            return site;
+          })
+        ).pipe(Effect.map(toSiteWriteResponse), catchSitesStorageError());
       });
 
       const update = Effect.fn("SitesService.update")(function* (
@@ -192,20 +193,21 @@ export class SitesService extends Context.Service<SitesService>()(
                 siteLocationProvider
               );
 
-        const site = yield* sitesRepository
-          .withTransaction(
-            sitesRepository
-              .update(actor.organizationId, siteId, {
-                accessNotes: input.accessNotes,
-                ...(location === undefined ? {} : { location }),
-                name: input.name,
-              })
-              .pipe(Effect.map(Option.getOrUndefined))
-          )
-          .pipe(catchSitesStorageError());
+        const site = yield* withElectricMutationConfirmation(
+          sitesRepository
+            .update(actor.organizationId, siteId, {
+              accessNotes: input.accessNotes,
+              ...(location === undefined ? {} : { location }),
+              name: input.name,
+            })
+            .pipe(Effect.map(Option.getOrUndefined))
+        ).pipe(catchSitesStorageError());
 
-        if (site !== undefined) {
-          return site;
+        if (site.value !== undefined) {
+          return toSiteWriteResponse({
+            mutation: site.mutation,
+            value: site.value,
+          });
         }
 
         return yield* Effect.fail(
@@ -517,21 +519,23 @@ export class SitesService extends Context.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        yield* sitesRepository
-          .withTransaction(
-            siteLabelAssignmentsRepository.assignToSite({
+        const site = yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            yield* siteLabelAssignmentsRepository.assignToSite({
               labelId: input.labelId,
               organizationId: actor.organizationId,
               siteId,
-            })
-          )
-          .pipe(catchSitesStorageError({ siteId }));
+            });
 
-        return yield* loadSiteDetailOrFail(
-          actor.organizationId,
-          siteId,
-          sitesRepository
-        );
+            return yield* loadSiteDetailOrFail(
+              actor.organizationId,
+              siteId,
+              sitesRepository
+            );
+          })
+        ).pipe(catchSitesStorageError({ siteId }));
+
+        return toSiteWriteResponse(site);
       });
 
       const removeLabel = Effect.fn("SitesService.removeLabel")(function* (
@@ -557,21 +561,23 @@ export class SitesService extends Context.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        yield* sitesRepository
-          .withTransaction(
-            siteLabelAssignmentsRepository.removeFromSite({
+        const site = yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            yield* siteLabelAssignmentsRepository.removeFromSite({
               labelId,
               organizationId: actor.organizationId,
               siteId,
-            })
-          )
-          .pipe(catchSitesStorageError({ siteId }));
+            });
 
-        return yield* loadSiteDetailOrFail(
-          actor.organizationId,
-          siteId,
-          sitesRepository
-        );
+            return yield* loadSiteDetailOrFail(
+              actor.organizationId,
+              siteId,
+              sitesRepository
+            );
+          })
+        ).pipe(catchSitesStorageError({ siteId }));
+
+        return toSiteWriteResponse(site);
       });
 
       return {
@@ -717,6 +723,15 @@ function catchSitesStorageError<Value, Error, Requirements>(
     Exclude<Error, DomainDrizzleStorageFailure> | SiteStorageError,
     Requirements
   >;
+}
+
+function toSiteWriteResponse(
+  result: ElectricMutationConfirmed<SiteOption>
+): SiteWriteResponse {
+  return {
+    mutation: result.mutation,
+    site: result.value,
+  };
 }
 
 function ensureCanViewOrganizationSiteOptions(

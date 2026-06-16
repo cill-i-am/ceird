@@ -28,6 +28,7 @@ import {
   SitesApi,
   SitesApiGroup,
   SiteStorageError,
+  SiteWriteResponseSchema,
   UpdateSiteInputSchema,
 } from "./index.js";
 
@@ -193,6 +194,21 @@ describe("sites-core", () => {
     expect(
       Schema.decodeUnknownSync(CreateSiteResponseSchema)(resolvedSite)
     ).toStrictEqual(resolvedSite);
+    expect(
+      Schema.decodeUnknownSync(SiteWriteResponseSchema)({
+        mutation: { txid: 42 },
+        site: resolvedSite,
+      })
+    ).toStrictEqual({
+      mutation: { txid: 42 },
+      site: resolvedSite,
+    });
+    expect(() =>
+      Schema.decodeUnknownSync(SiteWriteResponseSchema)({
+        mutation: { txid: 4_294_967_296 },
+        site: resolvedSite,
+      })
+    ).toThrow(/less than or equal to 4294967295/);
     expect(
       Schema.decodeUnknownSync(SiteOptionSchema)({
         ...resolvedSite,

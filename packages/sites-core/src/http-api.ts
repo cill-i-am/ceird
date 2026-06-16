@@ -17,9 +17,7 @@ import {
   AddSiteCommentResponseSchema,
   AssignSiteLabelInputSchema,
   CreateSiteInputSchema,
-  CreateSiteResponseSchema,
   SiteCommentsResponseSchema,
-  SiteDetailSchema,
   SiteListQuerySchema,
   SiteListResponseSchema,
   SiteLocationAutocompleteInputSchema,
@@ -31,8 +29,8 @@ import {
   SiteRoutePreviewInputSchema,
   SiteRoutePreviewResponseSchema,
   SitesOptionsResponseSchema,
+  SiteWriteResponseSchema,
   UpdateSiteInputSchema,
-  UpdateSiteResponseSchema,
 } from "./dto.js";
 import {
   SiteAccessDeniedError,
@@ -96,7 +94,7 @@ const sitesGroup = HttpApiGroup.make("sites")
   .add(
     HttpApiEndpoint.post("createSite", "/sites", {
       payload: CreateSiteInputSchema,
-      success: CreateSiteResponseSchema.pipe(HttpApiSchema.status("Created")),
+      success: SiteWriteResponseSchema.pipe(HttpApiSchema.status("Created")),
       error: [
         SiteAccessDeniedError,
         SiteLocationProviderError,
@@ -143,7 +141,7 @@ const sitesGroup = HttpApiGroup.make("sites")
     HttpApiEndpoint.patch("updateSite", "/sites/:siteId", {
       params: { siteId: SiteId },
       payload: UpdateSiteInputSchema,
-      success: UpdateSiteResponseSchema,
+      success: SiteWriteResponseSchema,
       error: [
         SiteAccessDeniedError,
         SiteNotFoundError,
@@ -174,7 +172,7 @@ const sitesGroup = HttpApiGroup.make("sites")
     HttpApiEndpoint.post("assignSiteLabel", "/sites/:siteId/labels", {
       params: { siteId: SiteId },
       payload: AssignSiteLabelInputSchema,
-      success: SiteDetailSchema,
+      success: SiteWriteResponseSchema,
       error: [
         SiteAccessDeniedError,
         SiteNotFoundError,
@@ -189,7 +187,7 @@ const sitesGroup = HttpApiGroup.make("sites")
       "/sites/:siteId/labels/:labelId",
       {
         params: { siteId: SiteId, labelId: LabelId },
-        success: SiteDetailSchema,
+        success: SiteWriteResponseSchema,
         error: [
           SiteAccessDeniedError,
           SiteNotFoundError,

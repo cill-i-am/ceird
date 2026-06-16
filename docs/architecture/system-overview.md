@@ -83,6 +83,8 @@ Jobs and sites requests use shared contracts:
 1. `packages/jobs-core/src/http-api.ts` and
    `packages/sites-core/src/http-api.ts` define endpoint names, paths, payload
    schemas, response schemas, and typed errors.
+   Sites create/update/label write responses include the canonical site payload
+   plus Electric mutation confirmation metadata from the domain transaction.
 2. `packages/proximity-core` defines the route-aware origin, route summary,
    display-line, metadata, and typed provider/quota error contracts shared by
    jobs, sites, the app client, and agent action schemas.

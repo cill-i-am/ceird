@@ -4,6 +4,7 @@ import {
   UserId,
   UserPreferencesStorageError,
 } from "@ceird/identity-core";
+import { LabelId } from "@ceird/labels-core";
 import {
   GooglePlaceId,
   ProximityAccessDeniedError,
@@ -27,6 +28,7 @@ import {
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
+import { SqlClient } from "effect/unstable/sql";
 
 import { DomainDrizzle } from "../../platform/database/database.js";
 import type { DomainDrizzleService } from "../../platform/database/database.js";
@@ -60,6 +62,7 @@ type ContextService<Service> = Service extends {
 
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeGooglePlaceId = Schema.decodeUnknownSync(GooglePlaceId);
+const decodeLabelId = Schema.decodeUnknownSync(LabelId);
 const decodeSiteId = Schema.decodeUnknownSync(SiteId);
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
@@ -164,7 +167,10 @@ describe("SitesService contracts", () => {
       }
     );
 
-    expect(result).toStrictEqual(createdSite);
+    expect(result).toStrictEqual({
+      mutation: { txid: 701 },
+      site: createdSite,
+    });
     expect(createdRecord).toMatchObject({
       displayLocation: "",
       locationStatus: "unverified",
@@ -214,7 +220,7 @@ describe("SitesService contracts", () => {
       }
     );
 
-    expect(result).toStrictEqual(createdSite);
+    expect(result.site).toStrictEqual(createdSite);
     expect(createdRecord).toMatchObject({
       country: "IE",
       displayLocation: "gate beside old quarry",
@@ -264,7 +270,7 @@ describe("SitesService contracts", () => {
       }
     );
 
-    expect(result).toStrictEqual(createdSite);
+    expect(result.site).toStrictEqual(createdSite);
     expect(createdRecord).toMatchObject({
       country: "IE",
       displayLocation: "V31 R968",
@@ -353,7 +359,7 @@ describe("SitesService contracts", () => {
       }
     );
 
-    expect(result).toStrictEqual(createdSite);
+    expect(result.site).toStrictEqual(createdSite);
     expect(autocompleteInput).toMatchObject({
       country: "IE",
       input: "V31 R968",
@@ -422,7 +428,7 @@ describe("SitesService contracts", () => {
       }
     );
 
-    expect(result).toStrictEqual(createdSite);
+    expect(result.site).toStrictEqual(createdSite);
     expect(createdRecord).toMatchObject({
       country: "IE",
       displayLocation: "V31 R968",
@@ -492,7 +498,7 @@ describe("SitesService contracts", () => {
       }
     );
 
-    expect(result).toStrictEqual(createdSite);
+    expect(result.site).toStrictEqual(createdSite);
     expect(createdRecord).toMatchObject({
       displayLocation: "Dublin Port",
       googlePlaceId,
@@ -548,7 +554,7 @@ describe("SitesService contracts", () => {
       }
     );
 
-    expect(result).toStrictEqual(updatedSite);
+    expect(result.site).toStrictEqual(updatedSite);
     expect(updatedRecord).toStrictEqual({
       accessNotes: "Use yard gate",
       name: "Existing Depot Updated",
@@ -603,7 +609,7 @@ describe("SitesService contracts", () => {
       }
     );
 
-    expect(result).toStrictEqual(existingSite);
+    expect(result.site).toStrictEqual(existingSite);
     expect(updatedRecord).toStrictEqual({
       accessNotes: undefined,
       name: "Unchanged Depot",
@@ -657,7 +663,7 @@ describe("SitesService contracts", () => {
       }
     );
 
-    expect(result).toStrictEqual(updatedSite);
+    expect(result.site).toStrictEqual(updatedSite);
     expect(updatedRecord).toStrictEqual({
       accessNotes: undefined,
       location: {
@@ -665,6 +671,106 @@ describe("SitesService contracts", () => {
         locationStatus: "unverified",
       },
       name: "Existing Depot",
+    });
+  });
+
+  it("assigns a label through the domain repository and returns mutation confirmation", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111117");
+    const labelId = decodeLabelId("22222222-2222-4222-8222-222222222222");
+    const label = {
+      createdAt: "2026-05-20T09:00:00.000Z",
+      id: labelId,
+      name: "Fire safety",
+      updatedAt: "2026-05-20T09:00:00.000Z",
+    };
+    const labeledSite = decodeSiteOption({
+      displayLocation: "",
+      hasUsableCoordinates: false,
+      id: siteId,
+      labels: [label],
+      locationStatus: "unverified",
+      name: "Labelled depot",
+      updatedAt: "2026-05-20T09:35:00.000Z",
+    });
+    let assigned:
+      | Parameters<
+          ContextService<typeof SiteLabelAssignmentsRepository>["assignToSite"]
+        >[0]
+      | undefined;
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) => sites.assignLabel(siteId, { labelId })),
+      {
+        assignLabelToSite: (input) => {
+          assigned = input;
+          return Effect.succeed({
+            changed: true,
+            label,
+          });
+        },
+        getOptionById: () => Effect.succeed(Option.some(labeledSite)),
+      }
+    );
+
+    expect(result).toStrictEqual({
+      mutation: { txid: 701 },
+      site: labeledSite,
+    });
+    expect(assigned).toStrictEqual({
+      labelId,
+      organizationId: actor.organizationId,
+      siteId,
+    });
+  });
+
+  it("removes a label through the domain repository and returns mutation confirmation", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111118");
+    const labelId = decodeLabelId("33333333-3333-4333-8333-333333333333");
+    const label = {
+      createdAt: "2026-05-20T09:00:00.000Z",
+      id: labelId,
+      name: "Fire safety",
+      updatedAt: "2026-05-20T09:00:00.000Z",
+    };
+    const unlabeledSite = decodeSiteOption({
+      displayLocation: "",
+      hasUsableCoordinates: false,
+      id: siteId,
+      labels: [],
+      locationStatus: "unverified",
+      name: "Unlabelled depot",
+      updatedAt: "2026-05-20T09:40:00.000Z",
+    });
+    let removed:
+      | Parameters<
+          ContextService<
+            typeof SiteLabelAssignmentsRepository
+          >["removeFromSite"]
+        >[0]
+      | undefined;
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) => sites.removeLabel(siteId, labelId)),
+      {
+        getOptionById: () => Effect.succeed(Option.some(unlabeledSite)),
+        removeLabelFromSite: (input) => {
+          removed = input;
+          return Effect.succeed({
+            changed: true,
+            label,
+          });
+        },
+      }
+    );
+
+    expect(result).toStrictEqual({
+      mutation: { txid: 701 },
+      site: unlabeledSite,
+    });
+    expect(removed).toStrictEqual({
+      labelId,
+      organizationId: actor.organizationId,
+      siteId,
     });
   });
 
@@ -1176,6 +1282,7 @@ type TestSitesServiceRequirements =
   | RouteProximityService
   | SiteLabelAssignmentsRepository
   | SiteLocationProvider
+  | SqlClient.SqlClient
   | SitesRepository
   | UserPreferencesRepository;
 
@@ -1220,6 +1327,9 @@ interface TestSitesDependencies {
   readonly autocomplete: ContextService<
     typeof SiteLocationProvider
   >["autocomplete"];
+  readonly assignLabelToSite: ContextService<
+    typeof SiteLabelAssignmentsRepository
+  >["assignToSite"];
   readonly create: ContextService<typeof SitesRepository>["create"];
   readonly getOptionById: ContextService<
     typeof SitesRepository
@@ -1238,6 +1348,9 @@ interface TestSitesDependencies {
   readonly resolvePlace: ContextService<
     typeof SiteLocationProvider
   >["resolvePlace"];
+  readonly removeLabelFromSite: ContextService<
+    typeof SiteLabelAssignmentsRepository
+  >["removeFromSite"];
   readonly update: ContextService<typeof SitesRepository>["update"];
   readonly userPreferencesGet: ContextService<
     typeof UserPreferencesRepository
@@ -1245,6 +1358,8 @@ interface TestSitesDependencies {
 }
 
 function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
+  let nextTxid = 700;
+
   return Layer.mergeAll(
     Layer.succeed(
       CommentsRepository,
@@ -1258,6 +1373,13 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
     ),
     makeUnusedDomainDrizzleLayer(),
     Layer.succeed(
+      SqlClient.SqlClient,
+      makeFakeSqlClient(() => {
+        nextTxid += 1;
+        return nextTxid;
+      })
+    ),
+    Layer.succeed(
       HttpServerRequest.HttpServerRequest,
       {} as HttpServerRequest.HttpServerRequest
     ),
@@ -1265,6 +1387,7 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
       OrganizationAuthorization,
       OrganizationAuthorization.of({
         ensureCanCreateSite: () => Effect.void,
+        ensureCanManageLabels: () => Effect.void,
         ensureCanViewOrganizationData: () => Effect.void,
       } as unknown as ContextService<typeof OrganizationAuthorization>)
     ),
@@ -1305,9 +1428,20 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
         ),
     Layer.succeed(
       SiteLabelAssignmentsRepository,
-      SiteLabelAssignmentsRepository.of(
-        {} as ContextService<typeof SiteLabelAssignmentsRepository>
-      )
+      SiteLabelAssignmentsRepository.of({
+        assignToSite:
+          options.assignLabelToSite ??
+          (() =>
+            Effect.die(
+              "SiteLabelAssignmentsRepository.assignToSite not stubbed"
+            )),
+        removeFromSite:
+          options.removeLabelFromSite ??
+          (() =>
+            Effect.die(
+              "SiteLabelAssignmentsRepository.removeFromSite not stubbed"
+            )),
+      } as unknown as ContextService<typeof SiteLabelAssignmentsRepository>)
     ),
     Layer.succeed(
       SitesRepository,
@@ -1334,6 +1468,24 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
       } as unknown as ContextService<typeof SitesRepository>)
     )
   );
+}
+
+function makeFakeSqlClient(nextTxid: () => number): SqlClient.SqlClient {
+  const sql = Object.assign(
+    <Row>() =>
+      Effect.succeed([
+        {
+          txid: String(nextTxid()),
+        },
+      ] as Row[]),
+    {
+      withTransaction: <Value, Error, Requirements>(
+        effect: Effect.Effect<Value, Error, Requirements>
+      ) => effect,
+    }
+  );
+
+  return sql as unknown as SqlClient.SqlClient;
 }
 
 function makeUnusedDomainDrizzleLayer() {

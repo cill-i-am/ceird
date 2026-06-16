@@ -5,16 +5,21 @@ import type { JobListItem } from "@ceird/jobs-core";
 import type { Label } from "@ceird/labels-core";
 import type { SiteOption } from "@ceird/sites-core";
 import {
+  Add01Icon,
   Alert02Icon,
   Briefcase01Icon,
+  Cancel01Icon,
+  CheckmarkCircle02Icon,
   Database01Icon,
   FilterHorizontalIcon,
   LeftToRightListBulletIcon,
   Location01Icon,
   MapsSquare01Icon,
+  PencilEdit02Icon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Cause, Exit } from "effect";
 import * as React from "react";
 
 import { AppPageHeader } from "#/components/app-page-header";
@@ -30,6 +35,7 @@ import {
 } from "#/components/ui/empty";
 import { Input } from "#/components/ui/input";
 import { Skeleton } from "#/components/ui/skeleton";
+import { Textarea } from "#/components/ui/textarea";
 import type { DataPlaneCollectionHealthSnapshot } from "#/data-plane/collection-health";
 import { useHydratedCollectionItems } from "#/data-plane/hydrated-collection";
 import { useDataPlaneSession } from "#/data-plane/session";
@@ -41,12 +47,15 @@ import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { cn } from "#/lib/utils";
 
 import {
+  createSitesWorkspaceCommandRunner,
   deriveSitesWorkspaceVisibleRows,
   getOrCreateSitesWorkspaceReadModelCollectionState,
 } from "./sites-workspace-data-plane";
 import type {
   SiteActiveJobSummaryElectricRow,
   SiteLabelAssignmentElectricRow,
+  SitesWorkspaceCommandCollections,
+  SitesWorkspaceCommandResult,
   SitesWorkspaceVisibleRow,
 } from "./sites-workspace-data-plane";
 import type {
@@ -57,6 +66,30 @@ import type {
 } from "./sites-workspace-search";
 
 type SyncPresentationStatus = "connecting" | "ready" | "stale" | "unavailable";
+type WorkspaceWriteStatus =
+  | { readonly kind: "idle" }
+  | {
+      readonly kind: "pending";
+      readonly message: string;
+      readonly siteId?: string | undefined;
+    }
+  | {
+      readonly kind: "synced";
+      readonly message: string;
+      readonly observation: SitesWorkspaceCommandResult["electricObservation"];
+      readonly serverTxid: number;
+      readonly siteId?: string | undefined;
+    }
+  | {
+      readonly error: string;
+      readonly kind: "failed";
+      readonly message: string;
+      readonly siteId?: string | undefined;
+    };
+
+const IDLE_WRITE_STATUS = { kind: "idle" } satisfies WorkspaceWriteStatus;
+const EMPTY_COMMAND_ACTIONS: readonly CommandAction[] = [];
+const EMPTY_COLLECTION_ITEMS: readonly never[] = [];
 
 const FILTER_OPTIONS = [
   { label: "All", value: "all" },
@@ -117,7 +150,7 @@ export function SitesWorkspaceRouteContent({
               title: "Focus workspace search",
             },
           ]
-        : [],
+        : EMPTY_COMMAND_ACTIONS,
     [canUseWorkspace, focusSearch]
   );
 
@@ -159,10 +192,18 @@ function SitesWorkspaceShell({
   readonly searchInputRef: React.RefObject<HTMLInputElement | null>;
   readonly workspaceSearch: SitesWorkspaceSearch;
 }) {
+  const session = useDataPlaneSession();
+  const mountedRef = React.useRef(true);
   const readModel = useSitesWorkspaceReadModel();
+  const createFormRef = React.useRef<HTMLFormElement>(null);
+  const editFormRef = React.useRef<HTMLFormElement>(null);
   const query = workspaceSearch.query ?? "";
   const filter = workspaceSearch.filter ?? "all";
   const sort = workspaceSearch.sort ?? "name";
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [editingSiteId, setEditingSiteId] = React.useState<string>();
+  const [writeStatus, setWriteStatus] =
+    React.useState<WorkspaceWriteStatus>(IDLE_WRITE_STATUS);
   const [restoredSelectedSiteId, setRestoredSelectedSiteId] =
     useRestoredSelectedSiteId();
   const selectedSiteId =
@@ -198,6 +239,14 @@ function SitesWorkspaceShell({
   );
 
   const status = resolveWorkspaceStatus(readModel.health);
+  const commandRunner = React.useMemo(
+    () =>
+      createSitesWorkspaceCommandRunner({
+        collections: readModel.collections,
+        journal: session.mutationJournal,
+      }),
+    [readModel.collections, session.mutationJournal]
+  );
   const canDeriveCompleteRows = status === "ready";
   const visibleRows = React.useMemo(() => {
     if (!canDeriveCompleteRows) {
@@ -229,6 +278,46 @@ function SitesWorkspaceShell({
     () => visibleRows.find((row) => row.site.id === selectedSiteId),
     [selectedSiteId, visibleRows]
   );
+  const formOpen = createOpen || editingSiteId !== undefined;
+  const writePending = writeStatus.kind === "pending";
+  const formActionsEnabled = formOpen && !writePending;
+
+  React.useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    []
+  );
+
+  const beginCreate = React.useCallback(() => {
+    if (writePending) {
+      return;
+    }
+
+    setCreateOpen(true);
+    setEditingSiteId(undefined);
+    setWriteStatus(IDLE_WRITE_STATUS);
+  }, [writePending]);
+  const cancelForm = React.useCallback(() => {
+    if (writePending) {
+      return;
+    }
+
+    setCreateOpen(false);
+    setEditingSiteId(undefined);
+  }, [writePending]);
+  const requestActiveFormSubmit = React.useCallback(() => {
+    if (writePending) {
+      return;
+    }
+
+    if (createOpen) {
+      createFormRef.current?.requestSubmit();
+      return;
+    }
+
+    editFormRef.current?.requestSubmit();
+  }, [createOpen, writePending]);
 
   React.useEffect(() => {
     if (visibleRows.length === 0) {
@@ -265,6 +354,237 @@ function SitesWorkspaceShell({
   useAppHotkey("sitesWorkspacePreviousRow", () => selectOffset(-1), {
     enabled: visibleRows.length > 0,
   });
+  useAppHotkey("sitesWorkspaceCreate", beginCreate, {
+    enabled: status === "ready" && !writePending,
+  });
+  useAppHotkey("sitesWorkspaceSave", requestActiveFormSubmit, {
+    enabled: formActionsEnabled,
+  });
+  useAppHotkey("sitesWorkspaceCancel", cancelForm, {
+    enabled: formActionsEnabled,
+  });
+
+  const submitCreate = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const formData = new FormData(event.currentTarget);
+      const name = String(formData.get("name") ?? "").trim();
+      const accessNotes = String(formData.get("accessNotes") ?? "").trim();
+
+      if (name.length === 0) {
+        setWriteStatus({
+          error: "Site name is required.",
+          kind: "failed",
+          message: "Create site failed",
+        });
+        return;
+      }
+
+      setWriteStatus({
+        kind: "pending",
+        message: "Creating site and waiting for Electric confirmation",
+      });
+      const exit = await commandRunner.createSite({
+        ...(accessNotes.length === 0 ? {} : { accessNotes }),
+        name,
+      });
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      if (Exit.isSuccess(exit)) {
+        setCreateOpen(false);
+        setSelectedSiteId(exit.value.site.id);
+        setWriteStatus({
+          kind: "synced",
+          message: `Site synced: ${exit.value.site.name}`,
+          observation: exit.value.electricObservation,
+          serverTxid: exit.value.mutation.txid,
+          siteId: exit.value.site.id,
+        });
+        form.reset();
+        return;
+      }
+
+      setWriteStatus({
+        error: getWorkspaceWriteErrorMessage(exit.cause),
+        kind: "failed",
+        message: "Create site failed",
+      });
+    },
+    [commandRunner, setSelectedSiteId]
+  );
+
+  const submitUpdate = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const row = selectedRow;
+
+      if (!row) {
+        return;
+      }
+
+      const formData = new FormData(event.currentTarget);
+      const name = String(formData.get("name") ?? "").trim();
+      const accessNotes = String(formData.get("accessNotes") ?? "").trim();
+
+      if (name.length === 0) {
+        setWriteStatus({
+          error: "Site name is required.",
+          kind: "failed",
+          message: "Save site failed",
+          siteId: row.site.id,
+        });
+        return;
+      }
+
+      setWriteStatus({
+        kind: "pending",
+        message: `Saving ${row.site.name} and waiting for Electric confirmation`,
+        siteId: row.site.id,
+      });
+      const exit = await commandRunner.updateSite(row.site.id, {
+        ...(accessNotes.length === 0 ? {} : { accessNotes }),
+        name,
+      });
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      if (Exit.isSuccess(exit)) {
+        setEditingSiteId(undefined);
+        setWriteStatus({
+          kind: "synced",
+          message: `Site synced: ${exit.value.site.name}`,
+          observation: exit.value.electricObservation,
+          serverTxid: exit.value.mutation.txid,
+          siteId: exit.value.site.id,
+        });
+        return;
+      }
+
+      setWriteStatus({
+        error: getWorkspaceWriteErrorMessage(exit.cause),
+        kind: "failed",
+        message: "Save site failed",
+        siteId: row.site.id,
+      });
+    },
+    [commandRunner, selectedRow]
+  );
+
+  const toggleLabel = React.useCallback(
+    async (label: Label, assigned: boolean) => {
+      if (!selectedRow) {
+        return;
+      }
+
+      if (writePending) {
+        return;
+      }
+
+      const action = assigned ? "Removing" : "Assigning";
+      setWriteStatus({
+        kind: "pending",
+        message: `${action} ${label.name} and waiting for Electric confirmation`,
+        siteId: selectedRow.site.id,
+      });
+      const exit = assigned
+        ? await commandRunner.removeSiteLabel(selectedRow.site.id, label.id)
+        : await commandRunner.assignSiteLabel(selectedRow.site.id, {
+            labelId: label.id,
+          });
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      if (Exit.isSuccess(exit)) {
+        setWriteStatus({
+          kind: "synced",
+          message: `${label.name} label synced`,
+          observation: exit.value.electricObservation,
+          serverTxid: exit.value.mutation.txid,
+          siteId: selectedRow.site.id,
+        });
+        return;
+      }
+
+      setWriteStatus({
+        error: getWorkspaceWriteErrorMessage(exit.cause),
+        kind: "failed",
+        message: `${assigned ? "Remove" : "Assign"} label failed`,
+        siteId: selectedRow.site.id,
+      });
+    },
+    [commandRunner, selectedRow, writePending]
+  );
+
+  const commandActions = React.useMemo<readonly CommandAction[]>(() => {
+    if (status !== "ready" || writePending) {
+      return EMPTY_COMMAND_ACTIONS;
+    }
+
+    const labelActions =
+      selectedRow === undefined
+        ? []
+        : readModel.labels.map((label) => {
+            const assigned = selectedRow.site.labels.some(
+              (siteLabel) => siteLabel.id === label.id
+            );
+
+            return {
+              group: "Current page",
+              icon: FilterHorizontalIcon,
+              id: `sites-workspace-label-${label.id}`,
+              priority: assigned ? 55 : 56,
+              run: () => {
+                void toggleLabel(label, assigned);
+              },
+              scope: "route",
+              title: `${assigned ? "Remove" : "Assign"} ${label.name} label`,
+            } satisfies CommandAction;
+          });
+
+    return [
+      {
+        group: "Current page",
+        icon: Add01Icon,
+        id: "sites-workspace-create",
+        priority: 78,
+        run: beginCreate,
+        scope: "route",
+        shortcut: HOTKEYS.sitesWorkspaceCreate,
+        title: "Create site",
+      },
+      ...(selectedRow === undefined
+        ? []
+        : [
+            {
+              group: "Current page",
+              icon: PencilEdit02Icon,
+              id: "sites-workspace-edit-site",
+              priority: 70,
+              run: () => setEditingSiteId(selectedRow.site.id),
+              scope: "route",
+              title: `Edit ${selectedRow.site.name}`,
+            } satisfies CommandAction,
+          ]),
+      ...labelActions,
+    ];
+  }, [
+    beginCreate,
+    readModel.labels,
+    selectedRow,
+    status,
+    toggleLabel,
+    writePending,
+  ]);
+
+  useRegisterCommandActions(commandActions);
 
   const isBusy = status === "connecting";
   const isUnavailable = status === "unavailable";
@@ -273,6 +593,7 @@ function SitesWorkspaceShell({
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-4">
       <WorkspaceStatusAlert health={readModel.health} status={status} />
+      <WorkspaceWriteStatusAlert status={writeStatus} />
 
       <section
         aria-label="Sites workspace controls"
@@ -309,6 +630,19 @@ function SitesWorkspaceShell({
           </span>
         </label>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            disabled={status !== "ready" || writePending}
+            onClick={beginCreate}
+            type="button"
+          >
+            <HugeiconsIcon aria-hidden icon={Add01Icon} strokeWidth={2} />
+            New Site
+            <ShortcutHint
+              decorative
+              hotkey={HOTKEYS.sitesWorkspaceCreate.hotkey}
+              label={HOTKEYS.sitesWorkspaceCreate.label}
+            />
+          </Button>
           <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>Sort</span>
             <select
@@ -327,6 +661,15 @@ function SitesWorkspaceShell({
           </label>
         </div>
       </section>
+
+      {createOpen ? (
+        <SiteCreatePanel
+          formRef={createFormRef}
+          pending={writeStatus.kind === "pending"}
+          onCancel={cancelForm}
+          onSubmit={submitCreate}
+        />
+      ) : null}
 
       <fieldset className="flex flex-wrap gap-2" aria-label="Site filters">
         {FILTER_OPTIONS.map((option) => (
@@ -372,9 +715,23 @@ function SitesWorkspaceShell({
           })}
         </div>
         <SiteDetailPanel
+          allLabels={readModel.labels}
+          editing={editingSiteId === selectedRow?.site.id}
+          editFormRef={editFormRef}
+          pending={writeStatus.kind === "pending"}
           row={selectedRow}
           status={status}
           totalRows={visibleRows.length}
+          writeStatus={writeStatus}
+          onCancelEdit={cancelForm}
+          onEdit={() => {
+            if (selectedRow) {
+              setEditingSiteId(selectedRow.site.id);
+              setCreateOpen(false);
+            }
+          }}
+          onSubmitEdit={submitUpdate}
+          onToggleLabel={toggleLabel}
         />
       </div>
 
@@ -408,30 +765,41 @@ function useSitesWorkspaceReadModel() {
     [sitesState]
   );
   const health = useCollectionHealthSnapshots(healthObjects);
+  const collections = React.useMemo(
+    () =>
+      ({
+        siteLabelAssignments: sitesState.siteLabelAssignments
+          .collection as unknown as SitesWorkspaceCommandCollections["siteLabelAssignments"],
+        sites: sitesState.sites
+          .collection as unknown as SitesWorkspaceCommandCollections["sites"],
+      }) satisfies SitesWorkspaceCommandCollections,
+    [sitesState.siteLabelAssignments.collection, sitesState.sites.collection]
+  );
 
   return {
     activeJobSummaries: useHydratedCollectionItems(
       sitesState.activeJobSummaries.collection,
-      []
+      EMPTY_COLLECTION_ITEMS
     ) as unknown as readonly SiteActiveJobSummaryElectricRow[],
+    collections,
     health,
     labels: useHydratedCollectionItems(
       sitesState.labels.collection as unknown as Parameters<
         typeof useHydratedCollectionItems<Label>
       >[0],
-      []
+      EMPTY_COLLECTION_ITEMS
     ) as readonly Label[],
     relatedJobs: useHydratedCollectionItems(
       sitesState.relatedJobs.collection,
-      []
+      EMPTY_COLLECTION_ITEMS
     ) as unknown as readonly JobListItem[],
     siteLabelAssignments: useHydratedCollectionItems(
       sitesState.siteLabelAssignments.collection,
-      []
+      EMPTY_COLLECTION_ITEMS
     ) as unknown as readonly SiteLabelAssignmentElectricRow[],
     sites: useHydratedCollectionItems(
       sitesState.sites.collection,
-      []
+      EMPTY_COLLECTION_ITEMS
     ) as unknown as readonly SiteOption[],
   };
 }
@@ -746,6 +1114,83 @@ function UnavailableState() {
   );
 }
 
+function SiteCreatePanel({
+  formRef,
+  onCancel,
+  onSubmit,
+  pending,
+}: {
+  readonly formRef: React.RefObject<HTMLFormElement | null>;
+  readonly onCancel: () => void;
+  readonly onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  readonly pending: boolean;
+}) {
+  return (
+    <form
+      ref={formRef}
+      aria-label="Create site"
+      className="grid gap-3 rounded-lg border border-border/70 bg-background p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+      onSubmit={onSubmit}
+    >
+      <label
+        className="grid gap-1 text-sm"
+        htmlFor="sites-workspace-create-name"
+      >
+        <span className="font-medium">Name</span>
+        <Input
+          autoComplete="off"
+          autoFocus
+          id="sites-workspace-create-name"
+          name="name"
+          placeholder="Dublin Port"
+          required
+        />
+      </label>
+      <label
+        className="grid gap-1 text-sm"
+        htmlFor="sites-workspace-create-access-notes"
+      >
+        <span className="font-medium">Access notes</span>
+        <Input
+          autoComplete="off"
+          id="sites-workspace-create-access-notes"
+          name="accessNotes"
+          placeholder="Gate, parking, or entry notes"
+        />
+      </label>
+      <div className="flex items-end gap-2">
+        <Button disabled={pending} type="submit">
+          <HugeiconsIcon
+            aria-hidden
+            icon={CheckmarkCircle02Icon}
+            strokeWidth={2}
+          />
+          Save
+          <ShortcutHint
+            decorative
+            hotkey={HOTKEYS.sitesWorkspaceSave.hotkey}
+            label={HOTKEYS.sitesWorkspaceSave.label}
+          />
+        </Button>
+        <Button
+          disabled={pending}
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+        >
+          <HugeiconsIcon aria-hidden icon={Cancel01Icon} strokeWidth={2} />
+          Cancel
+          <ShortcutHint
+            decorative
+            hotkey={HOTKEYS.sitesWorkspaceCancel.hotkey}
+            label={HOTKEYS.sitesWorkspaceCancel.label}
+          />
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function SitesRows({
   onSelect,
   rows,
@@ -798,14 +1243,85 @@ function SitesRows({
   );
 }
 
+function WorkspaceWriteStatusAlert({
+  status,
+}: {
+  readonly status: WorkspaceWriteStatus;
+}) {
+  if (status.kind === "idle") {
+    return null;
+  }
+
+  if (status.kind === "failed") {
+    return (
+      <Alert variant="destructive">
+        <HugeiconsIcon aria-hidden icon={Alert02Icon} strokeWidth={2} />
+        <AlertTitle>{status.message}</AlertTitle>
+        <AlertDescription>{status.error}</AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert>
+      <HugeiconsIcon
+        aria-hidden
+        icon={
+          status.kind === "pending" ? Database01Icon : CheckmarkCircle02Icon
+        }
+        strokeWidth={2}
+      />
+      <AlertTitle>
+        {status.kind === "pending" ? "Site mutation pending" : "Site synced"}
+      </AlertTitle>
+      <AlertDescription>
+        {status.message}
+        {status.kind === "synced"
+          ? ` (${formatWorkspaceWriteObservation(status)})`
+          : ""}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function MutationInlineStatus({
+  status,
+}: {
+  readonly status: Exclude<WorkspaceWriteStatus, { readonly kind: "idle" }>;
+}) {
+  return (
+    <Badge variant={status.kind === "failed" ? "destructive" : "outline"}>
+      {getMutationInlineStatusLabel(status)}
+    </Badge>
+  );
+}
+
 function SiteDetailPanel({
+  allLabels,
+  editing,
+  editFormRef,
+  pending,
   row,
   status,
   totalRows,
+  writeStatus,
+  onCancelEdit,
+  onEdit,
+  onSubmitEdit,
+  onToggleLabel,
 }: {
+  readonly allLabels: readonly Label[];
+  readonly editing: boolean;
+  readonly editFormRef: React.RefObject<HTMLFormElement | null>;
+  readonly onCancelEdit: () => void;
+  readonly onEdit: () => void;
+  readonly onSubmitEdit: (event: React.FormEvent<HTMLFormElement>) => void;
+  readonly onToggleLabel: (label: Label, assigned: boolean) => void;
+  readonly pending: boolean;
   readonly row: SitesWorkspaceVisibleRow | undefined;
   readonly status: SyncPresentationStatus;
   readonly totalRows: number;
+  readonly writeStatus: WorkspaceWriteStatus;
 }) {
   if (!row) {
     const emptyDetailText = getEmptyDetailText({ status, totalRows });
@@ -820,15 +1336,97 @@ function SiteDetailPanel({
 
   return (
     <aside className="flex min-w-0 flex-col gap-4 rounded-lg border border-border/70 bg-muted/20 p-4">
-      <div className="min-w-0">
-        <SectionHeading icon={Location01Icon} title="Site detail" />
-        <h2 className="mt-3 truncate font-heading text-lg font-semibold">
-          {row.site.name}
-        </h2>
-        <p className="mt-1 text-sm/6 text-muted-foreground">
-          {row.site.displayLocation}
-        </p>
-      </div>
+      {editing ? (
+        <form ref={editFormRef} className="grid gap-3" onSubmit={onSubmitEdit}>
+          <SectionHeading icon={PencilEdit02Icon} title="Edit site" />
+          <label
+            className="grid gap-1 text-sm"
+            htmlFor="sites-workspace-edit-name"
+          >
+            <span className="font-medium">Name</span>
+            <Input
+              autoComplete="off"
+              defaultValue={row.site.name}
+              id="sites-workspace-edit-name"
+              name="name"
+              required
+            />
+          </label>
+          <label
+            className="grid gap-1 text-sm"
+            htmlFor="sites-workspace-edit-access-notes"
+          >
+            <span className="font-medium">Access notes</span>
+            <Textarea
+              defaultValue={row.site.accessNotes ?? ""}
+              id="sites-workspace-edit-access-notes"
+              name="accessNotes"
+              placeholder="Gate codes, safe entry notes, or parking details"
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={pending} type="submit">
+              <HugeiconsIcon
+                aria-hidden
+                icon={CheckmarkCircle02Icon}
+                strokeWidth={2}
+              />
+              Save
+              <ShortcutHint
+                decorative
+                hotkey={HOTKEYS.sitesWorkspaceSave.hotkey}
+                label={HOTKEYS.sitesWorkspaceSave.label}
+              />
+            </Button>
+            <Button
+              disabled={pending}
+              type="button"
+              variant="outline"
+              onClick={onCancelEdit}
+            >
+              <HugeiconsIcon aria-hidden icon={Cancel01Icon} strokeWidth={2} />
+              Cancel
+              <ShortcutHint
+                decorative
+                hotkey={HOTKEYS.sitesWorkspaceCancel.hotkey}
+                label={HOTKEYS.sitesWorkspaceCancel.label}
+              />
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0">
+              <SectionHeading icon={Location01Icon} title="Site detail" />
+              <h2 className="mt-3 truncate font-heading text-lg font-semibold">
+                {row.site.name}
+              </h2>
+              <p className="mt-1 text-sm/6 text-muted-foreground">
+                {row.site.displayLocation}
+              </p>
+            </div>
+            <Button
+              disabled={pending}
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={onEdit}
+            >
+              <HugeiconsIcon
+                aria-hidden
+                icon={PencilEdit02Icon}
+                strokeWidth={2}
+              />
+              Edit
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {writeStatus.kind !== "idle" && writeStatus.siteId === row.site.id ? (
+        <MutationInlineStatus status={writeStatus} />
+      ) : null}
 
       <DetailStat
         icon={Briefcase01Icon}
@@ -848,6 +1446,28 @@ function SiteDetailPanel({
       <section className="min-w-0">
         <SectionHeading icon={FilterHorizontalIcon} title="Labels" />
         <LabelChips labels={row.site.labels} />
+        {allLabels.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {allLabels.map((label) => {
+              const assigned = row.site.labels.some(
+                (siteLabel) => siteLabel.id === label.id
+              );
+
+              return (
+                <Button
+                  disabled={pending}
+                  key={label.id}
+                  size="sm"
+                  type="button"
+                  variant={assigned ? "default" : "outline"}
+                  onClick={() => onToggleLabel(label, assigned)}
+                >
+                  {assigned ? "Remove" : "Assign"} {label.name}
+                </Button>
+              );
+            })}
+          </div>
+        ) : null}
       </section>
 
       <section className="min-w-0">
@@ -992,6 +1612,43 @@ function formatActiveJobs(site: SiteOption) {
     : "";
 
   return `${activeJobCount} active${priority}`;
+}
+
+function getWorkspaceWriteErrorMessage(cause: Cause.Cause<unknown>) {
+  const error = Cause.squash(cause);
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "The site command could not be confirmed.";
+}
+
+function getMutationInlineStatusLabel(
+  status: Exclude<WorkspaceWriteStatus, { readonly kind: "idle" }>
+) {
+  if (status.kind === "pending") {
+    return "Pending";
+  }
+
+  if (status.kind === "synced") {
+    return "Synced";
+  }
+
+  return "Failed";
+}
+
+function formatWorkspaceWriteObservation(
+  status: Extract<WorkspaceWriteStatus, { readonly kind: "synced" }>
+) {
+  const collection =
+    status.observation.collection === "sites" ? "site row" : "site label row";
+
+  if (status.observation.kind === "already-reflected") {
+    return `${collection} already reflected in live data; server txid ${status.serverTxid}`;
+  }
+
+  return `${collection} observed in live data after server txid ${status.serverTxid}`;
 }
 
 function NoWorkspaceAccess() {

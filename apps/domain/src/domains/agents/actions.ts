@@ -42,6 +42,7 @@ import {
 } from "@ceird/sites-core";
 import { Context, Effect, Layer, Schema } from "effect";
 import type { HttpServerRequest } from "effect/unstable/http";
+import { SqlClient } from "effect/unstable/sql";
 
 import { DomainDrizzle } from "../../platform/database/database.js";
 import type { DomainDrizzleService } from "../../platform/database/database.js";
@@ -125,6 +126,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
       const labelsRepository = yield* LabelsRepository;
       const organizationAuthorization = yield* OrganizationAuthorization;
       const domainDrizzle = yield* DomainDrizzle;
+      const sqlClient = yield* SqlClient.SqlClient;
       const siteLocationProvider = yield* SiteLocationProvider;
       const siteLabelAssignmentsRepository =
         yield* SiteLabelAssignmentsRepository;
@@ -161,6 +163,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
                   labelsRepository,
                   organizationAuthorization,
                   domainDrizzle,
+                  sqlClient,
                   siteLocationProvider,
                   siteLabelAssignmentsRepository,
                   sitesRepository,
@@ -212,6 +215,7 @@ interface SitesServiceLayerDependencies {
   readonly routeProximityService?: Context.Service.Shape<
     typeof RouteProximityService
   >;
+  readonly sqlClient: SqlClient.SqlClient;
   readonly siteLocationProvider: SiteLocationProviderImplementation;
   readonly siteLabelAssignmentsRepository: Context.Service.Shape<
     typeof SiteLabelAssignmentsRepository
@@ -255,6 +259,7 @@ type AgentActionRequirements =
   | JobsService
   | SitesService
   | DomainDrizzleService
+  | SqlClient.SqlClient
   | HttpServerRequest.HttpServerRequest;
 
 type DirectAgentActionRequirements =
@@ -268,6 +273,7 @@ type DirectAgentActionRequirements =
   | SiteLabelAssignmentsRepository
   | SitesRepository
   | DomainDrizzleService
+  | SqlClient.SqlClient
   | HttpServerRequest.HttpServerRequest;
 
 interface ActionServiceDependencies
@@ -348,6 +354,7 @@ function provideDirectActionServices(
     Effect.provideService(JobsRepository, dependencies.jobsRepository),
     Effect.provideService(LabelsRepository, dependencies.labelsRepository),
     Effect.provideService(DomainDrizzle, dependencies.domainDrizzle),
+    Effect.provideService(SqlClient.SqlClient, dependencies.sqlClient),
     Effect.provideService(
       OrganizationAuthorization,
       dependencies.organizationAuthorization

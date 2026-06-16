@@ -34,6 +34,7 @@ const SiteLocationRawInput = NonEmptyTrimmedString.pipe(
 const SiteLocationDisplayText = NonEmptyTrimmedString.pipe(
   Schema.check(Schema.isMaxLength(512))
 );
+const MAX_ELECTRIC_MUTATION_TXID = 4_294_967_295;
 
 const GooglePlaceSiteLocationInputSchema = Schema.Struct({
   displayText: SiteLocationDisplayText,
@@ -279,6 +280,27 @@ export type SiteRoutePreviewResponse = Schema.Schema.Type<
 export const CreateSiteResponseSchema = SiteOptionSchema;
 export type CreateSiteResponse = Schema.Schema.Type<
   typeof CreateSiteResponseSchema
+>;
+
+export const ElectricMutationConfirmationSchema = Schema.Struct({
+  txid: Schema.Number.pipe(
+    Schema.check(
+      Schema.isInt(),
+      Schema.isGreaterThanOrEqualTo(0),
+      Schema.isLessThanOrEqualTo(MAX_ELECTRIC_MUTATION_TXID)
+    )
+  ),
+});
+export type ElectricMutationConfirmation = Schema.Schema.Type<
+  typeof ElectricMutationConfirmationSchema
+>;
+
+export const SiteWriteResponseSchema = Schema.Struct({
+  mutation: ElectricMutationConfirmationSchema,
+  site: SiteOptionSchema,
+});
+export type SiteWriteResponse = Schema.Schema.Type<
+  typeof SiteWriteResponseSchema
 >;
 
 export const UpdateSiteInputSchema = Schema.Struct({

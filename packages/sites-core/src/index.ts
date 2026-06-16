@@ -32,6 +32,7 @@ export {
   AssignSiteLabelInputSchema,
   CreateSiteInputSchema,
   CreateSiteResponseSchema,
+  ElectricMutationConfirmationSchema,
   GoogleAddressComponentSchema,
   SITE_ACTIVE_JOB_PRIORITIES,
   SiteActiveJobPrioritySchema,
@@ -55,6 +56,7 @@ export {
   SiteRoutePreviewInputSchema,
   SiteRoutePreviewResponseSchema,
   SitesOptionsResponseSchema,
+  SiteWriteResponseSchema,
   UpdateSiteInputSchema,
   UpdateSiteResponseSchema,
 } from "./dto.js";
@@ -64,6 +66,7 @@ export type {
   AssignSiteLabelInput,
   CreateSiteInput,
   CreateSiteResponse,
+  ElectricMutationConfirmation,
   GoogleAddressComponent,
   SiteActiveJobPriority,
   SiteComment,
@@ -86,6 +89,7 @@ export type {
   SiteRoutePreviewInput,
   SiteRoutePreviewResponse,
   SitesOptionsResponse,
+  SiteWriteResponse,
   UpdateSiteInput,
   UpdateSiteResponse,
 } from "./dto.js";

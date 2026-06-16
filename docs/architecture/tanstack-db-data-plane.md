@@ -208,19 +208,33 @@ data-plane helpers. Failures are recorded in the session mutation journal and
 leave collection state unchanged. Optimistic commands can be added later by
 widening the command implementation, not by bypassing the data plane.
 
-Electric-backed mutation handlers are only enabled for the first narrow write
-slice that needs replication confirmation: organization label definition
-create, update, and archive. Labels were chosen because their Electric shape is
-a direct `labels` table DTO and the app already has an opt-in label collection
-contract; derived jobs, sites, comments, and assignment writes still use the
-server-confirmed command path without Electric mutation handlers. Label
-handlers call the typed Effect HTTP label API, receive `{ label, mutation:
-{ txid } }`, and return `{ txid, timeout }` to
+Electric-backed mutation handlers are enabled for the first narrow write slice
+that needs replication confirmation: organization label definition create,
+update, and archive. Labels were chosen because their Electric shape is a direct
+`labels` table DTO and the app already has an opt-in label collection contract.
+Label handlers call the typed Effect HTTP label API, receive `{ label,
+mutation: { txid } }`, and return `{ txid, timeout }` to
 `@tanstack/electric-db-collection` so the client waits for the corresponding
 Electric signal. The public label helpers still map successful write responses
 back to `Label`, so existing command reconciliation and mutation journal
-semantics stay unchanged. Read-only Electric adoption, including the jobs
-canary, does not require mutation confirmation and remains opt-in/test-gated.
+semantics stay unchanged.
+
+The Electric-native Sites workspace uses a data-plane command runner instead of
+raw collection mutation handlers because the domain owns generated IDs,
+authorization, Google Places enrichment, and canonical label assignment
+invariants. Site create, update, assign-label, and remove-label commands call
+the typed Sites API, receive `{ site, mutation: { txid } }`, keep the command
+pending in the mutation journal, and resolve only after the relevant Electric
+collection observes the committed row: `sites` for create/update and
+`site-label-assignments` for assignment changes. The Sites shapes expose the
+product rows, not Electric txid stream metadata, so the route presents this as
+row-state observation while preserving the server txid for diagnostics. If the
+row state was already reflected, for example an idempotent assign/remove race,
+the runner records that as already reflected instead of claiming Electric
+observed the returned txid. Confirmation timeout or failure records the command
+as failed and leaves synced collection data as the source of truth. Read-only
+Electric adoption, including the jobs canary, does not require mutation
+confirmation and remains opt-in/test-gated.
 
 ## Enforcement
 
