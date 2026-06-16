@@ -1,8 +1,12 @@
+import type { OrganizationId } from "@ceird/identity-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
+import { QueryClient } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 
+import { createOrganizationDataScope } from "#/data-plane/query-scope";
+import { DataPlaneProvider } from "#/data-plane/session";
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
 
 import { SitesWorkspaceRouteContent } from "./sites-workspace-route-content";
@@ -16,10 +20,15 @@ describe(SitesWorkspaceRouteContent, () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Preview route")).toBeInTheDocument();
     expect(
-      screen.getByRole("textbox", { name: "Search sites workspace" })
+      screen.getByRole("searchbox", { name: /search sites workspace/i })
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /new site/i })).toBeEnabled();
-    expect(screen.getByText("Realtime sites unavailable")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Realtime sites unavailable").length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/server-render|missing-sync-origin/)
+    ).toBeInTheDocument();
   });
 
   it("shows a permission-aware state for external collaborators", () => {
@@ -30,26 +39,17 @@ describe(SitesWorkspaceRouteContent, () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /new site/i })).toBeDisabled();
     expect(
-      screen.queryByRole("textbox", { name: "Search sites workspace" })
+      screen.queryByRole("searchbox", { name: /search sites workspace/i })
     ).not.toBeInTheDocument();
   });
 
-  it("switches placeholder route state through shell controls", async () => {
-    const user = userEvent.setup();
-    const onShellStateChange =
-      vi.fn<
-        React.ComponentProps<
-          typeof SitesWorkspaceRouteContent
-        >["onShellStateChange"]
-      >();
+  it("can render a connecting state from the route state hook", () => {
+    renderSitesWorkspace({ shellState: "loading" });
 
-    renderSitesWorkspace({ onShellStateChange, shellState: "ready" });
-
-    await user.click(screen.getByRole("tab", { name: "Loading" }));
-    expect(onShellStateChange).toHaveBeenCalledWith("loading");
-
-    await user.click(screen.getByRole("tab", { name: "Empty" }));
-    expect(onShellStateChange).toHaveBeenCalledWith("empty");
+    expect(screen.getByText("Connecting to live Sites")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Sites workspace loading")
+    ).toBeInTheDocument();
   });
 
   it("registers keyboard access for search and create affordances", async () => {
@@ -68,7 +68,7 @@ describe(SitesWorkspaceRouteContent, () => {
 
     await user.keyboard("/");
     expect(
-      screen.getByRole("textbox", { name: "Search sites workspace" })
+      screen.getByRole("searchbox", { name: /search sites workspace/i })
     ).toHaveFocus();
   });
 
@@ -98,15 +98,26 @@ function renderSitesWorkspace({
   >(),
   shellState = "unavailable",
 }: Partial<React.ComponentProps<typeof SitesWorkspaceRouteContent>> = {}) {
+  const queryClient = new QueryClient();
+
   return render(
     <HotkeysProvider>
-      <CommandBarProvider>
-        <SitesWorkspaceRouteContent
-          currentOrganizationRole={currentOrganizationRole}
-          onShellStateChange={onShellStateChange}
-          shellState={shellState}
-        />
-      </CommandBarProvider>
+      <DataPlaneProvider
+        queryClient={queryClient}
+        scope={createOrganizationDataScope({
+          organizationId: "org_123" as OrganizationId,
+          role: currentOrganizationRole,
+          userId: "user_123",
+        })}
+      >
+        <CommandBarProvider>
+          <SitesWorkspaceRouteContent
+            currentOrganizationRole={currentOrganizationRole}
+            onShellStateChange={onShellStateChange}
+            shellState={shellState}
+          />
+        </CommandBarProvider>
+      </DataPlaneProvider>
     </HotkeysProvider>
   );
 }

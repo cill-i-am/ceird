@@ -91,10 +91,16 @@ data. Settings Labels is intentionally different: it requests the named
 unavailable collection health to the route instead of silently activating an API
 fallback. The route's label search derives from the hydrated local collection
 items rather than API requests per keystroke. The Electric-native Sites
-read-model contracts likewise do not
-introduce a legacy Query Collection fallback; callers consume shared health from
-the Electric collection factory and can show an explicit unavailable/degraded
-state when sync is disabled or unavailable.
+read-model contracts likewise do not introduce a legacy Query Collection
+fallback. The `/sites-workspace` route uses a browser-safe feature data-plane
+module under `features/sites-workspace` so the client route does not import the
+legacy Sites module's server-backed query collection helpers. That workspace
+read model requests the named `sites`, `site-labels`,
+`site-active-job-summaries`, `jobs`, and `labels` shapes, joins shared label
+definitions through site-label assignments, derives visible rows from local
+search/filter/sort state, and selects related jobs from the synced jobs row set.
+Callers consume shared health from the Electric collection factory and show
+explicit unavailable/degraded states when sync is disabled or unavailable.
 
 ## Collection Health
 
