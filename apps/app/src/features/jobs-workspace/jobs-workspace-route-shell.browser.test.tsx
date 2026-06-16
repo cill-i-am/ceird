@@ -517,6 +517,33 @@ describe("jobs workspace route shell", () => {
     expect(screen.getByText(/Detail sync status: disabled/)).toBeVisible();
   });
 
+  it("closes an unavailable detail panel with Escape", async () => {
+    const user = userEvent.setup();
+    const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
+    const onDetailJobChange = vi.fn<(jobId: string | undefined) => void>();
+    liveListState.current = {
+      ...liveListState.current,
+      allRowsCount: 1,
+      rows: [makeWorkspaceRow(workItemId)],
+    };
+    liveDetailState.current = {
+      ...liveDetailState.current,
+      health: {
+        ...liveDetailState.current.health,
+        disabledReason: "missing-sync-origin",
+        status: "disabled",
+      },
+      isCollectionGraphAvailable: false,
+      isReady: false,
+    };
+
+    renderShell({ detailJobId: workItemId, onDetailJobChange });
+
+    await user.keyboard("{Escape}");
+
+    expect(onDetailJobChange).toHaveBeenCalledWith(undefined);
+  });
+
   it("closes detail and restores focus to the opening row action", async () => {
     const user = userEvent.setup();
     const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;

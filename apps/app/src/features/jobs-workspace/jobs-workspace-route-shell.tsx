@@ -1026,10 +1026,7 @@ const JobDetailPanel = React.forwardRef<
   useAppHotkey("jobsWorkspaceCloseDetail", onClose, {
     conflictBehavior: "allow",
     enabled:
-      hotkeysEnabled &&
-      detail !== undefined &&
-      commentDraft.trim().length === 0 &&
-      !commentPending,
+      hotkeysEnabled && commentDraft.trim().length === 0 && !commentPending,
   });
   useAppHotkey(
     "jobsWorkspaceCancelComment",
