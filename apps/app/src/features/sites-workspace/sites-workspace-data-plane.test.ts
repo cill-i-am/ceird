@@ -18,6 +18,7 @@ import {
   createSitesWorkspaceCommandRunner,
   deriveSitesWorkspaceVisibleRows,
   getOrCreateSitesWorkspaceReadModelCollectionState,
+  toSiteCommentBodyElectricRow,
 } from "./sites-workspace-data-plane";
 import type {
   SiteCommentBodyRow,
@@ -108,7 +109,6 @@ describe("sites workspace data plane", () => {
   } satisfies SitesWorkspaceProductActorRow;
   const dublinComment = {
     actorId: productActor.id,
-    authorUserId: decodeUserId("user_taylor"),
     body: "Bring the dock gate key.",
     createdAt: "2026-06-02T09:30:00.000Z",
     id: decodeCommentId("77777777-7777-4777-8777-777777777777"),
@@ -163,6 +163,22 @@ describe("sites workspace data plane", () => {
       status: "disabled",
       subscriptionName: "product-activity-actors",
     });
+  });
+
+  it("maps site comment bodies to product-safe actor rows without raw user ids", () => {
+    const comment = toSiteCommentBodyElectricRow({
+      actorId: productActor.id,
+      authorUserId: decodeUserId("user_taylor"),
+      body: "Bring the dock gate key.",
+      createdAt: "2026-06-02T09:30:00.000Z",
+      id: dublinComment.id,
+      updatedAt: "2026-06-02T09:30:00.000Z",
+      updatedByUserId: decodeUserId("user_admin"),
+    });
+
+    expect(comment).toStrictEqual(dublinComment);
+    expect(comment).not.toHaveProperty("authorUserId");
+    expect(comment).not.toHaveProperty("updatedByUserId");
   });
 
   it("derives selection-ready visible rows from the actual Sites workspace graph inputs", () => {
@@ -404,12 +420,20 @@ describe("sites workspace data plane", () => {
     const response = {
       actor: productActor,
       authorName: productActor.displayName,
-      authorUserId: dublinComment.authorUserId,
+      authorUserId: decodeUserId("user_taylor"),
       body: dublinComment.body,
       createdAt: dublinComment.createdAt,
       id: dublinComment.id,
       siteId: dublinSite.id,
     } satisfies AddSiteCommentResponse;
+    const productSafeResponse = {
+      actor: productActor,
+      authorName: productActor.displayName,
+      body: dublinComment.body,
+      createdAt: dublinComment.createdAt,
+      id: dublinComment.id,
+      siteId: dublinSite.id,
+    };
     appApiMock.runBrowserAppApiRequest.mockReturnValueOnce(
       Effect.succeed(response)
     );
@@ -455,13 +479,15 @@ describe("sites workspace data plane", () => {
       id: dublinComment.id,
       siteId: dublinSite.id,
     });
+    expect(exit.value).not.toHaveProperty("authorUserId");
     expect(journal.entries()).toMatchObject([
       {
         commandName: "sites-workspace.add-comment",
-        output: response,
+        output: productSafeResponse,
         status: "success",
       },
     ]);
+    expect(journal.entries()[0]?.output).not.toHaveProperty("authorUserId");
   });
 
   it("confirms site label assignment and removal through the assignment collection", async () => {

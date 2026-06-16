@@ -1,4 +1,5 @@
 import type { ProductActivityEvent } from "@ceird/activity-core";
+import { ProductActivityEventDisplayPayloadSchema } from "@ceird/activity-core";
 import { CommentId } from "@ceird/comments-core";
 import {
   decodeUserPreferences,
@@ -261,6 +262,63 @@ describe("SitesService contracts", () => {
         targetType: "comment",
       }),
     ]);
+  });
+
+  it("adds site comments for long valid site names without rolling back Activity validation", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111122");
+    const longSiteName = `Dublin Port ${"North Yard ".repeat(24)}`.trim();
+    const site = decodeSiteOption({
+      displayLocation: "Dublin Port",
+      hasUsableCoordinates: false,
+      id: siteId,
+      labels: [],
+      locationStatus: "unverified",
+      name: longSiteName,
+      updatedAt: "2026-06-15T09:00:00.000Z",
+    });
+    const comment = {
+      actor: {
+        displayDetail: "Team member",
+        displayName: "Taylor Member",
+        id: decodeProductActorId("99999999-9999-4999-8999-999999999999"),
+        kind: "member",
+      },
+      authorName: "Taylor Member",
+      authorUserId: actor.userId,
+      body: "Bring the dock gate key.",
+      createdAt: "2026-06-15T09:10:00.000Z",
+      id: decodeCommentId("55555555-5555-4555-8555-555555555556"),
+      siteId,
+    } satisfies SiteComment;
+    const recordedEvents: RecordActivityEventInput[] = [];
+
+    const result = await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        sites.addComment(siteId, { body: "Bring the dock gate key." })
+      ),
+      {
+        addCommentForSite: () => Effect.succeed(Option.some(comment)),
+        getOptionById: () => Effect.succeed(Option.some(site)),
+        recordActivityEvent: (input) => {
+          Schema.decodeUnknownSync(ProductActivityEventDisplayPayloadSchema)(
+            input.display
+          );
+          recordedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
+      }
+    );
+
+    expect(result).toStrictEqual(comment);
+    expect(recordedEvents).toHaveLength(1);
+    expect(recordedEvents[0]?.display.route?.href).toBe(
+      `/sites-workspace?selectedSiteId=${siteId}`
+    );
+    expect(recordedEvents[0]?.display.route?.label.length).toBeLessThanOrEqual(
+      80
+    );
+    expect(recordedEvents[0]?.display.summary).toMatch(/^Commented on /);
+    expect(recordedEvents[0]?.display.summary.length).toBeLessThanOrEqual(160);
   });
 
   it("does not call the location provider for manual locations", async () => {

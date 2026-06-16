@@ -3,7 +3,6 @@ import {
   CommentBodySchema,
   CommentId,
   IsoDateTimeString,
-  UserId,
 } from "@ceird/comments-core";
 import {
   ProductActorDisplayDetail,
@@ -89,13 +88,11 @@ const SiteCommentEdgeElectricRowSchema = Schema.Struct({
   siteId: SiteId,
 });
 const SiteCommentBodyElectricRowSchema = Schema.Struct({
-  actorId: Schema.optional(ProductActorId),
-  authorUserId: UserId,
+  actorId: ProductActorId,
   body: CommentBodySchema,
   createdAt: IsoDateTimeString,
   id: CommentId,
   updatedAt: IsoDateTimeString,
-  updatedByUserId: Schema.optional(UserId),
 });
 const SiteOptionElectricStandardSchema = Schema.toStandardSchemaV1(
   SiteOptionSchema
@@ -199,9 +196,15 @@ export interface SitesWorkspaceCommentElectricObservation {
   readonly commentEdge: "already-reflected" | "observed-change";
 }
 
-export type SitesWorkspaceCommentCommandResult = AddSiteCommentResponse & {
-  readonly electricObservation: SitesWorkspaceCommentElectricObservation;
-};
+type SitesWorkspaceSiteCommentResponse = Omit<
+  AddSiteCommentResponse,
+  "authorUserId"
+>;
+
+export type SitesWorkspaceCommentCommandResult =
+  SitesWorkspaceSiteCommentResponse & {
+    readonly electricObservation: SitesWorkspaceCommentElectricObservation;
+  };
 
 export type SitesWorkspaceFilter =
   | "all"
@@ -257,13 +260,15 @@ export function createSitesWorkspaceCommandRunner({
               return Exit.failCause(exit.cause);
             }
 
+            const response = toSitesWorkspaceSiteCommentResponse(exit.value);
+
             return await catchWorkspaceConfirmationFailure(
               awaitSiteCommentConfirmation({
                 collections: {
                   commentBodies: collections.commentBodies,
                   commentEdges: collections.commentEdges,
                 },
-                response: exit.value,
+                response,
                 siteId: commandInput.siteId,
                 timeoutMs,
               })
@@ -734,10 +739,7 @@ function selectSiteComments({
 
       return [
         {
-          actor:
-            comment.actorId === undefined
-              ? undefined
-              : actorsById.get(comment.actorId),
+          actor: actorsById.get(comment.actorId),
           comment,
           edge,
         },
@@ -902,23 +904,28 @@ function toSiteCommentEdgeElectricRow(
   }) as SiteCommentEdgeRow;
 }
 
-function toSiteCommentBodyElectricRow(
+export function toSiteCommentBodyElectricRow(
   row: Record<string, unknown>
 ): SiteCommentBodyRow {
   const comment: SitesWorkspaceElectricRow = {
-    authorUserId: String(row.authorUserId),
+    actorId: String(row.actorId),
     body: String(row.body),
     createdAt: String(row.createdAt),
     id: String(row.id),
     updatedAt: String(row.updatedAt),
   };
 
-  addOptionalString(comment, "actorId", row.actorId);
-  addOptionalString(comment, "updatedByUserId", row.updatedByUserId);
-
   return Schema.decodeUnknownSync(SiteCommentBodyElectricRowSchema)(
     comment
   ) as SiteCommentBodyRow;
+}
+
+function toSitesWorkspaceSiteCommentResponse(
+  response: AddSiteCommentResponse
+): SitesWorkspaceSiteCommentResponse {
+  const { authorUserId: _authorUserId, ...productSafeResponse } = response;
+
+  return productSafeResponse;
 }
 
 async function awaitSiteConfirmation({
@@ -953,7 +960,7 @@ async function awaitSiteCommentConfirmation({
   timeoutMs,
 }: {
   readonly collections: SitesWorkspaceCommentCommandCollections;
-  readonly response: AddSiteCommentResponse;
+  readonly response: SitesWorkspaceSiteCommentResponse;
   readonly siteId: SiteIdType;
   readonly timeoutMs: number;
 }) {

@@ -942,7 +942,6 @@ const caseyActor = {
 
 const dublinComment = {
   actorId: caseyActor.id,
-  authorUserId: "user_123",
   body: "Gate 4 reopened after contractor sign-off.",
   createdAt: "2026-06-05T10:30:00.000Z",
   id: "77777777-7777-4777-8777-777777777777",

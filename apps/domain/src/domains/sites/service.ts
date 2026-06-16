@@ -67,6 +67,9 @@ type OrganizationAuthorizationService = Context.Service.Shape<
 >;
 type SitesRepositoryService = Context.Service.Shape<typeof SitesRepository>;
 const ACTIVITY_DETAIL_MAX_LENGTH = 280;
+const ACTIVITY_ROUTE_LABEL_MAX_LENGTH = 80;
+const ACTIVITY_SUMMARY_MAX_LENGTH = 160;
+const SITE_COMMENT_ACTIVITY_SUMMARY_PREFIX = "Commented on ";
 
 export class SitesService extends Context.Service<SitesService>()(
   "@ceird/domains/sites/SitesService",
@@ -673,9 +676,12 @@ function recordSiteCommentCreated({
       detail: summarizeCommentActivityDetail(comment.body),
       route: {
         href: `/sites-workspace?selectedSiteId=${site.id}`,
-        label: site.name,
+        label: formatActivityDisplayText(
+          site.name,
+          ACTIVITY_ROUTE_LABEL_MAX_LENGTH
+        ),
       },
-      summary: `Commented on ${site.name}`,
+      summary: formatSiteCommentActivitySummary(site.name),
     },
     eventType: "site.comment_created",
     organizationId: actor.organizationId,
@@ -688,11 +694,22 @@ function recordSiteCommentCreated({
 }
 
 function summarizeCommentActivityDetail(body: string): string {
-  if (body.length <= ACTIVITY_DETAIL_MAX_LENGTH) {
-    return body;
+  return formatActivityDisplayText(body, ACTIVITY_DETAIL_MAX_LENGTH);
+}
+
+function formatSiteCommentActivitySummary(siteName: string): string {
+  return `${SITE_COMMENT_ACTIVITY_SUMMARY_PREFIX}${formatActivityDisplayText(
+    siteName,
+    ACTIVITY_SUMMARY_MAX_LENGTH - SITE_COMMENT_ACTIVITY_SUMMARY_PREFIX.length
+  )}`;
+}
+
+function formatActivityDisplayText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text;
   }
 
-  return `${body.slice(0, ACTIVITY_DETAIL_MAX_LENGTH - 3)}...`;
+  return `${text.slice(0, maxLength - 3)}...`;
 }
 
 function failDestinationUnmapped(
