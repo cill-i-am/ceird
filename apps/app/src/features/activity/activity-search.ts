@@ -1,63 +1,32 @@
 import type {
-  IsoDateStringType,
-  JobActivityEventType,
-  OrganizationActivityQuery,
-  UserIdType,
-} from "@ceird/jobs-core";
+  ActivityEventStatus,
+  ActivityEventTargetType,
+  ActivityEventType,
+} from "@ceird/activity-core";
+import {
+  ACTIVITY_EVENT_STATUSES,
+  ACTIVITY_EVENT_TARGET_TYPES,
+  ACTIVITY_EVENT_TYPES,
+} from "@ceird/activity-core";
 
 export interface ActivitySearch {
-  readonly actorUserId?: UserIdType | undefined;
-  readonly eventType?: JobActivityEventType | undefined;
-  readonly fromDate?: IsoDateStringType | undefined;
-  readonly jobTitle?: string | undefined;
-  readonly toDate?: IsoDateStringType | undefined;
+  readonly eventType?: ActivityEventType | undefined;
+  readonly status?: ActivityEventStatus | undefined;
+  readonly targetType?: ActivityEventTargetType | undefined;
 }
 
-const ACTIVITY_EVENT_TYPE_LOOKUP = {
-  assignee_changed: true,
-  blocked_reason_changed: true,
-  contact_changed: true,
-  coordinator_changed: true,
-  job_created: true,
-  job_reopened: true,
-  label_added: true,
-  label_removed: true,
-  priority_changed: true,
-  site_changed: true,
-  status_changed: true,
-  visit_logged: true,
-} as const satisfies Record<JobActivityEventType, true>;
-
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
+const ACTIVITY_EVENT_TYPE_LOOKUP = new Set<string>(ACTIVITY_EVENT_TYPES);
+const ACTIVITY_TARGET_TYPE_LOOKUP = new Set<string>(
+  ACTIVITY_EVENT_TARGET_TYPES
+);
+const ACTIVITY_STATUS_LOOKUP = new Set<string>(ACTIVITY_EVENT_STATUSES);
 
 export function decodeActivitySearch(input: Record<string, unknown>) {
   return {
-    actorUserId: decodeActivityActorUserId(input.actorUserId),
     eventType: decodeActivityEventType(input.eventType),
-    fromDate: decodeActivityIsoDate(input.fromDate),
-    jobTitle: decodeJobTitle(input.jobTitle),
-    toDate: decodeActivityIsoDate(input.toDate),
+    status: decodeActivityStatus(input.status),
+    targetType: decodeActivityTargetType(input.targetType),
   } satisfies ActivitySearch;
-}
-
-export function toOrganizationActivityQuery(
-  search: ActivitySearch
-): OrganizationActivityQuery {
-  return {
-    actorUserId: search.actorUserId,
-    eventType: search.eventType,
-    fromDate: search.fromDate,
-    jobTitle: search.jobTitle,
-    toDate: search.toDate,
-  };
-}
-
-function decodeActivityActorUserId(value: unknown) {
-  if (typeof value !== "string" || value.length === 0) {
-    return;
-  }
-
-  return value as UserIdType;
 }
 
 export function decodeActivityEventType(value: unknown) {
@@ -68,52 +37,30 @@ export function decodeActivityEventType(value: unknown) {
   return value;
 }
 
-export function decodeActivityIsoDate(value: unknown) {
-  if (typeof value !== "string" || !isIsoDateString(value)) {
+export function decodeActivityTargetType(value: unknown) {
+  if (typeof value !== "string" || !isActivityTargetType(value)) {
     return;
   }
 
-  return value as IsoDateStringType;
+  return value;
 }
 
-function decodeJobTitle(value: unknown) {
-  if (typeof value !== "string") {
+export function decodeActivityStatus(value: unknown) {
+  if (typeof value !== "string" || !isActivityStatus(value)) {
     return;
   }
 
-  const trimmed = value.trim();
-
-  return trimmed.length > 0 ? trimmed : undefined;
+  return value;
 }
 
-function isIsoDateString(value: string): boolean {
-  if (!ISO_DATE_PATTERN.test(value)) {
-    return false;
-  }
-
-  const segments = value.split("-");
-  const year = Number(segments[0]);
-  const month = Number(segments[1]);
-  const day = Number(segments[2]);
-  if (
-    segments.length !== 3 ||
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day)
-  ) {
-    return false;
-  }
-
-  const date = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    !Number.isNaN(date.getTime()) &&
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() + 1 === month &&
-    date.getUTCDate() === day
-  );
+function isActivityEventType(value: string): value is ActivityEventType {
+  return ACTIVITY_EVENT_TYPE_LOOKUP.has(value);
 }
 
-function isActivityEventType(value: string): value is JobActivityEventType {
-  return value in ACTIVITY_EVENT_TYPE_LOOKUP;
+function isActivityTargetType(value: string): value is ActivityEventTargetType {
+  return ACTIVITY_TARGET_TYPE_LOOKUP.has(value);
+}
+
+function isActivityStatus(value: string): value is ActivityEventStatus {
+  return ACTIVITY_STATUS_LOOKUP.has(value);
 }

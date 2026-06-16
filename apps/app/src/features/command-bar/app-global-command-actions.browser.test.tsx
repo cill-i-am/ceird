@@ -211,13 +211,51 @@ describe("app global command actions", () => {
     }
   );
 
-  it.each(["member", undefined] as const)(
-    "hides administrator organization commands for %s role",
+  it(
+    "shows internal activity and hides administrator organization commands for member role",
     { timeout: 10_000 },
-    async (role) => {
+    async () => {
       render(
         <CommandBarProvider>
-          <AppOrganizationCommandActions currentOrganizationRole={role} />
+          <AppOrganizationCommandActions currentOrganizationRole="member" />
+        </CommandBarProvider>
+      );
+
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("option", { name: /go to jobs/i })
+        ).toBeInTheDocument();
+      });
+
+      expect(
+        screen.getByRole("option", { name: /go to activity/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /go to security/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /go to members/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: /go to security/i })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", {
+          name: /open organization settings/i,
+        })
+      ).not.toBeInTheDocument();
+    }
+  );
+
+  it(
+    "hides internal and administrator organization commands when role is unknown",
+    { timeout: 10_000 },
+    async () => {
+      render(
+        <CommandBarProvider>
+          <AppOrganizationCommandActions currentOrganizationRole={undefined} />
         </CommandBarProvider>
       );
 
@@ -237,9 +275,6 @@ describe("app global command actions", () => {
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("option", { name: /go to members/i })
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByRole("option", { name: /go to security/i })
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("option", {

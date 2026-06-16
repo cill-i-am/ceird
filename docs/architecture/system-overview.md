@@ -158,8 +158,8 @@ The domain Worker exports a combined Drizzle schema from
   remain on the site record; site comments are separate internal collaboration
   records.
 - `agentsSchema` contains agent threads and the agent action-run ledger.
-- `databaseSchema` merges authentication, comments, labels, sites, jobs, and
-  agents for the full database runtime.
+- `databaseSchema` merges authentication, activity, comments, labels, sites,
+  jobs, and agents for the full database runtime.
 
 The sync shape registry lives in `@ceird/domain-core` and covers domain tables
 outside auth, including product-safe projections such as
@@ -184,6 +184,9 @@ retained_until > $2`, where `$2` is the domain Worker's current time.
 stale rows even if cleanup lags. Repository retention also prunes expired rows
 and keeps only the latest 5,000 events per organization, which is the guardrail
 that cannot be represented as an Electric predicate.
+The browser Activity route subscribes to both `activity-events` and
+`product-activity-actors`, joins product-safe actor display locally, and applies
+event/entity/status filters over synced rows.
 
 Migrations live in `apps/domain/drizzle`. Package-local Drizzle CLI migrations
 remain there for development history, while the Alchemy deploy path uses

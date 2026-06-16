@@ -84,9 +84,7 @@ describe("route hotkeys", () => {
     expect(within(dialog).getByText("Go to Home")).toBeVisible();
     expect(within(dialog).getByText("Go to Sites")).toBeVisible();
     expect(within(dialog).getByText("Go to Sites workspace")).toBeVisible();
-    expect(
-      within(dialog).queryByText("Go to Activity")
-    ).not.toBeInTheDocument();
+    expect(within(dialog).getByText("Go to Activity")).toBeVisible();
     expect(
       within(dialog).queryByText("Go to Security activity")
     ).not.toBeInTheDocument();
@@ -220,11 +218,9 @@ describe("route hotkeys", () => {
       });
       expect(mockedNavigate).toHaveBeenNthCalledWith(6, {
         search: {
-          actorUserId: undefined,
           eventType: undefined,
-          fromDate: undefined,
-          jobTitle: undefined,
-          toDate: undefined,
+          status: undefined,
+          targetType: undefined,
         },
         to: "/activity",
       });
@@ -255,7 +251,7 @@ describe("route hotkeys", () => {
     10_000
   );
 
-  it("does not navigate to administrator routes for member role", async () => {
+  it("navigates to internal routes but not administrator routes for member role", async () => {
     const user = userEvent.setup();
 
     render(
@@ -275,11 +271,19 @@ describe("route hotkeys", () => {
     await user.keyboard("gr");
 
     expect(mockedNavigate).toHaveBeenNthCalledWith(1, {
+      search: {
+        eventType: undefined,
+        status: undefined,
+        targetType: undefined,
+      },
+      to: "/activity",
+    });
+    expect(mockedNavigate).toHaveBeenNthCalledWith(2, {
       to: "/sites-workspace",
     });
-    expect(mockedNavigate).toHaveBeenNthCalledWith(2, { to: "/" });
-    expect(mockedNavigate).toHaveBeenNthCalledWith(3, { to: "/jobs" });
-    expect(mockedNavigate).toHaveBeenNthCalledWith(4, {
+    expect(mockedNavigate).toHaveBeenNthCalledWith(3, { to: "/" });
+    expect(mockedNavigate).toHaveBeenNthCalledWith(4, { to: "/jobs" });
+    expect(mockedNavigate).toHaveBeenNthCalledWith(5, {
       to: "/jobs-workspace",
     });
   }, 10_000);
