@@ -26,6 +26,7 @@ import {
   AttachJobCollaboratorInputSchema,
   CreateJobInputSchema,
   CreateJobResponseSchema,
+  JobDetailWriteResponseSchema,
   JobDetailResponseSchema,
   JobCollaboratorSchema,
   JobCollaboratorsResponseSchema,
@@ -242,7 +243,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
     HttpApiEndpoint.post("assignJobLabel", "/jobs/:workItemId/labels", {
       params: { workItemId: WorkItemId },
       payload: AssignJobLabelInputSchema,
-      success: JobDetailResponseSchema,
+      success: JobDetailWriteResponseSchema,
       error: [
         JobNotFoundError,
         LabelNotFoundError,
@@ -257,7 +258,7 @@ const jobsGroup = HttpApiGroup.make("jobs")
       "/jobs/:workItemId/labels/:labelId",
       {
         params: { workItemId: WorkItemId, labelId: LabelId },
-        success: JobDetailResponseSchema,
+        success: JobDetailWriteResponseSchema,
         error: [
           JobNotFoundError,
           LabelNotFoundError,

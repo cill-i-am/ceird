@@ -364,10 +364,11 @@ export function JobsStateProvider({
             ),
           name: "jobs.create",
           optimistic: "none",
-          reconcile: async (createdJob, commandInput) => {
+          reconcile: async (response, commandInput) => {
             const shouldRefreshOptions =
               commandInput.site?.kind === "create" ||
               commandInput.contact?.kind === "create";
+            const createdJob = response.job;
 
             await refreshJobsListOrUpsertState({
               currentNextCursor: nextCursor,
@@ -918,7 +919,7 @@ async function refreshJobsListOrUpsertState({
 }: {
   readonly currentNextCursor?: JobListCursorType | undefined;
   readonly expectedOrganizationId: OrganizationId;
-  readonly job: CreateJobResponse;
+  readonly job: Job;
   readonly organizationIdRef: React.MutableRefObject<OrganizationId>;
   readonly replaceJobsListState: (
     organizationId: OrganizationId,
@@ -1103,21 +1104,20 @@ function buildJobSearchText(item: JobListItem, lookup: VisibleJobsLookup) {
     .toLowerCase();
 }
 
-type JobListItemSource = Pick<
-  Job | CreateJobResponse,
-  | "assigneeId"
-  | "contactId"
-  | "coordinatorId"
-  | "createdAt"
-  | "id"
-  | "kind"
-  | "labels"
-  | "priority"
-  | "siteId"
-  | "status"
-  | "title"
-  | "updatedAt"
->;
+interface JobListItemSource {
+  readonly assigneeId?: JobListItem["assigneeId"] | undefined;
+  readonly contactId?: JobListItem["contactId"] | undefined;
+  readonly coordinatorId?: JobListItem["coordinatorId"] | undefined;
+  readonly createdAt: JobListItem["createdAt"];
+  readonly id: JobListItem["id"];
+  readonly kind: JobListItem["kind"];
+  readonly labels: JobListItem["labels"];
+  readonly priority: JobListItem["priority"];
+  readonly siteId?: JobListItem["siteId"] | undefined;
+  readonly status: JobListItem["status"];
+  readonly title: JobListItem["title"];
+  readonly updatedAt: JobListItem["updatedAt"];
+}
 
 export function toJobListItem(job: JobListItemSource): JobListItem {
   return {

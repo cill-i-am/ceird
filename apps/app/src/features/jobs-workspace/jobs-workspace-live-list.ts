@@ -6,6 +6,7 @@ import type { DataPlaneCollectionHealthSnapshot } from "#/data-plane/collection-
 import { useDataPlaneLiveQuery } from "#/data-plane/live-query";
 import { useDataPlaneSession } from "#/data-plane/session";
 import {
+  createJobsWorkspaceCommandRunner,
   deriveJobsWorkspaceVisibleRows,
   getOrCreateJobsWorkspaceReadModelState,
 } from "#/features/jobs/jobs-data-plane";
@@ -29,6 +30,7 @@ export interface JobsWorkspaceLiveListOptions {
 export interface JobsWorkspaceLiveListState {
   readonly allRowsCount: number;
   readonly availableLabels: readonly Label[];
+  readonly commands: ReturnType<typeof createJobsWorkspaceCommandRunner>;
   readonly health: DataPlaneCollectionHealthSnapshot;
   readonly isCollectionGraphAvailable: boolean;
   readonly isLoading: boolean;
@@ -117,10 +119,22 @@ export function useJobsWorkspaceLiveList(
   const availableLabels = isReady
     ? labels.toSorted((left, right) => left.name.localeCompare(right.name))
     : [];
+  const commands = React.useMemo(
+    () =>
+      createJobsWorkspaceCommandRunner({
+        collections: {
+          jobLabelAssignments: readModel.jobLabelAssignments ?? null,
+          jobs: readModel.jobs ?? null,
+        },
+        journal: session.mutationJournal,
+      }),
+    [readModel.jobLabelAssignments, readModel.jobs, session.mutationJournal]
+  );
 
   return {
     allRowsCount: isReady ? jobs.length : 0,
     availableLabels,
+    commands,
     health,
     isCollectionGraphAvailable,
     isLoading,

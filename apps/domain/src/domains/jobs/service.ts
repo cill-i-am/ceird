@@ -24,6 +24,7 @@ import type {
   JobCollaboratorIdType as JobCollaboratorId,
   JobCollaboratorsResponse,
   JobDetail,
+  JobDetailWriteResponse,
   JobListItem,
   JobExternalMemberOptionsResponse,
   JobMemberOptionsResponse,
@@ -34,6 +35,7 @@ import type {
   JobProximityResponse,
   JobRoutePreviewInput,
   JobRoutePreviewResponse,
+  JobWriteResponse,
   OrganizationActivityQuery,
   OrganizationMemberNotFoundError,
   OrganizationIdType as OrganizationId,
@@ -52,6 +54,8 @@ import {
   isDomainDrizzleStorageFailure,
 } from "../../platform/database/database.js";
 import type { DomainDrizzleStorageFailure } from "../../platform/database/database.js";
+import { withElectricMutationConfirmation } from "../../platform/database/electric-mutation-confirmation.js";
+import type { ElectricMutationConfirmed } from "../../platform/database/electric-mutation-confirmation.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -389,55 +393,54 @@ export class JobsService extends Context.Service<JobsService>()(
           siteLocationProvider
         );
 
-        return yield* jobsRepository
-          .withTransaction(
-            Effect.gen(function* () {
-              const siteId = yield* createResolvedJobSite(
-                actor.organizationId,
-                siteResolution,
-                sitesRepository
-              );
-              const contactId = yield* resolveCreateContactId(
-                actor.organizationId,
-                input.contact,
-                contactsRepository
-              );
+        return yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            const siteId = yield* createResolvedJobSite(
+              actor.organizationId,
+              siteResolution,
+              sitesRepository
+            );
+            const contactId = yield* resolveCreateContactId(
+              actor.organizationId,
+              input.contact,
+              contactsRepository
+            );
 
-              if (siteId !== undefined && contactId !== undefined) {
-                yield* jobsRepository.linkSiteContact({
-                  contactId,
-                  organizationId: actor.organizationId,
-                  siteId,
-                });
-              }
-
-              const job = yield* jobsRepository.create({
+            if (siteId !== undefined && contactId !== undefined) {
+              yield* jobsRepository.linkSiteContact({
                 contactId,
-                createdByUserId: actor.userId,
                 organizationId: actor.organizationId,
-                priority: input.priority,
                 siteId,
-                title: input.title,
               });
+            }
 
-              yield* activityRecorder.recordCreated(actor, job);
+            const job = yield* jobsRepository.create({
+              contactId,
+              createdByUserId: actor.userId,
+              organizationId: actor.organizationId,
+              priority: input.priority,
+              siteId,
+              title: input.title,
+            });
 
-              return job;
-            })
+            yield* activityRecorder.recordCreated(actor, job);
+
+            return job;
+          })
+        ).pipe(
+          Effect.map(toJobWriteResponse),
+          catchJobsStorageError(),
+          Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
+            failActorMembershipLossOrDieOtherMember(error, { actor })
+          ),
+          Effect.catchTag(JOB_NOT_FOUND_ERROR_TAG, (error) =>
+            Effect.die(error)
+          ),
+          Effect.catchTag(
+            WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
+            dieWorkItemOrganizationMismatch
           )
-          .pipe(
-            catchJobsStorageError(),
-            Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
-              failActorMembershipLossOrDieOtherMember(error, { actor })
-            ),
-            Effect.catchTag(JOB_NOT_FOUND_ERROR_TAG, (error) =>
-              Effect.die(error)
-            ),
-            Effect.catchTag(
-              WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-              dieWorkItemOrganizationMismatch
-            )
-          );
+        );
       });
 
       const getDetail = Effect.fn("JobsService.getDetail")(function* (
@@ -466,94 +469,87 @@ export class JobsService extends Context.Service<JobsService>()(
         const actor = yield* loadActor(workItemId);
         yield* authorization.ensureCanPatch(actor, workItemId);
 
-        yield* jobsRepository
-          .withTransaction(
-            Effect.gen(function* () {
-              const existing = yield* jobsRepository
-                .findByIdForUpdate(actor.organizationId, workItemId)
-                .pipe(Effect.map(Option.getOrUndefined));
+        return yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            const existing = yield* jobsRepository
+              .findByIdForUpdate(actor.organizationId, workItemId)
+              .pipe(Effect.map(Option.getOrUndefined));
 
-              if (existing === undefined) {
-                return yield* Effect.fail(
-                  new JobNotFoundError({
-                    message: "Job does not exist",
-                    workItemId,
-                  })
-                );
-              }
+            if (existing === undefined) {
+              return yield* Effect.fail(
+                new JobNotFoundError({
+                  message: "Job does not exist",
+                  workItemId,
+                })
+              );
+            }
 
-              if (!hasPatchChanges(input)) {
-                return existing;
-              }
+            if (!hasPatchChanges(input)) {
+              return existing;
+            }
 
-              const nextAssigneeId = resolvePatchedOptionalValue(
-                existing.assigneeId,
-                input.assigneeId
-              );
-              const nextCoordinatorId = resolvePatchedOptionalValue(
-                existing.coordinatorId,
-                input.coordinatorId
-              );
-              const nextSiteId = resolvePatchedOptionalValue(
-                existing.siteId,
-                input.siteId
-              );
-              const nextContactId = resolvePatchedOptionalValue(
-                existing.contactId,
-                input.contactId
-              );
+            const nextAssigneeId = resolvePatchedOptionalValue(
+              existing.assigneeId,
+              input.assigneeId
+            );
+            const nextCoordinatorId = resolvePatchedOptionalValue(
+              existing.coordinatorId,
+              input.coordinatorId
+            );
+            const nextSiteId = resolvePatchedOptionalValue(
+              existing.siteId,
+              input.siteId
+            );
+            const nextContactId = resolvePatchedOptionalValue(
+              existing.contactId,
+              input.contactId
+            );
 
-              yield* ensureCoordinatorDiffersFromAssignee({
-                assigneeId: nextAssigneeId,
-                coordinatorId: nextCoordinatorId,
-                workItemId,
+            yield* ensureCoordinatorDiffersFromAssignee({
+              assigneeId: nextAssigneeId,
+              coordinatorId: nextCoordinatorId,
+              workItemId,
+            });
+
+            const job = yield* jobsRepository
+              .patch(actor.organizationId, workItemId, input)
+              .pipe(Effect.map(Option.getOrUndefined));
+
+            if (job === undefined) {
+              return yield* Effect.fail(
+                new JobNotFoundError({
+                  message: "Job does not exist",
+                  workItemId,
+                })
+              );
+            }
+
+            if (nextSiteId !== undefined && nextContactId !== undefined) {
+              yield* jobsRepository.linkSiteContact({
+                contactId: nextContactId,
+                organizationId: actor.organizationId,
+                siteId: nextSiteId,
               });
+            }
 
-              const job = yield* jobsRepository
-                .patch(actor.organizationId, workItemId, input)
-                .pipe(Effect.map(Option.getOrUndefined));
+            yield* activityRecorder.recordPatched(actor, existing, job);
 
-              if (job === undefined) {
-                return yield* Effect.fail(
-                  new JobNotFoundError({
-                    message: "Job does not exist",
-                    workItemId,
-                  })
-                );
-              }
-
-              if (nextSiteId !== undefined && nextContactId !== undefined) {
-                yield* jobsRepository.linkSiteContact({
-                  contactId: nextContactId,
-                  organizationId: actor.organizationId,
-                  siteId: nextSiteId,
-                });
-              }
-
-              yield* activityRecorder.recordPatched(actor, existing, job);
-
-              return job;
+            return job;
+          })
+        ).pipe(
+          Effect.map(toJobWriteResponse),
+          Effect.catchTag(
+            WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
+            dieWorkItemOrganizationMismatch
+          ),
+          Effect.catchTag("SqlError", failJobsStorageError),
+          Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
+          Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
+            failActorMembershipLossOrPreserveOtherMember(error, {
+              actor,
+              workItemId,
             })
           )
-          .pipe(
-            Effect.catchTag(
-              WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-              dieWorkItemOrganizationMismatch
-            ),
-            Effect.catchTag("SqlError", failJobsStorageError),
-            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
-            Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
-              failActorMembershipLossOrPreserveOtherMember(error, {
-                actor,
-                workItemId,
-              })
-            )
-          );
-
-        return yield* loadJobOrFail(
-          actor.organizationId,
-          workItemId,
-          jobsRepository
         );
       });
 
@@ -563,84 +559,77 @@ export class JobsService extends Context.Service<JobsService>()(
       ) {
         const actor = yield* loadActor(workItemId);
 
-        yield* jobsRepository
-          .withTransaction(
-            Effect.gen(function* () {
-              const existing = yield* jobsRepository
-                .findByIdForUpdate(actor.organizationId, workItemId)
-                .pipe(Effect.map(Option.getOrUndefined));
+        return yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            const existing = yield* jobsRepository
+              .findByIdForUpdate(actor.organizationId, workItemId)
+              .pipe(Effect.map(Option.getOrUndefined));
 
-              if (existing === undefined) {
-                return yield* Effect.fail(
-                  new JobNotFoundError({
-                    message: "Job does not exist",
-                    workItemId,
-                  })
-                );
-              }
-
-              if (isExternalOrganizationRole(actor.role)) {
-                yield* authorization.ensureCanTransition(
-                  actor,
-                  existing,
-                  input.status
-                );
-                yield* validateTransitionInput(existing, input);
-              } else {
-                yield* validateTransitionInput(existing, input);
-                yield* authorization.ensureCanTransition(
-                  actor,
-                  existing,
-                  input.status
-                );
-              }
-
-              const job = yield* jobsRepository
-                .transition(actor.organizationId, workItemId, {
-                  blockedReason: input.blockedReason,
-                  completedAt:
-                    input.status === "completed"
-                      ? new Date().toISOString()
-                      : undefined,
-                  completedByUserId:
-                    input.status === "completed" ? actor.userId : null,
-                  status: input.status,
+            if (existing === undefined) {
+              return yield* Effect.fail(
+                new JobNotFoundError({
+                  message: "Job does not exist",
+                  workItemId,
                 })
-                .pipe(Effect.map(Option.getOrUndefined));
+              );
+            }
 
-              if (job === undefined) {
-                return yield* Effect.fail(
-                  new JobNotFoundError({
-                    message: "Job does not exist",
-                    workItemId,
-                  })
-                );
-              }
+            if (isExternalOrganizationRole(actor.role)) {
+              yield* authorization.ensureCanTransition(
+                actor,
+                existing,
+                input.status
+              );
+              yield* validateTransitionInput(existing, input);
+            } else {
+              yield* validateTransitionInput(existing, input);
+              yield* authorization.ensureCanTransition(
+                actor,
+                existing,
+                input.status
+              );
+            }
 
-              yield* activityRecorder.recordTransition(actor, existing, job);
+            const job = yield* jobsRepository
+              .transition(actor.organizationId, workItemId, {
+                blockedReason: input.blockedReason,
+                completedAt:
+                  input.status === "completed"
+                    ? new Date().toISOString()
+                    : undefined,
+                completedByUserId:
+                  input.status === "completed" ? actor.userId : null,
+                status: input.status,
+              })
+              .pipe(Effect.map(Option.getOrUndefined));
 
-              return job;
+            if (job === undefined) {
+              return yield* Effect.fail(
+                new JobNotFoundError({
+                  message: "Job does not exist",
+                  workItemId,
+                })
+              );
+            }
+
+            yield* activityRecorder.recordTransition(actor, existing, job);
+
+            return job;
+          })
+        ).pipe(
+          Effect.map(toJobWriteResponse),
+          Effect.catchTag(
+            WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
+            dieWorkItemOrganizationMismatch
+          ),
+          Effect.catchTag("SqlError", failJobsStorageError),
+          Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
+          Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
+            failActorMembershipLossOrDieOtherMember(error, {
+              actor,
+              workItemId,
             })
           )
-          .pipe(
-            Effect.catchTag(
-              WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-              dieWorkItemOrganizationMismatch
-            ),
-            Effect.catchTag("SqlError", failJobsStorageError),
-            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
-            Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
-              failActorMembershipLossOrDieOtherMember(error, {
-                actor,
-                workItemId,
-              })
-            )
-          );
-
-        return yield* loadJobOrFail(
-          actor.organizationId,
-          workItemId,
-          jobsRepository
         );
       });
 
@@ -649,67 +638,60 @@ export class JobsService extends Context.Service<JobsService>()(
       ) {
         const actor = yield* loadActor(workItemId);
 
-        yield* jobsRepository
-          .withTransaction(
-            Effect.gen(function* () {
-              const existing = yield* jobsRepository
-                .findByIdForUpdate(actor.organizationId, workItemId)
-                .pipe(Effect.map(Option.getOrUndefined));
+        return yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            const existing = yield* jobsRepository
+              .findByIdForUpdate(actor.organizationId, workItemId)
+              .pipe(Effect.map(Option.getOrUndefined));
 
-              if (existing === undefined) {
-                return yield* Effect.fail(
-                  new JobNotFoundError({
-                    message: "Job does not exist",
-                    workItemId,
-                  })
-                );
-              }
+            if (existing === undefined) {
+              return yield* Effect.fail(
+                new JobNotFoundError({
+                  message: "Job does not exist",
+                  workItemId,
+                })
+              );
+            }
 
-              if (isExternalOrganizationRole(actor.role)) {
-                yield* authorization.ensureCanReopen(actor, existing);
-                yield* validateReopen(existing);
-              } else {
-                yield* validateReopen(existing);
-                yield* authorization.ensureCanReopen(actor, existing);
-              }
+            if (isExternalOrganizationRole(actor.role)) {
+              yield* authorization.ensureCanReopen(actor, existing);
+              yield* validateReopen(existing);
+            } else {
+              yield* validateReopen(existing);
+              yield* authorization.ensureCanReopen(actor, existing);
+            }
 
-              const job = yield* jobsRepository
-                .reopen(actor.organizationId, workItemId)
-                .pipe(Effect.map(Option.getOrUndefined));
+            const job = yield* jobsRepository
+              .reopen(actor.organizationId, workItemId)
+              .pipe(Effect.map(Option.getOrUndefined));
 
-              if (job === undefined) {
-                return yield* Effect.fail(
-                  new JobNotFoundError({
-                    message: "Job does not exist",
-                    workItemId,
-                  })
-                );
-              }
+            if (job === undefined) {
+              return yield* Effect.fail(
+                new JobNotFoundError({
+                  message: "Job does not exist",
+                  workItemId,
+                })
+              );
+            }
 
-              yield* activityRecorder.recordReopened(actor, job);
+            yield* activityRecorder.recordReopened(actor, job);
 
-              return job;
+            return job;
+          })
+        ).pipe(
+          Effect.map(toJobWriteResponse),
+          Effect.catchTag(
+            WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
+            dieWorkItemOrganizationMismatch
+          ),
+          Effect.catchTag("SqlError", failJobsStorageError),
+          Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
+          Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
+            failActorMembershipLossOrDieOtherMember(error, {
+              actor,
+              workItemId,
             })
           )
-          .pipe(
-            Effect.catchTag(
-              WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-              dieWorkItemOrganizationMismatch
-            ),
-            Effect.catchTag("SqlError", failJobsStorageError),
-            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
-            Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
-              failActorMembershipLossOrDieOtherMember(error, {
-                actor,
-                workItemId,
-              })
-            )
-          );
-
-        return yield* loadJobOrFail(
-          actor.organizationId,
-          workItemId,
-          jobsRepository
         );
       });
 
@@ -771,59 +753,59 @@ export class JobsService extends Context.Service<JobsService>()(
       ) {
         const actor = yield* loadActor(workItemId);
 
-        yield* jobsRepository
-          .withTransaction(
-            Effect.gen(function* () {
-              const job = yield* jobsRepository
-                .findByIdForUpdate(actor.organizationId, workItemId)
-                .pipe(Effect.map(Option.getOrUndefined));
+        return yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            const job = yield* jobsRepository
+              .findByIdForUpdate(actor.organizationId, workItemId)
+              .pipe(Effect.map(Option.getOrUndefined));
 
-              if (job === undefined) {
-                return yield* Effect.fail(
-                  new JobNotFoundError({
-                    message: "Job does not exist",
-                    workItemId,
-                  })
-                );
-              }
-
-              yield* authorization.ensureCanAssignLabels(actor, job);
-
-              const assignment =
-                yield* jobLabelAssignmentsRepository.assignToJob({
-                  labelId: input.labelId,
-                  organizationId: actor.organizationId,
+            if (job === undefined) {
+              return yield* Effect.fail(
+                new JobNotFoundError({
+                  message: "Job does not exist",
                   workItemId,
-                });
+                })
+              );
+            }
 
-              if (assignment.changed) {
-                yield* activityRecorder.recordLabelAssigned(
-                  actor,
-                  job,
-                  assignment.label
-                );
+            yield* authorization.ensureCanAssignLabels(actor, job);
+
+            const assignment = yield* jobLabelAssignmentsRepository.assignToJob(
+              {
+                labelId: input.labelId,
+                organizationId: actor.organizationId,
+                workItemId,
               }
+            );
+
+            if (assignment.changed) {
+              yield* activityRecorder.recordLabelAssigned(
+                actor,
+                job,
+                assignment.label
+              );
+            }
+
+            return yield* loadJobDetailOrFail(
+              actor.organizationId,
+              workItemId,
+              jobsRepository
+            );
+          })
+        ).pipe(
+          Effect.map(toJobDetailWriteResponse),
+          Effect.catchTag(
+            WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
+            dieWorkItemOrganizationMismatch
+          ),
+          Effect.catchTag("SqlError", failJobsStorageError),
+          Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
+          Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
+            failActorMembershipLossOrDieOtherMember(error, {
+              actor,
+              workItemId,
             })
           )
-          .pipe(
-            Effect.catchTag(
-              WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-              dieWorkItemOrganizationMismatch
-            ),
-            Effect.catchTag("SqlError", failJobsStorageError),
-            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
-            Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
-              failActorMembershipLossOrDieOtherMember(error, {
-                actor,
-                workItemId,
-              })
-            )
-          );
-
-        return yield* loadJobDetailOrFail(
-          actor.organizationId,
-          workItemId,
-          jobsRepository
         );
       });
 
@@ -833,59 +815,58 @@ export class JobsService extends Context.Service<JobsService>()(
       ) {
         const actor = yield* loadActor(workItemId);
 
-        yield* jobsRepository
-          .withTransaction(
-            Effect.gen(function* () {
-              const job = yield* jobsRepository
-                .findByIdForUpdate(actor.organizationId, workItemId)
-                .pipe(Effect.map(Option.getOrUndefined));
+        return yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            const job = yield* jobsRepository
+              .findByIdForUpdate(actor.organizationId, workItemId)
+              .pipe(Effect.map(Option.getOrUndefined));
 
-              if (job === undefined) {
-                return yield* Effect.fail(
-                  new JobNotFoundError({
-                    message: "Job does not exist",
-                    workItemId,
-                  })
-                );
-              }
-
-              yield* authorization.ensureCanAssignLabels(actor, job);
-
-              const assignment =
-                yield* jobLabelAssignmentsRepository.removeFromJob({
-                  labelId,
-                  organizationId: actor.organizationId,
+            if (job === undefined) {
+              return yield* Effect.fail(
+                new JobNotFoundError({
+                  message: "Job does not exist",
                   workItemId,
-                });
+                })
+              );
+            }
 
-              if (assignment.changed) {
-                yield* activityRecorder.recordLabelRemoved(
-                  actor,
-                  job,
-                  assignment.label
-                );
-              }
+            yield* authorization.ensureCanAssignLabels(actor, job);
+
+            const assignment =
+              yield* jobLabelAssignmentsRepository.removeFromJob({
+                labelId,
+                organizationId: actor.organizationId,
+                workItemId,
+              });
+
+            if (assignment.changed) {
+              yield* activityRecorder.recordLabelRemoved(
+                actor,
+                job,
+                assignment.label
+              );
+            }
+
+            return yield* loadJobDetailOrFail(
+              actor.organizationId,
+              workItemId,
+              jobsRepository
+            );
+          })
+        ).pipe(
+          Effect.map(toJobDetailWriteResponse),
+          Effect.catchTag(
+            WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
+            dieWorkItemOrganizationMismatch
+          ),
+          Effect.catchTag("SqlError", failJobsStorageError),
+          Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
+          Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
+            failActorMembershipLossOrDieOtherMember(error, {
+              actor,
+              workItemId,
             })
           )
-          .pipe(
-            Effect.catchTag(
-              WORK_ITEM_ORGANIZATION_MISMATCH_ERROR_TAG,
-              dieWorkItemOrganizationMismatch
-            ),
-            Effect.catchTag("SqlError", failJobsStorageError),
-            Effect.catchTag("EffectDrizzleQueryError", failJobsStorageError),
-            Effect.catchTag(ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG, (error) =>
-              failActorMembershipLossOrDieOtherMember(error, {
-                actor,
-                workItemId,
-              })
-            )
-          );
-
-        return yield* loadJobDetailOrFail(
-          actor.organizationId,
-          workItemId,
-          jobsRepository
         );
       });
 
@@ -1178,14 +1159,22 @@ function loadJobDetailOrFail(
   });
 }
 
-function loadJobOrFail(
-  organizationId: OrganizationId,
-  workItemId: WorkItemId,
-  jobsRepository: JobsRepositoryService
-): Effect.Effect<Job, JobNotFoundError | JobStorageError> {
-  return loadJobDetailOrFail(organizationId, workItemId, jobsRepository).pipe(
-    Effect.map((detail) => detail.job)
-  );
+function toJobWriteResponse(
+  result: ElectricMutationConfirmed<Job>
+): JobWriteResponse {
+  return {
+    job: result.value,
+    mutation: result.mutation,
+  };
+}
+
+function toJobDetailWriteResponse(
+  result: ElectricMutationConfirmed<JobDetail>
+): JobDetailWriteResponse {
+  return {
+    detail: result.value,
+    mutation: result.mutation,
+  };
 }
 
 function loadExternalGrantIfNeeded(

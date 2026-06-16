@@ -2,6 +2,7 @@ import type { ProductActorId, UserId } from "@ceird/identity-core";
 import type {
   ActivityIdType,
   ContactIdType,
+  Job,
   WorkItemIdType,
   VisitIdType,
 } from "@ceird/jobs-core";
@@ -10,6 +11,7 @@ import type { SiteIdType } from "@ceird/sites-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Exit } from "effect";
 import * as React from "react";
 
 import type { JobsWorkspaceVisibleRow } from "#/features/jobs/jobs-data-plane";
@@ -23,6 +25,7 @@ const liveListState = vi.hoisted<{ current: JobsWorkspaceLiveListState }>(
     current: {
       allRowsCount: 0,
       availableLabels: [],
+      commands: makeCommandStubs(),
       health: {
         collection: "jobs",
         collectionId: "jobs-workspace-test",
@@ -98,6 +101,7 @@ describe("jobs workspace route shell", () => {
       ...liveListState.current,
       allRowsCount: 0,
       availableLabels: [],
+      commands: makeCommandStubs(),
       isCollectionGraphAvailable: true,
       isLoading: false,
       isReady: true,
@@ -129,7 +133,7 @@ describe("jobs workspace route shell", () => {
       screen.getByRole("heading", { name: "Jobs Workspace" })
     ).toBeVisible();
     expect(screen.getByText("Not the active Jobs route")).toBeVisible();
-    expect(screen.getByRole("button", { name: /new job/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /new job/i })).toBeEnabled();
     expect(
       screen.getByRole("searchbox", { name: /search live jobs/i })
     ).toBeVisible();
@@ -242,7 +246,7 @@ describe("jobs workspace route shell", () => {
 
     renderShell();
 
-    expect(screen.getByText("Fit heat pump")).toBeVisible();
+    expect(screen.getAllByText("Fit heat pump")[0]).toBeVisible();
     expect(screen.getByText("Warehouse")).toBeVisible();
     expect(screen.getByText("Urgent")).toBeVisible();
     expect(
@@ -383,6 +387,80 @@ describe("jobs workspace route shell", () => {
     ).toHaveFocus();
   });
 
+  it("shows pending and synced command feedback for workspace writes", async () => {
+    const user = userEvent.setup();
+    const createDeferred = Promise.withResolvers<
+      Exit.Exit<
+        {
+          readonly electricObservation: {
+            readonly collection: "jobs";
+            readonly kind: "observed-change";
+          };
+          readonly job: Job;
+          readonly mutation: { readonly txid: number };
+        },
+        unknown
+      >
+    >();
+    liveListState.current = {
+      ...liveListState.current,
+      commands: {
+        ...makeCommandStubs(),
+        createJob: vi.fn<JobsWorkspaceLiveListState["commands"]["createJob"]>(
+          () => createDeferred.promise
+        ),
+      },
+    };
+
+    renderShell();
+
+    await user.type(screen.getByLabelText("New job title"), "Fit heat pump");
+    await user.click(screen.getByRole("button", { name: /^create/i }));
+
+    expect(
+      screen.getByText("Creating job through the domain command.")
+    ).toBeVisible();
+
+    createDeferred.resolve(
+      Exit.succeed({
+        electricObservation: {
+          collection: "jobs",
+          kind: "observed-change",
+        },
+        job: makeJob("Fit heat pump"),
+        mutation: { txid: 501 },
+      })
+    );
+
+    await expect(
+      screen.findByText(/Created and synced Fit heat pump/)
+    ).resolves.toBeVisible();
+    expect(screen.getByText(/Txid 501/)).toBeVisible();
+  });
+
+  it("keeps failed command feedback visible without clearing the draft", async () => {
+    const user = userEvent.setup();
+    liveListState.current = {
+      ...liveListState.current,
+      commands: {
+        ...makeCommandStubs(),
+        createJob: vi.fn<JobsWorkspaceLiveListState["commands"]["createJob"]>(
+          () => Promise.resolve(Exit.fail(new Error("Title is too short")))
+        ),
+      },
+    };
+
+    renderShell();
+
+    await user.type(screen.getByLabelText("New job title"), "Fit");
+    await user.click(screen.getByRole("button", { name: /^create/i }));
+
+    await expect(
+      screen.findByText("Title is too short")
+    ).resolves.toBeVisible();
+    expect(screen.getByLabelText("New job title")).toHaveValue("Fit");
+  });
+
   it("keeps route state controls keyboard-addressable", async () => {
     const user = userEvent.setup();
     const onStatusChange = vi.fn<(status: unknown) => void>();
@@ -439,6 +517,34 @@ describe("jobs workspace route shell", () => {
     expect(onQueryChange).toHaveBeenLastCalledWith("boiler");
   });
 });
+
+function makeCommandStubs(): JobsWorkspaceLiveListState["commands"] {
+  return {
+    assignJobLabel:
+      vi.fn<JobsWorkspaceLiveListState["commands"]["assignJobLabel"]>(),
+    createJob: vi.fn<JobsWorkspaceLiveListState["commands"]["createJob"]>(),
+    removeJobLabel:
+      vi.fn<JobsWorkspaceLiveListState["commands"]["removeJobLabel"]>(),
+    reopenJob: vi.fn<JobsWorkspaceLiveListState["commands"]["reopenJob"]>(),
+    transitionJob:
+      vi.fn<JobsWorkspaceLiveListState["commands"]["transitionJob"]>(),
+    updateJob: vi.fn<JobsWorkspaceLiveListState["commands"]["updateJob"]>(),
+  };
+}
+
+function makeJob(title: string): Job {
+  return {
+    createdAt: "2026-06-15T10:00:00.000Z",
+    createdByUserId: "user_123" as UserId,
+    id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
+    kind: "job",
+    labels: [],
+    priority: "medium",
+    status: "new",
+    title,
+    updatedAt: "2026-06-15T11:00:00.000Z",
+  };
+}
 
 function makeWorkspaceRow(workItemId: WorkItemIdType): JobsWorkspaceVisibleRow {
   return {

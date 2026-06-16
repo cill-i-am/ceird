@@ -1,5 +1,7 @@
 "use client";
 import * as IdentityCore from "@ceird/identity-core";
+import type { JobPriority, JobStatus } from "@ceird/jobs-core";
+import type { LabelIdType } from "@ceird/labels-core";
 import {
   Alert01Icon,
   Briefcase01Icon,
@@ -7,6 +9,7 @@ import {
   Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Cause, Exit, Option } from "effect";
 import * as React from "react";
 
 import { AppPageHeader } from "#/components/app-page-header";
@@ -70,6 +73,33 @@ const SORT_OPTIONS = [
   readonly label: string;
   readonly value: JobsWorkspaceSort;
 }[];
+const PRIORITY_OPTIONS = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "urgent",
+] as const satisfies readonly JobPriority[];
+const JOB_STATUS_COMMAND_OPTIONS = [
+  "new",
+  "triaged",
+  "in_progress",
+  "blocked",
+  "completed",
+  "canceled",
+] as const satisfies readonly JobStatus[];
+const COMMAND_STATUS_CLASSES = {
+  failed: "border-destructive/40 bg-destructive/10 text-destructive",
+  pending: "border-amber-400/50 bg-amber-50 text-amber-700",
+  synced: "border-emerald-500/40 bg-emerald-50 text-emerald-700",
+} as const;
+
+type JobsWorkspaceCommandStatus = {
+  readonly message: string;
+  readonly status: "failed" | "pending" | "synced";
+  readonly targetJobId?: string | undefined;
+  readonly txid?: number | undefined;
+} | null;
 
 function clearedSearchParam(): undefined {
   return undefined;
@@ -112,11 +142,15 @@ function JobsWorkspaceLiveRouteShell({
   view,
 }: Omit<JobsWorkspaceRouteShellProps, "currentOrganizationRole">) {
   const searchRef = React.useRef<HTMLInputElement>(null);
+  const createTitleRef = React.useRef<HTMLInputElement>(null);
   const rowActionRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
   const detailPanelRef = React.useRef<HTMLElement>(null);
   const detailCloseWasRequestedRef = React.useRef(false);
   const focusedDetailJobIdRef = React.useRef<string | null>(null);
   const [selectedRowIndex, setSelectedRowIndex] = React.useState(0);
+  const [createTitle, setCreateTitle] = React.useState("");
+  const [commandStatus, setCommandStatus] =
+    React.useState<JobsWorkspaceCommandStatus>(null);
   const liveList = useJobsWorkspaceLiveList({
     labelId,
     query,
@@ -130,6 +164,10 @@ function JobsWorkspaceLiveRouteShell({
     status !== undefined ||
     sort !== "updated-desc";
   const detailOpen = detailJobId !== undefined;
+  const selectedRow = liveList.isReady
+    ? liveList.rows[selectedRowIndex]
+    : undefined;
+  const commandPending = commandStatus?.status === "pending";
 
   React.useEffect(() => {
     setSelectedRowIndex((current) =>
@@ -227,6 +265,167 @@ function JobsWorkspaceLiveRouteShell({
   useAppHotkeySequence("jobsWorkspaceBoardView", () => onViewChange("board"), {
     enabled: hotkeysEnabled,
   });
+  useAppHotkey(
+    "jobsWorkspaceCreate",
+    () => {
+      void handleCreateJob();
+    },
+    {
+      enabled:
+        hotkeysEnabled &&
+        liveList.isReady &&
+        !commandPending &&
+        createTitle.trim().length > 0,
+    }
+  );
+
+  async function runWorkspaceCommand<
+    Output extends { readonly mutation: { readonly txid: number } },
+  >(
+    promise: Promise<Exit.Exit<Output, unknown>>,
+    options: {
+      readonly pending: string;
+      readonly success: (output: Output) => string;
+      readonly targetJobId?: string | undefined;
+      readonly targetFromOutput?:
+        | ((output: Output) => string | undefined)
+        | undefined;
+    }
+  ): Promise<boolean> {
+    setCommandStatus({
+      message: options.pending,
+      status: "pending",
+      targetJobId: options.targetJobId,
+    });
+
+    const exit = await promise;
+
+    if (Exit.isSuccess(exit)) {
+      setCommandStatus({
+        message: options.success(exit.value),
+        status: "synced",
+        targetJobId:
+          options.targetFromOutput?.(exit.value) ?? options.targetJobId,
+        txid: exit.value.mutation.txid,
+      });
+      return true;
+    }
+
+    setCommandStatus({
+      message: formatCommandFailure(exit.cause),
+      status: "failed",
+      targetJobId: options.targetJobId,
+    });
+    return false;
+  }
+
+  async function handleCreateJob() {
+    const title = createTitle.trim();
+
+    if (title.length === 0 || !liveList.isReady || commandPending) {
+      createTitleRef.current?.focus();
+      return;
+    }
+
+    const synced = await runWorkspaceCommand(
+      liveList.commands.createJob({ title }),
+      {
+        pending: "Creating job through the domain command.",
+        success: (output) => `Created and synced ${output.job.title}.`,
+        targetFromOutput: (output) => output.job.id,
+      }
+    );
+    if (synced) {
+      setCreateTitle("");
+    }
+  }
+
+  async function handleStatusChange(nextStatus: JobStatus) {
+    if (!selectedRow || commandPending) {
+      return;
+    }
+
+    await runWorkspaceCommand(
+      liveList.commands.transitionJob(selectedRow.job.id, {
+        status: nextStatus,
+      }),
+      {
+        pending: `Updating ${selectedRow.job.title} status.`,
+        success: (output) =>
+          `${output.job.title} synced as ${formatStatus(output.job.status)}.`,
+        targetJobId: selectedRow.job.id,
+      }
+    );
+  }
+
+  async function handlePriorityChange(nextPriority: JobPriority) {
+    if (!selectedRow || commandPending) {
+      return;
+    }
+
+    await runWorkspaceCommand(
+      liveList.commands.updateJob(selectedRow.job.id, {
+        priority: nextPriority,
+      }),
+      {
+        pending: `Updating ${selectedRow.job.title} priority.`,
+        success: (output) =>
+          `${output.job.title} priority synced as ${formatPriority(output.job.priority)}.`,
+        targetJobId: selectedRow.job.id,
+      }
+    );
+  }
+
+  async function handleClearAssignee() {
+    if (!selectedRow || commandPending) {
+      return;
+    }
+
+    await runWorkspaceCommand(
+      liveList.commands.updateJob(selectedRow.job.id, { assigneeId: null }),
+      {
+        pending: `Clearing ${selectedRow.job.title} assignment.`,
+        success: (output) => `${output.job.title} assignment synced.`,
+        targetJobId: selectedRow.job.id,
+      }
+    );
+  }
+
+  async function handleAssignLabel(selectedLabelId: string | undefined) {
+    if (!selectedRow || commandPending || selectedLabelId === undefined) {
+      return;
+    }
+
+    await runWorkspaceCommand(
+      liveList.commands.assignJobLabel(selectedRow.job.id, {
+        labelId: selectedLabelId as LabelIdType,
+      }),
+      {
+        pending: `Assigning label to ${selectedRow.job.title}.`,
+        success: (output) =>
+          `${output.detail.job.title} label assignment synced.`,
+        targetJobId: selectedRow.job.id,
+      }
+    );
+  }
+
+  async function handleRemoveLabel(removedLabelId: string) {
+    if (!selectedRow || commandPending) {
+      return;
+    }
+
+    await runWorkspaceCommand(
+      liveList.commands.removeJobLabel(
+        selectedRow.job.id,
+        removedLabelId as LabelIdType
+      ),
+      {
+        pending: `Removing label from ${selectedRow.job.title}.`,
+        success: (output) => `${output.detail.job.title} label removal synced.`,
+        targetJobId: selectedRow.job.id,
+      }
+    );
+  }
 
   return (
     <main className="flex min-h-full min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
@@ -238,13 +437,22 @@ function JobsWorkspaceLiveRouteShell({
         actions={
           <>
             <Badge variant="outline">Not the active Jobs route</Badge>
-            <Button disabled type="button">
+            <Button
+              disabled={!liveList.isReady}
+              onClick={() => createTitleRef.current?.focus()}
+              type="button"
+            >
               <HugeiconsIcon
                 aria-hidden
                 icon={Briefcase01Icon}
                 strokeWidth={2}
               />
               New job
+              <ShortcutHint
+                decorative
+                hotkey={HOTKEYS.jobsWorkspaceCreate.hotkey}
+                label={HOTKEYS.jobsWorkspaceCreate.label}
+              />
             </Button>
           </>
         }
@@ -413,6 +621,7 @@ function JobsWorkspaceLiveRouteShell({
               setSelectedRowIndex(rowIndex);
               onDetailJobChange(row.job.id);
             }}
+            commandStatus={commandStatus}
             rowActionRefs={rowActionRefs}
             rows={liveList.rows}
             selectedJobId={detailJobId}
@@ -430,8 +639,29 @@ function JobsWorkspaceLiveRouteShell({
           ) : (
             <HealthPanel
               allRowsCount={liveList.allRowsCount}
+              availableLabels={liveList.availableLabels}
+              commandPending={commandPending}
+              commandStatus={commandStatus}
+              createTitle={createTitle}
+              createTitleRef={createTitleRef}
               health={liveList.health}
+              onAssignLabel={(nextLabelId) =>
+                void handleAssignLabel(nextLabelId)
+              }
+              onClearAssignee={() => void handleClearAssignee()}
+              onCreateJob={() => void handleCreateJob()}
+              onPriorityChange={(nextPriority) =>
+                void handlePriorityChange(nextPriority)
+              }
+              onRemoveLabel={(nextLabelId) =>
+                void handleRemoveLabel(nextLabelId)
+              }
+              onStatusChange={(nextStatus) =>
+                void handleStatusChange(nextStatus)
+              }
+              onTitleChange={setCreateTitle}
               recentSearch={recentSearch}
+              selectedRow={selectedRow}
               visibleRowsCount={liveList.rows.length}
             />
           )}
@@ -442,6 +672,7 @@ function JobsWorkspaceLiveRouteShell({
 }
 
 function ListBody({
+  commandStatus,
   isAvailable,
   isLoading,
   isReady,
@@ -452,6 +683,7 @@ function ListBody({
   selectedRowIndex,
   setSelectedRowIndex,
 }: {
+  readonly commandStatus: JobsWorkspaceCommandStatus;
   readonly isAvailable: boolean;
   readonly isLoading: boolean;
   readonly isReady: boolean;
@@ -520,6 +752,16 @@ function ListBody({
                     {formatPriority(row.job.priority)}
                   </Badge>
                   {row.contact ? <span>{row.contact.name}</span> : null}
+                  {commandStatus?.targetJobId === row.job.id ? (
+                    <span
+                      className={cn(
+                        "rounded border px-1.5 py-0.5 font-medium",
+                        COMMAND_STATUS_CLASSES[commandStatus.status]
+                      )}
+                    >
+                      {formatCommandStatusLabel(commandStatus.status)}
+                    </span>
+                  ) : null}
                 </span>
               </span>
               <span className="min-w-0 truncate text-muted-foreground">
@@ -818,17 +1060,54 @@ function JobsWorkspaceDetailUnavailableState({
 
 function HealthPanel({
   allRowsCount,
+  availableLabels,
+  commandPending,
+  commandStatus,
+  createTitle,
+  createTitleRef,
   health,
+  onAssignLabel,
+  onClearAssignee,
+  onCreateJob,
+  onPriorityChange,
+  onRemoveLabel,
+  onStatusChange,
+  onTitleChange,
   recentSearch,
+  selectedRow,
   visibleRowsCount,
 }: {
   readonly allRowsCount: number;
+  readonly availableLabels: ReturnType<
+    typeof useJobsWorkspaceLiveList
+  >["availableLabels"];
+  readonly commandPending: boolean;
+  readonly commandStatus: JobsWorkspaceCommandStatus;
+  readonly createTitle: string;
+  readonly createTitleRef: React.RefObject<HTMLInputElement | null>;
   readonly health: ReturnType<typeof useJobsWorkspaceLiveList>["health"];
+  readonly onAssignLabel: (labelId: string | undefined) => void;
+  readonly onClearAssignee: () => void;
+  readonly onCreateJob: () => void;
+  readonly onPriorityChange: (priority: JobPriority) => void;
+  readonly onRemoveLabel: (labelId: string) => void;
+  readonly onStatusChange: (status: JobStatus) => void;
+  readonly onTitleChange: (title: string) => void;
   readonly recentSearch?: string | undefined;
+  readonly selectedRow:
+    | ReturnType<typeof useJobsWorkspaceLiveList>["rows"][number]
+    | undefined;
   readonly visibleRowsCount: number;
 }) {
   const degraded =
     health.status === "unavailable" || health.status === "disabled";
+  const assignedLabelIds =
+    selectedRow === undefined
+      ? new Set<LabelIdType>()
+      : new Set(selectedRow.labels.map((label) => label.id));
+  const assignableLabels = availableLabels.filter(
+    (label) => !assignedLabelIds.has(label.id)
+  );
 
   return (
     <>
@@ -859,6 +1138,151 @@ function HealthPanel({
           <p className="mt-3 text-sm/6 text-destructive">
             {health.lastError.message}
           </p>
+        ) : null}
+      </div>
+      <div className="rounded-md border border-border/70 p-4">
+        <h2 className="font-heading text-sm font-medium">Domain commands</h2>
+        <div className="mt-3 grid gap-2">
+          <Input
+            ref={createTitleRef}
+            aria-label="New job title"
+            autoComplete="off"
+            disabled={commandPending}
+            name="new-job-title"
+            onChange={(event) => onTitleChange(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                onCreateJob();
+              }
+            }}
+            placeholder="e.g. Inspect boiler…"
+            value={createTitle}
+          />
+          <Button
+            disabled={commandPending || createTitle.trim().length === 0}
+            onClick={onCreateJob}
+            size="sm"
+            type="button"
+          >
+            Create job
+            <ShortcutHint
+              decorative
+              hotkey={HOTKEYS.jobsWorkspaceCreate.hotkey}
+              label={HOTKEYS.jobsWorkspaceCreate.label}
+            />
+          </Button>
+        </div>
+
+        {selectedRow ? (
+          <div className="mt-4 grid gap-3 border-t border-border/70 pt-3">
+            <div>
+              <p className="truncate text-sm font-medium">
+                {selectedRow.job.title}
+              </p>
+              <p className="text-xs text-muted-foreground">Selected live row</p>
+            </div>
+            <label className="grid gap-1 text-sm">
+              <span className="text-muted-foreground">Status</span>
+              <select
+                aria-label="Update selected job status"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                disabled={commandPending}
+                name="selected-job-status"
+                onChange={(event) =>
+                  onStatusChange(event.currentTarget.value as JobStatus)
+                }
+                value={selectedRow.job.status}
+              >
+                {JOB_STATUS_COMMAND_OPTIONS.map((nextStatus) => (
+                  <option key={nextStatus} value={nextStatus}>
+                    {formatStatus(nextStatus)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-muted-foreground">Priority</span>
+              <select
+                aria-label="Update selected job priority"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                disabled={commandPending}
+                name="selected-job-priority"
+                onChange={(event) =>
+                  onPriorityChange(event.currentTarget.value as JobPriority)
+                }
+                value={selectedRow.job.priority}
+              >
+                {PRIORITY_OPTIONS.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {formatPriority(priority)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedRow.job.assigneeId ? (
+              <Button
+                disabled={commandPending}
+                onClick={onClearAssignee}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Clear assignee
+              </Button>
+            ) : null}
+            <label className="grid gap-1 text-sm">
+              <span className="text-muted-foreground">Assign label</span>
+              <select
+                aria-label="Assign label to selected job"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                disabled={commandPending}
+                name="selected-job-label"
+                onChange={(event) => {
+                  onAssignLabel(normalizeInput(event.currentTarget.value));
+                  event.currentTarget.value = "";
+                }}
+                value=""
+              >
+                <option value="">Choose label</option>
+                {assignableLabels.map((label) => (
+                  <option key={label.id} value={label.id}>
+                    {label.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selectedRow.labels.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {selectedRow.labels.map((label) => (
+                  <Button
+                    disabled={commandPending}
+                    key={label.id}
+                    onClick={() => onRemoveLabel(label.id)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    Remove {label.name}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {commandStatus ? (
+          <output
+            aria-live="polite"
+            className={cn(
+              "mt-3 rounded-md border px-3 py-2 text-sm/6",
+              COMMAND_STATUS_CLASSES[commandStatus.status]
+            )}
+          >
+            {commandStatus.message}
+            {commandStatus.txid === undefined
+              ? null
+              : ` Txid ${commandStatus.txid}.`}
+          </output>
         ) : null}
       </div>
       <div className="rounded-md border border-border/70 p-4">
@@ -1060,6 +1484,46 @@ function formatLongDate(value: string): string {
     month: "short",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function formatCommandFailure(cause: Cause.Cause<unknown>): string {
+  const failure = Cause.findErrorOption(cause);
+  const error = Option.isSome(failure) ? failure.value : Cause.squash(cause);
+
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.length > 0
+  ) {
+    return error.message;
+  }
+
+  return "The job command failed before Electric confirmation completed.";
+}
+
+function formatCommandStatusLabel(
+  status: Exclude<JobsWorkspaceCommandStatus, null>["status"]
+): string {
+  switch (status) {
+    case "failed": {
+      return "Failed";
+    }
+    case "pending": {
+      return "Pending";
+    }
+    case "synced": {
+      return "Synced";
+    }
+    default: {
+      return "Pending";
+    }
+  }
 }
 
 function formatShortDate(value: string): string {

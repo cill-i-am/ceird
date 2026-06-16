@@ -602,7 +602,11 @@ The jobs service flow is:
 3. Enforce authorization for the requested operation.
 4. Read or mutate through repositories.
 5. Record activity for auditable changes.
-6. Return DTOs defined in the owning shared core package.
+6. Return DTOs defined in the owning shared core package. Jobs write commands
+   return server-confirmed rows plus PostgreSQL/Electric mutation metadata so
+   Electric-backed clients can wait for synced collection observation without
+   moving authorization, generated IDs, enrichment, or invariants into the
+   browser.
 
 Current actor resolution lives in `apps/domain/src/domains/organizations`
 because sites,
@@ -681,6 +685,18 @@ filtering the complete array in the browser.
 `GET /jobs/external-options` is external-only. It returns `JobOptionsResponse`
 with `members: []` and derives labels, contacts, and sites only from jobs
 visible through the current collaborator's grants.
+
+Jobs write endpoints that mutate the work item row (`POST /jobs`,
+`PATCH /jobs/:workItemId`, `POST /jobs/:workItemId/transitions`, and
+`POST /jobs/:workItemId/reopen`) return `JobWriteResponse`:
+`{ job, mutation: { txid } }`. Job label assignment endpoints
+(`POST /jobs/:workItemId/labels` and
+`DELETE /jobs/:workItemId/labels/:labelId`) return
+`JobDetailWriteResponse`: `{ detail, mutation: { txid } }`. The domain Worker
+owns these commands inside the same transaction that captures
+`pg_current_xact_id()`; browser callers use the txid only as confirmation
+metadata while canonical job, label assignment, site/contact enrichment, and
+authorization behavior remain domain-owned.
 
 ## Labels Domain
 

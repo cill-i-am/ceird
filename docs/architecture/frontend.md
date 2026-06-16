@@ -166,6 +166,14 @@ pending, synced, and failed write feedback while waiting for Electric collection
 observation, and registers create/save/cancel shortcuts through the shared
 hotkey layer instead of local key listeners.
 
+The Electric-native Jobs workspace uses the Jobs feature data-plane command
+runner for create, status, priority/update, reopen, assignee clearing, and job
+label assignment/removal. The route never computes generated IDs, enrichment,
+or authorization locally; it calls domain/API commands, keeps visible command
+feedback pending until synced `jobs` or `job-label-assignments` rows confirm the
+change, shows the preserved txid for diagnostics, and exposes create through
+the shared hotkey layer.
+
 The authenticated app shell also mounts the global Ceird Agent entry point in
 `features/agent/global-agent-chat.tsx`. It is app-level rather than
 route-level: `AppLayout` owns the Agent drawer open state, the authenticated
@@ -251,7 +259,7 @@ the package-local fallback and `local` when no Alchemy metadata is available.
 | `features/auth`            | Login, signup, password reset, email verification, route guards, redirects, auth UI, and server session helpers.                                                                                                                                                                                                                                                                                                                                                       |
 | `features/organizations`   | Organization onboarding, active organization sync, settings, members, invitations, role access, and labels.                                                                                                                                                                                                                                                                                                                                                            |
 | `features/jobs`            | Jobs list, create flow, detail drawer/sheet, state effects, API client bridge, saved views, location display, maps, collaborators, labels, comments, and visits.                                                                                                                                                                                                                                                                                                       |
-| `features/jobs-workspace`  | Electric-native Jobs workspace preview route, live list controls, URL-backed detail state, health/permission states, saved-view-ready route state, and shortcut affordances. It consumes feature-owned data-plane helpers and must not instantiate raw Electric streams or raw TanStack DB collection APIs in route/view code.                                                                                                                                         |
+| `features/jobs-workspace`  | Electric-native Jobs workspace preview route, live list controls, URL-backed detail state, health/permission states, saved-view-ready route state, domain-backed job/label commands with Electric row-observation feedback plus preserved server txid metadata, and shortcut affordances. It consumes feature-owned data-plane helpers and must not instantiate raw Electric streams or raw TanStack DB collection APIs in route/view code.                            |
 | `features/sites`           | Sites list, site create flow, detail sheet, and site API state. The first Sites index refresh intentionally uses only supported site fields: name, address, and map readiness. Status, labels, lead, open job counts, saved views, updated timestamps, archive state, and bulk selection are product follow-ups, not placeholder UI.                                                                                                                                   |
 | `features/sites-workspace` | Electric-native Sites workspace preview route, browser-safe Electric read-model contracts, live list/detail derivation, domain-backed create/update/label commands with Electric row-observation feedback plus preserved server txid metadata, permission/unavailable/degraded states, saved search/detail restoration hooks, and shortcut affordances. Route/view code consumes the feature data-plane module rather than constructing raw Electric streams directly. |
 | `features/activity`        | Global organization Activity route, Electric-backed activity event and product-safe actor read-model contracts, local feed filters, health states, and activity row navigation.                                                                                                                                                                                                                                                                                        |
@@ -489,7 +497,9 @@ an explicit SSR strategy. The current migrated slices are:
   derives visible live rows from jobs, label assignments, labels, site
   summaries, and contact summaries only after the full required collection
   graph is healthy/live-query ready, and surfaces explicit graph sync health
-  instead of falling back to the legacy Jobs route data path.
+  instead of falling back to the legacy Jobs route data path. It also exposes
+  the Jobs workspace command runner so route code can call domain-backed write
+  commands without constructing raw TanStack DB or Electric mutations.
 - `features/jobs-workspace/jobs-workspace-live-detail.ts`, where the
   Electric-native Jobs workspace derives selected job detail from the wider
   Electric detail graph, including labels, site/contact summaries,
@@ -562,8 +572,8 @@ contract:
   accurately predict.
 - When a synced feature can observe the committed mutation, prefer command
   pending state that resolves from Electric collection observation rather than
-  from the HTTP response alone. Sites workspace create/update and site-label
-  commands follow this pattern.
+  from the HTTP response alone. Sites workspace create/update/site-label
+  commands and Jobs workspace job/job-label commands follow this pattern.
 - Query Collection fetch results are authoritative synced state. Race guards
   may preserve server-confirmed local writes, but they must not promote
   `$synced: false` optimistic rows into the fetched result.

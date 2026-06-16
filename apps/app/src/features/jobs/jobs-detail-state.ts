@@ -11,9 +11,7 @@ import type {
   JobCollaboratorIdType,
   JobDetailResponse,
   PatchJobInput,
-  PatchJobResponse,
   TransitionJobInput,
-  TransitionJobResponse,
   UpdateJobCollaboratorInput,
   WorkItemIdType,
 } from "@ceird/jobs-core";
@@ -127,20 +125,18 @@ export interface JobsDetailStateContextValue {
   readonly detail: JobDetailResponse;
   readonly patchJob: (
     input: PatchJobInput
-  ) => Promise<Exit.Exit<PatchJobResponse, AppApiError>>;
+  ) => Promise<Exit.Exit<Job, AppApiError>>;
   readonly refreshCollaborators: () => Promise<
     Exit.Exit<readonly JobCollaborator[], AppApiError>
   >;
   readonly removeJobLabel: (
     labelId: LabelIdType
   ) => Promise<Exit.Exit<JobDetailResponse, AppApiError>>;
-  readonly reopenJob: () => Promise<
-    Exit.Exit<JobDetailResponse["job"], AppApiError>
-  >;
+  readonly reopenJob: () => Promise<Exit.Exit<Job, AppApiError>>;
   readonly results: JobsDetailMutationResults;
   readonly transitionJob: (
     input: TransitionJobInput
-  ) => Promise<Exit.Exit<TransitionJobResponse, AppApiError>>;
+  ) => Promise<Exit.Exit<Job, AppApiError>>;
   readonly updateCollaborator: (input: {
     readonly collaboratorId: JobCollaboratorIdType;
     readonly input: UpdateJobCollaboratorInput;
@@ -348,7 +344,9 @@ export function JobsDetailStateProvider({
         "transition",
         ["job-details", "jobs", "site-related-jobs"],
         withMinimumMutationPendingDurationEffect(
-          transitionBrowserJob(workItemId, input)
+          transitionBrowserJob(workItemId, input).pipe(
+            Effect.map((response) => response.job)
+          )
         ),
         syncChangedJob
       ),
@@ -360,7 +358,11 @@ export function JobsDetailStateProvider({
       runMutation(
         "reopen",
         ["job-details", "jobs", "site-related-jobs"],
-        withMinimumMutationPendingDurationEffect(reopenBrowserJob(workItemId)),
+        withMinimumMutationPendingDurationEffect(
+          reopenBrowserJob(workItemId).pipe(
+            Effect.map((response) => response.job)
+          )
+        ),
         syncChangedJob
       ),
     [runMutation, syncChangedJob, workItemId]
@@ -372,7 +374,9 @@ export function JobsDetailStateProvider({
         "patch",
         ["job-details", "jobs", "site-related-jobs"],
         withMinimumMutationPendingDurationEffect(
-          patchBrowserJob(workItemId, input)
+          patchBrowserJob(workItemId, input).pipe(
+            Effect.map((response) => response.job)
+          )
         ),
         syncChangedJob
       ),
@@ -423,7 +427,9 @@ export function JobsDetailStateProvider({
         "assignLabel",
         ["job-details", "jobs", "site-related-jobs"],
         withMinimumMutationPendingDurationEffect(
-          assignBrowserJobLabel(workItemId, input)
+          assignBrowserJobLabel(workItemId, input).pipe(
+            Effect.map((response) => response.detail)
+          )
         ),
         syncChangedJobDetail
       ),
@@ -444,7 +450,8 @@ export function JobsDetailStateProvider({
             ),
             Effect.flatMap((label) =>
               assignBrowserJobLabel(workItemId, { labelId: label.id })
-            )
+            ),
+            Effect.map((response) => response.detail)
           )
         ),
         syncChangedJobDetail
@@ -458,7 +465,9 @@ export function JobsDetailStateProvider({
         "removeLabel",
         ["job-details", "jobs", "site-related-jobs"],
         withMinimumMutationPendingDurationEffect(
-          removeBrowserJobLabel(workItemId, labelId)
+          removeBrowserJobLabel(workItemId, labelId).pipe(
+            Effect.map((response) => response.detail)
+          )
         ),
         syncChangedJobDetail
       ),
