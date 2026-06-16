@@ -2851,7 +2851,11 @@ function addOptionalString(item: JobsElectricRow, key: string, value: unknown) {
   item[key] = String(value);
 }
 
-function addOptionalDateTime(item: JobsElectricRow, key: string, value: unknown) {
+function addOptionalDateTime(
+  item: JobsElectricRow,
+  key: string,
+  value: unknown
+) {
   if (value === null || value === undefined) {
     return;
   }
