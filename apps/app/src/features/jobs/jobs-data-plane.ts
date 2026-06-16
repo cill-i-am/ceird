@@ -2604,14 +2604,14 @@ function createJobsCollection({
 
 function toJobListItemElectricRow(row: Record<string, unknown>) {
   const item: JobsElectricRow = {
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     id: String(row.id),
     kind: String(row.kind),
     labels: [],
     priority: String(row.priority),
     status: String(row.status),
     title: String(row.title),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   };
 
   addOptionalString(item, "assigneeId", row.assigneeId);
@@ -2626,19 +2626,19 @@ export function toJobsWorkspaceJobRow(
   row: Record<string, unknown>
 ): JobsWorkspaceJobRow {
   const item: JobsElectricRow = {
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     createdByUserId: String(row.createdByUserId),
     id: String(row.id),
     kind: String(row.kind),
     priority: String(row.priority),
     status: String(row.status),
     title: String(row.title),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   };
 
   addOptionalString(item, "assigneeId", row.assigneeId);
   addOptionalString(item, "blockedReason", row.blockedReason);
-  addOptionalString(item, "completedAt", row.completedAt);
+  addOptionalDateTime(item, "completedAt", row.completedAt);
   addOptionalString(item, "completedByUserId", row.completedByUserId);
   addOptionalString(item, "contactId", row.contactId);
   addOptionalString(item, "coordinatorId", row.coordinatorId);
@@ -2654,7 +2654,7 @@ export function toJobLabelAssignmentRow(
   const labelId = String(row.labelId);
 
   return Schema.decodeUnknownSync(JobLabelAssignmentRowSchema)({
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     id: `${workItemId}:${labelId}`,
     labelId,
     workItemId,
@@ -2674,7 +2674,7 @@ export function toJobSiteSummaryRow(
     id: String(row.id),
     locationStatus: String(row.locationStatus),
     name: String(row.name),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   };
 
   addOptionalString(item, "accessNotes", row.accessNotes);
@@ -2692,7 +2692,7 @@ export function toJobContactSummaryRow(
   const item: JobsElectricRow = {
     id: String(row.id),
     name: String(row.name),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   };
 
   addOptionalString(item, "email", row.email);
@@ -2704,10 +2704,10 @@ export function toJobContactSummaryRow(
 
 export function toJobsWorkspaceLabelRow(row: Record<string, unknown>): Label {
   return Schema.decodeUnknownSync(LabelSchema)({
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     id: String(row.id),
     name: String(row.name),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   });
 }
 
@@ -2716,11 +2716,11 @@ export function toJobCollaboratorElectricRow(
 ): JobCollaborator {
   const item: JobsElectricRow = {
     accessLevel: String(row.accessLevel),
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     id: String(row.id),
     roleLabel: String(row.roleLabel),
     subjectType: String(row.subjectType),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
     workItemId: String(row.workItemId),
   };
 
@@ -2733,7 +2733,7 @@ export function toJobActivityElectricRow(
   row: Record<string, unknown>
 ): JobsWorkspaceActivityRow {
   const item: JobsElectricRow = {
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     eventType: String(row.eventType),
     id: String(row.id),
     payload: parseJsonColumn(row.payload) as JobsElectricRowValue,
@@ -2751,7 +2751,7 @@ export function toJobVisitElectricRow(
 ): Schema.Schema.Type<typeof JobVisitSchema> {
   return Schema.decodeUnknownSync(JobVisitSchema)({
     authorUserId: String(row.authorUserId),
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     durationMinutes: Number(row.durationMinutes),
     id: String(row.id),
     note: String(row.note),
@@ -2768,7 +2768,7 @@ export function toJobCommentEdgeRow(
 
   return Schema.decodeUnknownSync(JobCommentEdgeRowSchema)({
     commentId,
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     id: `${workItemId}:${commentId}`,
     workItemId,
   });
@@ -2780,9 +2780,9 @@ export function toJobCommentElectricRow(
   const item: JobsElectricRow = {
     actorId: String(row.actorId),
     body: String(row.body),
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     id: String(row.id),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   };
 
   return Schema.decodeUnknownSync(JobsWorkspaceCommentRowSchema)(item);
@@ -2849,6 +2849,27 @@ function addOptionalString(item: JobsElectricRow, key: string, value: unknown) {
   }
 
   item[key] = String(value);
+}
+
+function addOptionalDateTime(item: JobsElectricRow, key: string, value: unknown) {
+  if (value === null || value === undefined) {
+    return;
+  }
+
+  item[key] = normalizeJobsElectricDateTime(value);
+}
+
+function normalizeJobsElectricDateTime(value: unknown) {
+  const raw = String(value);
+
+  if (raw.includes("T")) {
+    return raw;
+  }
+
+  const normalized = raw.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
+  const date = new Date(normalized);
+
+  return Number.isNaN(date.getTime()) ? raw : date.toISOString();
 }
 
 function addOptionalNumber(item: JobsElectricRow, key: string, value: unknown) {

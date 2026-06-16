@@ -685,6 +685,33 @@ describe("jobs data plane", () => {
     });
   });
 
+  it("normalizes Postgres timestamptz Electric rows for Jobs workspace jobs", () => {
+    expect(
+      toJobsWorkspaceJobRow({
+        assigneeId: null,
+        blockedReason: null,
+        completedAt: null,
+        completedByUserId: null,
+        contactId: null,
+        coordinatorId: null,
+        createdAt: "2026-06-16 21:12:41.802467+00",
+        createdByUserId: "user_123",
+        id: "019ed247-7fcb-7114-9d5c-af3e0dc7fdc2",
+        kind: "job",
+        priority: "none",
+        siteId: null,
+        status: "new",
+        title: "TSK-237 realtime",
+        updatedAt: "2026-06-16 21:12:41.802467+00",
+      })
+    ).toMatchObject({
+      createdAt: "2026-06-16T21:12:41.802Z",
+      id: "019ed247-7fcb-7114-9d5c-af3e0dc7fdc2",
+      title: "TSK-237 realtime",
+      updatedAt: "2026-06-16T21:12:41.802Z",
+    });
+  });
+
   it("derives visible Jobs workspace rows from local joins, filters, search, and sort", () => {
     const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
     const secondWorkItemId =

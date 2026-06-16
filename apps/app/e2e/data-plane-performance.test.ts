@@ -27,10 +27,10 @@ test.describe("data-plane browser performance", () => {
       }),
       await measureVisibleInteraction({
         action: () =>
-          page.locator("header").getByRole("link", { name: "New job" }).click(),
-        name: "jobs.create-sheet",
+          page.getByRole("button", { exact: true, name: "New job" }).click(),
+        name: "jobs.workspace-create",
         page,
-        visible: page.getByRole("dialog", { name: "New job" }),
+        visible: page.getByLabel("New job title"),
       }),
     ];
 
