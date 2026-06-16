@@ -57,12 +57,14 @@ function makeJobsAuthorization() {
   });
 }
 
-function makeActivityEventsAuthorization() {
+function makeActivityEventsAuthorization(
+  retainedAfter = "2026-06-16T00:00:00.000Z"
+) {
   return makeAuthorization({
     organizationId: "org_sync",
     params: {
       "1": "org_sync",
-      "2": "2026-06-16T00:00:00.000Z",
+      "2": retainedAfter,
     },
     shape: "activity-events",
     table: "activity_events",
@@ -384,6 +386,62 @@ describe("Sync Worker runtime", () => {
     expect(authorizeShape).toHaveBeenCalledTimes(1);
     expect(fetchElectric).toHaveBeenCalledTimes(2);
     expect(forwardedOrganizations).toStrictEqual(["org_sync", "org_sync"]);
+  });
+
+  it("does not cache time-sensitive activity events authorization cutoffs", async () => {
+    const forwardedRetainedCutoffs: string[] = [];
+    const authorizeShape = vi
+      .fn()
+      .mockReturnValueOnce(
+        Effect.succeed(
+          makeActivityEventsAuthorization("2026-06-16T00:00:00.000Z")
+        )
+      )
+      .mockReturnValueOnce(
+        Effect.succeed(
+          makeActivityEventsAuthorization("2026-06-16T00:00:05.000Z")
+        )
+      );
+    const fetchElectric = vi.fn((request: Request) =>
+      Effect.sync(() => {
+        forwardedRetainedCutoffs.push(
+          new URL(request.url).searchParams.get("params[2]") ?? ""
+        );
+
+        return Response.json([{ headers: { control: "up-to-date" } }]);
+      })
+    );
+    const dependencies = {
+      authorizeShape,
+      fetchElectric,
+      now: () => 1000,
+    };
+
+    for (const offset of ["-1", "0_0"]) {
+      const response = await handleSyncWorkerFetch(
+        new Request(
+          `https://sync.example.com/v1/shapes/activity-events?offset=${offset}`,
+          {
+            headers: {
+              cookie: "ceird.session=user-a",
+              origin: "https://app.example.com",
+            },
+          }
+        ),
+        baseEnv,
+        makeExecutionContext(),
+        dependencies
+      ).pipe(Effect.runPromise);
+
+      expect(response.status).toBe(200);
+    }
+
+    expect(authorizeShape).toHaveBeenCalledTimes(2);
+    expect(fetchElectric).toHaveBeenCalledTimes(2);
+    expect(forwardedRetainedCutoffs).toStrictEqual([
+      "2026-06-16T00:00:00.000Z",
+      "2026-06-16T00:00:05.000Z",
+    ]);
   });
 
   it("isolates cached grants by auth fingerprint and organization", async () => {

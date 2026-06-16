@@ -360,8 +360,10 @@ scope, table, predicate, and params returned by the domain Worker, and cached
 entries are only reused for the same requested shape. Authorization failures,
 malformed payloads, unknown shapes, and domain/service errors are never cached;
 expired or absent grants call the domain Worker live and keep fail-closed
-behavior. Active membership invalidation is intentionally out of scope for v1,
-so revocation exposure is bounded by the short TTL.
+behavior. The `activity-events` shape is not cached because its retained cutoff
+is time-sensitive and must be refreshed for each public shape request. Active
+membership invalidation is intentionally out of scope for v1, so revocation
+exposure is bounded by the short TTL.
 Pull-request previews and ephemeral push-to-main cloud E2E now provision the
 full Worker, Durable Object, Container, R2, and Neon path. Their deploy
 workflows run an authenticated sync canary through `PLAYWRIGHT_SYNC_URL` after

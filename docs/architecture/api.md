@@ -445,7 +445,8 @@ projection: the domain-approved predicate is
 Worker's current time. `retained_until` already encodes the 30-day activity
 retention rule, so stale rows are excluded even if cleanup has not run yet.
 Browser callers cannot provide the cutoff, table, predicate, params, or
-Electric source secret.
+Electric source secret. The sync Worker does not cache `activity-events`
+authorizations because the retained cutoff is time-sensitive.
 
 ## Observability
 
