@@ -585,6 +585,127 @@ describe("comments repository", () => {
       ]);
     });
   });
+
+  it("retries the first site projection migration after partial DDL application", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "partial_site_projection_retry",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Comments integration database unavailable; skipping partial site projection retry coverage"
+      );
+    }
+
+    await applyMigrationsBefore(
+      testDatabase.url,
+      SITE_COMMENT_BODIES_MIGRATION
+    );
+
+    const actorId = randomUUID();
+    const organizationId = decodeOrganizationId(randomUUID());
+    const userId = decodeUserId(`partial_site_projection_${Date.now()}`);
+    const siteId = decodeSiteId(randomUUID());
+    const siteCommentId = randomUUID();
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Partial Site Projection Retry",
+      });
+      await seedUser(pool, {
+        id: userId,
+        name: "Taylor Retry",
+      });
+      await seedMember(pool, {
+        organizationId,
+        role: "member",
+        userId,
+      });
+      await seedSite(pool, {
+        id: siteId,
+        name: "Retry Site",
+        organizationId,
+      });
+      await seedProductActivityActor(pool, {
+        actorId,
+        displayName: "Taylor Retry",
+        organizationId,
+      });
+      await seedSiteComment(pool, {
+        actorId,
+        body: "Retry-safe projection comment",
+        commentId: siteCommentId,
+        organizationId,
+        siteId,
+        userId,
+      });
+      await createPartialSiteCommentBodiesTable(pool);
+    });
+
+    await applyMigration(testDatabase.url, SITE_COMMENT_BODIES_MIGRATION);
+
+    await withPool(testDatabase.url, async (pool) => {
+      const projection = await pool.query<{
+        actor_id: string;
+        body: string;
+        id: string;
+      }>(
+        `select id, actor_id, body
+         from site_comment_bodies
+         where organization_id = $1
+           and id = $2`,
+        [organizationId, siteCommentId]
+      );
+      const indexes = await pool.query<{ indexname: string }>(
+        `select indexname
+         from pg_indexes
+         where schemaname = current_schema()
+           and tablename = 'site_comment_bodies'
+           and indexname in (
+             'site_comment_bodies_organization_created_at_idx',
+             'site_comment_bodies_actor_id_idx'
+           )
+         order by indexname`
+      );
+      const constraints = await pool.query<{ conname: string }>(
+        `select conname
+         from pg_constraint
+         where conrelid = 'site_comment_bodies'::regclass
+           and conname in (
+             'site_comment_bodies_organization_id_organization_id_fkey',
+             'site_comment_bodies_comment_org_fk',
+             'site_comment_bodies_actor_org_fk'
+           )
+         order by conname`
+      );
+
+      expect(projection.rows).toStrictEqual([
+        {
+          actor_id: actorId,
+          body: "Retry-safe projection comment",
+          id: siteCommentId,
+        },
+      ]);
+      expect(indexes.rows.map((row) => row.indexname)).toStrictEqual([
+        "site_comment_bodies_actor_id_idx",
+        "site_comment_bodies_organization_created_at_idx",
+      ]);
+      expect(constraints.rows.map((row) => row.conname)).toStrictEqual([
+        "site_comment_bodies_actor_org_fk",
+        "site_comment_bodies_comment_org_fk",
+        "site_comment_bodies_organization_id_organization_id_fkey",
+      ]);
+    });
+  });
 });
 
 async function applyMigrationsBefore(
@@ -721,6 +842,86 @@ async function seedNullActorSiteComment(
       [input.commentId, input.organizationId, input.siteId]
     );
   });
+}
+
+async function seedProductActivityActor(
+  pool: Pool,
+  input: {
+    readonly actorId: string;
+    readonly displayName: string;
+    readonly organizationId: string;
+  }
+) {
+  await pool.query(
+    `insert into product_activity_actors (
+       id,
+       organization_id,
+       kind,
+       display_name,
+       display_detail,
+       created_at,
+       updated_at
+     )
+     values ($1, $2, 'member', $3, 'Team member', now(), now())`,
+    [input.actorId, input.organizationId, input.displayName]
+  );
+}
+
+async function seedSiteComment(
+  pool: Pool,
+  input: {
+    readonly actorId: string;
+    readonly body: string;
+    readonly commentId: string;
+    readonly organizationId: string;
+    readonly siteId: string;
+    readonly userId: string;
+  }
+) {
+  await withCommentOwnershipSeedTransaction(pool, async () => {
+    await pool.query(
+      `insert into comments (
+         id,
+         organization_id,
+         actor_id,
+         author_user_id,
+         body,
+         created_at,
+         updated_at
+       )
+       values ($1, $2, $3, $4, $5, now(), now())`,
+      [
+        input.commentId,
+        input.organizationId,
+        input.actorId,
+        input.userId,
+        input.body,
+      ]
+    );
+    await pool.query(
+      `insert into site_comments (
+         comment_id,
+         organization_id,
+         site_id,
+         created_at
+       )
+       values ($1, $2, $3, now())`,
+      [input.commentId, input.organizationId, input.siteId]
+    );
+  });
+}
+
+async function createPartialSiteCommentBodiesTable(pool: Pool) {
+  await pool.query(
+    `create table site_comment_bodies (
+       id uuid primary key,
+       organization_id text not null,
+       actor_id uuid not null,
+       body text not null,
+       created_at timestamp with time zone default now() not null,
+       updated_at timestamp with time zone default now() not null
+     )`
+  );
 }
 
 async function seedNullActorWorkItemComment(

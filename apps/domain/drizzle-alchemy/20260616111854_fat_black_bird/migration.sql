@@ -1,4 +1,4 @@
-CREATE TABLE "site_comment_bodies" (
+CREATE TABLE IF NOT EXISTS "site_comment_bodies" (
 	"id" uuid PRIMARY KEY,
 	"organization_id" text NOT NULL,
 	"actor_id" uuid NOT NULL,
@@ -29,8 +29,34 @@ INNER JOIN "comments"
 WHERE "comments"."actor_id" IS NOT NULL
 ON CONFLICT ("id") DO NOTHING;
 --> statement-breakpoint
-CREATE INDEX "site_comment_bodies_organization_created_at_idx" ON "site_comment_bodies" ("organization_id","created_at","id");--> statement-breakpoint
-CREATE INDEX "site_comment_bodies_actor_id_idx" ON "site_comment_bodies" ("organization_id","actor_id");--> statement-breakpoint
-ALTER TABLE "site_comment_bodies" ADD CONSTRAINT "site_comment_bodies_organization_id_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization"("id") ON DELETE CASCADE;--> statement-breakpoint
-ALTER TABLE "site_comment_bodies" ADD CONSTRAINT "site_comment_bodies_comment_org_fk" FOREIGN KEY ("id","organization_id") REFERENCES "comments"("id","organization_id") ON DELETE CASCADE;--> statement-breakpoint
-ALTER TABLE "site_comment_bodies" ADD CONSTRAINT "site_comment_bodies_actor_org_fk" FOREIGN KEY ("actor_id","organization_id") REFERENCES "product_activity_actors"("id","organization_id");
+CREATE INDEX IF NOT EXISTS "site_comment_bodies_organization_created_at_idx" ON "site_comment_bodies" ("organization_id","created_at","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "site_comment_bodies_actor_id_idx" ON "site_comment_bodies" ("organization_id","actor_id");--> statement-breakpoint
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conname = 'site_comment_bodies_organization_id_organization_id_fkey'
+	) THEN
+		ALTER TABLE "site_comment_bodies" ADD CONSTRAINT "site_comment_bodies_organization_id_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization"("id") ON DELETE CASCADE;
+	END IF;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conname = 'site_comment_bodies_comment_org_fk'
+	) THEN
+		ALTER TABLE "site_comment_bodies" ADD CONSTRAINT "site_comment_bodies_comment_org_fk" FOREIGN KEY ("id","organization_id") REFERENCES "comments"("id","organization_id") ON DELETE CASCADE;
+	END IF;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conname = 'site_comment_bodies_actor_org_fk'
+	) THEN
+		ALTER TABLE "site_comment_bodies" ADD CONSTRAINT "site_comment_bodies_actor_org_fk" FOREIGN KEY ("actor_id","organization_id") REFERENCES "product_activity_actors"("id","organization_id");
+	END IF;
+END $$;
