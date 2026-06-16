@@ -30,7 +30,6 @@ export interface AppNavigationItem {
   readonly url:
     | "/"
     | "/jobs"
-    | "/jobs-workspace"
     | "/sites"
     | "/activity"
     | "/organization/security"
@@ -53,14 +52,6 @@ const APP_PRIMARY_NAV_ITEMS = [
     keywords: ["queue", "work"],
     title: "Jobs",
     url: "/jobs",
-  },
-  {
-    access: "internal",
-    icon: ComputerTerminalIcon,
-    id: "jobs-workspace",
-    keywords: ["realtime", "electric", "dispatch", "workspace"],
-    title: "Workspace",
-    url: "/jobs-workspace",
   },
   {
     access: "internal",
@@ -100,7 +91,6 @@ const APP_PRIMARY_NAV_SHORTCUTS_BY_URL = {
   "/": HOTKEYS.goHome,
   "/activity": HOTKEYS.goActivity,
   "/jobs": HOTKEYS.goJobs,
-  "/jobs-workspace": HOTKEYS.goJobsWorkspace,
   "/members": HOTKEYS.goMembers,
   "/organization/security": HOTKEYS.goOrganizationSecurity,
   "/sites": HOTKEYS.goSites,

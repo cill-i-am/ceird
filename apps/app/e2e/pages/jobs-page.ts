@@ -1,11 +1,5 @@
-/* oxlint-disable eslint/max-classes-per-file */
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
-
-import {
-  waitForLocatorHydration,
-  waitForSubmitHydration,
-} from "./wait-for-submit-hydration";
 
 const JOBS_ROUTE_TIMEOUT_MS = 30_000;
 
@@ -13,6 +7,7 @@ export class JobsPage {
   readonly page: Page;
   readonly heading: Locator;
   readonly newJobButton: Locator;
+  readonly unavailableState: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -20,9 +15,8 @@ export class JobsPage {
       level: 1,
       name: "Jobs",
     });
-    this.newJobButton = page
-      .locator("header")
-      .getByRole("link", { name: "New job" });
+    this.newJobButton = page.getByRole("button", { name: "New job" });
+    this.unavailableState = page.getByText("Realtime jobs are unavailable");
   }
 
   async openFromHome() {
@@ -30,234 +24,25 @@ export class JobsPage {
     await this.expectLoaded();
   }
 
-  async expectLoaded() {
+  async expectLoaded(options: { readonly search?: RegExp } = {}) {
     await Promise.all([
-      expect(this.page).toHaveURL(/\/jobs$/, {
-        timeout: JOBS_ROUTE_TIMEOUT_MS,
-      }),
-      expect(this.page.getByRole("dialog", { name: "New job" })).toBeHidden({
-        timeout: JOBS_ROUTE_TIMEOUT_MS,
-      }),
+      expect(this.page).toHaveURL(
+        options.search
+          ? new RegExp(`/jobs\\?${options.search.source}`)
+          : /\/jobs$/,
+        {
+          timeout: JOBS_ROUTE_TIMEOUT_MS,
+        }
+      ),
       expect(this.heading).toBeVisible({ timeout: JOBS_ROUTE_TIMEOUT_MS }),
     ]);
   }
 
-  async openCreateSheet() {
-    await this.newJobButton.click();
-  }
-
-  jobCard(title: string): Locator {
-    return this.page.getByRole("link", { name: new RegExp(title) });
-  }
-
-  createdJobNotice(title: string): Locator {
-    return this.page
-      .locator("[data-slot='alert'][aria-live='polite']")
-      .filter({ hasText: title })
-      .filter({ hasText: "Job added to the queue." });
-  }
-
-  async openJob(title: string) {
-    await this.page.getByRole("link", { name: new RegExp(title) }).click();
-  }
-}
-
-export class JobsCreateSheet {
-  readonly page: Page;
-  readonly root: Locator;
-  readonly heading: Locator;
-  readonly title: Locator;
-  readonly priority: Locator;
-  readonly site: Locator;
-  readonly siteDialog: Locator;
-  readonly siteLocation: Locator;
-  readonly siteLocationStatus: Locator;
-  readonly siteName: Locator;
-  readonly siteSubmit: Locator;
-  readonly contact: Locator;
-  readonly contactName: Locator;
-  readonly submit: Locator;
-
-  constructor(page: Page) {
-    this.page = page;
-    this.root = page.getByRole("dialog", {
-      name: "New job",
-    });
-    this.heading = this.root.getByRole("heading", {
-      level: 2,
-      name: "New job",
-    });
-    this.title = this.root.getByLabel("Title");
-    this.priority = this.root.getByLabel("Priority", { exact: true });
-    this.site = this.root.getByLabel("Site");
-    this.siteDialog = page.getByRole("dialog", { name: "New site" });
-    this.siteLocation = this.siteDialog.getByLabel("Location");
-    this.siteLocationStatus = this.siteDialog.getByRole("status");
-    this.siteName = this.siteDialog.getByLabel("Site name");
-    this.siteSubmit = this.siteDialog.getByRole("button", {
-      name: "Create site",
-    });
-    this.contact = this.root.getByLabel("Contact");
-    this.contactName = page.getByPlaceholder("Contact");
-    this.submit = this.root.getByRole("button", { name: "Create job" });
-  }
-
-  async expectOpen() {
-    await Promise.all([
-      expect(this.page).toHaveURL(/\/jobs\?.*sheets=/, {
-        timeout: JOBS_ROUTE_TIMEOUT_MS,
-      }),
-      expect(this.heading).toBeVisible({ timeout: JOBS_ROUTE_TIMEOUT_MS }),
-      waitForSubmitHydration(this.page),
-    ]);
-  }
-
-  async chooseSiteOption(optionLabel: string) {
-    await this.site.click();
-    await chooseCommandOption(this.page, optionLabel);
-
-    if (optionLabel === "Create a new site") {
-      await this.expectSiteDialogReady();
-    }
-  }
-
-  async chooseContactOption(optionLabel: string) {
-    await this.contact.click();
-    await chooseCommandOption(this.page, optionLabel);
-  }
-
-  async choosePriorityOption(optionLabel: string) {
-    await this.priority.click();
-    await chooseCommandOption(this.page, optionLabel);
-  }
-
-  async createInlineContact(contactName: string) {
-    // The contact options are rendered only after the combobox is opened.
-    // react-doctor-disable-next-line
-    await this.contact.click();
-    await this.contactName.fill(contactName);
-    await chooseCommandOption(
-      this.page,
-      `Create new contact: "${contactName}"`
-    );
-  }
-
-  async expectSiteDialogReady() {
-    await Promise.all([
-      expect(this.siteDialog).toBeVisible({ timeout: JOBS_ROUTE_TIMEOUT_MS }),
-      waitForLocatorHydration(this.siteName),
-      waitForLocatorHydration(this.siteSubmit),
-    ]);
-  }
-
-  async closeSiteDialog() {
-    await this.siteSubmit.click();
-    await expect(this.siteDialog).toBeHidden({
+  async expectRealtimeState() {
+    await expect(
+      this.newJobButton.or(this.unavailableState).first()
+    ).toBeVisible({
       timeout: JOBS_ROUTE_TIMEOUT_MS,
     });
   }
-}
-
-export class JobDetailSheet {
-  readonly page: Page;
-  readonly root: Locator;
-  readonly commentItems: Locator;
-  readonly visitItems: Locator;
-  readonly statusSelect: Locator;
-  readonly blockedReason: Locator;
-  readonly pickStatusChange: Locator;
-  readonly applyStatusChange: Locator;
-  readonly commentBody: Locator;
-  readonly addComment: Locator;
-  readonly visitDate: Locator;
-  readonly visitDuration: Locator;
-  readonly visitNote: Locator;
-  readonly logVisit: Locator;
-  readonly reopenJob: Locator;
-
-  constructor(page: Page) {
-    this.page = page;
-    this.root = page.getByRole("dialog");
-    this.commentItems = this.root.locator("li");
-    this.visitItems = this.root.locator("li");
-    this.statusSelect = this.root.locator("#job-transition-status");
-    this.blockedReason = this.root.getByLabel("Why is it blocked?");
-    this.pickStatusChange = this.root.getByRole("button", {
-      name: "Pick a status",
-    });
-    this.applyStatusChange = this.root.getByRole("button", {
-      name: "Apply status change",
-    });
-    this.commentBody = this.root.getByLabel("Add a comment");
-    this.addComment = this.root.getByRole("button", { name: "Add comment" });
-    this.visitDate = this.root.getByLabel("Visit date");
-    this.visitDuration = this.root.locator("#job-visit-duration");
-    this.visitNote = this.root.getByLabel("Visit note");
-    this.logVisit = this.root.getByRole("button", { name: "Log visit" });
-    this.reopenJob = this.root.getByRole("button", { name: "Reopen job" });
-  }
-
-  commentItem(body: string): Locator {
-    return this.commentItems.filter({ hasText: body }).first();
-  }
-
-  visitItem(note: string): Locator {
-    return this.visitItems.filter({ hasText: note }).first();
-  }
-
-  async expectOpen(title: string) {
-    await Promise.all([
-      expect(this.page).toHaveURL(/\/jobs\?.*sheets=/, {
-        timeout: JOBS_ROUTE_TIMEOUT_MS,
-      }),
-      expect(this.root.getByText(title, { exact: true })).toBeVisible({
-        timeout: JOBS_ROUTE_TIMEOUT_MS,
-      }),
-    ]);
-  }
-
-  async openPanel(panelName: "Comment" | "Cost" | "Site" | "Status" | "Visit") {
-    const panel = this.root.getByRole("button", {
-      name: new RegExp(`^${panelName}(?: \\d+)?$`),
-    });
-
-    await panel.click();
-  }
-
-  async chooseStatusOption(optionLabel: string) {
-    if (!(await this.statusSelect.isVisible())) {
-      await this.openPanel("Status");
-    }
-
-    await expect(this.statusSelect).toBeVisible();
-    // The status options are rendered only after the picker is opened.
-    // react-doctor-disable-next-line
-    await this.statusSelect.click();
-    await chooseCommandOption(this.page, optionLabel);
-    await expect(this.statusSelect).toContainText(optionLabel);
-  }
-
-  async chooseVisitDurationOption(optionLabel: string) {
-    // The duration options are rendered only after the picker is opened.
-    // react-doctor-disable-next-line
-    await this.visitDuration.click();
-    await chooseCommandOption(this.page, optionLabel);
-    await expect(this.visitDuration).toContainText(optionLabel);
-  }
-
-  async createAndAssignLabel(labelName: string) {
-    await this.root.getByRole("button", { name: "Add label" }).click();
-    await this.page.getByPlaceholder("Search labels").fill(labelName);
-    await chooseCommandOption(this.page, `Create new label: "${labelName}"`);
-  }
-}
-
-async function chooseCommandOption(page: Page, optionLabel: string) {
-  const option = page.getByRole("option", {
-    exact: true,
-    name: optionLabel,
-  });
-
-  await option.click({ timeout: JOBS_ROUTE_TIMEOUT_MS });
-  await expect(option).toBeHidden({ timeout: JOBS_ROUTE_TIMEOUT_MS });
 }

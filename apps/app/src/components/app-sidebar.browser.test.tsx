@@ -460,8 +460,7 @@ describe("app sidebar", () => {
     ).toBeVisible();
     expect(mockedShortcutOverlayCalls.at(-1)?.activeScopes).toStrictEqual([
       "global",
-      "jobs",
-      "map",
+      "jobs-workspace",
     ]);
     expect(mockedShortcutOverlayCalls.at(-1)?.registerHotkeys).toBeTruthy();
   });

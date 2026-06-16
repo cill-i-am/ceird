@@ -3,5 +3,5 @@ export function shouldEnableJobsWorkspaceHotkeys({
 }: {
   readonly pathname: string;
 }) {
-  return pathname === "/jobs-workspace";
+  return pathname === "/jobs";
 }

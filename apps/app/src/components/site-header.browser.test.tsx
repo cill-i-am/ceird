@@ -280,8 +280,7 @@ describe("site header", () => {
     ).toBeInTheDocument();
     expect(mockedShortcutOverlayCalls.at(-1)?.activeScopes).toStrictEqual([
       "global",
-      "jobs",
-      "map",
+      "jobs-workspace",
     ]);
   });
 

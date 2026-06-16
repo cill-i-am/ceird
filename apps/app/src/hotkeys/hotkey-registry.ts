@@ -102,14 +102,6 @@ export const HOTKEYS = {
     label: "Go to Jobs",
     scope: "global",
   },
-  goJobsWorkspace: {
-    group: "Navigation",
-    hotkey: "G R",
-    id: "goJobsWorkspace",
-    label: "Go to Jobs Workspace",
-    scope: "global",
-    when: "Viewer can access the realtime jobs preview",
-  },
   goSites: {
     group: "Navigation",
     hotkey: "G S",
@@ -169,13 +161,6 @@ export const HOTKEYS = {
     label: "Go to Labels settings",
     scope: "global",
     when: "Viewer can administer organization",
-  },
-  goMap: {
-    group: "Navigation",
-    hotkey: "G P",
-    id: "goMap",
-    label: "Go to Map",
-    scope: "global",
   },
   openOrganizationSwitcher: {
     group: "Navigation",
