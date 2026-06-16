@@ -583,7 +583,7 @@ export const HOTKEYS = {
     group: "Settings",
     hotkey: "Mod+Shift+Backspace",
     id: "labelsSettingsArchive",
-    label: "Archive edited label",
+    label: "Prepare label archive",
     scope: "labels-settings",
     when: "Label edit is active",
   },

@@ -185,6 +185,49 @@ describe("organization labels settings page", () => {
     ]);
   });
 
+  it("disables mouse-driven row actions while another mutation is pending", async () => {
+    const user = userEvent.setup();
+    const createTransaction = Promise.withResolvers<unknown>();
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [urgentLabel],
+        status: "ready",
+        transactions: {
+          insert: [createTransaction],
+        },
+      }),
+      createTemporaryLabelId: () =>
+        "44444444-4444-4444-8444-444444444444" as Label["id"],
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: /new label name/i }),
+      "Fire Safety"
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+    expect(screen.getByText("Pending realtime confirmation")).toBeVisible();
+    const urgentActions = screen.getByRole("button", {
+      name: /open actions for urgent/i,
+    });
+    expect(urgentActions).toBeDisabled();
+
+    await user.click(urgentActions);
+
+    expect(
+      screen.queryByRole("menuitem", { name: /archive label/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Pending realtime confirmation")).toBeVisible();
+
+    createTransaction.resolve({ txid: 123 });
+
+    await expect(
+      screen.findByText("Label created and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+  });
+
   it("shows duplicate and invalid label feedback before submitting", async () => {
     const user = userEvent.setup();
 
@@ -258,7 +301,7 @@ describe("organization labels settings page", () => {
     ]);
   });
 
-  it("archives labels from the active synced list", async () => {
+  it("requires menu archive confirmation before removing labels from the active synced list", async () => {
     const user = userEvent.setup();
 
     renderLabelsPage({
@@ -275,12 +318,48 @@ describe("organization labels settings page", () => {
       await screen.findByRole("menuitem", { name: /archive label/i })
     );
 
+    expect(screen.getByText("Archive this label?")).toBeVisible();
+    expect(screen.getByText("Urgent")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: /archive label/i }));
+
     await expect(
       screen.findByText(
         "Label archived and removed after realtime confirmation."
       )
     ).resolves.toBeVisible();
     expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
+  });
+
+  it("requires edit-mode archive icon confirmation and supports cancel", async () => {
+    const user = userEvent.setup();
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [urgentLabel],
+        status: "ready",
+      }),
+    });
+
+    await user.click(
+      await screen.findByRole("button", { name: /open actions for urgent/i })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit label/i })
+    );
+    await user.click(screen.getByRole("button", { name: /archive urgent/i }));
+
+    expect(screen.getByText("Archive this label?")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(
+      "Urgent"
+    );
+
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(screen.queryByText("Archive this label?")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(
+      "Urgent"
+    );
   });
 
   it("supports route hotkeys for search, create, save, cancel, and archive edit mode", async () => {
@@ -333,6 +412,11 @@ describe("organization labels settings page", () => {
       await screen.findByRole("menuitem", { name: /edit label/i })
     );
     await user.keyboard("{Meta>}{Shift>}{Backspace}{/Shift}{/Meta}");
+    expect(screen.getByText("Archive this label?")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(
+      "Urgent"
+    );
+    await user.click(screen.getByRole("button", { name: /archive label/i }));
     await waitFor(() => {
       expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
     });
@@ -394,12 +478,16 @@ function makeCollectionState({
   failures,
   labels,
   status,
+  transactions,
 }: {
   readonly failures?: Partial<
     Record<"delete" | "insert" | "update", readonly Error[]>
   >;
   readonly labels: readonly Label[];
   readonly status: DataPlaneCollectionHealthStatus;
+  readonly transactions?: Partial<
+    Record<"delete" | "insert" | "update", readonly ManualTransaction[]>
+  >;
 }) {
   const health = createDataPlaneCollectionHealth({
     collection: "labels",
@@ -426,7 +514,7 @@ function makeCollectionState({
     collection:
       status === "disabled" || status === "unavailable"
         ? null
-        : makeCollection(labels, status, failures),
+        : makeCollection(labels, status, failures, transactions),
     health: health as DataPlaneCollectionHealth,
   };
 }
@@ -434,7 +522,10 @@ function makeCollectionState({
 function makeCollection(
   labels: readonly Label[],
   status: DataPlaneCollectionHealthStatus,
-  failures?: Partial<Record<"delete" | "insert" | "update", readonly Error[]>>
+  failures?: Partial<Record<"delete" | "insert" | "update", readonly Error[]>>,
+  transactions?: Partial<
+    Record<"delete" | "insert" | "update", readonly ManualTransaction[]>
+  >
 ) {
   let currentLabels = [...labels].toSorted(compareLabels);
   const listeners = new Set<() => void>();
@@ -442,6 +533,11 @@ function makeCollection(
     delete: [...(failures?.delete ?? [])],
     insert: [...(failures?.insert ?? [])],
     update: [...(failures?.update ?? [])],
+  };
+  const transactionQueues = {
+    delete: [...(transactions?.delete ?? [])],
+    insert: [...(transactions?.insert ?? [])],
+    update: [...(transactions?.update ?? [])],
   };
   const notify = () => {
     for (const listener of listeners) {
@@ -461,6 +557,7 @@ function makeCollection(
 
       return makeTransaction({
         failWith: failureQueues.delete.shift(),
+        transaction: transactionQueues.delete.shift(),
         onRollback: () => {
           currentLabels = previous;
           notify();
@@ -474,6 +571,7 @@ function makeCollection(
 
       return makeTransaction({
         failWith: failureQueues.insert.shift(),
+        transaction: transactionQueues.insert.shift(),
         onRollback: () => {
           currentLabels = previous;
           notify();
@@ -515,6 +613,7 @@ function makeCollection(
 
       return makeTransaction({
         failWith: failureQueues.update.shift(),
+        transaction: transactionQueues.update.shift(),
         onRollback: () => {
           currentLabels = previous;
           notify();
@@ -527,11 +626,22 @@ function makeCollection(
 function makeTransaction({
   failWith,
   onRollback,
+  transaction,
 }: {
   readonly failWith?: Error | undefined;
   readonly onRollback: () => void;
+  readonly transaction?: ManualTransaction | undefined;
 }) {
-  const persisted = Promise.withResolvers<unknown>();
+  const persisted = transaction ?? Promise.withResolvers<unknown>();
+
+  if (transaction) {
+    return {
+      isPersisted: {
+        promise: persisted.promise,
+      },
+    };
+  }
+
   queueMicrotask(() => {
     if (failWith) {
       onRollback();
@@ -547,6 +657,12 @@ function makeTransaction({
       promise: persisted.promise,
     },
   };
+}
+
+interface ManualTransaction {
+  readonly promise: Promise<unknown>;
+  readonly reject: (reason?: unknown) => void;
+  readonly resolve: (value: unknown) => void;
 }
 
 function makeLabel({
