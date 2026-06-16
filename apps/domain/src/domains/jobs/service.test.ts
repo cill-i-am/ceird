@@ -1406,6 +1406,7 @@ function makeMappedSite(
     longitude,
     name,
     rawLocationInput: name,
+    updatedAt: "2026-05-20T09:30:00.000Z",
   });
 }
 

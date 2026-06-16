@@ -1,6 +1,8 @@
 import type { OrganizationId, OrganizationRole } from "@ceird/identity-core";
 import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 
+import { useDataPlaneSession } from "#/data-plane/session";
+import { getOrCreateSettingsLabelsCollectionState } from "#/features/labels/labels-data-plane";
 import { OrganizationLabelsSettingsPage } from "#/features/organizations/organization-labels-settings-page";
 import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-route-access";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
@@ -35,6 +37,7 @@ export function assertLabelsSettingsRouteAccess(
 }
 
 function LabelsSettingsRoute() {
+  const dataPlaneSession = useDataPlaneSession();
   const { activeOrganization, currentOrganizationRole } = useRouteContext({
     from: "/_app/_org",
   });
@@ -45,6 +48,10 @@ function LabelsSettingsRoute() {
 
   return (
     <OrganizationLabelsSettingsPage
+      collectionState={getOrCreateSettingsLabelsCollectionState({
+        scope: dataPlaneSession.scope,
+        session: dataPlaneSession,
+      })}
       organization={activeOrganization}
       organizationRole={currentOrganizationRole}
     />

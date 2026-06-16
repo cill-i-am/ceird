@@ -152,6 +152,7 @@ describe("sites-core", () => {
       locationStatus: "unverified",
       name: "Road entrance",
       rawLocationInput: "near the old quarry gate",
+      updatedAt: "2026-05-26T08:00:00.000Z",
     };
     const resolvedSite = {
       addressComponents: [
@@ -183,6 +184,7 @@ describe("sites-core", () => {
       longitude: -6.1956,
       name: "Dublin Port",
       rawLocationInput: "dub port",
+      updatedAt: "2026-05-26T08:05:00.000Z",
     };
 
     expect(
@@ -393,6 +395,7 @@ describe("sites-core", () => {
             locationStatus: "google_resolved",
             longitude: -6.267_428,
             name: "Dublin Boiler Room",
+            updatedAt: "2026-06-06T09:30:00.000Z",
           },
         },
       ],
@@ -486,6 +489,7 @@ describe("sites-core", () => {
             locationStatus: "google_resolved",
             longitude: -6.2603,
             name: "Dublin Port",
+            updatedAt: "2026-05-26T08:00:00.000Z",
           },
         ],
         nextCursor: cursor,

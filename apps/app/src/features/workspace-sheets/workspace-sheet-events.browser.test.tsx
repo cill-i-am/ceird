@@ -15,6 +15,7 @@ const SITE = {
   labels: [],
   locationStatus: "unverified",
   name: "Routing test site",
+  updatedAt: "2026-06-06T10:00:00.000Z",
 } as SiteOption;
 
 describe("workspace sheet events", () => {

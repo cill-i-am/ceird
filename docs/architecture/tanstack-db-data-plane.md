@@ -77,6 +77,16 @@ collaborators, activity, visits, comment edges, and comment bodies without
 constructing raw Electric streams in feature UI. Member/actor display names and
 site-level active job rollups remain domain-owned projection follow-ups rather
 than browser business-rule recomputation.
+The `/jobs-workspace` live list consumes that graph through
+`features/jobs-workspace/jobs-workspace-live-list.ts`, which creates the
+Electric collections through the data-plane boundary, subscribes with the
+shared live-query wrapper, joins labels/sites/contacts locally, and exposes
+route-backed search, filters, sort, recent-search, and saved-view-ready hooks.
+The list read model aggregates health across all five required list shapes and
+derives visible rows only after jobs, label assignments, labels, sites, and
+contacts are all healthy and live-query ready. When the graph is disabled,
+unavailable, or not fully ready, the workspace reports that shared graph health
+directly and does not activate the legacy Jobs Query Collection fallback.
 The jobs primary route collection has a conservative Electric read canary behind
 that same fallback wrapper. It is disabled by default and must be opted in
 through the jobs data-plane sync options, so a configured `VITE_SYNC_ORIGIN`
@@ -88,10 +98,27 @@ data. Settings Labels is intentionally different: it requests the named
 `labels` Electric shape directly through
 `getOrCreateSettingsLabelsCollectionState(...)` and exposes disabled or
 unavailable collection health to the route instead of silently activating an API
-fallback. The Electric-native Sites read-model contracts likewise do not
-introduce a legacy Query Collection fallback; callers consume shared health from
-the Electric collection factory and can show an explicit unavailable/degraded
-state when sync is disabled or unavailable.
+fallback. The route's label search derives from the hydrated local collection
+items rather than API requests per keystroke. The Electric-native Sites
+read-model contracts likewise do not introduce a legacy Query Collection
+fallback. The `/sites-workspace` route uses a browser-safe feature data-plane
+module under `features/sites-workspace` so the client route does not import the
+legacy Sites module's server-backed query collection helpers. That workspace
+read model requests the named `sites`, `site-labels`,
+`site-active-job-summaries`, `jobs`, and `labels` shapes, joins shared label
+definitions through site-label assignments, derives visible rows from local
+search/filter/sort state, and selects related jobs from the synced jobs row set.
+The synced `sites` row transformer carries the shared `SiteOption.updatedAt`
+boundary field so the workspace's recently-updated sort is backed by production
+site data rather than a view-local fallback.
+The current visible-row helper derives over hydrated TanStack DB
+collection snapshots inside the feature data-plane boundary rather than adding a
+separate TanStack DB derived collection: each input collection is already a live
+subscription, the route needs route-backed local query/filter/sort state, and a
+second collection layer would not change sync coverage or health semantics in
+this slice. Callers consume shared health from the Electric collection factory
+and show explicit unavailable/degraded states when sync is disabled or
+unavailable.
 
 ## Collection Health
 

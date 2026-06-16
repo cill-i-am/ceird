@@ -77,6 +77,7 @@ describe("domain HTTP API", () => {
       longitude: undefined,
       name: "D1",
       rawLocationInput: "D1",
+      updatedAt: "2026-05-20T09:30:00.000Z",
     });
     const handlers = HttpApiBuilder.group(api, "test", (builder) =>
       builder.handle("options", () =>

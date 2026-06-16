@@ -122,6 +122,7 @@ const createSiteResponse: CreateSiteResponse = {
   longitude: -6.2603,
   name: "Docklands Campus",
   town: "Dublin",
+  updatedAt: "2026-04-27T10:05:00.000Z",
 };
 
 const siteLabelId = "44444444-4444-4444-8444-444444444444" as LabelIdType;

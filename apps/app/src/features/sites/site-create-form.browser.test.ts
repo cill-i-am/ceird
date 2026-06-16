@@ -116,6 +116,7 @@ describe("site create form helpers", () => {
       longitude: -6.1956,
       name: "Dublin Port",
       rawLocationInput: "dub port",
+      updatedAt: "2026-05-26T08:05:00.000Z",
     });
 
     expect(siteDraft.locationSelection).toMatchObject({
@@ -138,6 +139,7 @@ describe("site create form helpers", () => {
         longitude: -6.1956,
         name: "Dublin Port",
         rawLocationInput: "dub port",
+        updatedAt: "2026-05-26T08:05:00.000Z",
       })
     ).toBe(true);
     expect(
@@ -157,6 +159,7 @@ describe("site create form helpers", () => {
           longitude: -6.1956,
           name: "Dublin Port",
           rawLocationInput: "dub port",
+          updatedAt: "2026-05-26T08:05:00.000Z",
         }
       )
     ).toBe(false);

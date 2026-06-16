@@ -62,6 +62,9 @@ type SiteCommentsCollection = ReturnType<typeof createSiteCommentsCollection>;
 type SiteRelatedJobsCollection = ReturnType<
   typeof createSiteRelatedJobsCollection
 >;
+type SitesElectricReadModelCollections = ReturnType<
+  typeof createSitesElectricReadModelCollections
+>;
 
 export const SITES_LIST_PAGE_LIMIT = 50;
 export const SITE_RELATED_JOBS_PAGE_LIMIT = 25;
@@ -137,6 +140,10 @@ export interface SitesElectricReadModelContracts {
     typeof createSiteLabelAssignmentsElectricContract
   >;
   readonly sites: ReturnType<typeof createSitesElectricContract>;
+}
+
+export interface SitesElectricReadModelCollectionState {
+  readonly collections: SitesElectricReadModelCollections;
 }
 
 interface SitesListPageScope {
@@ -309,6 +316,29 @@ export function createSitesElectricReadModelCollections({
     ),
     sites: createElectricCollectionFromContract(contracts.sites),
   };
+}
+
+export function getOrCreateSitesElectricReadModelCollectionState({
+  scope,
+  session,
+}: {
+  readonly scope: OrganizationDataScope;
+  readonly session?: DataPlaneSession | undefined;
+}): SitesElectricReadModelCollectionState {
+  const registryKey = `${sitesCollectionId(scope)}:workspace-read-model:electric`;
+  const existing = session?.registry.get(registryKey);
+
+  if (existing) {
+    return existing as SitesElectricReadModelCollectionState;
+  }
+
+  const created = {
+    collections: createSitesElectricReadModelCollections({ scope }),
+  } satisfies SitesElectricReadModelCollectionState;
+
+  session?.registry.set(registryKey, created);
+
+  return created;
 }
 
 export function joinSitesElectricReadModel({
@@ -910,7 +940,7 @@ function listBrowserSiteComments(siteId: SiteIdType) {
   );
 }
 
-function toSiteOptionElectricRow(
+export function toSiteOptionElectricRow(
   row: Record<string, unknown>
 ): SitesElectricRow {
   const site: Record<string, unknown> = {
@@ -927,6 +957,7 @@ function toSiteOptionElectricRow(
     labels: [],
     locationStatus: String(row.locationStatus),
     name: String(row.name),
+    updatedAt: String(row.updatedAt),
     activeJobCount: 0,
   };
 

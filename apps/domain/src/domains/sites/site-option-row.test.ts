@@ -53,5 +53,6 @@ function buildSiteOptionRow(): Parameters<typeof mapSiteOptionRow>[0] {
     name: "Main Street Houses",
     raw_location_input: null,
     town: "Limerick",
+    updated_at: new Date("2026-06-09T07:00:00.000Z"),
   };
 }
