@@ -105,6 +105,7 @@ type CommentWriteStatus =
       readonly kind: "failed";
       readonly message: string;
     };
+type CommentWriteStatusBySiteId = Readonly<Record<string, CommentWriteStatus>>;
 
 const IDLE_WRITE_STATUS = { kind: "idle" } satisfies WorkspaceWriteStatus;
 const IDLE_COMMENT_WRITE_STATUS = {
@@ -221,13 +222,14 @@ function SitesWorkspaceShell({
   const editFormRef = React.useRef<HTMLFormElement>(null);
   const commentFormRef = React.useRef<HTMLFormElement>(null);
   const commentInputRef = React.useRef<HTMLTextAreaElement>(null);
+  const selectedSiteIdRef = React.useRef<string | null>(null);
   const query = workspaceSearch.query ?? "";
   const filter = workspaceSearch.filter ?? "all";
   const sort = workspaceSearch.sort ?? "name";
   const [createOpen, setCreateOpen] = React.useState(false);
   const [commentDraft, setCommentDraft] = React.useState("");
-  const [commentWriteStatus, setCommentWriteStatus] =
-    React.useState<CommentWriteStatus>(IDLE_COMMENT_WRITE_STATUS);
+  const [commentWriteStatusBySiteId, setCommentWriteStatusBySiteId] =
+    React.useState<CommentWriteStatusBySiteId>({});
   const [editingSiteId, setEditingSiteId] = React.useState<string>();
   const [writeStatus, setWriteStatus] =
     React.useState<WorkspaceWriteStatus>(IDLE_WRITE_STATUS);
@@ -313,9 +315,14 @@ function SitesWorkspaceShell({
     () => visibleRows.find((row) => row.site.id === selectedSiteId),
     [selectedSiteId, visibleRows]
   );
+  const selectedCommentWriteStatus =
+    selectedRow === undefined
+      ? IDLE_COMMENT_WRITE_STATUS
+      : (commentWriteStatusBySiteId[selectedRow.site.id] ??
+        IDLE_COMMENT_WRITE_STATUS);
   const formOpen = createOpen || editingSiteId !== undefined;
   const writePending = writeStatus.kind === "pending";
-  const commentPending = commentWriteStatus.kind === "pending";
+  const commentPending = selectedCommentWriteStatus.kind === "pending";
   const formActionsEnabled = formOpen && !writePending;
   const commentShortcutsEnabled = areSiteCommentShortcutsEnabled({
     formOpen,
@@ -331,8 +338,20 @@ function SitesWorkspaceShell({
   );
   React.useEffect(() => {
     setCommentDraft("");
-    setCommentWriteStatus(IDLE_COMMENT_WRITE_STATUS);
   }, [selectedRow?.site.id]);
+  React.useEffect(() => {
+    selectedSiteIdRef.current = selectedRow?.site.id ?? null;
+  }, [selectedRow?.site.id]);
+
+  const setCommentWriteStatusForSite = React.useCallback(
+    (siteId: string, nextStatus: CommentWriteStatus) => {
+      setCommentWriteStatusBySiteId((statuses) => ({
+        ...statuses,
+        [siteId]: nextStatus,
+      }));
+    },
+    []
+  );
 
   const beginCreate = React.useCallback(() => {
     if (writePending) {
@@ -368,10 +387,15 @@ function SitesWorkspaceShell({
       return;
     }
 
+    if (selectedRow) {
+      setCommentWriteStatusForSite(
+        selectedRow.site.id,
+        IDLE_COMMENT_WRITE_STATUS
+      );
+    }
     setCommentDraft("");
-    setCommentWriteStatus(IDLE_COMMENT_WRITE_STATUS);
     commentInputRef.current?.focus();
-  }, [commentPending]);
+  }, [commentPending, selectedRow, setCommentWriteStatusForSite]);
 
   React.useEffect(() => {
     if (visibleRows.length === 0) {
@@ -616,7 +640,7 @@ function SitesWorkspaceShell({
 
       const body = commentDraft.trim();
       if (body.length === 0) {
-        setCommentWriteStatus({
+        setCommentWriteStatusForSite(selectedRow.site.id, {
           error: "Comment text is required.",
           kind: "failed",
           message: "Comment failed",
@@ -624,11 +648,12 @@ function SitesWorkspaceShell({
         return;
       }
 
-      setCommentWriteStatus({
+      const siteId = selectedRow.site.id;
+      setCommentWriteStatusForSite(siteId, {
         kind: "pending",
         message: "Adding site comment and waiting for realtime sync",
       });
-      const exit = await commandRunner.addSiteComment(selectedRow.site.id, {
+      const exit = await commandRunner.addSiteComment(siteId, {
         body,
       });
 
@@ -637,23 +662,25 @@ function SitesWorkspaceShell({
       }
 
       if (Exit.isSuccess(exit)) {
-        setCommentDraft("");
-        setCommentWriteStatus({
+        setCommentWriteStatusForSite(siteId, {
           kind: "synced",
           message: "Comment synced",
           observation: exit.value.electricObservation,
         });
-        window.setTimeout(() => commentInputRef.current?.focus(), 0);
+        if (selectedSiteIdRef.current === siteId) {
+          setCommentDraft("");
+          window.setTimeout(() => commentInputRef.current?.focus(), 0);
+        }
         return;
       }
 
-      setCommentWriteStatus({
+      setCommentWriteStatusForSite(siteId, {
         error: getCommentWriteErrorMessage(exit.cause),
         kind: "failed",
         message: "Comment failed",
       });
     },
-    [commandRunner, commentDraft, selectedRow]
+    [commandRunner, commentDraft, selectedRow, setCommentWriteStatusForSite]
   );
 
   const commandActions = React.useMemo<readonly CommandAction[]>(() => {
@@ -866,7 +893,7 @@ function SitesWorkspaceShell({
           commentFormRef={commentFormRef}
           commentInputRef={commentInputRef}
           commentPending={commentPending}
-          commentWriteStatus={commentWriteStatus}
+          commentWriteStatus={selectedCommentWriteStatus}
           editing={editingSiteId === selectedRow?.site.id}
           editFormRef={editFormRef}
           pending={writeStatus.kind === "pending"}

@@ -15,7 +15,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { Exit } from "effect";
 import { Effect } from "effect";
-import type * as React from "react";
+import * as React from "react";
 
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { DataPlaneProvider } from "#/data-plane/session";
@@ -568,6 +568,71 @@ describe(SitesWorkspaceRouteContent, () => {
     ).toBeInTheDocument();
   });
 
+  it("does not show stale comment completion status after selecting another site", async () => {
+    const user = userEvent.setup();
+    const readModel = createReadyReadModelState({
+      actors: [caseyActor],
+      sites: [dublinSite, corkSite],
+    });
+    const commandRunner = createMockCommandRunner();
+    const commentCommand = deferredCommentCommand();
+    sitesDataPlaneMock.readModelState = readModel;
+    sitesDataPlaneMock.commandRunner = commandRunner;
+    commandRunner.addSiteComment.mockReturnValueOnce(commentCommand.promise);
+
+    renderStatefulSitesWorkspace({
+      shellState: "ready",
+      workspaceSearch: { selectedSiteId: dublinSite.id },
+    });
+    await screen.findByRole("heading", { name: "Dublin Port" });
+
+    const commentInput = screen.getByLabelText("Comment");
+    await user.type(commentInput, "Gate 4 reopened after contractor sign-off.");
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(commandRunner.addSiteComment).toHaveBeenCalledExactlyOnceWith(
+      dublinSite.id,
+      { body: "Gate 4 reopened after contractor sign-off." }
+    );
+    expect(screen.getByText("Comment pending")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /cork depot/i }));
+    await screen.findByRole("heading", { name: "Cork Depot" });
+    expect(screen.queryByText("Comment pending")).not.toBeInTheDocument();
+    expect(screen.queryByText("Comment synced")).not.toBeInTheDocument();
+
+    const corkCommentInput = screen.getByLabelText("Comment");
+    await user.type(corkCommentInput, "Keep Cork draft while Dublin syncs.");
+
+    await act(async () => {
+      readModel.commentBodies.collection.upsert(dublinComment);
+      readModel.siteCommentEdges.collection.upsert(dublinCommentEdge);
+      commentCommand.resolve(makeCommentSuccess(dublinComment));
+      await commentCommand.promise;
+    });
+
+    expect(screen.getByRole("heading", { name: "Cork Depot" })).toBeVisible();
+    expect(screen.queryByText("Comment synced")).not.toBeInTheDocument();
+    expect(screen.queryByText("Comment failed")).not.toBeInTheDocument();
+    expect(corkCommentInput).toHaveValue("Keep Cork draft while Dublin syncs.");
+    expect(
+      screen.queryByText("Gate 4 reopened after contractor sign-off.")
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /dublin port/i }));
+
+    await expect(
+      screen.findByRole("heading", { name: "Dublin Port" })
+    ).resolves.toBeInTheDocument();
+    expect(screen.getByText("Comment synced")).toBeInTheDocument();
+    expect(
+      screen.getByText("Comment synced (observed by Electric)")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Gate 4 reopened after contractor sign-off.")
+    ).toBeInTheDocument();
+  });
+
   it("keeps comment text retryable after add-comment failure", async () => {
     const user = userEvent.setup();
     const readModel = createReadyReadModelState({ sites: [dublinSite] });
@@ -699,6 +764,53 @@ function renderSitesWorkspace({
       </DataPlaneProvider>
     </HotkeysProvider>
   );
+}
+
+function renderStatefulSitesWorkspace({
+  currentOrganizationRole = "owner",
+  shellState = "unavailable",
+  workspaceSearch = {},
+}: Partial<React.ComponentProps<typeof SitesWorkspaceRouteContent>> = {}) {
+  const queryClient = new QueryClient();
+
+  function StatefulSitesWorkspace() {
+    const [currentWorkspaceSearch, setCurrentWorkspaceSearch] =
+      React.useState(workspaceSearch);
+    const onWorkspaceSearchChange = React.useCallback<
+      React.ComponentProps<
+        typeof SitesWorkspaceRouteContent
+      >["onWorkspaceSearchChange"]
+    >((nextWorkspaceSearch) => {
+      setCurrentWorkspaceSearch((current) => ({
+        ...current,
+        ...nextWorkspaceSearch,
+      }));
+    }, []);
+
+    return (
+      <HotkeysProvider>
+        <DataPlaneProvider
+          queryClient={queryClient}
+          scope={createOrganizationDataScope({
+            organizationId: "org_123" as OrganizationId,
+            role: currentOrganizationRole,
+            userId: "user_123",
+          })}
+        >
+          <CommandBarProvider>
+            <SitesWorkspaceRouteContent
+              currentOrganizationRole={currentOrganizationRole}
+              workspaceSearch={currentWorkspaceSearch}
+              onWorkspaceSearchChange={onWorkspaceSearchChange}
+              shellState={shellState}
+            />
+          </CommandBarProvider>
+        </DataPlaneProvider>
+      </HotkeysProvider>
+    );
+  }
+
+  return render(<StatefulSitesWorkspace />);
 }
 
 function createReadyReadModelState({
@@ -931,6 +1043,14 @@ const dublinSite = makeSite({
   id: "22222222-2222-4222-8222-222222222222",
   name: "Dublin Port",
   updatedAt: "2026-06-02T00:00:00.000Z",
+});
+
+const corkSite = makeSite({
+  accessNotes: "Use side entrance",
+  displayLocation: "Cork Depot",
+  id: "33333333-3333-4333-8333-333333333333",
+  name: "Cork Depot",
+  updatedAt: "2026-06-02T01:00:00.000Z",
 });
 
 const caseyActor = {
