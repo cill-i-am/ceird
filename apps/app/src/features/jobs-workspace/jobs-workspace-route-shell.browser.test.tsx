@@ -26,6 +26,13 @@ const liveListState = vi.hoisted<{ current: JobsWorkspaceLiveListState }>(
       allRowsCount: 0,
       availableLabels: [],
       commands: makeCommandStubs(),
+      graphCounts: {
+        contacts: 0,
+        jobLabelAssignments: 0,
+        jobs: 0,
+        labels: 0,
+        sites: 0,
+      },
       health: {
         collection: "jobs",
         collectionId: "jobs-workspace-test",
@@ -48,6 +55,15 @@ const liveDetailState = vi.hoisted<{
 }>(() => ({
   current: {
     detail: undefined,
+    graphCounts: {
+      activity: 0,
+      actors: 0,
+      collaborators: 0,
+      comments: 0,
+      jobComments: 0,
+      memberActorSummaries: 0,
+      visits: 0,
+    },
     health: {
       collection: "jobs",
       collectionId: "jobs-workspace-detail-test",
@@ -102,6 +118,13 @@ describe("jobs workspace route shell", () => {
       allRowsCount: 0,
       availableLabels: [],
       commands: makeCommandStubs(),
+      graphCounts: {
+        contacts: 0,
+        jobLabelAssignments: 0,
+        jobs: 0,
+        labels: 0,
+        sites: 0,
+      },
       isCollectionGraphAvailable: true,
       isLoading: false,
       isReady: true,
@@ -109,6 +132,15 @@ describe("jobs workspace route shell", () => {
     };
     liveDetailState.current = {
       detail: undefined,
+      graphCounts: {
+        activity: 0,
+        actors: 0,
+        collaborators: 0,
+        comments: 0,
+        jobComments: 0,
+        memberActorSummaries: 0,
+        visits: 0,
+      },
       health: {
         collection: "jobs",
         collectionId: "jobs-workspace-detail-test",

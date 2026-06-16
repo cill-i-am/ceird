@@ -31,6 +31,13 @@ export interface JobsWorkspaceLiveListState {
   readonly allRowsCount: number;
   readonly availableLabels: readonly Label[];
   readonly commands: ReturnType<typeof createJobsWorkspaceCommandRunner>;
+  readonly graphCounts: {
+    readonly contacts: number;
+    readonly jobLabelAssignments: number;
+    readonly jobs: number;
+    readonly labels: number;
+    readonly sites: number;
+  };
   readonly health: DataPlaneCollectionHealthSnapshot;
   readonly isCollectionGraphAvailable: boolean;
   readonly isLoading: boolean;
@@ -135,6 +142,13 @@ export function useJobsWorkspaceLiveList(
     allRowsCount: isReady ? jobs.length : 0,
     availableLabels,
     commands,
+    graphCounts: {
+      contacts: isReady ? contacts.length : 0,
+      jobLabelAssignments: isReady ? labelAssignments.length : 0,
+      jobs: isReady ? jobs.length : 0,
+      labels: isReady ? labels.length : 0,
+      sites: isReady ? sites.length : 0,
+    },
     health,
     isCollectionGraphAvailable,
     isLoading,

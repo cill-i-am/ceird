@@ -26,6 +26,15 @@ import type {
 
 export interface JobsWorkspaceLiveDetailState {
   readonly detail?: JobsWorkspaceDetailReadModel | undefined;
+  readonly graphCounts: {
+    readonly activity: number;
+    readonly actors: number;
+    readonly collaborators: number;
+    readonly comments: number;
+    readonly jobComments: number;
+    readonly memberActorSummaries: number;
+    readonly visits: number;
+  };
   readonly health: DataPlaneCollectionHealthSnapshot;
   readonly isCollectionGraphAvailable: boolean;
   readonly isLoading: boolean;
@@ -165,6 +174,21 @@ export function useJobsWorkspaceLiveDetail(
 
   return {
     detail,
+    graphCounts: {
+      activity: isReady ? readLiveQueryData(activityQuery.data).length : 0,
+      actors: isReady ? readLiveQueryData(actorsQuery.data).length : 0,
+      collaborators: isReady
+        ? readLiveQueryData(collaboratorsQuery.data).length
+        : 0,
+      comments: isReady ? readLiveQueryData(commentsQuery.data).length : 0,
+      jobComments: isReady
+        ? readLiveQueryData(jobCommentsQuery.data).length
+        : 0,
+      memberActorSummaries: isReady
+        ? readLiveQueryData(memberActorSummariesQuery.data).length
+        : 0,
+      visits: isReady ? readLiveQueryData(visitsQuery.data).length : 0,
+    },
     health,
     isCollectionGraphAvailable,
     isLoading,
