@@ -107,6 +107,17 @@ by member `userId`; the UI shows an unavailable summary state when that
 projection is absent rather than synthesizing names from raw identifiers. Detail
 health is aggregated separately from list health so list readiness is not gated
 by the wider record-local activity/comment graph.
+`pnpm --filter app perf:jobs-workspace` runs the Jobs live-query performance
+harness in `features/jobs-workspace/jobs-workspace-performance-harness.ts`.
+The default fixture matches the TSK-200 Jobs budget shape: 5,000 jobs, 1,000
+sites, 100 labels, about three labels per job, realistic status/priority mix,
+and 10,000 comments for detail/comment-count paths. The harness measures list
+search/filter/sort/label-join derivation, selected-detail transitions,
+recomputation after representative job and label-assignment changes, CPU, and
+heap observations. It can record stage/browser-observed Electric initial ready
+latency with `--initial-ready-ms`, but a local synthetic run leaves that field
+explicitly marked as not recorded so cutover evidence still requires an
+approved realtime verification stage.
 The jobs primary route collection has a conservative Electric read canary behind
 that same fallback wrapper. It is disabled by default and must be opted in
 through the jobs data-plane sync options, so a configured `VITE_SYNC_ORIGIN`
