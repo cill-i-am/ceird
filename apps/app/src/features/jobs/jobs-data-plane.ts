@@ -1954,11 +1954,17 @@ async function awaitJobCommentConfirmation({
   ]);
 
   return Exit.succeed({
-    ...response,
+    actor: response.actor,
+    actorId: response.actorId,
+    authorName: response.authorName,
+    body: response.body,
+    createdAt: response.createdAt,
     electricObservation: {
       commentBody: commentBody.kind,
       commentEdge: commentEdge.kind,
     },
+    id: response.id,
+    workItemId: response.workItemId,
   } satisfies JobsWorkspaceCommentCommandResult);
 }
 

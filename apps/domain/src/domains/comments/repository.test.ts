@@ -188,7 +188,9 @@ describe("comments repository", () => {
       })
     );
 
-    expect(comment).toHaveProperty("authorUserId", userId);
+    expect(comment).not.toHaveProperty("authorUserId");
+    expect(comment).not.toHaveProperty("updatedByUserId");
+    expect(comment.actorId).toBe(comment.actor?.id);
 
     await withPool(testDatabase.url, async (pool) => {
       const rawUserColumns = await pool.query<{ column_name: string }>(

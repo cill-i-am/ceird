@@ -129,17 +129,34 @@ describe("jobs-core", () => {
     ).toStrictEqual({ body: "Pump room inspected." });
     expect(
       Schema.decodeUnknownSync(JobCommentSchema)({
+        actor: {
+          displayName: "Ciara",
+          id: "99999999-9999-4999-8999-999999999999",
+          kind: "member",
+        },
+        actorId: "99999999-9999-4999-8999-999999999999",
+        authorName: "Ciara",
+        body: "Pump room inspected.",
+        createdAt: "2026-05-16T09:30:00.000Z",
         id: "77777777-7777-4777-8777-777777777777",
         workItemId: "11111111-1111-4111-8111-111111111111",
+      })
+    ).toMatchObject({
+      actorId: "99999999-9999-4999-8999-999999999999",
+      body: "Pump room inspected.",
+    });
+    expect(() =>
+      Schema.decodeUnknownSync(JobCommentSchema)({
+        actorId: "99999999-9999-4999-8999-999999999999",
         authorUserId: "user_123",
         authorName: "Ciara",
         body: "Pump room inspected.",
         createdAt: "2026-05-16T09:30:00.000Z",
+        id: "77777777-7777-4777-8777-777777777777",
+        updatedByUserId: "user_123",
+        workItemId: "11111111-1111-4111-8111-111111111111",
       })
-    ).toMatchObject({
-      authorUserId: "user_123",
-      body: "Pump room inspected.",
-    });
+    ).toThrow(/[Uu]nexpected/);
   });
 
   it("keeps mutation inputs strict and shapeable", () => {
@@ -292,6 +309,28 @@ describe("jobs-core", () => {
     expect(
       Schema.decodeUnknownSync(JobDetailResponseSchema)(detail)
     ).toStrictEqual(detail);
+    expect(() =>
+      Schema.decodeUnknownSync(JobDetailResponseSchema)({
+        ...detail,
+        comments: [
+          {
+            actor: {
+              displayName: "Ciara",
+              id: "99999999-9999-4999-8999-999999999999",
+              kind: "member",
+            },
+            actorId: "99999999-9999-4999-8999-999999999999",
+            authorName: "Ciara",
+            authorUserId: "user_123",
+            body: "Raw ids stay out of browser detail DTOs.",
+            createdAt: "2026-05-16T09:30:00.000Z",
+            id: "77777777-7777-4777-8777-777777777777",
+            updatedByUserId: "user_123",
+            workItemId: "11111111-1111-4111-8111-111111111111",
+          },
+        ],
+      })
+    ).toThrow(/[Uu]nexpected/);
   });
 
   it("decodes trimmed boundary DTOs", () => {

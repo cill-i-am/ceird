@@ -34,10 +34,12 @@ Exports shared comment primitives used by target-specific packages:
 - base comment and editable-comment DTO schemas
 - add-comment input/response schemas
 
-Target packages extend the base comment DTO with their own target IDs, such as
-`workItemId` in `@ceird/jobs-core` or `siteId` in `@ceird/sites-core`. Keep
-authorization, SQL ownership rows, and target-specific service behavior out of
-this package.
+The base comment DTOs are domain/shared primitives and may include raw domain
+author ids. Browser-facing target packages define product-safe response DTOs
+with target ids and product actor ids, such as `workItemId` in
+`@ceird/jobs-core` or `siteId` in `@ceird/sites-core`, rather than extending
+raw user-id fields. Keep authorization, SQL ownership rows, and target-specific
+service behavior out of this package.
 
 ## `@ceird/agents-core`
 

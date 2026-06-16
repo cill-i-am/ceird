@@ -1148,7 +1148,6 @@ describe("jobs data plane", () => {
   it("keeps add-comment pending until comment body and edge collections observe the domain row", async () => {
     const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
     const commentId = "55555555-5555-4555-8555-555555555555" as CommentIdType;
-    const authorUserId = "user_123" as UserId;
     const actor = toProductActivityActorElectricRow({
       displayName: "Taylor Field",
       id: "77777777-7777-4777-8777-777777777777",
@@ -1183,12 +1182,14 @@ describe("jobs data plane", () => {
 
     apiResponse.resolve({
       actor,
-      authorUserId,
+      actorId: actor.id,
+      authorUserId: "user_123",
       body: "Ready for dispatch",
       createdAt: "2026-06-15T10:40:00.000Z",
       id: commentId,
+      updatedByUserId: "user_123",
       workItemId,
-    });
+    } as AddJobCommentResponse);
     await Promise.all([
       commentBodies.waitForSubscriber(),
       commentEdges.waitForSubscriber(),
@@ -1211,7 +1212,9 @@ describe("jobs data plane", () => {
       }),
     ]);
 
-    await expect(command).resolves.toMatchObject({
+    const exit = await command;
+
+    expect(exit).toMatchObject({
       _tag: "Success",
       value: {
         electricObservation: {
@@ -1220,15 +1223,21 @@ describe("jobs data plane", () => {
         },
       },
     });
+    if (Exit.isFailure(exit)) {
+      throw new Error("Expected comment command to succeed");
+    }
+    expect(exit.value).not.toHaveProperty("authorUserId");
+    expect(exit.value).not.toHaveProperty("updatedByUserId");
     expect(journal.entries()[0]).toMatchObject({
       status: "success",
     });
+    expect(journal.entries()[0]?.output).not.toHaveProperty("authorUserId");
+    expect(journal.entries()[0]?.output).not.toHaveProperty("updatedByUserId");
   });
 
   it("handles synchronous comment collection confirmation notifications", async () => {
     const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
     const commentId = "55555555-5555-4555-8555-555555555555" as CommentIdType;
-    const authorUserId = "user_123" as UserId;
     const actor = toProductActivityActorElectricRow({
       displayName: "Taylor Field",
       id: "77777777-7777-4777-8777-777777777777",
@@ -1236,7 +1245,7 @@ describe("jobs data plane", () => {
     });
     const response = {
       actor,
-      authorUserId,
+      actorId: actor.id,
       body: "Ready for dispatch",
       createdAt: "2026-06-15T10:40:00.000Z",
       id: commentId,

@@ -511,8 +511,8 @@ function mapWorkItemCommentRow(row: WorkItemCommentRow): JobComment {
   const actor = mapProductActorProjection(row);
   return decodeJobComment({
     actor,
+    actorId: actor?.id,
     authorName: actor?.displayName,
-    authorUserId: row.author_user_id,
     body: row.body,
     createdAt: row.created_at.toISOString(),
     id: row.id,

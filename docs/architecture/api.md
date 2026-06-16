@@ -654,7 +654,7 @@ projection.
 Job comment writes go through `JobsService.addComment`. The service creates the
 shared comment row, `work_item_comments` edge, and `work_item_comment_bodies`
 projection row in the domain transaction, returns a DTO with the product-safe
-actor projection, and records a
+actor projection and no raw `authorUserId`/`updatedByUserId`, and records a
 `comment.created` global activity event targeted at the comment. App and sync
 clients join comments to actors through `product_activity_actors`; Better Auth
 user/member tables remain private to the domain actor resolver and projection
