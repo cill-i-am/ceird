@@ -70,11 +70,11 @@ function getBaseShortcutScopes(
     return ["global"];
   }
 
-  if (
-    pathname === "/settings" ||
-    pathname === "/organization/settings" ||
-    pathname === "/organization/settings/labels"
-  ) {
+  if (pathname === "/organization/settings/labels") {
+    return ["global", "settings", "labels-settings"];
+  }
+
+  if (pathname === "/settings" || pathname === "/organization/settings") {
     return ["global", "settings"];
   }
 

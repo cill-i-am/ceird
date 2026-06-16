@@ -54,12 +54,19 @@ import {
   updateBrowserLabelWithConfirmation,
 } from "#/features/labels/labels-state";
 
+export { searchSettingsLabels } from "#/features/labels/labels-search";
+
 interface LabelsCollection extends DataPlaneCollectionSnapshot<Label> {
   readonly cleanup: () => Promise<void>;
+  entries: () => IterableIterator<[string | number, Label]>;
   readonly id: string;
   readonly keys: () => IterableIterator<Label["id"]>;
   readonly preload?: (() => Promise<void>) | undefined;
-  readonly status?: string | undefined;
+  readonly status: string;
+  subscribeChanges: (callback: () => void) => {
+    requestSnapshot?: (options?: { readonly optimizedOnly?: boolean }) => void;
+    unsubscribe: () => void;
+  };
   readonly subscriberCount: number;
   readonly utils: {
     readonly writeBatch: (callback: () => void) => void;

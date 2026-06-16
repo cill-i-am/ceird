@@ -9,6 +9,7 @@ const HOTKEY_SCOPES = [
   "sites-workspace",
   "members",
   "settings",
+  "labels-settings",
   "map",
 ] as const;
 
@@ -508,6 +509,13 @@ export const HOTKEYS = {
     id: "settingsSubmit",
     label: "Submit focused form",
     scope: "settings",
+  },
+  labelsSettingsSearch: {
+    group: "Settings",
+    hotkey: "/",
+    id: "labelsSettingsSearch",
+    label: "Search labels",
+    scope: "labels-settings",
   },
   mapZoomIn: {
     group: "Map",
