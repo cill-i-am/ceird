@@ -19,7 +19,7 @@ import type { HotkeyDefinition } from "#/hotkeys/hotkey-registry";
 
 type AppNavigationIcon = React.ComponentProps<typeof HugeiconsIcon>["icon"];
 
-type AppNavigationAccess = "all" | "internal" | "administrators";
+type AppNavigationAccess = "internal" | "administrators";
 
 export interface AppNavigationItem {
   readonly access?: AppNavigationAccess;
@@ -46,7 +46,7 @@ const APP_PRIMARY_NAV_ITEMS = [
     url: "/",
   },
   {
-    access: "all",
+    access: "internal",
     icon: Briefcase01Icon,
     id: "jobs",
     keywords: ["queue", "work"],
@@ -102,10 +102,6 @@ export function getPrimaryNavItemsForRole(
   role?: OrganizationRole | null
 ): readonly AppNavigationItem[] {
   return APP_PRIMARY_NAV_ITEMS.filter((item) => {
-    if (item.access === "all") {
-      return true;
-    }
-
     if (!role) {
       return false;
     }

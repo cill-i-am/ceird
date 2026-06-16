@@ -24,9 +24,9 @@ describe("app navigation", () => {
     ).toStrictEqual(["/", "/jobs", "/sites", "/activity"]);
   }, 1000);
 
-  it("shows only jobs navigation for external users", () => {
+  it("hides internal navigation for external users", () => {
     expect(
       getPrimaryNavItemsForRole("external").map((item) => item.url)
-    ).toStrictEqual(["/jobs"]);
+    ).toStrictEqual([]);
   }, 1000);
 });

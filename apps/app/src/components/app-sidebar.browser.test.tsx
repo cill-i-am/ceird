@@ -541,7 +541,7 @@ describe("app sidebar", () => {
   );
 
   it(
-    "shows only jobs navigation for external role",
+    "hides internal navigation for external role",
     {
       timeout: 10_000,
     },
@@ -558,10 +558,9 @@ describe("app sidebar", () => {
 
       render(<AppSidebar />);
 
-      expect(screen.getByRole("link", { name: /jobs/i })).toHaveAttribute(
-        "href",
-        "/jobs"
-      );
+      expect(
+        screen.queryByRole("link", { name: /jobs/i })
+      ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("link", { name: /ceird/i })
       ).not.toBeInTheDocument();
@@ -580,7 +579,7 @@ describe("app sidebar", () => {
     }
   );
 
-  it("keeps external users pointed at jobs while still showing the active organization", () => {
+  it("keeps the active organization visible for external users", () => {
     const externalOrganization = organization({
       id: "org_external",
       name: "External Client",
@@ -607,7 +606,9 @@ describe("app sidebar", () => {
     expect(
       screen.queryByRole("link", { name: /ceird/i })
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /jobs/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /jobs/i })
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /members/i })
     ).not.toBeInTheDocument();

@@ -263,10 +263,13 @@ describe("app global command actions", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole("option", { name: /go to jobs/i })
-        ).toBeInTheDocument();
+          screen.queryByRole("option", { name: /go to jobs/i })
+        ).not.toBeInTheDocument();
       });
 
+      expect(
+        screen.queryByRole("option", { name: /go to home/i })
+      ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("option", { name: /go to activity/i })
       ).not.toBeInTheDocument();
@@ -285,7 +288,7 @@ describe("app global command actions", () => {
   );
 
   it(
-    "registers only jobs, agent, and user settings commands for external users",
+    "registers only agent and user settings commands for external users",
     { timeout: 10_000 },
     async () => {
       render(
@@ -303,14 +306,13 @@ describe("app global command actions", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole("option", { name: /go to jobs/i })
+          screen.getByRole("option", { name: /ask ceird/i })
         ).toBeInTheDocument();
       });
 
-      expectCommandShortcut("Go to Jobs", ["G", "J"]);
       expect(
-        screen.getByRole("option", { name: /ask ceird/i })
-      ).toBeInTheDocument();
+        screen.queryByRole("option", { name: /go to jobs/i })
+      ).not.toBeInTheDocument();
       expectCommandShortcut("Ask Ceird", ["J"]);
       expect(
         screen.getByRole("option", { name: /open user settings/i })

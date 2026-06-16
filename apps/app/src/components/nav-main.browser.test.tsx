@@ -251,9 +251,9 @@ describe("nav main", () => {
       ).toStrictEqual(["/", "/jobs", "/sites", "/activity"]);
       expect(
         getPrimaryNavItemsForRole("external").map((item) => item.url)
-      ).toStrictEqual(["/jobs"]);
+      ).toStrictEqual([]);
       expect(getPrimaryNavItemsForRole().map((item) => item.url)).toStrictEqual(
-        ["/jobs"]
+        []
       );
     }
   );
