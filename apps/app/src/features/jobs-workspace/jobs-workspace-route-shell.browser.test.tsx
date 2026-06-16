@@ -116,6 +116,43 @@ describe("jobs workspace route shell", () => {
     expect(screen.getByText("disabled")).toBeVisible();
   });
 
+  it("does not render partial joined rows while the collection graph is not ready", () => {
+    liveListState.current = {
+      ...liveListState.current,
+      allRowsCount: 0,
+      health: {
+        ...liveListState.current.health,
+        status: "connecting",
+        subscriptionName: "jobs-workspace-list",
+      },
+      isLoading: true,
+      isReady: false,
+      rows: [
+        {
+          job: {
+            createdAt: "2026-06-15T10:00:00.000Z",
+            createdByUserId: "user_123" as UserId,
+            id: "11111111-1111-4111-8111-111111111111" as WorkItemIdType,
+            kind: "job",
+            priority: "high",
+            status: "blocked",
+            title: "Fit heat pump",
+            updatedAt: "2026-06-15T11:00:00.000Z",
+          },
+          labels: [],
+          searchText: "fit heat pump",
+        },
+      ],
+    };
+
+    renderShell();
+
+    expect(screen.getByLabelText("Connecting live jobs")).toBeVisible();
+    expect(screen.queryByText("Fit heat pump")).not.toBeInTheDocument();
+    expect(screen.queryByText("None")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unassigned")).not.toBeInTheDocument();
+  });
+
   it("renders joined live rows with labels and row actions", () => {
     liveListState.current = {
       ...liveListState.current,

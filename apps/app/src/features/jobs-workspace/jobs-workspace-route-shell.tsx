@@ -133,13 +133,6 @@ function JobsWorkspaceLiveRouteShell({
     { enabled: hotkeysEnabled }
   );
   useAppHotkey(
-    "jobsWorkspaceCreate",
-    () => {
-      searchRef.current?.focus();
-    },
-    { enabled: hotkeysEnabled }
-  );
-  useAppHotkey(
     "jobsWorkspaceNextRow",
     () => {
       setSelectedRowIndex((current) =>
@@ -205,11 +198,6 @@ function JobsWorkspaceLiveRouteShell({
                 strokeWidth={2}
               />
               New job
-              <ShortcutHint
-                decorative
-                hotkey={HOTKEYS.jobsWorkspaceCreate.hotkey}
-                label={HOTKEYS.jobsWorkspaceCreate.label}
-              />
             </Button>
           </>
         }

@@ -351,14 +351,6 @@ export const HOTKEYS = {
     label: "Jobs workspace board view",
     scope: "jobs-workspace",
   },
-  jobsWorkspaceCreate: {
-    group: "Jobs",
-    hotkey: "N",
-    id: "jobsWorkspaceCreate",
-    label: "Create job",
-    scope: "jobs-workspace",
-    when: "Jobs workspace write slice is available",
-  },
   jobsWorkspaceNextRow: {
     group: "Jobs",
     hotkey: "J",

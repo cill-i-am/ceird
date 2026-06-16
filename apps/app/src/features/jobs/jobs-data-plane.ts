@@ -53,7 +53,12 @@ import {
   syncBackedCollectionCompleteness,
 } from "#/data-plane/collection-contract";
 import type { DataPlaneCollectionFilterScope } from "#/data-plane/collection-contract";
-import type { DataPlaneCollectionHealth } from "#/data-plane/collection-health";
+import type {
+  DataPlaneCollectionHealth,
+  DataPlaneCollectionHealthError,
+  DataPlaneCollectionHealthSnapshot,
+  DataPlaneCollectionHealthStatus,
+} from "#/data-plane/collection-health";
 import {
   ROUTE_SCOPED_QUERY_COLLECTION_GC_TIME_MS,
   deleteDataPlaneCollectionItem,
@@ -286,6 +291,7 @@ export interface JobsWorkspaceReadModelContracts {
 }
 
 export interface JobsWorkspaceReadModelState {
+  readonly collectionHealth: JobsWorkspaceReadModelCollectionHealth;
   readonly contactSummaries?:
     | JobsWorkspaceCollection<JobContactSummaryRow>
     | undefined;
@@ -298,6 +304,14 @@ export interface JobsWorkspaceReadModelState {
   readonly siteSummaries?:
     | JobsWorkspaceCollection<JobSiteSummaryRow>
     | undefined;
+}
+
+export interface JobsWorkspaceReadModelCollectionHealth {
+  readonly jobs: DataPlaneCollectionHealth;
+  readonly labels: DataPlaneCollectionHealth;
+  readonly jobLabelAssignments: DataPlaneCollectionHealth;
+  readonly siteSummaries: DataPlaneCollectionHealth;
+  readonly contactSummaries: DataPlaneCollectionHealth;
 }
 
 export type JobsWorkspaceSort = "updated-desc" | "updated-asc" | "priority";
@@ -331,7 +345,13 @@ export interface JobsWorkspaceListContract {
     "job-sites",
     "job-contacts",
   ];
-  readonly healthCollection: "jobs";
+  readonly healthCollections: readonly [
+    "jobs",
+    "job-label-assignments",
+    "labels",
+    "job-sites",
+    "job-contacts",
+  ];
   readonly requiredShapes: readonly [
     "jobs",
     "work-item-labels",
@@ -952,9 +972,20 @@ export function getOrCreateJobsWorkspaceReadModelState({
     JobContactSummaryRow,
     string
   >(contracts.contactSummaries);
+  const collectionHealth = {
+    jobs: jobs.health,
+    labels: labels.health,
+    jobLabelAssignments: jobLabelAssignments.health,
+    siteSummaries: siteSummaries.health,
+    contactSummaries: contactSummaries.health,
+  } satisfies JobsWorkspaceReadModelCollectionHealth;
   const created = {
+    collectionHealth,
     contactSummaries: contactSummaries.collection,
-    health: jobs.health,
+    health: createJobsWorkspaceReadModelHealth({
+      collectionHealth,
+      collectionId: jobsWorkspaceCollectionId(scope, "list-read-model"),
+    }),
     jobLabelAssignments: jobLabelAssignments.collection,
     jobs: jobs.collection,
     labels: labels.collection,
@@ -996,6 +1027,138 @@ function createJobsWorkspaceElectricCollection<
   };
 }
 
+export function createJobsWorkspaceReadModelHealth({
+  collectionHealth,
+  collectionId,
+}: {
+  readonly collectionHealth: JobsWorkspaceReadModelCollectionHealth;
+  readonly collectionId: string;
+}): DataPlaneCollectionHealth {
+  const healthSources = Object.values(collectionHealth);
+  const computeCurrent = () =>
+    aggregateJobsWorkspaceReadModelHealth({
+      collectionId,
+      snapshots: healthSources.map((health) => health.current),
+    });
+
+  return {
+    get current() {
+      return computeCurrent();
+    },
+    markFallbackActive: () => computeCurrent(),
+    markReady: () => computeCurrent(),
+    markUnavailable: () => computeCurrent(),
+    subscribe: (listener) => {
+      const unsubscribes = healthSources.map((health) =>
+        health.subscribe(() => listener(computeCurrent()))
+      );
+
+      return () => {
+        for (const unsubscribe of unsubscribes) {
+          unsubscribe();
+        }
+      };
+    },
+  };
+}
+
+export function aggregateJobsWorkspaceReadModelHealth({
+  collectionId,
+  snapshots,
+}: {
+  readonly collectionId: string;
+  readonly snapshots: readonly DataPlaneCollectionHealthSnapshot[];
+}): DataPlaneCollectionHealthSnapshot {
+  const status = getJobsWorkspaceReadModelHealthStatus(snapshots);
+  const firstUnavailable = snapshots.find(
+    (snapshot) => snapshot.status === "unavailable"
+  );
+  const firstDisabled = snapshots.find(
+    (snapshot) => snapshot.status === "disabled"
+  );
+  const firstFallback = snapshots.find(
+    (snapshot) => snapshot.status === "fallback-active"
+  );
+  const readyLatencies = snapshots
+    .map((snapshot) => snapshot.initialReadyLatencyMs)
+    .filter((value): value is number => value !== undefined);
+
+  return {
+    collection: "jobs",
+    collectionId,
+    ...(firstDisabled?.disabledReason === undefined
+      ? {}
+      : {
+          disabledReason: `${formatJobsWorkspaceHealthSource(firstDisabled)}: ${firstDisabled.disabledReason}`,
+        }),
+    ...(firstFallback?.fallbackReason === undefined
+      ? {}
+      : {
+          fallbackReason: `${formatJobsWorkspaceHealthSource(firstFallback)}: ${firstFallback.fallbackReason}`,
+        }),
+    ...(readyLatencies.length === snapshots.length
+      ? { initialReadyLatencyMs: Math.max(...readyLatencies) }
+      : {}),
+    ...(firstUnavailable?.lastError === undefined
+      ? {}
+      : {
+          lastError: annotateJobsWorkspaceHealthError(
+            firstUnavailable.lastError,
+            firstUnavailable
+          ),
+        }),
+    lastStatusChangeAtMs: Math.max(
+      ...snapshots.map((snapshot) => snapshot.lastStatusChangeAtMs)
+    ),
+    recoveryAttempts: snapshots.reduce(
+      (total, snapshot) => total + snapshot.recoveryAttempts,
+      0
+    ),
+    source: "electric",
+    startedAtMs: Math.min(...snapshots.map((snapshot) => snapshot.startedAtMs)),
+    status,
+    subscriptionName: "jobs-workspace-list",
+  };
+}
+
+function getJobsWorkspaceReadModelHealthStatus(
+  snapshots: readonly DataPlaneCollectionHealthSnapshot[]
+): DataPlaneCollectionHealthStatus {
+  if (snapshots.some((snapshot) => snapshot.status === "unavailable")) {
+    return "unavailable";
+  }
+
+  if (snapshots.some((snapshot) => snapshot.status === "disabled")) {
+    return "disabled";
+  }
+
+  if (snapshots.some((snapshot) => snapshot.status === "fallback-active")) {
+    return "fallback-active";
+  }
+
+  if (snapshots.every((snapshot) => snapshot.status === "ready")) {
+    return "ready";
+  }
+
+  return "connecting";
+}
+
+function annotateJobsWorkspaceHealthError(
+  error: DataPlaneCollectionHealthError,
+  snapshot: DataPlaneCollectionHealthSnapshot
+): DataPlaneCollectionHealthError {
+  return {
+    ...error,
+    message: `${formatJobsWorkspaceHealthSource(snapshot)}: ${error.message}`,
+  };
+}
+
+function formatJobsWorkspaceHealthSource(
+  snapshot: DataPlaneCollectionHealthSnapshot
+) {
+  return snapshot.subscriptionName ?? snapshot.collection;
+}
+
 export function createJobsWorkspaceListContract(): JobsWorkspaceListContract {
   return {
     completeness: jobsWorkspaceListCompleteness(),
@@ -1006,7 +1169,13 @@ export function createJobsWorkspaceListContract(): JobsWorkspaceListContract {
       "job-sites",
       "job-contacts",
     ],
-    healthCollection: "jobs",
+    healthCollections: [
+      "jobs",
+      "job-label-assignments",
+      "labels",
+      "job-sites",
+      "job-contacts",
+    ],
     requiredShapes: ["jobs", "work-item-labels", "labels", "sites", "contacts"],
   };
 }

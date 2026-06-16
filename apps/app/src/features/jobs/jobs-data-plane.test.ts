@@ -18,6 +18,7 @@ import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { getDataPlaneSessionKey } from "#/data-plane/session";
 
 import {
+  aggregateJobsWorkspaceReadModelHealth,
   createJobsWorkspaceReadModelContracts,
   deriveJobsWorkspaceVisibleRows,
   createJobsListSeed,
@@ -365,7 +366,13 @@ describe("jobs data plane", () => {
         "job-sites",
         "job-contacts",
       ],
-      healthCollection: "jobs",
+      healthCollections: [
+        "jobs",
+        "job-label-assignments",
+        "labels",
+        "job-sites",
+        "job-contacts",
+      ],
       requiredShapes: [
         "jobs",
         "work-item-labels",
@@ -467,10 +474,113 @@ describe("jobs data plane", () => {
     expect(first).toBe(second);
     expect(first.health.current).toMatchObject({
       collection: "jobs",
-      disabledReason: "server-render",
+      disabledReason: "jobs: server-render",
       source: "electric",
       status: "disabled",
+      subscriptionName: "jobs-workspace-list",
+    });
+    expect(first.collectionHealth.labels.current).toMatchObject({
+      collection: "labels",
+      disabledReason: "server-render",
+      status: "disabled",
+      subscriptionName: "labels",
+    });
+  });
+
+  it("does not report the Jobs workspace read model ready when a required join collection is unavailable", () => {
+    const jobsHealth = createDataPlaneCollectionHealth({
+      collection: "jobs",
+      collectionId: "jobs",
+      source: "electric",
+      status: "connecting",
       subscriptionName: "jobs",
+    });
+    const labelsHealth = createDataPlaneCollectionHealth({
+      collection: "labels",
+      collectionId: "labels",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "labels",
+    });
+    const assignmentsHealth = createDataPlaneCollectionHealth({
+      collection: "job-label-assignments",
+      collectionId: "job-label-assignments",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "work-item-labels",
+    });
+    const sitesHealth = createDataPlaneCollectionHealth({
+      collection: "job-sites",
+      collectionId: "job-sites",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "sites",
+    });
+    const contactsHealth = createDataPlaneCollectionHealth({
+      collection: "job-contacts",
+      collectionId: "job-contacts",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "contacts",
+    });
+
+    jobsHealth.markReady();
+    assignmentsHealth.markReady();
+    sitesHealth.markReady();
+    contactsHealth.markReady();
+    labelsHealth.markUnavailable({
+      kind: "server",
+      message: "labels shape unavailable",
+      retryable: true,
+      status: 503,
+    });
+
+    expect(
+      aggregateJobsWorkspaceReadModelHealth({
+        collectionId: "jobs-workspace-list",
+        snapshots: [
+          jobsHealth.current,
+          labelsHealth.current,
+          assignmentsHealth.current,
+          sitesHealth.current,
+          contactsHealth.current,
+        ],
+      })
+    ).toMatchObject({
+      collection: "jobs",
+      collectionId: "jobs-workspace-list",
+      lastError: {
+        message: "labels: labels shape unavailable",
+        status: 503,
+      },
+      status: "unavailable",
+      subscriptionName: "jobs-workspace-list",
+    });
+  });
+
+  it("keeps the Jobs workspace read model connecting until every required collection is ready", () => {
+    const snapshots = [
+      makeReadyHealthSnapshot("jobs", "jobs"),
+      makeReadyHealthSnapshot("job-label-assignments", "work-item-labels"),
+      makeReadyHealthSnapshot("job-sites", "sites"),
+      makeReadyHealthSnapshot("job-contacts", "contacts"),
+      createDataPlaneCollectionHealth({
+        collection: "labels",
+        collectionId: "labels",
+        source: "electric",
+        status: "connecting",
+        subscriptionName: "labels",
+      }).current,
+    ];
+
+    expect(
+      aggregateJobsWorkspaceReadModelHealth({
+        collectionId: "jobs-workspace-list",
+        snapshots,
+      })
+    ).toMatchObject({
+      status: "connecting",
+      subscriptionName: "jobs-workspace-list",
     });
   });
 
@@ -751,6 +861,23 @@ function makeElectricError({
     shapeName: "jobs",
     ...(status === undefined ? {} : { status }),
   };
+}
+
+function makeReadyHealthSnapshot(
+  collection: Parameters<
+    typeof createDataPlaneCollectionHealth
+  >[0]["collection"],
+  subscriptionName: string
+) {
+  const health = createDataPlaneCollectionHealth({
+    collection,
+    collectionId: collection,
+    source: "electric",
+    status: "connecting",
+    subscriptionName,
+  });
+
+  return health.markReady();
 }
 
 function makeTestCollection(

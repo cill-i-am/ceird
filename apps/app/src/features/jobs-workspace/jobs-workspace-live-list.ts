@@ -87,16 +87,10 @@ export function useJobsWorkspaceLiveList(
   );
   const sites = readLiveQueryData<JobSiteSummaryRow>(sitesQuery.data);
   const contacts = readLiveQueryData<JobContactSummaryRow>(contactsQuery.data);
-  const rows = deriveJobsWorkspaceVisibleRows({
-    contacts,
-    jobs,
-    labelAssignments,
-    labels,
-    options,
-    sites,
-  });
-  const isCollectionGraphAvailable =
-    isJobsWorkspaceReadModelAvailable(readModel);
+  const isCollectionGraphAvailable = isJobsWorkspaceReadModelAvailable(
+    readModel,
+    health
+  );
   const queryStates = [
     jobsQuery,
     labelsQuery,
@@ -110,12 +104,23 @@ export function useJobsWorkspaceLiveList(
     isCollectionGraphAvailable,
     queryStates,
   });
+  const rows = isReady
+    ? deriveJobsWorkspaceVisibleRows({
+        contacts,
+        jobs,
+        labelAssignments,
+        labels,
+        options,
+        sites,
+      })
+    : [];
+  const availableLabels = isReady
+    ? labels.toSorted((left, right) => left.name.localeCompare(right.name))
+    : [];
 
   return {
-    allRowsCount: jobs.length,
-    availableLabels: labels.toSorted((left, right) =>
-      left.name.localeCompare(right.name)
-    ),
+    allRowsCount: isReady ? jobs.length : 0,
+    availableLabels,
     health,
     isCollectionGraphAvailable,
     isLoading,
@@ -131,9 +136,13 @@ function readLiveQueryData<Item>(
 }
 
 function isJobsWorkspaceReadModelAvailable(
-  readModel: ReturnType<typeof getOrCreateJobsWorkspaceReadModelState>
+  readModel: ReturnType<typeof getOrCreateJobsWorkspaceReadModelState>,
+  health: DataPlaneCollectionHealthSnapshot
 ): boolean {
   return (
+    health.status !== "disabled" &&
+    health.status !== "fallback-active" &&
+    health.status !== "unavailable" &&
     readModel.jobs !== undefined &&
     readModel.labels !== undefined &&
     readModel.jobLabelAssignments !== undefined &&
@@ -162,8 +171,8 @@ function isJobsWorkspaceLiveListReady({
   readonly queryStates: readonly { readonly isReady: boolean }[];
 }): boolean {
   return (
-    health.status === "ready" ||
-    (isCollectionGraphAvailable &&
-      queryStates.every((queryState) => queryState.isReady))
+    health.status === "ready" &&
+    isCollectionGraphAvailable &&
+    queryStates.every((queryState) => queryState.isReady)
   );
 }

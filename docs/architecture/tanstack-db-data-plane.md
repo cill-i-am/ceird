@@ -73,9 +73,11 @@ The `/jobs-workspace` live list consumes that graph through
 Electric collections through the data-plane boundary, subscribes with the
 shared live-query wrapper, joins labels/sites/contacts locally, and exposes
 route-backed search, filters, sort, recent-search, and saved-view-ready hooks.
-When the graph is disabled, unavailable, or degraded, the workspace reports the
-shared collection health directly and does not activate the legacy Jobs Query
-Collection fallback.
+The list read model aggregates health across all five required list shapes and
+derives visible rows only after jobs, label assignments, labels, sites, and
+contacts are all healthy and live-query ready. When the graph is disabled,
+unavailable, or not fully ready, the workspace reports that shared graph health
+directly and does not activate the legacy Jobs Query Collection fallback.
 The jobs primary route collection has a conservative Electric read canary behind
 that same fallback wrapper. It is disabled by default and must be opted in
 through the jobs data-plane sync options, so a configured `VITE_SYNC_ORIGIN`

@@ -466,8 +466,9 @@ an explicit SSR strategy. The current migrated slices are:
 - `features/jobs-workspace/jobs-workspace-live-list.ts`, where the
   Electric-native Jobs workspace subscribes to the Jobs read-model collections,
   derives visible live rows from jobs, label assignments, labels, site
-  summaries, and contact summaries, and surfaces explicit sync health instead
-  of falling back to the legacy Jobs route data path.
+  summaries, and contact summaries only after the full required collection
+  graph is healthy/live-query ready, and surfaces explicit graph sync health
+  instead of falling back to the legacy Jobs route data path.
 - `features/jobs/jobs-detail-state.ts`, which is now a detail-sheet facade over
   job detail and collaborator collections plus command mutation feedback.
 
