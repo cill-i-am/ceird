@@ -22,6 +22,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Cause, Effect, Exit, Layer, Option, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
+import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql";
 
 import { DomainDrizzle } from "../../platform/database/database.js";
@@ -1071,6 +1072,7 @@ function makeAgentThreadsServiceTestLayer(
 function makeAgentActionsTestLayer(options: AgentActionsTestOptions) {
   return Layer.mergeAll(
     makeUnusedDomainDrizzleLayer(),
+    makeUnusedSqlClientLayer(),
     Layer.succeed(
       CommentsRepository,
       {} as ContextService<typeof CommentsRepository>
@@ -1131,6 +1133,22 @@ function makeAgentActionsTestLayer(options: AgentActionsTestOptions) {
       UserPreferencesRepository,
       {} as ContextService<typeof UserPreferencesRepository>
     )
+  );
+}
+
+function makeUnusedSqlClientLayer() {
+  return Layer.succeed(
+    SqlClient.SqlClient,
+    new Proxy(
+      {},
+      {
+        get: (_target, property) => {
+          throw new Error(
+            `SqlClient.${String(property)} should not be called in AgentActions unit tests`
+          );
+        },
+      }
+    ) as unknown as SqlClient.SqlClient
   );
 }
 

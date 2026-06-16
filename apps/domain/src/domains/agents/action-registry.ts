@@ -9,6 +9,7 @@ import type {
 } from "@ceird/agents-core";
 import { Effect, Option, Schema } from "effect";
 import type { HttpServerRequest } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 
 import type { DomainDrizzleService } from "../../platform/database/database.js";
 import { JobsService } from "../jobs/service.js";
@@ -25,6 +26,7 @@ type DomainAgentActionRequirements =
   | JobsService
   | SitesService
   | DomainDrizzleService
+  | SqlClient.SqlClient
   | HttpServerRequest.HttpServerRequest;
 
 export interface DomainAgentActionHandler<

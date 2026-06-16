@@ -133,6 +133,11 @@ value read inside the wrapped write and the returned confirmation metadata are
 the same transaction id. Deployed Neon/Hyperdrive runtime uses the same
 `@effect/sql-pg` pool path through the `DATABASE` Hyperdrive binding; provider
 stage mutation is not required to exercise this helper.
+Domain-owned label writes and Sites create/update/label-assignment writes wrap
+their persistence work in this helper and return shared DTOs that include the
+canonical entity plus `mutation.txid`. Browser command layers use that metadata
+only to wait for synced collection observation; they do not derive ids,
+authorization, enrichment, or label invariants locally.
 
 ## Cloudflare Neon Postgres And Hyperdrive
 

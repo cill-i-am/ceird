@@ -1,30 +1,37 @@
 import type { JobListItem } from "@ceird/jobs-core";
 import { JobListItemSchema } from "@ceird/jobs-core";
-import type { Label } from "@ceird/labels-core";
+import type { Label, LabelIdType } from "@ceird/labels-core";
 import { LabelSchema } from "@ceird/labels-core";
 import type {
+  AssignSiteLabelInput,
+  CreateSiteInput,
   SiteActiveJobPriority,
   SiteIdType,
   SiteOption,
+  SiteWriteResponse,
+  UpdateSiteInput,
 } from "@ceird/sites-core";
 import {
   SiteActiveJobPrioritySchema,
   SiteOptionSchema,
 } from "@ceird/sites-core";
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { Schema } from "effect";
+import { Effect, Exit, Schema } from "effect";
 
 import {
   COMPLETE_TENANT_COLLECTION,
   syncBackedCollectionCompleteness,
 } from "#/data-plane/collection-contract";
+import { executeDataPlaneCommandAction } from "#/data-plane/command-action";
 import {
   createElectricCollectionFromContract,
   defineElectricCollectionContract,
 } from "#/data-plane/electric-collection";
+import type { DataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 import { organizationDataQueryKey } from "#/data-plane/query-scope";
 import type { OrganizationDataScope } from "#/data-plane/query-scope";
 import type { DataPlaneSession } from "#/data-plane/session";
+import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 
 type SitesWorkspaceElectricRowValue =
   | bigint
@@ -64,6 +71,26 @@ const SiteRelatedJobElectricStandardSchema = Schema.toStandardSchemaV1(
   JobListItemSchema
 ) as unknown as StandardSchemaV1<unknown, SitesWorkspaceElectricRow>;
 const LabelElectricStandardSchema = Schema.toStandardSchemaV1(LabelSchema);
+const SITES_WORKSPACE_MUTATION_CONFIRMATION_TIMEOUT_MS = 10_000;
+
+interface SitesWorkspaceObservableCollection<Item> {
+  entries: () => IterableIterator<[string | number, Item]>;
+  subscribeChanges: (callback: () => void) => {
+    requestSnapshot?: (options?: { readonly optimizedOnly?: boolean }) => void;
+    unsubscribe: () => void;
+  };
+}
+
+export interface SitesWorkspaceCommandCollections {
+  readonly siteLabelAssignments: SitesWorkspaceObservableCollection<SiteLabelAssignmentElectricRow> | null;
+  readonly sites: SitesWorkspaceObservableCollection<SiteOption> | null;
+}
+
+export interface SitesWorkspaceCommandRunnerOptions {
+  readonly collections: SitesWorkspaceCommandCollections;
+  readonly journal?: DataPlaneMutationJournal | undefined;
+  readonly timeoutMs?: number | undefined;
+}
 
 export interface SiteActiveJobSummaryElectricRow {
   readonly activeJobCount: number;
@@ -98,6 +125,147 @@ export interface SitesWorkspaceReadModelRows {
   readonly relatedJobs: readonly JobListItem[];
   readonly siteLabelAssignments: readonly SiteLabelAssignmentElectricRow[];
   readonly sites: readonly SiteOption[];
+}
+
+export function createSitesWorkspaceCommandRunner({
+  collections,
+  journal,
+  timeoutMs = SITES_WORKSPACE_MUTATION_CONFIRMATION_TIMEOUT_MS,
+}: SitesWorkspaceCommandRunnerOptions) {
+  return {
+    assignSiteLabel: (siteId: SiteIdType, input: AssignSiteLabelInput) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["site-label-assignments"],
+          execute: async (commandInput: {
+            readonly input: AssignSiteLabelInput;
+            readonly siteId: SiteIdType;
+          }) => {
+            const exit = await Effect.runPromiseExit(
+              assignBrowserSiteLabelWithConfirmation(
+                commandInput.siteId,
+                commandInput.input
+              )
+            );
+
+            if (Exit.isFailure(exit)) {
+              return exit;
+            }
+
+            return await catchWorkspaceConfirmationFailure(
+              awaitSiteLabelAssignmentConfirmation({
+                collection: collections.siteLabelAssignments,
+                labelId: commandInput.input.labelId,
+                mode: "assigned",
+                response: exit.value,
+                siteId: commandInput.siteId,
+                timeoutMs,
+              })
+            );
+          },
+          name: "sites-workspace.assign-label",
+          optimistic: "none",
+        },
+        { input, siteId },
+        { journal }
+      ),
+    createSite: (input: CreateSiteInput) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["sites"],
+          execute: async (commandInput: CreateSiteInput) => {
+            const exit = await Effect.runPromiseExit(
+              createBrowserSiteWithConfirmation(commandInput)
+            );
+
+            if (Exit.isFailure(exit)) {
+              return exit;
+            }
+
+            return await catchWorkspaceConfirmationFailure(
+              awaitSiteConfirmation({
+                collection: collections.sites,
+                response: exit.value,
+                timeoutMs,
+              })
+            );
+          },
+          name: "sites-workspace.create",
+          optimistic: "none",
+        },
+        input,
+        { journal }
+      ),
+    removeSiteLabel: (siteId: SiteIdType, labelId: LabelIdType) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["site-label-assignments"],
+          execute: async (commandInput: {
+            readonly labelId: LabelIdType;
+            readonly siteId: SiteIdType;
+          }) => {
+            const exit = await Effect.runPromiseExit(
+              removeBrowserSiteLabelWithConfirmation(
+                commandInput.siteId,
+                commandInput.labelId
+              )
+            );
+
+            if (Exit.isFailure(exit)) {
+              return exit;
+            }
+
+            return await catchWorkspaceConfirmationFailure(
+              awaitSiteLabelAssignmentConfirmation({
+                collection: collections.siteLabelAssignments,
+                labelId: commandInput.labelId,
+                mode: "removed",
+                response: exit.value,
+                siteId: commandInput.siteId,
+                timeoutMs,
+              })
+            );
+          },
+          name: "sites-workspace.remove-label",
+          optimistic: "none",
+        },
+        { labelId, siteId },
+        { journal }
+      ),
+    updateSite: (siteId: SiteIdType, input: UpdateSiteInput) =>
+      executeDataPlaneCommandAction(
+        {
+          affectedCollections: ["sites"],
+          execute: async (commandInput: {
+            readonly input: UpdateSiteInput;
+            readonly siteId: SiteIdType;
+          }) => {
+            const exit = await Effect.runPromiseExit(
+              updateBrowserSiteWithConfirmation(
+                commandInput.siteId,
+                commandInput.input
+              )
+            );
+
+            if (Exit.isFailure(exit)) {
+              return exit;
+            }
+
+            return await catchWorkspaceConfirmationFailure(
+              awaitSiteConfirmation({
+                collection: collections.sites,
+                response: exit.value,
+                timeoutMs,
+              })
+            );
+          },
+          name: "sites-workspace.update",
+          optimistic: "none",
+        },
+        { input, siteId },
+        { journal }
+      ),
+  };
 }
 
 export function getOrCreateSitesWorkspaceReadModelCollectionState({
@@ -433,6 +601,162 @@ function toLabelElectricRow(row: Record<string, unknown>) {
     name: String(row.name),
     updatedAt: String(row.updatedAt),
   };
+}
+
+async function awaitSiteConfirmation({
+  collection,
+  response,
+  timeoutMs,
+}: {
+  readonly collection: SitesWorkspaceObservableCollection<SiteOption> | null;
+  readonly response: SiteWriteResponse;
+  readonly timeoutMs: number;
+}) {
+  await waitForWorkspaceCollectionObservation({
+    collection,
+    matches: (site) =>
+      site.id === response.site.id &&
+      site.updatedAt === response.site.updatedAt,
+    timeoutMs,
+  });
+
+  return Exit.succeed(response);
+}
+
+async function catchWorkspaceConfirmationFailure<Success>(
+  promise: Promise<Exit.Exit<Success, unknown>>
+) {
+  try {
+    return await promise;
+  } catch (error) {
+    return Exit.fail(error);
+  }
+}
+
+async function awaitSiteLabelAssignmentConfirmation({
+  collection,
+  labelId,
+  mode,
+  response,
+  siteId,
+  timeoutMs,
+}: {
+  readonly collection: SitesWorkspaceObservableCollection<SiteLabelAssignmentElectricRow> | null;
+  readonly labelId: Label["id"];
+  readonly mode: "assigned" | "removed";
+  readonly response: SiteWriteResponse;
+  readonly siteId: SiteIdType;
+  readonly timeoutMs: number;
+}) {
+  await waitForWorkspaceCollectionObservation({
+    collection,
+    matches:
+      mode === "assigned"
+        ? (assignment) =>
+            assignment.siteId === siteId && assignment.labelId === labelId
+        : (assignment) =>
+            !(assignment.siteId === siteId && assignment.labelId === labelId),
+    mode,
+    timeoutMs,
+  });
+
+  return Exit.succeed(response);
+}
+
+function waitForWorkspaceCollectionObservation<Item>({
+  collection,
+  matches,
+  mode = "assigned",
+  timeoutMs,
+}: {
+  readonly collection: SitesWorkspaceObservableCollection<Item> | null;
+  readonly matches: (item: Item) => boolean;
+  readonly mode?: "assigned" | "removed" | undefined;
+  readonly timeoutMs: number;
+}): Promise<unknown> {
+  if (collection === null) {
+    return Promise.reject(
+      new Error(
+        "Electric confirmation is unavailable because the collection is not connected."
+      )
+    );
+  }
+
+  const isConfirmed = () => {
+    const items = Array.from(collection.entries(), ([, item]) => item);
+
+    if (mode === "removed") {
+      return items.every((item) => matches(item));
+    }
+
+    return items.some((item) => matches(item));
+  };
+
+  if (isConfirmed()) {
+    return Promise.resolve();
+  }
+
+  const deferred = Promise.withResolvers<null>();
+  const timeout = globalThis.setTimeout(() => {
+    subscription.unsubscribe();
+    deferred.reject(
+      new Error("Timed out waiting for Electric to confirm the site mutation.")
+    );
+  }, timeoutMs);
+  const subscription = collection.subscribeChanges(() => {
+    if (!isConfirmed()) {
+      return;
+    }
+
+    globalThis.clearTimeout(timeout);
+    subscription.unsubscribe();
+    deferred.resolve(null);
+  });
+
+  subscription.requestSnapshot?.({ optimizedOnly: false });
+
+  return deferred.promise;
+}
+
+function createBrowserSiteWithConfirmation(input: CreateSiteInput) {
+  return runBrowserAppApiRequest("SitesWorkspace.createSite", (client) =>
+    client.sites.createSite({ payload: input })
+  );
+}
+
+function updateBrowserSiteWithConfirmation(
+  siteId: SiteIdType,
+  input: UpdateSiteInput
+) {
+  return runBrowserAppApiRequest("SitesWorkspace.updateSite", (client) =>
+    client.sites.updateSite({
+      params: { siteId },
+      payload: input,
+    })
+  );
+}
+
+function assignBrowserSiteLabelWithConfirmation(
+  siteId: SiteIdType,
+  input: AssignSiteLabelInput
+) {
+  return runBrowserAppApiRequest("SitesWorkspace.assignSiteLabel", (client) =>
+    client.sites.assignSiteLabel({
+      params: { siteId },
+      payload: input,
+    })
+  );
+}
+
+function removeBrowserSiteLabelWithConfirmation(
+  siteId: SiteIdType,
+  labelId: LabelIdType
+) {
+  return runBrowserAppApiRequest("SitesWorkspace.removeSiteLabel", (client) =>
+    client.sites.removeSiteLabel({
+      params: { labelId, siteId },
+    })
+  );
 }
 
 function addOptionalValue(

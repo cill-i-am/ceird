@@ -12,6 +12,7 @@ import type {
   SiteDetail,
   SiteIdType,
   SiteOption,
+  SiteWriteResponse,
   SitesOptionsResponse,
   UpdateSiteInput,
   UpdateSiteResponse,
@@ -852,12 +853,25 @@ function beginSiteCommentsRefresh(store: SitesStateStore, siteId: SiteIdType) {
 }
 
 function createBrowserSite(input: CreateSiteInput) {
+  return createBrowserSiteWithConfirmation(input).pipe(Effect.map(getSite));
+}
+
+export function createBrowserSiteWithConfirmation(input: CreateSiteInput) {
   return runBrowserAppApiRequest("SitesBrowser.createSite", (client) =>
     client.sites.createSite({ payload: input })
   );
 }
 
 function updateBrowserSite(siteId: SiteIdType, input: UpdateSiteInput) {
+  return updateBrowserSiteWithConfirmation(siteId, input).pipe(
+    Effect.map(getSite)
+  );
+}
+
+export function updateBrowserSiteWithConfirmation(
+  siteId: SiteIdType,
+  input: UpdateSiteInput
+) {
   return runBrowserAppApiRequest("SitesBrowser.updateSite", (client) =>
     client.sites.updateSite({
       params: { siteId },
@@ -879,6 +893,15 @@ function assignBrowserSiteLabel(
   siteId: SiteIdType,
   input: AssignSiteLabelInput
 ) {
+  return assignBrowserSiteLabelWithConfirmation(siteId, input).pipe(
+    Effect.map(getSite)
+  );
+}
+
+export function assignBrowserSiteLabelWithConfirmation(
+  siteId: SiteIdType,
+  input: AssignSiteLabelInput
+) {
   return runBrowserAppApiRequest("SitesBrowser.assignSiteLabel", (client) =>
     client.sites.assignSiteLabel({
       params: { siteId },
@@ -888,11 +911,24 @@ function assignBrowserSiteLabel(
 }
 
 function removeBrowserSiteLabel(siteId: SiteIdType, labelId: LabelIdType) {
+  return removeBrowserSiteLabelWithConfirmation(siteId, labelId).pipe(
+    Effect.map(getSite)
+  );
+}
+
+export function removeBrowserSiteLabelWithConfirmation(
+  siteId: SiteIdType,
+  labelId: LabelIdType
+) {
   return runBrowserAppApiRequest("SitesBrowser.removeSiteLabel", (client) =>
     client.sites.removeSiteLabel({
       params: { labelId, siteId },
     })
   );
+}
+
+function getSite(response: SiteWriteResponse) {
+  return response.site;
 }
 
 async function syncChangedSiteDetail(

@@ -25,9 +25,7 @@ describe(SitesWorkspaceRouteContent, () => {
     expect(
       screen.getByRole("searchbox", { name: /search sites workspace/i })
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /new site/i })
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /new site/i })).toBeDisabled();
     expect(
       screen.getAllByText("Realtime sites unavailable").length
     ).toBeGreaterThan(0);
@@ -64,7 +62,7 @@ describe(SitesWorkspaceRouteContent, () => {
     ).not.toBeInTheDocument();
   });
 
-  it("registers keyboard access for search without a placeholder create affordance", async () => {
+  it("keeps create disabled while registering keyboard access for search", async () => {
     const user = userEvent.setup();
     const onWorkspaceSearchChange =
       vi.fn<
@@ -77,8 +75,9 @@ describe(SitesWorkspaceRouteContent, () => {
 
     await user.keyboard("n");
     expect(onWorkspaceSearchChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /new site/i })).toBeDisabled();
     expect(
-      screen.queryByRole("button", { name: /new site/i })
+      screen.queryByRole("form", { name: /create site/i })
     ).not.toBeInTheDocument();
     expect(
       screen.getAllByText("Realtime sites unavailable").length
