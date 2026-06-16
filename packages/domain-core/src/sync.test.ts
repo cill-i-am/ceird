@@ -85,7 +85,7 @@ describe("domain sync boundary contracts", () => {
       organizationId: "org_123",
       params: {
         "1": "org_123",
-        "2": "2026-05-17T00:00:00.000Z",
+        "2": "2026-06-16T00:00:00.000Z",
       },
       shape: "activity-events",
       scope: "organization",
@@ -98,7 +98,7 @@ describe("domain sync boundary contracts", () => {
       organizationId: "org_123",
       params: {
         "1": "org_123",
-        "2": "2026-05-17T00:00:00.000Z",
+        "2": "2026-06-16T00:00:00.000Z",
       },
       shape: "activity-events",
       scope: "organization",

@@ -1,4 +1,3 @@
-import { ACTIVITY_FEED_RETENTION_DAYS } from "@ceird/activity-core";
 import {
   SyncAccessDeniedError,
   SyncAuthorizationStorageError,
@@ -98,7 +97,7 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
           shapeName === "activity-events"
             ? {
                 "1": actor.organizationId,
-                "2": makeActivityEventsRetainedAfter(),
+                "2": makeActivityEventsRetainedAfterNow(),
               }
             : {
                 "1": actor.organizationId,
@@ -128,15 +127,8 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
     );
 }
 
-function makeActivityEventsRetainedAfter(now: Date = new Date()) {
-  return addDays(now, -ACTIVITY_FEED_RETENTION_DAYS).toISOString();
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setUTCDate(next.getUTCDate() + days);
-
-  return next;
+function makeActivityEventsRetainedAfterNow(now: Date = new Date()) {
+  return now.toISOString();
 }
 
 function decodeSyncShapeAuthorization(input: unknown) {

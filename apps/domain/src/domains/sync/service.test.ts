@@ -227,9 +227,9 @@ describe("SyncAuthorizationService", () => {
   });
 
   it("authorizes the activity events shape as a bounded retained projection", async () => {
-    const before = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const before = Date.now();
     const authorization = await runWithActor(authorizeShape("activity-events"));
-    const after = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const after = Date.now();
     const retainedAfterMs = Date.parse(
       readRequiredActivityRetainedAfter(authorization.params)
     );
@@ -247,6 +247,19 @@ describe("SyncAuthorizationService", () => {
     });
     expect(retainedAfterMs).toBeGreaterThanOrEqual(before);
     expect(retainedAfterMs).toBeLessThanOrEqual(after);
+  });
+
+  it("uses retained-until current-time semantics so stale rows stay out of sync", async () => {
+    const authorization = await runWithActor(authorizeShape("activity-events"));
+    const retainedAfter = Date.parse(
+      readRequiredActivityRetainedAfter(authorization.params)
+    );
+    const staleRetainedUntil = new Date(retainedAfter - 1).toISOString();
+    const recentRetainedUntil = new Date(retainedAfter + 1).toISOString();
+
+    expect(Date.parse(staleRetainedUntil)).toBeLessThanOrEqual(retainedAfter);
+    expect(Date.parse(recentRetainedUntil)).toBeGreaterThan(retainedAfter);
+    expect(authorization.where).toBe(ACTIVITY_EVENTS_SYNC_WHERE);
   });
 
   it("limits per-user agent shapes to the current user", async () => {

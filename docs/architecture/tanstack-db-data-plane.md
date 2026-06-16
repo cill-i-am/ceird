@@ -42,9 +42,10 @@ for the bounded domain read model. It uses the named sync Worker
 `activity-events` shape and the shared collection health surface. Its
 completeness metadata is `sync-backed` over the
 `activity-events.recent-retained` filtered query, not `complete-tenant`, because
-the domain shape exposes only rows with `retained_until` after the 30-day cutoff
-and repository cleanup keeps only the latest 5,000 retained rows per
-organization. The global feed UI mounts in later activity issues.
+the domain shape exposes only rows with `retained_until` after the domain
+Worker's current time, while repository cleanup keeps only the latest 5,000
+retained rows per organization. The global feed UI mounts in later activity
+issues.
 ElectricSQL integration starts at this same boundary. Raw
 `@tanstack/electric-db-collection` and `@electric-sql/client` usage belongs only
 in `apps/app/src/data-plane/electric-collection.ts`, which standardizes

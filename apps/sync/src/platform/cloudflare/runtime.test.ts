@@ -62,7 +62,7 @@ function makeActivityEventsAuthorization() {
     organizationId: "org_sync",
     params: {
       "1": "org_sync",
-      "2": "2026-05-17T00:00:00.000Z",
+      "2": "2026-06-16T00:00:00.000Z",
     },
     shape: "activity-events",
     table: "activity_events",
@@ -334,7 +334,13 @@ describe("Sync Worker runtime", () => {
     );
     expect(electricUrl.searchParams.get("params[1]")).toBe("org_sync");
     expect(electricUrl.searchParams.get("params[2]")).toBe(
-      "2026-05-17T00:00:00.000Z"
+      "2026-06-16T00:00:00.000Z"
+    );
+    expect(Date.parse("2026-06-15T23:59:59.999Z")).toBeLessThanOrEqual(
+      Date.parse(electricUrl.searchParams.get("params[2]") ?? "")
+    );
+    expect(Date.parse("2026-06-16T00:00:00.001Z")).toBeGreaterThan(
+      Date.parse(electricUrl.searchParams.get("params[2]") ?? "")
     );
   });
 

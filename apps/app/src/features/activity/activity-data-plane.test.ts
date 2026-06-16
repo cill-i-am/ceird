@@ -45,7 +45,7 @@ describe("activity data plane", () => {
             {
               field: "retainedUntil",
               operator: "custom",
-              value: "retained_until > domain retention cutoff",
+              value: "retained_until > domain current time",
             },
             {
               field: "organizationRecentLimit",

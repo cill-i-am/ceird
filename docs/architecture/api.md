@@ -441,9 +441,11 @@ the domain-approved predicate is
 contract without letting browser callers provide `where` or `params` values.
 The named `activity-events` shape is the global feed's bounded recent
 projection: the domain-approved predicate is
-`organization_id = $1 AND retained_until > $2`, with `$2` computed by the
-domain Worker from the 30-day activity retention rule. Browser callers cannot
-provide the cutoff, table, predicate, params, or Electric source secret.
+`organization_id = $1 AND retained_until > $2`, with `$2` set to the domain
+Worker's current time. `retained_until` already encodes the 30-day activity
+retention rule, so stale rows are excluded even if cleanup has not run yet.
+Browser callers cannot provide the cutoff, table, predicate, params, or
+Electric source secret.
 
 ## Observability
 
