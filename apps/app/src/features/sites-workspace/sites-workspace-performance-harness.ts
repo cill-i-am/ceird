@@ -21,6 +21,7 @@ const DETAIL_OPEN_TARGET_MS = 200;
 const ELECTRIC_READY_TARGET_MS = 3000;
 const ELECTRIC_READY_BLOCKER_MS = 5000;
 const DEFAULT_ITERATIONS = 25;
+const DEFAULT_WARMUP_ITERATIONS = 5;
 
 interface NodeProcessLike {
   readonly argv?: readonly string[];
@@ -469,6 +470,14 @@ function measureInteraction<Output>({
   readonly targetMs: number;
 }): SitesWorkspacePerformanceMetric {
   const samples: number[] = [];
+
+  for (let index = 0; index < DEFAULT_WARMUP_ITERATIONS; index += 1) {
+    const output = run();
+
+    if (output === undefined) {
+      throw new Error(`${name} did not produce output.`);
+    }
+  }
 
   for (let index = 0; index < iterations; index += 1) {
     const startedAt = performance.now();

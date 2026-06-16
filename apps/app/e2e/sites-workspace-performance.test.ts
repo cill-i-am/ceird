@@ -3,7 +3,6 @@ import { appendFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import type { Page, TestInfo } from "@playwright/test";
 
-import { createSignedInOrganization } from "./helpers/auth-session";
 import { LoginPage } from "./pages/login-page";
 import { readOptionalEnv } from "./test-origins";
 
@@ -11,6 +10,8 @@ const SHOULD_RUN_STAGE_HARNESS = process.env.SITES_WORKSPACE_PERF_STAGE === "1";
 const READY_TIMEOUT_MS = 60_000;
 const INTERACTION_TARGET_MS = 150;
 const DETAIL_TARGET_MS = 200;
+const DEFAULT_EXPECTED_MIN_ROWS = 1000;
+const DEFAULT_SEARCH_QUERY = "site";
 
 interface BrowserSitesWorkspaceMetric {
   readonly durationMs: number;
@@ -82,10 +83,7 @@ test.describe("Sites workspace live-query performance harness", () => {
     expect(
       initialElectricReadyLatencyMs ?? Number.POSITIVE_INFINITY
     ).toBeLessThanOrEqual(5000);
-
-    if (process.env.SITES_WORKSPACE_PERF_EXPECT_SEEDED === "1") {
-      expect(rowCountObserved).toBeGreaterThanOrEqual(1000);
-    }
+    expect(rowCountObserved).toBeGreaterThanOrEqual(readExpectedMinimumRows());
 
     for (const metric of interactions) {
       expect(metric.durationMs, `${metric.name} duration`).toBeLessThanOrEqual(
@@ -96,24 +94,16 @@ test.describe("Sites workspace live-query performance harness", () => {
 });
 
 async function signInForSitesWorkspacePerformance(page: Page) {
-  const email = readOptionalEnv("SITES_WORKSPACE_PERF_EMAIL");
-  const password = readOptionalEnv("SITES_WORKSPACE_PERF_PASSWORD");
+  const email = readRequiredEnv("SITES_WORKSPACE_PERF_EMAIL");
+  const password = readRequiredEnv("SITES_WORKSPACE_PERF_PASSWORD");
+  const loginPage = new LoginPage(page);
 
-  if (email !== undefined && password !== undefined) {
-    const loginPage = new LoginPage(page);
-
-    await loginPage.goto();
-    await loginPage.email.fill(email);
-    await loginPage.password.fill(password);
-    await loginPage.submit.click();
-    await expect(
-      page.getByRole("main", { name: "Workspace home" })
-    ).toBeVisible({ timeout: 30_000 });
-    return;
-  }
-
-  await createSignedInOrganization(page, {
-    organizationName: "Sites Workspace Performance",
+  await loginPage.goto();
+  await loginPage.email.fill(email);
+  await loginPage.password.fill(password);
+  await loginPage.submit.click();
+  await expect(page.getByRole("main", { name: "Workspace home" })).toBeVisible({
+    timeout: 30_000,
   });
 }
 
@@ -148,38 +138,70 @@ async function measureSitesWorkspaceInteractions(page: Page) {
   const searchInput = page.getByLabel("Search sites workspace");
   const sortSelect = page.getByLabel("Sort");
   const rows = page.locator("button[aria-pressed]");
+  const searchQuery =
+    readOptionalEnv("SITES_WORKSPACE_PERF_SEARCH_QUERY") ??
+    DEFAULT_SEARCH_QUERY;
 
   return [
     await measureBrowserInteraction({
       action: async () => {
-        await searchInput.fill("label");
+        await searchInput.fill(searchQuery);
       },
-      name: "search.label",
-      page,
+      settled: async () => {
+        await expect(searchInput).toHaveValue(searchQuery);
+        await expect(rows.first()).toBeVisible();
+        await expect.poll(() => rows.count()).toBeGreaterThan(0);
+      },
+      name: "search.results-visible",
       targetMs: INTERACTION_TARGET_MS,
     }),
     await measureBrowserInteraction({
       action: async () => {
         await page.getByRole("button", { name: "Active jobs" }).click();
       },
+      settled: async () => {
+        await expect(rows.first()).toBeVisible();
+        await expect
+          .poll(() => countRowsMatchingText(page, /[1-9]\d* related/))
+          .toBeGreaterThan(0);
+      },
       name: "filter.active-jobs",
-      page,
       targetMs: INTERACTION_TARGET_MS,
     }),
     await measureBrowserInteraction({
       action: async () => {
         await sortSelect.selectOption("updated");
       },
+      settled: async () => {
+        await expect(sortSelect).toHaveValue("updated");
+        await expect(rows.first()).toBeVisible();
+      },
       name: "sort.updated",
-      page,
       targetMs: INTERACTION_TARGET_MS,
     }),
     await measureBrowserInteraction({
       action: async () => {
-        await rows.first().click();
+        await page
+          .locator("button[aria-pressed]", {
+            hasText: /[1-9]\d* related/,
+          })
+          .first()
+          .click();
+      },
+      settled: async () => {
+        const selectedRow = page.locator("button[aria-pressed='true']").first();
+        const detailPanel = page
+          .locator("aside", {
+            hasText: "Related jobs",
+          })
+          .last();
+
+        await expect(selectedRow).toBeVisible();
+        await expect(detailPanel.getByText("Site detail")).toBeVisible();
+        await expect(detailPanel.getByText("Related jobs")).toBeVisible();
+        await expect(detailPanel.locator("li").first()).toBeVisible();
       },
       name: "detail-transition",
-      page,
       targetMs: DETAIL_TARGET_MS,
     }),
   ];
@@ -188,24 +210,58 @@ async function measureSitesWorkspaceInteractions(page: Page) {
 async function measureBrowserInteraction({
   action,
   name,
-  page,
+  settled,
   targetMs,
 }: {
   readonly action: () => Promise<void>;
   readonly name: string;
-  readonly page: Page;
+  readonly settled: () => Promise<void>;
   readonly targetMs: number;
 }) {
   const startedAt = performance.now();
 
   await action();
-  await page.waitForTimeout(0);
+  await settled();
 
   return {
     durationMs: Math.round(performance.now() - startedAt),
     name,
     targetMs,
   } satisfies BrowserSitesWorkspaceMetric;
+}
+
+function countRowsMatchingText(page: Page, text: RegExp) {
+  return page.locator("button[aria-pressed]", { hasText: text }).count();
+}
+
+function readExpectedMinimumRows() {
+  const value = readOptionalEnv("SITES_WORKSPACE_PERF_EXPECTED_MIN_ROWS");
+
+  if (value === undefined) {
+    return DEFAULT_EXPECTED_MIN_ROWS;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < DEFAULT_EXPECTED_MIN_ROWS) {
+    throw new Error(
+      `SITES_WORKSPACE_PERF_EXPECTED_MIN_ROWS must be an integer >= ${DEFAULT_EXPECTED_MIN_ROWS}.`
+    );
+  }
+
+  return parsed;
+}
+
+function readRequiredEnv(name: string) {
+  const value = readOptionalEnv(name);
+
+  if (value === undefined) {
+    throw new Error(
+      `${name} is required for the Sites workspace performance stage harness. Use an already seeded account; this test never creates organizations or seed data.`
+    );
+  }
+
+  return value;
 }
 
 function readBrowserMemory(page: Page) {

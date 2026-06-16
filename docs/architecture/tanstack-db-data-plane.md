@@ -218,26 +218,36 @@ movement, CPU usage when available, and recommendations for projection or query
 changes before cutover.
 
 The browser/stage harness is `apps/app/e2e/sites-workspace-performance.test.ts`
-and is opt-in so ordinary package-local Playwright runs do not require
-provider-mutating setup:
+and is opt-in so ordinary package-local Playwright runs do not require a stage.
+It only consumes an already-approved, already-seeded stage/account; it never
+creates an organization or seed data for performance evidence. The stage
+credentials and seeded-row expectation are mandatory:
 
 ```bash
 SITES_WORKSPACE_PERF_STAGE=1 \
 PLAYWRIGHT_BASE_URL=<alchemy-app-url> \
 PLAYWRIGHT_API_URL=<alchemy-api-url> \
+SITES_WORKSPACE_PERF_EMAIL=<seeded-user-email> \
+SITES_WORKSPACE_PERF_PASSWORD=<seeded-user-password> \
+SITES_WORKSPACE_PERF_EXPECTED_MIN_ROWS=1000 \
+SITES_WORKSPACE_PERF_SEARCH_QUERY=<query-with-results> \
 DATA_PLANE_PERF_OUTPUT=artifacts/sites-workspace-performance.ndjson \
 pnpm --filter app e2e -- sites-workspace-performance.test.ts
 ```
 
-When a prepared stage already has the agreed seeded organization, pass
-`SITES_WORKSPACE_PERF_EMAIL`, `SITES_WORKSPACE_PERF_PASSWORD`, and
-`SITES_WORKSPACE_PERF_EXPECT_SEEDED=1` to run against that account. The test
-records time from route navigation to the `Live Sites read model ready` state,
-visible row count, browser heap observation when Chrome exposes it, and local
-search/filter/sort/detail timings. It fails if the workspace is unavailable or
-if initial ready exceeds the TSK-200 5s blocker threshold. Creating or mutating
-an Alchemy stage and seeding the organization remain explicit operator actions;
-the harness only consumes an already-approved target.
+`SITES_WORKSPACE_PERF_EXPECTED_MIN_ROWS` must be at least `1000`, matching the
+TSK-200 Sites fixture. `SITES_WORKSPACE_PERF_SEARCH_QUERY` should be a stable
+term known to return rows in that seeded organization; when omitted the harness
+uses `site`. The test records time from route navigation to the `Live Sites read
+model ready` state, visible row count, browser heap observation when Chrome
+exposes it, and completed local search/filter/sort/detail timings. Each timed
+interaction waits for post-action UI state: search results visible, active-job
+filtered rows with related jobs present, the updated-sort control selected, the
+selected detail panel visible, and related jobs rendered. It fails if required
+seed credentials are absent, the workspace is unavailable, the seeded row count
+is below the TSK-200 threshold, or initial ready exceeds the TSK-200 5s blocker
+threshold. Creating or mutating an Alchemy stage and seeding the organization
+remain explicit operator actions outside the harness.
 
 ## Commands
 
