@@ -518,6 +518,7 @@ export function OrganizationSettingsPage({
             {successMessage ? (
               <output
                 aria-live="polite"
+                
                 className="text-sm text-muted-foreground"
               >
                 {successMessage}
