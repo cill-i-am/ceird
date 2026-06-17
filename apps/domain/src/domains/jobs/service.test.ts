@@ -338,9 +338,27 @@ describe("JobsService contracts", () => {
     expect(capturedEvents).toHaveLength(1);
     expect(capturedEvents[0]?.display.detail).toHaveLength(280);
     expect(capturedEvents[0]?.display.detail?.endsWith("...")).toBe(true);
+    expect(capturedEvents[0]).toMatchObject({
+      actorId: "99999999-9999-4999-8999-999999999999",
+      display: {
+        route: {
+          href: `/jobs-workspace?detailJobId=${workItemId}`,
+          label: "Inspect boiler",
+        },
+        summary: "Commented on Inspect boiler",
+      },
+      eventType: "comment.created",
+      organizationId: internalActor.organizationId,
+      sourceId: "33333333-3333-4333-8333-333333333333",
+      sourceType: "comment",
+      status: "synced",
+      targetId: "33333333-3333-4333-8333-333333333333",
+      targetType: "comment",
+    });
     expect(capturedEvents[0]?.display.route?.href).toBe(
       `/jobs-workspace?detailJobId=${workItemId}`
     );
+    expect(JSON.stringify(capturedEvents)).not.toContain(internalActor.userId);
   });
 
   it("returns empty scoped options for external collaborators with no accessible option data", async () => {

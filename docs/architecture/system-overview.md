@@ -123,12 +123,14 @@ touches thread activity in the domain Worker for each chat turn, and executes
 Ceird tools by calling the domain Worker's internal action API. Read tools are
 model-available by default; mutating tools are gated until a client
 confirmation flow can approve them outside the model prompt. Mutating actions
-use the domain action-run ledger for
-idempotent replay protection and reuse the same authorization and
-activity-recording paths as the HTTP API. The ledger is a small begin/complete
-record, not an outer transaction around the whole action; domain services keep
-their own transaction boundaries, and abandoned running rows time out to a
-terminal failed state on replay.
+use the domain action-run ledger for idempotent replay protection and reuse the
+same authorization and activity-recording paths as the HTTP API. Mutating action
+runs also publish noise-controlled `agent.product_effect` activity through the
+product-safe agent-thread actor projection; read-only tools stay out of the
+global feed. The ledger is a small begin/complete record, not an outer
+transaction around the whole action; domain services keep their own transaction
+boundaries, and abandoned running rows time out to a terminal failed state on
+replay.
 
 Electric SQL sync traffic is handled by `apps/sync`, not by the public API
 adapter. Browser clients request a named shape such as `jobs` from

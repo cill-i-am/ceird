@@ -15,6 +15,7 @@ import type {
   ProductActivityEvent,
   ProductActivityEventDisplayPayload,
 } from "@ceird/activity-core";
+import type { AgentThreadId } from "@ceird/agents-core";
 import {
   ProductActorSchema,
   UserId as UserIdSchema,
@@ -46,6 +47,11 @@ interface MemberSourceRow extends ProductActorRow {
   readonly source_user_id: string;
 }
 
+interface AgentThreadSourceRow extends ProductActorRow {
+  readonly source_agent_thread_id: string;
+  readonly source_user_id: string;
+}
+
 interface ActivityEventRow {
   readonly actor_id: string;
   readonly created_at: Date;
@@ -63,6 +69,13 @@ interface ActivityEventRow {
 
 export interface ResolveMemberActorInput {
   readonly organizationId: OrganizationId;
+  readonly userId: UserId;
+}
+
+export interface ResolveAgentThreadActorInput {
+  readonly organizationId: OrganizationId;
+  readonly threadId: AgentThreadId;
+  readonly threadTitle: string;
   readonly userId: UserId;
 }
 
@@ -399,6 +412,138 @@ export class ProductActivityActorsRepository extends Context.Service<ProductActi
         };
       });
 
+      const ensureAgentThreadActor = Effect.fn(
+        "ProductActivityActorsRepository.ensureAgentThreadActor"
+      )(function* (input: ResolveAgentThreadActorInput) {
+        yield* Effect.annotateCurrentSpan(
+          "organizationId",
+          input.organizationId
+        );
+        yield* Effect.annotateCurrentSpan("agent.threadId", input.threadId);
+
+        const rows = yield* sql.withTransaction(
+          Effect.gen(function* () {
+            yield* sql`
+              select pg_advisory_xact_lock(
+                hashtext(${buildAgentThreadActorLockKey(input)})
+              )
+            `;
+
+            const actorId = generateProductActorId();
+            const displayDetail = formatAgentThreadActorDetail(
+              input.threadTitle
+            );
+
+            return yield* sql<AgentThreadSourceRow>`
+              with source_thread as (
+                select
+                  agent_threads.id as source_agent_thread_id,
+                  agent_threads.user_id as source_user_id
+                from agent_threads
+                where agent_threads.organization_id = ${input.organizationId}
+                  and agent_threads.id = ${input.threadId}
+                  and agent_threads.user_id = ${input.userId}
+                  and agent_threads.status = 'active'
+                limit 1
+              ),
+              existing_actor as (
+                update product_activity_actors
+                set
+                  display_name = 'Ceird agent',
+                  display_detail = ${displayDetail},
+                  route_href = null,
+                  route_label = null,
+                  updated_at = now()
+                from product_activity_actor_sources, source_thread
+                where product_activity_actor_sources.organization_id = ${input.organizationId}
+                  and product_activity_actor_sources.kind = 'agent'
+                  and product_activity_actor_sources.agent_thread_id = source_thread.source_agent_thread_id
+                  and product_activity_actors.id = product_activity_actor_sources.actor_id
+                  and product_activity_actors.organization_id = product_activity_actor_sources.organization_id
+                returning
+                  product_activity_actors.id,
+                  product_activity_actors.kind,
+                  product_activity_actors.display_name,
+                  product_activity_actors.display_detail,
+                  product_activity_actors.route_href,
+                  product_activity_actors.route_label,
+                  source_thread.source_agent_thread_id,
+                  source_thread.source_user_id
+              ),
+              inserted_actor as (
+                insert into product_activity_actors (
+                  id,
+                  organization_id,
+                  kind,
+                  display_name,
+                  display_detail
+                )
+                select
+                  ${actorId},
+                  ${input.organizationId},
+                  'agent',
+                  'Ceird agent',
+                  ${displayDetail}
+                from source_thread
+                where not exists (select 1 from existing_actor)
+                returning
+                  id,
+                  kind,
+                  display_name,
+                  display_detail,
+                  route_href,
+                  route_label
+              ),
+              inserted_actor_with_source as (
+                select
+                  inserted_actor.id,
+                  inserted_actor.kind,
+                  inserted_actor.display_name,
+                  inserted_actor.display_detail,
+                  inserted_actor.route_href,
+                  inserted_actor.route_label,
+                  source_thread.source_agent_thread_id,
+                  source_thread.source_user_id
+                from inserted_actor
+                cross join source_thread
+              ),
+              inserted_source as (
+                insert into product_activity_actor_sources (
+                  actor_id,
+                  organization_id,
+                  kind,
+                  user_id,
+                  agent_thread_id
+                )
+                select
+                  inserted_actor_with_source.id,
+                  ${input.organizationId},
+                  'agent',
+                  inserted_actor_with_source.source_user_id,
+                  inserted_actor_with_source.source_agent_thread_id
+                from inserted_actor_with_source
+                returning actor_id
+              )
+              select * from existing_actor
+              union all
+              select inserted_actor_with_source.*
+              from inserted_actor_with_source
+              inner join inserted_source
+                on inserted_source.actor_id = inserted_actor_with_source.id
+            `;
+          })
+        );
+
+        const row = yield* getRequiredRow(rows, "agent product activity actor");
+        yield* Effect.annotateCurrentSpan("productActorId", row.id);
+
+        return {
+          actor: mapProductActorRow(row),
+          sourceAgentThreadId: row.source_agent_thread_id,
+          sourceUserId: decodeUserId(row.source_user_id),
+        };
+      });
+
       const getById = Effect.fn("ProductActivityActorsRepository.getById")(
         function* (organizationId: OrganizationId, actorId: ProductActorId) {
           const rows = yield* sql<ProductActorRow>`
@@ -422,6 +567,7 @@ export class ProductActivityActorsRepository extends Context.Service<ProductActi
       );
 
       return {
+        ensureAgentThreadActor,
         ensureMemberActor,
         getById,
       };
@@ -512,6 +658,22 @@ function nullableToUndefined<Value>(value: Value | null): Value | undefined {
 
 function buildMemberActorLockKey(input: ResolveMemberActorInput): string {
   return `product-activity-actor:member:${input.organizationId}:${input.userId}`;
+}
+
+function buildAgentThreadActorLockKey(
+  input: ResolveAgentThreadActorInput
+): string {
+  return `product-activity-actor:agent:${input.organizationId}:${input.threadId}`;
+}
+
+function formatAgentThreadActorDetail(threadTitle: string): string {
+  const title = threadTitle.trim();
+
+  if (title.length === 0) {
+    return "Agent thread";
+  }
+
+  return title.length <= 160 ? title : `${title.slice(0, 157)}...`;
 }
 
 function getRequiredRow<Row>(
