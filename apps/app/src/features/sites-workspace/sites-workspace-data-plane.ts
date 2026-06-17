@@ -972,8 +972,24 @@ export function toLabelElectricRow(row: Record<string, unknown>) {
 }
 
 export function toProductActivityActorElectricRow(
+  row: Record<string, unknown> & {
+    readonly displayName: unknown;
+    readonly id: unknown;
+    readonly kind: unknown;
+  }
+): SitesWorkspaceProductActorRow;
+export function toProductActivityActorElectricRow(
   row: Record<string, unknown>
-): SitesWorkspaceProductActorRow {
+): SitesWorkspaceProductActorRow | SitesWorkspaceElectricRow;
+export function toProductActivityActorElectricRow(
+  row: Record<string, unknown>
+): SitesWorkspaceProductActorRow | SitesWorkspaceElectricRow {
+  if (
+    !hasEveryElectricValue(row, PRODUCT_ACTIVITY_ACTOR_REQUIRED_ELECTRIC_FIELDS)
+  ) {
+    return toPartialProductActivityActorElectricRow(row);
+  }
+
   const actor: SitesWorkspaceElectricRow = {
     displayName: String(electricValue(row, "displayName")),
     id: String(electricValue(row, "id")),
@@ -1001,6 +1017,50 @@ export function toProductActivityActorElectricRow(
   return Schema.decodeUnknownSync(ProductActivityActorElectricRowSchema)(
     actor
   ) as SitesWorkspaceProductActorRow;
+}
+
+const PRODUCT_ACTIVITY_ACTOR_REQUIRED_ELECTRIC_FIELDS = [
+  "displayName",
+  "id",
+  "kind",
+] as const;
+
+function toPartialProductActivityActorElectricRow(
+  row: Record<string, unknown>
+) {
+  const actor: SitesWorkspaceElectricRow = {};
+
+  addOptionalString(
+    actor,
+    "displayDetail",
+    electricValue(row, "displayDetail")
+  );
+  addOptionalString(actor, "displayName", electricValue(row, "displayName"));
+  addOptionalString(actor, "id", electricValue(row, "id"));
+  addOptionalString(actor, "kind", electricValue(row, "kind"));
+  addOptionalProductActivityActorRoute(actor, row);
+
+  return actor;
+}
+
+function addOptionalProductActivityActorRoute(
+  actor: SitesWorkspaceElectricRow,
+  row: Record<string, unknown>
+) {
+  const routeHref = electricValue(row, "routeHref");
+  const routeLabel = electricValue(row, "routeLabel");
+
+  if (
+    routeHref !== null &&
+    routeHref !== undefined &&
+    routeLabel !== null &&
+    routeLabel !== undefined
+  ) {
+    actor.route = {
+      href: String(routeHref),
+      label: String(routeLabel),
+    };
+  }
 }
 
 export function toSiteCommentEdgeElectricRow(

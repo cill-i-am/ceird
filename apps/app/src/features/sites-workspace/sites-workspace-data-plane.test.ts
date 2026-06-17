@@ -313,6 +313,29 @@ describe("sites workspace data plane", () => {
     });
   });
 
+  it("normalizes partial Electric product actor old_value rows", () => {
+    expect(
+      toProductActivityActorElectricRow({
+        display_name: productActor.displayName,
+        id: productActor.id,
+      })
+    ).toStrictEqual({
+      displayName: productActor.displayName,
+      id: productActor.id,
+    });
+
+    expect(
+      toProductActivityActorElectricRow({
+        id: productActor.id,
+        route_href: "/members/user_taylor",
+        route_label: "Taylor Member",
+      })
+    ).toStrictEqual({
+      id: productActor.id,
+      route: { href: "/members/user_taylor", label: "Taylor Member" },
+    });
+  });
+
   it("derives selection-ready visible rows from the actual Sites workspace graph inputs", () => {
     const rows = deriveSitesWorkspaceVisibleRows({
       activeJobSummaries: [
