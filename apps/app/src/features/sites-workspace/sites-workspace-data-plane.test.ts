@@ -289,6 +289,30 @@ describe("sites workspace data plane", () => {
     });
   });
 
+  it("normalizes partial Electric site-label and active-job old_value rows", () => {
+    expect(
+      toSiteLabelAssignmentElectricRow({
+        label_id: urgentLabel.id,
+        site_id: dublinSite.id,
+      })
+    ).toStrictEqual({
+      labelId: urgentLabel.id,
+      siteId: dublinSite.id,
+    });
+
+    expect(
+      toSiteActiveJobSummaryElectricRow({
+        active_job_count: 1,
+        highest_active_job_priority: "urgent",
+        updated_at: "2026-06-02 09:30:00+00",
+      })
+    ).toStrictEqual({
+      activeJobCount: 1,
+      highestActiveJobPriority: "urgent",
+      updatedAt: "2026-06-02T09:30:00.000Z",
+    });
+  });
+
   it("derives selection-ready visible rows from the actual Sites workspace graph inputs", () => {
     const rows = deriveSitesWorkspaceVisibleRows({
       activeJobSummaries: [

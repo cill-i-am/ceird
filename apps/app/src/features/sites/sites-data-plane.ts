@@ -1027,6 +1027,12 @@ function toPartialSiteOptionElectricRow(row: Record<string, unknown>) {
 function toSiteLabelAssignmentElectricRow(
   row: Record<string, unknown>
 ): SitesElectricRow {
+  if (
+    !hasEveryElectricValue(row, SITE_LABEL_ASSIGNMENT_REQUIRED_ELECTRIC_FIELDS)
+  ) {
+    return toPartialSiteLabelAssignmentElectricRow(row);
+  }
+
   const assignment = {
     createdAt: normalizeSitesElectricDateTime(electricValue(row, "createdAt")),
     labelId: String(electricValue(row, "labelId")),
@@ -1039,9 +1045,36 @@ function toSiteLabelAssignmentElectricRow(
   return assignment;
 }
 
+const SITE_LABEL_ASSIGNMENT_REQUIRED_ELECTRIC_FIELDS = [
+  "createdAt",
+  "labelId",
+  "organizationId",
+  "siteId",
+] as const;
+
+function toPartialSiteLabelAssignmentElectricRow(row: Record<string, unknown>) {
+  const assignment: SitesElectricRow = {};
+
+  addOptionalElectricDateTime(assignment, row, "createdAt");
+  addOptionalElectricValue(assignment, row, "labelId");
+  addOptionalElectricValue(assignment, row, "organizationId");
+  addOptionalElectricValue(assignment, row, "siteId");
+
+  return assignment;
+}
+
 function toSiteActiveJobSummaryElectricRow(
   row: Record<string, unknown>
 ): SitesElectricRow {
+  if (
+    !hasEveryElectricValue(
+      row,
+      SITE_ACTIVE_JOB_SUMMARY_REQUIRED_ELECTRIC_FIELDS
+    )
+  ) {
+    return toPartialSiteActiveJobSummaryElectricRow(row);
+  }
+
   const highestActiveJobPriorityValue = electricValue(
     row,
     "highestActiveJobPriority"
@@ -1063,6 +1096,41 @@ function toSiteActiveJobSummaryElectricRow(
   };
 
   Schema.decodeUnknownSync(SiteActiveJobSummaryElectricRowSchema)(summary);
+
+  return summary;
+}
+
+const SITE_ACTIVE_JOB_SUMMARY_REQUIRED_ELECTRIC_FIELDS = [
+  "activeJobCount",
+  "organizationId",
+  "siteId",
+  "updatedAt",
+] as const;
+
+function toPartialSiteActiveJobSummaryElectricRow(
+  row: Record<string, unknown>
+) {
+  const summary: SitesElectricRow = {};
+  const activeJobCount = electricValue(row, "activeJobCount");
+  const highestActiveJobPriority = electricValue(
+    row,
+    "highestActiveJobPriority"
+  );
+
+  if (activeJobCount !== null && activeJobCount !== undefined) {
+    summary.activeJobCount = Number(activeJobCount);
+  }
+
+  if (
+    highestActiveJobPriority !== null &&
+    highestActiveJobPriority !== undefined
+  ) {
+    summary.highestActiveJobPriority = String(highestActiveJobPriority);
+  }
+
+  addOptionalElectricValue(summary, row, "organizationId");
+  addOptionalElectricValue(summary, row, "siteId");
+  addOptionalElectricDateTime(summary, row, "updatedAt");
 
   return summary;
 }

@@ -52,12 +52,53 @@ import {
   toJobsWorkspaceJobElectricRow,
   toJobsWorkspaceJobRow,
 } from "./jobs-data-plane";
-import type { JobLabelAssignmentRow } from "./jobs-data-plane";
+import type {
+  JobLabelAssignmentRow,
+  JobSiteSummaryRow,
+} from "./jobs-data-plane";
 
 const appApiMock = vi.hoisted(() => ({
   runBrowserAppApiRequest:
     vi.fn<() => Effect.Effect<unknown, unknown, never>>(),
 }));
+
+function expectFullJobSiteSummaryRow(
+  row: ReturnType<typeof toJobSiteSummaryRow>
+): JobSiteSummaryRow {
+  if (!isFullJobSiteSummaryRow(row)) {
+    throw new Error("Expected a full job site summary row.");
+  }
+
+  expect(row).toMatchObject({
+    displayLocation: expect.any(String),
+    hasUsableCoordinates: expect.any(Boolean),
+    id: expect.any(String),
+    locationStatus: expect.any(String),
+    name: expect.any(String),
+    updatedAt: expect.any(String),
+  });
+
+  return row;
+}
+
+function isFullJobSiteSummaryRow(
+  row: ReturnType<typeof toJobSiteSummaryRow>
+): row is JobSiteSummaryRow {
+  return (
+    "displayLocation" in row &&
+    typeof row.displayLocation === "string" &&
+    "hasUsableCoordinates" in row &&
+    typeof row.hasUsableCoordinates === "boolean" &&
+    "id" in row &&
+    typeof row.id === "string" &&
+    "locationStatus" in row &&
+    typeof row.locationStatus === "string" &&
+    "name" in row &&
+    typeof row.name === "string" &&
+    "updatedAt" in row &&
+    typeof row.updatedAt === "string"
+  );
+}
 
 vi.mock(import("#/features/api/app-api-client"), () => ({
   runBrowserAppApiRequest:
@@ -740,6 +781,20 @@ describe("jobs data plane", () => {
     });
   });
 
+  it("allows Electric update old values to be partial Jobs workspace site summaries", () => {
+    expect(
+      toJobSiteSummaryRow({
+        accessNotes: "Updated access note",
+        name: "Renamed site",
+        updatedAt: "2026-06-17 08:34:13.1604+00",
+      })
+    ).toStrictEqual({
+      accessNotes: "Updated access note",
+      name: "Renamed site",
+      updatedAt: "2026-06-17T08:34:13.160Z",
+    });
+  });
+
   it("allows Electric update old values to be partial product actor rows", () => {
     expect(
       toProductActivityActorElectricRow({
@@ -970,13 +1025,15 @@ describe("jobs data plane", () => {
       ],
       selectedJobId: workItemId,
       sites: [
-        toJobSiteSummaryRow({
-          displayLocation: "Dublin",
-          id: siteId,
-          locationStatus: "unverified",
-          name: "Warehouse",
-          updatedAt: "2026-06-15T10:10:00.000Z",
-        }),
+        expectFullJobSiteSummaryRow(
+          toJobSiteSummaryRow({
+            displayLocation: "Dublin",
+            id: siteId,
+            locationStatus: "unverified",
+            name: "Warehouse",
+            updatedAt: "2026-06-15T10:10:00.000Z",
+          })
+        ),
       ],
       visits: [
         toJobVisitElectricRow({
