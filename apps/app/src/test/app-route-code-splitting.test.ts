@@ -9,10 +9,10 @@ const DOMAIN_HEAVY_ROUTE_FILES = [
   "routes/_app._org.activity.tsx",
   "routes/_app._org.index.tsx",
   "routes/_app._org.organization.security.tsx",
-  "routes/_app._org.organization.settings.tsx",
 ] as const;
 
 const COMPONENT_SPLIT_ROUTE_FILES = [
+  "routes/_app._org.organization.settings.tsx",
   "routes/_app._org.members.tsx",
   "routes/forgot-password.tsx",
   "routes/login.tsx",

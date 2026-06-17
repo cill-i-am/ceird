@@ -134,7 +134,7 @@ test("an organization admin can update the organization name from account settin
   );
 });
 
-test("an organization admin can manage job labels from account settings", async ({
+test("an organization admin can manage labels from the realtime settings tab", async ({
   page,
 }) => {
   test.setTimeout(ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS);
@@ -149,38 +149,55 @@ test("an organization admin can manage job labels from account settings", async 
   });
 
   await openSettingsFromAccountMenu(page);
-  await expect(page.getByText("No labels yet.")).toBeVisible();
+  await page.getByRole("link", { name: /open labels/i }).click();
+  await expect(page).toHaveURL(/\/organization\/settings\/labels$/, {
+    timeout: AUTHENTICATED_HOME_TIMEOUT_MS,
+  });
+  await expect(page.getByRole("heading", { name: "Labels" })).toBeVisible({
+    timeout: AUTHENTICATED_HOME_TIMEOUT_MS,
+  });
+  await expect(page.getByText("Realtime ready")).toBeVisible({
+    timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS,
+  });
+  await expect(page.getByText("No labels yet")).toBeVisible();
 
   await page.getByLabel("New label name").fill(labelName);
   await Promise.all([
     waitForLabelMutation(page, "POST"),
-    page.getByRole("button", { name: "Create label" }).click(),
+    page.getByRole("button", { name: /create/i }).click(),
   ]);
-  await expect(page.getByRole("status")).toContainText("Label created.");
+  await expect(page.getByRole("status")).toContainText(
+    "Label created and confirmed by realtime sync."
+  );
   await expect(page.getByText(labelName, { exact: true })).toBeVisible();
 
   await page
-    .getByRole("button", { name: `Label actions for ${labelName}` })
+    .getByRole("button", { name: `Open actions for ${labelName}` })
     .click();
   await page.getByRole("menuitem", { name: "Edit label" }).click();
-  await page.getByLabel("Label name", { exact: true }).fill(updatedLabelName);
+  await page.getByLabel(`Rename ${labelName}`).fill(updatedLabelName);
   await Promise.all([
     waitForLabelMutation(page, "PATCH"),
-    page.getByRole("button", { name: "Save label changes" }).click(),
+    page.getByRole("button", { name: `Save ${labelName}` }).click(),
   ]);
-  await expect(page.getByRole("status")).toContainText("Label updated.");
+  await expect(page.getByRole("status")).toContainText(
+    "Label renamed and confirmed by realtime sync."
+  );
   await expect(page.getByText(updatedLabelName, { exact: true })).toBeVisible();
 
   await page
-    .getByRole("button", { name: `Label actions for ${updatedLabelName}` })
+    .getByRole("button", { name: `Open actions for ${updatedLabelName}` })
     .click();
+  await page.getByRole("menuitem", { name: "Archive label" }).click();
   await Promise.all([
     waitForLabelMutation(page, "DELETE"),
-    page.getByRole("menuitem", { name: "Archive label" }).click(),
+    page.getByRole("button", { name: "Archive label" }).click(),
   ]);
-  await expect(page.getByRole("status")).toContainText("Label archived.");
+  await expect(page.getByRole("status")).toContainText(
+    "Label archived and removed after realtime confirmation."
+  );
   await expect(page.getByText(updatedLabelName, { exact: true })).toBeHidden();
-  await expect(page.getByText("No labels yet.")).toBeVisible();
+  await expect(page.getByText("No labels yet")).toBeVisible();
 });
 
 function waitForLabelMutation(page: Page, method: "DELETE" | "PATCH" | "POST") {
