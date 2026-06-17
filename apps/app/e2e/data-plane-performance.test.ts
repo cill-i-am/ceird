@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import { createSignedInOrganization } from "./helpers/auth-session";
 import {
@@ -25,14 +25,22 @@ test.describe("data-plane browser performance", () => {
         page,
         visible: page.getByRole("heading", { level: 1, name: "Jobs" }),
       }),
+    ];
+
+    const newJobButton = page.getByRole("button", {
+      exact: true,
+      name: "New job",
+    });
+    await expect(newJobButton).toBeEnabled({ timeout: 60_000 });
+
+    metrics.push(
       await measureVisibleInteraction({
-        action: () =>
-          page.getByRole("button", { exact: true, name: "New job" }).click(),
+        action: () => newJobButton.click(),
         name: "jobs.workspace-create",
         page,
         visible: page.getByLabel("New job title"),
-      }),
-    ];
+      })
+    );
 
     await page.goBack();
 
