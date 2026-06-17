@@ -28,11 +28,15 @@ export function RouteHotkeys({
   const canUseActivityHotkey = primaryNavigationUrls.has("/activity");
   const canUseInternalHotkeys = primaryNavigationUrls.has("/");
 
-  useAppHotkeySequence("goJobs", () => {
-    React.startTransition(() => {
-      navigate({ to: "/jobs" });
-    });
-  });
+  useAppHotkeySequence(
+    "goJobs",
+    () => {
+      React.startTransition(() => {
+        navigate({ to: "/jobs" });
+      });
+    },
+    { enabled: canUseInternalHotkeys }
+  );
 
   useAppHotkeySequence(
     "goHome",

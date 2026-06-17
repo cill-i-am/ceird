@@ -118,7 +118,7 @@ describe("route hotkeys", () => {
       });
 
       expect(within(dialog).queryByText("Go to Home")).not.toBeInTheDocument();
-      expect(within(dialog).getByText("Go to Jobs")).toBeVisible();
+      expect(within(dialog).queryByText("Go to Jobs")).not.toBeInTheDocument();
       expect(
         within(dialog).queryByText("Go to Jobs Workspace")
       ).not.toBeInTheDocument();
@@ -273,7 +273,7 @@ describe("route hotkeys", () => {
   }, 10_000);
 
   it.each(["external", undefined] as const)(
-    "does not navigate to administrator routes for %s role",
+    "does not navigate to internal or administrator routes for %s role",
     async (role) => {
       const user = userEvent.setup();
 
@@ -293,7 +293,7 @@ describe("route hotkeys", () => {
       await user.keyboard("gj");
       await user.keyboard("gr");
 
-      expect(mockedNavigate).toHaveBeenCalledExactlyOnceWith({ to: "/jobs" });
+      expect(mockedNavigate).not.toHaveBeenCalled();
     },
     10_000
   );
@@ -312,7 +312,7 @@ describe("route hotkeys", () => {
       await user.keyboard("gp");
       await user.keyboard("gj");
 
-      expect(mockedNavigate).toHaveBeenCalledExactlyOnceWith({ to: "/jobs" });
+      expect(mockedNavigate).not.toHaveBeenCalled();
     },
     10_000
   );
