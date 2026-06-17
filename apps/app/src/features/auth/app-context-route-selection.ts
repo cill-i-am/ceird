@@ -1,25 +1,41 @@
+const AUTH_CONTEXT_ROUTES = new Set([
+  "/",
+  "/activity",
+  "/create-organization",
+  "/forgot-password",
+  "/login",
+  "/location-access",
+  "/members",
+  "/oauth/consent",
+  "/organization/security",
+  "/organization/settings",
+  "/organization/settings/labels",
+  "/reset-password",
+  "/settings",
+  "/signup",
+  "/sites",
+  "/sites-workspace",
+  "/verify-email",
+]);
+
+const ORGANIZATION_CONTEXT_ROUTES = new Set([
+  "/",
+  "/activity",
+  "/members",
+  "/organization/security",
+  "/organization/settings",
+  "/organization/settings/labels",
+  "/sites",
+  "/sites-workspace",
+]);
+
 export function shouldHydrateAuthContext(pathname: string) {
   if (pathname === "/health") {
     return false;
   }
 
   return (
-    pathname === "/" ||
-    pathname === "/activity" ||
-    pathname === "/create-organization" ||
-    pathname === "/forgot-password" ||
-    pathname === "/login" ||
-    pathname === "/location-access" ||
-    pathname === "/members" ||
-    pathname === "/oauth/consent" ||
-    pathname === "/organization/security" ||
-    pathname === "/organization/settings" ||
-    pathname === "/organization/settings/labels" ||
-    pathname === "/reset-password" ||
-    pathname === "/settings" ||
-    pathname === "/signup" ||
-    pathname === "/sites" ||
-    pathname === "/verify-email" ||
+    AUTH_CONTEXT_ROUTES.has(pathname) ||
     pathname.startsWith("/accept-invitation/") ||
     pathname.startsWith("/jobs") ||
     pathname.startsWith("/sites/")
@@ -28,13 +44,7 @@ export function shouldHydrateAuthContext(pathname: string) {
 
 export function shouldHydrateOrganizationContext(pathname: string) {
   return (
-    pathname === "/" ||
-    pathname === "/activity" ||
-    pathname === "/members" ||
-    pathname === "/organization/security" ||
-    pathname === "/organization/settings" ||
-    pathname === "/organization/settings/labels" ||
-    pathname === "/sites" ||
+    ORGANIZATION_CONTEXT_ROUTES.has(pathname) ||
     pathname.startsWith("/jobs") ||
     pathname.startsWith("/sites/")
   );

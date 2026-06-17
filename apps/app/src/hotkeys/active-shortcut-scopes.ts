@@ -49,7 +49,7 @@ function getBaseShortcutScopes(pathname: string): readonly HotkeyScope[] {
   }
 
   if (pathname === "/sites") {
-    return ["global", "sites"];
+    return ["global", "sites-workspace"];
   }
 
   if (pathname === "/sites-workspace") {

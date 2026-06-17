@@ -44,7 +44,7 @@ test.describe("Sites workspace live-query performance harness", () => {
     await signInForSitesWorkspacePerformance(page);
 
     const startedAt = performance.now();
-    await page.goto("/sites-workspace");
+    await page.goto("/sites");
     const readyAlert = page.getByRole("heading", {
       name: "Live Sites read model ready",
     });

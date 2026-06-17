@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
-import { SitesRouteContent } from "#/features/sites/sites-route-content";
-import { loadSitesRouteData } from "#/features/sites/sites-route-loader";
-import { decodeSitesSearch } from "#/features/sites/sites-search";
+import { SitesWorkspaceRouteContent } from "#/features/sites-workspace/sites-workspace-route-content";
+import { decodeSitesWorkspaceSearch } from "#/features/sites-workspace/sites-workspace-search";
+import type { SitesWorkspaceSearch } from "#/features/sites-workspace/sites-workspace-search";
 
 export const Route = createFileRoute("/_app/_org/sites")({
   staticData: {
@@ -11,61 +11,35 @@ export const Route = createFileRoute("/_app/_org/sites")({
       to: "/sites",
     },
   },
-  codeSplitGroupings: [["loader", "component"]],
-  validateSearch: decodeSitesSearch,
-  loader: ({ context }) => loadSitesRouteData(context),
+  codeSplitGroupings: [["component"]],
+  validateSearch: decodeSitesWorkspaceSearch,
   component: SitesRoute,
 });
 
 function SitesRoute() {
-  const { activeOrganizationId, queryClient } = Route.useRouteContext();
-  const { dataPlaneSeeds, options, routeProximityLocationEnabled, viewer } =
-    Route.useLoaderData();
+  const { currentOrganizationRole } = Route.useRouteContext();
   const navigate = useNavigate({ from: "/sites" });
   const search = Route.useSearch();
-  const stack = search.sheets ?? [];
+  const shellState = search.shell ?? "unavailable";
+
+  function updateWorkspaceSearch(
+    nextSearch: Partial<Omit<SitesWorkspaceSearch, "shell">>
+  ) {
+    navigate({
+      replace: true,
+      search: (current) => ({
+        ...current,
+        ...nextSearch,
+      }),
+    });
+  }
 
   return (
-    <SitesRouteContent
-      activeOrganizationId={activeOrganizationId}
-      dataPlaneSeeds={dataPlaneSeeds}
-      nearMeEnabled={search.near ?? false}
-      onViewModeChange={(viewMode) => {
-        navigate({
-          search: (current) => ({
-            ...current,
-            view: viewMode === "list" ? undefined : viewMode,
-          }),
-        });
-      }}
-      onNearMeChange={(near) => {
-        navigate({
-          search: (current) => ({
-            ...current,
-            near: near ? true : undefined,
-          }),
-        });
-      }}
-      onRouteLimitChange={(routeLimit) => {
-        const nextRouteLimit = decodeSitesSearch({ routeLimit }).routeLimit;
-
-        navigate({
-          search: (current) => ({
-            ...current,
-            routeLimit:
-              nextRouteLimit === undefined || nextRouteLimit === 10
-                ? undefined
-                : nextRouteLimit,
-          }),
-        });
-      }}
-      options={options}
-      queryClient={queryClient}
-      routeLimit={search.routeLimit ?? 10}
-      routeProximityLocationEnabled={routeProximityLocationEnabled}
-      stack={stack}
-      viewMode={search.view ?? "list"}
-      viewer={viewer}
+    <SitesWorkspaceRouteContent
+      currentOrganizationRole={currentOrganizationRole}
+      shellState={shellState}
+      workspaceSearch={search}
+      onWorkspaceSearchChange={updateWorkspaceSearch}
     />
   );
 }

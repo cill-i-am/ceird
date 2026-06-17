@@ -93,12 +93,9 @@ describe(SitesWorkspaceRouteContent, () => {
   it("renders the gated realtime shell for internal roles", () => {
     renderSitesWorkspace({ shellState: "ready" });
 
+    expect(screen.getByRole("heading", { name: "Sites" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Sites workspace" })
-    ).toBeInTheDocument();
-    expect(screen.getByText("Preview route")).toBeInTheDocument();
-    expect(
-      screen.getByRole("searchbox", { name: /search sites workspace/i })
+      screen.getByRole("searchbox", { name: /search sites/i })
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /new site/i })).toBeDisabled();
     expect(
@@ -115,14 +112,12 @@ describe(SitesWorkspaceRouteContent, () => {
   it("shows a permission-aware state for external collaborators", () => {
     renderSitesWorkspace({ currentOrganizationRole: "external" });
 
-    expect(
-      screen.getByText("Sites workspace is internal-only")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sites is internal-only")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /new site/i })
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("searchbox", { name: /search sites workspace/i })
+      screen.queryByRole("searchbox", { name: /search sites/i })
     ).not.toBeInTheDocument();
   });
 
@@ -160,7 +155,7 @@ describe(SitesWorkspaceRouteContent, () => {
 
     await user.keyboard("/");
     expect(
-      screen.getByRole("searchbox", { name: /search sites workspace/i })
+      screen.getByRole("searchbox", { name: /search sites/i })
     ).toHaveFocus();
   });
 
@@ -178,7 +173,7 @@ describe(SitesWorkspaceRouteContent, () => {
     });
 
     const searchInput = screen.getByRole("searchbox", {
-      name: /search sites workspace/i,
+      name: /search sites/i,
     });
 
     expect(searchInput).toHaveValue("Dub");

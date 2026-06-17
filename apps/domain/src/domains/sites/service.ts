@@ -675,7 +675,7 @@ function recordSiteCommentCreated({
     display: {
       detail: summarizeCommentActivityDetail(comment.body),
       route: {
-        href: `/sites-workspace?selectedSiteId=${site.id}`,
+        href: `/sites?selectedSiteId=${site.id}`,
         label: formatActivityDisplayText(
           site.name,
           ACTIVITY_ROUTE_LABEL_MAX_LENGTH
