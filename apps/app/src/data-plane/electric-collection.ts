@@ -144,6 +144,9 @@ const TRUSTED_ELECTRIC_SOURCE_PARAMS = new Set([
   "where",
 ]);
 const ALLOWED_ELECTRIC_CLIENT_PARAMS = new Set(["replica"]);
+const DEFAULT_ELECTRIC_CLIENT_PARAMS = {
+  replica: "full",
+} as const satisfies ExternalParamsRecord;
 
 export function defineElectricCollectionContract<
   Schema extends StandardSchemaV1<unknown, ElectricRow<unknown>>,
@@ -268,6 +271,10 @@ export function createElectricShapeOptions<
     transformer,
     ...passThroughShapeOptions
   } = contract.shapeOptions ?? {};
+  const params = {
+    ...DEFAULT_ELECTRIC_CLIENT_PARAMS,
+    ...passThroughShapeOptions.params,
+  } satisfies ExternalParamsRecord<DataPlaneElectricSchemaOutput<Schema>>;
 
   return {
     ...passThroughShapeOptions,
@@ -286,6 +293,7 @@ export function createElectricShapeOptions<
 
       return normalized.retryable ? {} : undefined;
     },
+    params,
     transformer,
     url: options.shapeUrl,
   };

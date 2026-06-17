@@ -269,6 +269,7 @@ describe("Ceird Electric collection factory", () => {
     );
     expect(shapeOptions.subscribe).toBeTruthy();
     expect(shapeOptions.liveSse).toBeTruthy();
+    expect(shapeOptions.params).toStrictEqual({ replica: "full" });
     expect(shapeOptions.columnMapper?.decode("created_at")).toBe("createdAt");
     expect(shapeOptions.columnMapper?.encode("createdAt")).toBe("created_at");
 
@@ -293,6 +294,25 @@ describe("Ceird Electric collection factory", () => {
         status: 401,
       })
     );
+  });
+
+  it("lets callers override the default full replica row mode", () => {
+    const shapeOptions = createElectricShapeOptions(
+      defineElectricCollectionContract({
+        ...testContract,
+        shapeOptions: {
+          params: {
+            replica: "default",
+          },
+        },
+      }),
+      {
+        fetch: makeTestFetch(new Response("ok")),
+        shapeUrl: "https://sync.codex.ceird.localhost/v1/shapes/labels",
+      }
+    );
+
+    expect(shapeOptions.params).toStrictEqual({ replica: "default" });
   });
 
   it("rejects caller-controlled trusted Electric source params", () => {
