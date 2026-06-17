@@ -15,8 +15,62 @@ This is a greenfield project and has not been released.
 - Prefer clean, sweeping refactors over incremental patching when that improves the codebase.
 - It is fine to reshape APIs, folder structure, and internal architecture when needed.
 - Keep the code simple and readable.
+- Treat simplification as a primary feature: fewer concepts, fewer files, fewer
+  branches, fewer knobs, and fewer dependencies are usually better.
 - Ensure maximum type safety.
 - Always leave the codebase better than you found it.
+
+## Agent Operating Principles
+
+For non-trivial work, convert the request into a clear goal, choose the simplest
+design that satisfies it, and verify the result. For tiny obvious changes, use
+judgment and keep moving. When in doubt, remove complexity before adding more.
+
+### Think Before Coding
+
+- Do not silently choose an interpretation when a request is ambiguous; state
+  assumptions or ask for clarification.
+- Surface uncertainty, inconsistencies, and meaningful tradeoffs before editing.
+- Push back when the requested approach is materially more complex, risky, or
+  indirect than a simpler alternative.
+
+### Simplicity First
+
+- Build the minimum code that satisfies the goal and fits the existing
+  architecture.
+- Do not add speculative features, generic configurability, single-use
+  abstractions, or impossible-case handling.
+- Prefer deleting code, collapsing layers, inlining single-use helpers, and using
+  existing primitives over creating new abstractions.
+- Avoid "just in case" options, flags, adapters, factories, fallback paths, and
+  compatibility layers unless the current requirement proves they are needed.
+- Make state, data flow, and ownership obvious. If the reader has to chase
+  indirection to understand the change, simplify the shape.
+- If the solution grows noticeably larger than the problem, simplify it before
+  handing it off.
+- During review, actively ask: "What can be removed?" and "Would this be clearer
+  as one direct path?"
+
+### Scope With Intent
+
+- Every changed line should trace to the user's request, the current goal, or
+  cleanup made necessary by your own changes.
+- Match existing style in touched areas, and avoid drive-by edits to adjacent
+  code, comments, formatting, or unrelated dead code.
+- In this greenfield repo, broader refactors are welcome only when they directly
+  simplify or strengthen the requested change; explain the scope and verify the
+  behavior.
+
+### Goal-Driven Execution
+
+- Convert non-trivial tasks into explicit success criteria and verification
+  loops.
+- Prefer tests-first for bug fixes and validation behavior: reproduce the
+  failure, fix it, then prove it stays fixed.
+- For multi-step tasks, state a brief plan with the check that will verify each
+  step.
+- Keep looping until the criteria are met or a real blocker is named with
+  evidence.
 
 ## Dependency Source
 
