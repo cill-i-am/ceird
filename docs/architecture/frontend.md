@@ -33,8 +33,8 @@ Current visible routes:
 | `/organization/security`           | `_app._org.organization.security.tsx`        | Owner/admin security activity review.                                        |
 | `/organization/settings`           | `_app._org.organization.settings.tsx`        | Organization settings and labels.                                            |
 | `/organization/settings/labels`    | `_app._org.organization.settings.labels.tsx` | Dedicated Labels settings shell for the Electric-native replacement surface. |
-| `/sites`                           | `_app._org.sites.tsx`                        | Sites list.                                                                  |
-| `/sites-workspace`                 | `_app._org.sites-workspace.tsx`              | Gated Electric-native Sites workspace shell.                                 |
+| `/sites`                           | `_app._org.sites.tsx`                        | Electric-native Sites list/detail workspace for internal members.            |
+| `/sites-workspace`                 | `_app._org.sites-workspace.tsx`              | Compatibility redirect to `/sites`.                                          |
 | `/health`                          | `health.ts`                                  | App stack/stage health response for Alchemy and Worker checks.               |
 
 `apps/app/src/router.tsx` configures scroll restoration, intent preloading, the
@@ -148,16 +148,15 @@ Authenticated layout and navigation live under:
 - `components/nav-user.tsx`
 - `components/app-page-header.tsx`
 
-The Electric-native Sites replacement starts as a separate `/sites-workspace`
-organization route rather than a canary under `/sites`. The route is
-intentionally absent from primary navigation until realtime evidence passes, is
-marked as a preview route in the UI, and fails closed with explicit
+The primary `/sites` route is the Electric-native Sites workspace for internal
+members. The old `/sites-workspace` preview URL redirects to `/sites`; it is not
+a separate navigation target. The route fails closed with explicit
 unavailable/degraded states instead of reading the old Sites Query Collection
-path. Its first live slice renders the Sites workspace list/detail from a
-browser-safe Electric read-model module, joining site rows, shared labels,
-site-label assignments, related jobs, domain-owned active-job summaries, site
-comment edges, domain-owned product-safe comment bodies, and product-safe
-actors in the feature data-plane layer. Comment author display is derived from
+path. It renders the Sites workspace list/detail from a browser-safe Electric
+read-model module, joining site rows, shared labels, site-label assignments,
+related jobs, domain-owned active-job summaries, site comment edges,
+domain-owned product-safe comment bodies, and product-safe actors in the
+feature data-plane layer. Comment author display is derived from
 `product-activity-actors`; Better Auth user/member tables stay outside the
 browser read graph. Search text, filter, sort, and the selected detail row are
 route-backed search state with local selected-site and recent-search restoration
@@ -260,19 +259,19 @@ the package-local fallback and `local` when no Alchemy metadata is available.
 
 ## Feature Folders
 
-| Folder                     | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `features/auth`            | Login, signup, password reset, email verification, route guards, redirects, auth UI, and server session helpers.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `features/organizations`   | Organization onboarding, active organization sync, settings, members, invitations, role access, and labels.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `features/jobs`            | Shared Jobs API bridge, DTO display helpers, data-plane contracts, command runners, and still-valid sheet/detail helpers reused by Sites and workspace flows. Legacy route UI remains only where it is still a shared helper, not as the primary `/jobs` route.                                                                                                                                                                                                                                                                                    |
-| `features/jobs-workspace`  | Electric-native primary Jobs route UI, live list controls, URL-backed detail state, realtime comments with product-safe actors, health/permission states, saved-view-ready route state, domain-backed job/label commands with Electric row-observation feedback plus preserved server txid metadata, comment commands with Electric body/edge observation feedback, and shortcut affordances. It consumes feature-owned data-plane helpers and must not instantiate raw Electric streams or raw TanStack DB collection APIs in route/view code.    |
-| `features/sites`           | Sites list, site create flow, detail sheet, and site API state. The first Sites index refresh intentionally uses only supported site fields: name, address, and map readiness. Status, labels, lead, open job counts, saved views, updated timestamps, archive state, and bulk selection are product follow-ups, not placeholder UI.                                                                                                                                                                                                               |
-| `features/sites-workspace` | Electric-native Sites workspace preview route, browser-safe Electric read-model contracts, live list/detail/comment derivation, realtime comments with product-safe actors, domain-backed create/update/label/comment commands with Electric row-observation feedback plus preserved server txid metadata where available, permission/unavailable/degraded states, saved search/detail restoration hooks, and shortcut affordances. Route/view code consumes the feature data-plane module rather than constructing raw Electric streams directly. |
-| `features/activity`        | Global organization Activity route, Electric-backed activity event and product-safe actor read-model contracts, local feed filters, health states, and activity row navigation.                                                                                                                                                                                                                                                                                                                                                                    |
-| `features/settings`        | User settings page schemas, search, profile/email/password forms, account security sessions, and 2FA settings UI.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `features/command-bar`     | Command palette UI and global app actions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `features/agent`           | App-level Ceird Agent launcher, thread API helpers, Agent Worker origin resolution, responsive chat drawer, and chat E2E page object.                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `features/proximity`       | Shared route-aware proximity browser primitives: API bridge helpers, location access, maps handoff, typed-origin dialog control, route-ranking control, limit state, and display formatting.                                                                                                                                                                                                                                                                                                                                                       |
+| Folder                     | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `features/auth`            | Login, signup, password reset, email verification, route guards, redirects, auth UI, and server session helpers.                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `features/organizations`   | Organization onboarding, active organization sync, settings, members, invitations, role access, and labels.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `features/jobs`            | Shared Jobs API bridge, DTO display helpers, data-plane contracts, command runners, and still-valid sheet/detail helpers reused by Sites and workspace flows. Legacy route UI remains only where it is still a shared helper, not as the primary `/jobs` route.                                                                                                                                                                                                                                                                                 |
+| `features/jobs-workspace`  | Electric-native primary Jobs route UI, live list controls, URL-backed detail state, realtime comments with product-safe actors, health/permission states, saved-view-ready route state, domain-backed job/label commands with Electric row-observation feedback plus preserved server txid metadata, comment commands with Electric body/edge observation feedback, and shortcut affordances. It consumes feature-owned data-plane helpers and must not instantiate raw Electric streams or raw TanStack DB collection APIs in route/view code. |
+| `features/sites`           | Shared Sites API bridge, DTO display helpers, data-plane contracts, command runners, and still-valid location, proximity, and sheet/detail helpers reused by Jobs and workspace flows. Legacy route UI is removed from the primary `/sites` path.                                                                                                                                                                                                                                                                                               |
+| `features/sites-workspace` | Electric-native primary Sites route UI, browser-safe Electric read-model contracts, live list/detail/comment derivation, realtime comments with product-safe actors, domain-backed create/update/label/comment commands with Electric row-observation feedback plus preserved server txid metadata where available, permission/unavailable/degraded states, saved search/detail restoration hooks, and shortcut affordances. Route/view code consumes the feature data-plane module rather than constructing raw Electric streams directly.     |
+| `features/activity`        | Global organization Activity route, Electric-backed activity event and product-safe actor read-model contracts, local feed filters, health states, and activity row navigation.                                                                                                                                                                                                                                                                                                                                                                 |
+| `features/settings`        | User settings page schemas, search, profile/email/password forms, account security sessions, and 2FA settings UI.                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `features/command-bar`     | Command palette UI and global app actions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `features/agent`           | App-level Ceird Agent launcher, thread API helpers, Agent Worker origin resolution, responsive chat drawer, and chat E2E page object.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `features/proximity`       | Shared route-aware proximity browser primitives: API bridge helpers, location access, maps handoff, typed-origin dialog control, route-ranking control, limit state, and display formatting.                                                                                                                                                                                                                                                                                                                                                    |
 
 Shared app components live in `src/components`. shadcn-style primitives live in
 `src/components/ui`. Hotkey infrastructure lives in `src/hotkeys`.
@@ -456,11 +455,9 @@ helpers such as `assertCompleteTenantCollection(...)` fail closed when a
 component or selector requires complete organization data. The `/jobs` primary
 list is a bounded `paged-query` collection keyed by cursor, limit, status,
 assignee, coordinator, priority, label, site, text search, and its stable
-updated-desc sort order. The `/sites` route first paint is also bounded to its
-first cursor page and marks the `sites` seed as `paged-query`. Existing labels
-and options collections stay available as eager `complete-tenant` collections
-until their route slices move to bounded paging or explicit sync-backed
-coverage.
+updated-desc sort order. Existing labels and options collections stay available
+as eager `complete-tenant` collections until their route slices move to bounded
+paging or explicit sync-backed coverage.
 The adapter starts the client collection subscription early enough for disabled
 Query Collections to support explicit `refetch()`, but its server and hydration
 snapshots keep using loader DTOs so TanStack DB state does not render during
@@ -474,9 +471,9 @@ an explicit SSR strategy. The current migrated slices are:
   collections for sheet flows, and the old route state provider is a
   compatibility facade for code paths that still mount the shared job sheets.
 - `features/sites/sites-data-plane.ts` and `features/sites/sites-state.ts`,
-  where the primary Sites route collection is a bounded cursor page,
-  site-related job subsets are bounded page/filter collections, and site
-  comments are lazy per-site collections exposed through public reader hooks.
+  where still-valid Sites API, site-related job, comment, and sheet helpers
+  live for shared sheet flows. The old API-backed primary route UI is removed;
+  the Electric-native primary route lives under `features/sites-workspace`.
 - `features/activity/activity-data-plane.ts`, where the global Activity route
   reads the bounded `activity-events` Electric shape and the complete-tenant
   `product-activity-actors` shape, joins product-safe actors locally, and
@@ -578,8 +575,8 @@ contract:
   accurately predict.
 - When a synced feature can observe the committed mutation, prefer command
   pending state that resolves from Electric collection observation rather than
-  from the HTTP response alone. Sites workspace create/update/site-label
-  commands and Jobs workspace job/job-label commands follow this pattern.
+  from the HTTP response alone. Sites create/update/site-label commands and
+  Jobs workspace job/job-label commands follow this pattern.
 - Query Collection fetch results are authoritative synced state. Race guards
   may preserve server-confirmed local writes, but they must not promote
   `$synced: false` optimistic rows into the fetched result.

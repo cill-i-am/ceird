@@ -183,12 +183,11 @@ export function SitesWorkspaceRouteContent({
     <main className="flex min-h-full min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
       <AppPageHeader
         leading={
-          <HugeiconsIcon aria-hidden icon={Database01Icon} strokeWidth={2} />
+          <HugeiconsIcon aria-hidden icon={Location01Icon} strokeWidth={2} />
         }
-        eyebrow="Electric workspace"
-        title="Sites workspace"
-        description="Live site directory, labels, related jobs, and active-job summaries from the Electric-backed Sites collection graph."
-        actions={<Badge variant="outline">Preview route</Badge>}
+        eyebrow="Live workspace"
+        title="Sites"
+        description="Live site directory, labels, related jobs, comments, and active-job summaries from the Electric-backed Sites collection graph."
       />
 
       {canUseWorkspace ? (
@@ -769,11 +768,11 @@ function SitesWorkspaceShell({
       <WorkspaceWriteStatusAlert status={writeStatus} />
 
       <section
-        aria-label="Sites workspace controls"
+        aria-label="Sites controls"
         className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]"
       >
         <label className="relative min-w-0" htmlFor="sites-workspace-search">
-          <span className="sr-only">Search sites workspace</span>
+          <span className="sr-only">Search sites</span>
           <HugeiconsIcon
             aria-hidden
             className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -1284,7 +1283,7 @@ function WorkspaceStatusAlert({
 function LoadingRows() {
   return (
     <div
-      aria-label="Sites workspace loading"
+      aria-label="Sites loading"
       className="grid gap-0 divide-y divide-border/60 p-4"
     >
       {Array.from({ length: 6 }, (_, index) => (
@@ -2102,7 +2101,7 @@ function NoWorkspaceAccess() {
         <EmptyMedia>
           <HugeiconsIcon aria-hidden icon={Alert02Icon} strokeWidth={2} />
         </EmptyMedia>
-        <EmptyTitle>Sites workspace is internal-only</EmptyTitle>
+        <EmptyTitle>Sites is internal-only</EmptyTitle>
         <EmptyDescription>
           External collaborators keep using their job-scoped workspace until
           collaborator-safe realtime site shapes are designed.

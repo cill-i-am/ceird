@@ -166,10 +166,11 @@ unavailable collection health to the route instead of silently activating an API
 fallback. The route's label search derives from the hydrated local collection
 items rather than API requests per keystroke. The Electric-native Sites
 read-model contracts likewise do not introduce a legacy Query Collection
-fallback. The `/sites-workspace` route uses a browser-safe feature data-plane
+fallback. The primary `/sites` route uses a browser-safe feature data-plane
 module under `features/sites-workspace` so the client route does not import the
-legacy Sites module's server-backed query collection helpers. That workspace
-read model requests the named `sites`, `site-labels`,
+legacy Sites module's server-backed query collection helpers. The old
+`/sites-workspace` preview URL redirects to `/sites`. That workspace read model
+requests the named `sites`, `site-labels`,
 `site-active-job-summaries`, `jobs`, `labels`, `site-comments`,
 `site-comment-bodies`, and `product-activity-actors` shapes. It joins shared
 label definitions through
@@ -287,9 +288,10 @@ changes before cutover.
 
 The browser/stage harness is `apps/app/e2e/sites-workspace-performance.test.ts`
 and is opt-in so ordinary package-local Playwright runs do not require a stage.
-It only consumes an already-approved, already-seeded stage/account; it never
-creates an organization or seed data for performance evidence. The stage
-credentials and seeded-row expectation are mandatory:
+It opens the primary `/sites` route and only consumes an already-approved,
+already-seeded stage/account; it never creates an organization or seed data for
+performance evidence. The stage credentials and seeded-row expectation are
+mandatory:
 
 ```bash
 SITES_WORKSPACE_PERF_STAGE=1 \

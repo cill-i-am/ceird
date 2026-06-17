@@ -248,7 +248,7 @@ describe("SitesService contracts", () => {
         display: {
           detail: "Bring the dock gate key.",
           route: {
-            href: `/sites-workspace?selectedSiteId=${siteId}`,
+            href: `/sites?selectedSiteId=${siteId}`,
             label: "Dublin Port",
           },
           summary: "Commented on Dublin Port",
@@ -312,7 +312,7 @@ describe("SitesService contracts", () => {
     expect(result).toStrictEqual(comment);
     expect(recordedEvents).toHaveLength(1);
     expect(recordedEvents[0]?.display.route?.href).toBe(
-      `/sites-workspace?selectedSiteId=${siteId}`
+      `/sites?selectedSiteId=${siteId}`
     );
     expect(recordedEvents[0]?.display.route?.label.length).toBeLessThanOrEqual(
       80
