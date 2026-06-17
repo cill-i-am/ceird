@@ -53,14 +53,10 @@ test.describe("data-plane browser performance", () => {
         visible: page.getByRole("heading", { level: 1, name: "Sites" }),
       }),
       await measureVisibleInteraction({
-        action: () =>
-          page
-            .locator("header")
-            .getByRole("link", { name: "New site" })
-            .click(),
-        name: "sites.create-sheet",
+        action: () => page.getByRole("button", { name: /new site/i }).click(),
+        name: "sites.workspace-create",
         page,
-        visible: page.getByRole("dialog", { name: "New site" }),
+        visible: page.getByRole("form", { name: "Create site" }),
       })
     );
 
