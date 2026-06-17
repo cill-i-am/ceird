@@ -68,6 +68,49 @@ describe("data-plane collection health", () => {
     expect(unavailable.lastError).not.toHaveProperty("url");
   });
 
+  it("records retrying sync origin errors without demoting ready collections", () => {
+    const now = vi
+      .fn<() => number>()
+      .mockReturnValueOnce(1000)
+      .mockReturnValueOnce(2000)
+      .mockReturnValueOnce(3000)
+      .mockReturnValue(3000);
+    const health = createDataPlaneCollectionHealth({
+      collection: "jobs",
+      collectionId: "organization:org_123:user:user_123:role:owner:jobs",
+      now,
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "jobs",
+    });
+
+    health.markReady();
+    const retrying = health.markRetrying({
+      kind: "server",
+      message: "Sync origin is unavailable with status 503.",
+      retryable: true,
+      status: 503,
+    });
+
+    expect(retrying).toStrictEqual({
+      collection: "jobs",
+      collectionId: "organization:org_123:user:user_123:role:owner:jobs",
+      initialReadyLatencyMs: 1000,
+      lastError: {
+        kind: "server",
+        message: "Sync origin is unavailable with status 503.",
+        retryable: true,
+        status: 503,
+      },
+      lastStatusChangeAtMs: 3000,
+      recoveryAttempts: 1,
+      source: "electric",
+      startedAtMs: 1000,
+      status: "ready",
+      subscriptionName: "jobs",
+    });
+  });
+
   it("lets Query Collection fallback consume the same status surface", () => {
     const health = createDataPlaneCollectionHealth({
       collection: "labels",

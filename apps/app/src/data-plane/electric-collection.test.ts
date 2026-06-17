@@ -13,6 +13,7 @@ import {
   makeCredentialedSyncFetch,
   makeElectricShapeUrl,
   normalizeElectricSyncError,
+  recordElectricCollectionSyncError,
 } from "./electric-collection";
 
 const TestRowSchema = Schema.Struct({
@@ -601,6 +602,48 @@ describe("Ceird Electric collection factory", () => {
     );
 
     unsubscribe();
+  });
+
+  it("keeps already-ready collections ready through retryable Sync failures", () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+    const result = createElectricCollectionFromContract(testContract, {
+      runtime: {
+        fetch: makeTestFetch(new Response("ok")),
+        isBrowser: true,
+      },
+    });
+
+    expect(result.status).toBe("enabled");
+    if (result.status !== "enabled") {
+      throw new Error("Expected Electric collection to be enabled");
+    }
+
+    result.collection._lifecycle.setStatus("loading");
+    result.collection._lifecycle.markReady();
+
+    recordElectricCollectionSyncError(
+      result.health,
+      normalizeElectricSyncError(
+        {
+          message: "temporary upstream source_secret=s3cr3t",
+          status: 503,
+        },
+        "labels"
+      )
+    );
+
+    expect(result.health.current).toStrictEqual(
+      expect.objectContaining({
+        lastError: {
+          kind: "server",
+          message: "Sync origin is unavailable with status 503.",
+          retryable: true,
+          status: 503,
+        },
+        recoveryAttempts: 1,
+        status: "ready",
+      })
+    );
   });
 });
 

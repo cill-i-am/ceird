@@ -281,6 +281,7 @@ function createFallbackHealthFacade({
       markFallbackActive: (options = {}) =>
         markDataPlaneCollectionFallbackActive(currentHealth, options),
       markReady: () => currentHealth.markReady(),
+      markRetrying: (error) => currentHealth.markRetrying(error),
       markUnavailable: (error) => currentHealth.markUnavailable(error),
       retryElectric: () =>
         isRecoverableFallback(currentHealth.current)

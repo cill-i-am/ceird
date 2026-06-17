@@ -223,7 +223,7 @@ export function createElectricCollectionFromContract<
   const shapeOptions = createElectricShapeOptions(contract, {
     fetch: runtime.fetch,
     onSyncError: (error) => {
-      health.markUnavailable(error);
+      recordElectricCollectionSyncError(health, error);
       options.onSyncError?.(error);
     },
     shapeUrl,
@@ -246,6 +246,15 @@ export function createElectricCollectionFromContract<
     shapeUrl,
     status: "enabled",
   } as const;
+}
+
+export function recordElectricCollectionSyncError(
+  health: DataPlaneCollectionHealth,
+  error: DataPlaneElectricSyncError
+) {
+  return error.retryable
+    ? health.markRetrying(error)
+    : health.markUnavailable(error);
 }
 
 export function createElectricShapeOptions<

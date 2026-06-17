@@ -524,7 +524,7 @@ describe("jobs data plane", () => {
     });
   });
 
-  it("does not report the Jobs workspace read model ready when a required join collection is unavailable", () => {
+  it("keeps the Jobs workspace read model recovering when a required join collection has a retryable outage", () => {
     const jobsHealth = createDataPlaneCollectionHealth({
       collection: "jobs",
       collectionId: "jobs",
@@ -588,9 +588,11 @@ describe("jobs data plane", () => {
       collectionId: "jobs-workspace-list",
       lastError: {
         message: "labels: labels shape unavailable",
+        retryable: true,
         status: 503,
       },
-      status: "unavailable",
+      recoveryAttempts: 1,
+      status: "connecting",
       subscriptionName: "jobs-workspace-list",
     });
   });

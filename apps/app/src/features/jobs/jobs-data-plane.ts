@@ -1474,6 +1474,7 @@ export function createJobsWorkspaceReadModelHealth({
     },
     markFallbackActive: () => refreshSnapshot(),
     markReady: () => refreshSnapshot(),
+    markRetrying: () => refreshSnapshot(),
     markUnavailable: () => refreshSnapshot(),
     subscribe: (listener) => {
       const unsubscribes = healthSources.map((health) =>
@@ -1553,7 +1554,13 @@ export function aggregateJobsWorkspaceReadModelHealth({
 function getJobsWorkspaceReadModelHealthStatus(
   snapshots: readonly DataPlaneCollectionHealthSnapshot[]
 ): DataPlaneCollectionHealthStatus {
-  if (snapshots.some((snapshot) => snapshot.status === "unavailable")) {
+  if (
+    snapshots.some(
+      (snapshot) =>
+        snapshot.status === "unavailable" &&
+        snapshot.lastError?.retryable !== true
+    )
+  ) {
     return "unavailable";
   }
 
