@@ -2866,8 +2866,22 @@ export function toJobCommentElectricRow(
 }
 
 export function toProductActivityActorElectricRow(
+  row: Record<string, unknown> & {
+    readonly displayName: unknown;
+    readonly id: unknown;
+    readonly kind: unknown;
+  }
+): JobsWorkspaceProductActorRow;
+export function toProductActivityActorElectricRow(
   row: Record<string, unknown>
-): JobsWorkspaceProductActorRow {
+): JobsWorkspaceProductActorRow | JobsElectricRow;
+export function toProductActivityActorElectricRow(
+  row: Record<string, unknown>
+): JobsWorkspaceProductActorRow | JobsElectricRow {
+  if (!hasEveryPresent(row, PRODUCT_ACTIVITY_ACTOR_REQUIRED_ELECTRIC_FIELDS)) {
+    return toPartialProductActivityActorElectricRow(row);
+  }
+
   const item: JobsElectricRow = {
     displayName: String(row.displayName),
     id: String(row.id),
@@ -2892,8 +2906,22 @@ export function toProductActivityActorElectricRow(
 }
 
 export function toProductMemberActorSummaryElectricRow(
+  row: Record<string, unknown> & {
+    readonly actorId: unknown;
+    readonly displayName: unknown;
+    readonly userId: unknown;
+  }
+): JobsWorkspaceMemberActorSummaryRow;
+export function toProductMemberActorSummaryElectricRow(
   row: Record<string, unknown>
-): JobsWorkspaceMemberActorSummaryRow {
+): JobsWorkspaceMemberActorSummaryRow | JobsElectricRow;
+export function toProductMemberActorSummaryElectricRow(
+  row: Record<string, unknown>
+): JobsWorkspaceMemberActorSummaryRow | JobsElectricRow {
+  if (!hasEveryPresent(row, PRODUCT_MEMBER_ACTOR_REQUIRED_ELECTRIC_FIELDS)) {
+    return toPartialProductMemberActorSummaryElectricRow(row);
+  }
+
   const item: JobsElectricRow = {
     displayName: String(row.displayName),
     id: String(row.actorId),
@@ -2918,6 +2946,60 @@ export function toProductMemberActorSummaryElectricRow(
   return Schema.decodeUnknownSync(JobsWorkspaceMemberActorSummaryRowSchema)(
     item
   );
+}
+
+const PRODUCT_ACTIVITY_ACTOR_REQUIRED_ELECTRIC_FIELDS = [
+  "displayName",
+  "id",
+  "kind",
+] as const;
+
+const PRODUCT_MEMBER_ACTOR_REQUIRED_ELECTRIC_FIELDS = [
+  "actorId",
+  "displayName",
+  "userId",
+] as const;
+
+function toPartialProductActivityActorElectricRow(
+  row: Record<string, unknown>
+) {
+  const item: JobsElectricRow = {};
+
+  addOptionalString(item, "displayDetail", row.displayDetail);
+  addOptionalString(item, "displayName", row.displayName);
+  addOptionalString(item, "id", row.id);
+  addOptionalString(item, "kind", row.kind);
+  addOptionalRoute(item, row);
+
+  return item;
+}
+
+function toPartialProductMemberActorSummaryElectricRow(
+  row: Record<string, unknown>
+) {
+  const item: JobsElectricRow = {};
+
+  addOptionalString(item, "displayDetail", row.displayDetail);
+  addOptionalString(item, "displayName", row.displayName);
+  addOptionalString(item, "id", row.actorId);
+  addOptionalString(item, "userId", row.userId);
+  addOptionalRoute(item, row);
+
+  return item;
+}
+
+function addOptionalRoute(item: JobsElectricRow, row: Record<string, unknown>) {
+  if (
+    row.routeHref !== null &&
+    row.routeHref !== undefined &&
+    row.routeLabel !== null &&
+    row.routeLabel !== undefined
+  ) {
+    item.route = {
+      href: String(row.routeHref),
+      label: String(row.routeLabel),
+    };
+  }
 }
 
 function addOptionalString(item: JobsElectricRow, key: string, value: unknown) {

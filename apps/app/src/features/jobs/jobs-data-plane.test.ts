@@ -740,6 +740,22 @@ describe("jobs data plane", () => {
     });
   });
 
+  it("allows Electric update old values to be partial product actor rows", () => {
+    expect(
+      toProductActivityActorElectricRow({
+        updatedAt: "2026-06-17 08:58:07.194174+00",
+      })
+    ).toStrictEqual({});
+  });
+
+  it("allows Electric update old values to be partial member actor summaries", () => {
+    expect(
+      toProductMemberActorSummaryElectricRow({
+        updatedAt: "2026-06-17 08:58:07.194174+00",
+      })
+    ).toStrictEqual({});
+  });
+
   it("derives visible Jobs workspace rows from local joins, filters, search, and sort", () => {
     const workItemId = "11111111-1111-4111-8111-111111111111" as WorkItemIdType;
     const secondWorkItemId =
