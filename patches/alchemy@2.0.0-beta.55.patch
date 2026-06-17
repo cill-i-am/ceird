@@ -1,5 +1,5 @@
 diff --git a/lib/Cloudflare/Container/ContainerApplication.js b/lib/Cloudflare/Container/ContainerApplication.js
-index cf14c2be7ec4903c0b2c4809ebb89cd09daa1e92..5fcaf688759e25221058ec26a46eda1036793f73 100644
+index cf14c2be7ec4903c0b2c4809ebb89cd09daa1e92..43f997131b90811da6b7fbc1353f8ef7106fea5e 100644
 --- a/lib/Cloudflare/Container/ContainerApplication.js
 +++ b/lib/Cloudflare/Container/ContainerApplication.js
 @@ -38,17 +38,38 @@ const resolveDurableObjectApplicationRecovery = ({ namespaceId, expectedName, ex
@@ -177,6 +177,37 @@ index cf14c2be7ec4903c0b2c4809ebb89cd09daa1e92..5fcaf688759e25221058ec26a46eda10
          return "applicationId" in application
              ? application
              : toAttributes(application);
+diff --git a/lib/Cloudflare/Workers/Worker.js b/lib/Cloudflare/Workers/Worker.js
+index 203ab75932469419d8a04a63258e798cc68283d0..850ea0f0e712ba91f772545f4ccc3887eeb8c476 100644
+--- a/lib/Cloudflare/Workers/Worker.js
++++ b/lib/Cloudflare/Workers/Worker.js
+@@ -421,6 +421,12 @@ export const Worker = Platform(WorkerTypeId, {
+ });
+ class MissingDurableObjectNamespaces extends Data.TaggedError("MissingDurableObjectNamespaces") {
+ }
++const isCloudflareWorkerSettingsAuthEdgeFailure = (error) => typeof error === "object" &&
++    error !== null &&
++    "_tag" in error &&
++    error._tag === "Forbidden" &&
++    "message" in error &&
++    /Unable to authenticate request/i.test(String(error.message));
+ export const WorkerProvider = () => ProviderLayer.select({
+     live: () => LiveWorkerProvider(),
+     local: () => LocalWorkerProvider(),
+@@ -656,7 +662,12 @@ export const LiveWorkerProvider = () => Provider.effect(Worker, Effect.gen(funct
+             accountId,
+             scriptName,
+         })
+-            .pipe(Effect.map((settings) => {
++            .pipe(Effect.tapError((error) => isCloudflareWorkerSettingsAuthEdgeFailure(error)
++            ? Effect.logDebug(`Cloudflare Worker settings read: ${scriptName} returned a transient auth edge response, retrying`)
++            : Effect.void), Effect.retry({
++            while: isCloudflareWorkerSettingsAuthEdgeFailure,
++            schedule: Schedule.exponential(200).pipe(Schedule.both(Schedule.recurs(10))),
++        }), Effect.map((settings) => {
+             const namespaces = getDurableObjectNamespaces(settings.bindings);
+             const missing = expectedClassNames.filter((className) => !namespaces[className]);
+             if (missing.length > 0) {
 diff --git a/src/Cloudflare/Container/ContainerApplication.ts b/src/Cloudflare/Container/ContainerApplication.ts
 index 0abf655377211c636840b5de30f35e70dded76d6..51833d82d0c9eaa8182c1843930456ca4fede5e9 100644
 --- a/src/Cloudflare/Container/ContainerApplication.ts
@@ -466,3 +497,42 @@ index 0abf655377211c636840b5de30f35e70dded76d6..51833d82d0c9eaa8182c1843930456ca
            Effect.tapError((error) =>
              Effect.logError(
                `Cloudflare Container create error: ${describeError(error)}`,
+diff --git a/src/Cloudflare/Workers/Worker.ts b/src/Cloudflare/Workers/Worker.ts
+index 356e26c5423039ebde64ab0e1b32e2f4e21a58ec..c8b6318131e7da570bd41c56003b81a029ef89bd 100644
+--- a/src/Cloudflare/Workers/Worker.ts
++++ b/src/Cloudflare/Workers/Worker.ts
+@@ -739,6 +739,14 @@ class MissingDurableObjectNamespaces extends Data.TaggedError(
+   expected: string[];
+ }> {}
+ 
++const isCloudflareWorkerSettingsAuthEdgeFailure = (error: unknown) =>
++  typeof error === "object" &&
++  error !== null &&
++  "_tag" in error &&
++  error._tag === "Forbidden" &&
++  "message" in error &&
++  /Unable to authenticate request/i.test(String(error.message));
++
+ export const WorkerProvider = () =>
+   ProviderLayer.select({
+     live: () => LiveWorkerProvider(),
+@@ -1097,6 +1105,19 @@ export const LiveWorkerProvider = () =>
+             scriptName,
+           })
+           .pipe(
++            Effect.tapError((error) =>
++              isCloudflareWorkerSettingsAuthEdgeFailure(error)
++                ? Effect.logDebug(
++                    `Cloudflare Worker settings read: ${scriptName} returned a transient auth edge response, retrying`,
++                  )
++                : Effect.void,
++            ),
++            Effect.retry({
++              while: isCloudflareWorkerSettingsAuthEdgeFailure,
++              schedule: Schedule.exponential(200).pipe(
++                Schedule.both(Schedule.recurs(10)),
++              ),
++            }),
+             Effect.map((settings) => {
+               const namespaces = getDurableObjectNamespaces(settings.bindings);
+               const missing = expectedClassNames.filter(
