@@ -275,6 +275,20 @@ describe("sites workspace data plane", () => {
     expect(transformedComment).toStrictEqual(dublinComment);
   });
 
+  it("normalizes partial Electric site old_value rows without full-row validation", () => {
+    expect(
+      toSiteOptionElectricRow({
+        access_notes: "Old gate code",
+        name: "Dublin Port",
+        updated_at: "2026-06-02 09:30:00+00",
+      })
+    ).toStrictEqual({
+      accessNotes: "Old gate code",
+      name: "Dublin Port",
+      updatedAt: "2026-06-02T09:30:00.000Z",
+    });
+  });
+
   it("derives selection-ready visible rows from the actual Sites workspace graph inputs", () => {
     const rows = deriveSitesWorkspaceVisibleRows({
       activeJobSummaries: [

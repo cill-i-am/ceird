@@ -746,6 +746,10 @@ function selectSiteComments({
 export function toSiteOptionElectricRow(
   row: Record<string, unknown>
 ): SitesWorkspaceElectricRow {
+  if (!hasEveryElectricValue(row, SITE_OPTION_REQUIRED_ELECTRIC_FIELDS)) {
+    return toPartialSiteOptionElectricRow(row) as SitesWorkspaceElectricRow;
+  }
+
   const latitude = electricValue(row, "latitude");
   const longitude = electricValue(row, "longitude");
   const locationStatus = electricValue(row, "locationStatus");
@@ -786,6 +790,41 @@ export function toSiteOptionElectricRow(
   Schema.decodeUnknownSync(SiteOptionSchema)(site);
 
   return site as SitesWorkspaceElectricRow;
+}
+
+const SITE_OPTION_REQUIRED_ELECTRIC_FIELDS = [
+  "displayLocation",
+  "id",
+  "locationStatus",
+  "name",
+  "updatedAt",
+] as const;
+
+function toPartialSiteOptionElectricRow(row: Record<string, unknown>) {
+  const site: Record<string, unknown> = {};
+
+  addOptionalElectricValue(site, row, "accessNotes");
+  addOptionalElectricValue(site, row, "addressComponents");
+  addOptionalElectricValue(site, row, "addressLine1");
+  addOptionalElectricValue(site, row, "addressLine2");
+  addOptionalElectricValue(site, row, "country");
+  addOptionalElectricValue(site, row, "county");
+  addOptionalElectricValue(site, row, "displayLocation");
+  addOptionalElectricValue(site, row, "eircode");
+  addOptionalElectricValue(site, row, "formattedAddress");
+  addOptionalElectricValue(site, row, "googlePlaceId");
+  addOptionalElectricValue(site, row, "id");
+  addOptionalElectricValue(site, row, "latitude");
+  addOptionalElectricValue(site, row, "locationProvider");
+  addOptionalElectricDateTime(site, row, "locationResolvedAt");
+  addOptionalElectricValue(site, row, "locationStatus");
+  addOptionalElectricValue(site, row, "longitude");
+  addOptionalElectricValue(site, row, "name");
+  addOptionalElectricValue(site, row, "rawLocationInput");
+  addOptionalElectricValue(site, row, "town");
+  addOptionalElectricDateTime(site, row, "updatedAt");
+
+  return site;
 }
 
 export function toSiteLabelAssignmentElectricRow(
@@ -1167,6 +1206,31 @@ function addOptionalElectricValue(
   key: string
 ) {
   addOptionalValue(target, key, electricValue(row, key));
+}
+
+function addOptionalElectricDateTime(
+  target: Record<string, unknown>,
+  row: Record<string, unknown>,
+  key: string
+) {
+  const value = electricValue(row, key);
+
+  if (value === null || value === undefined) {
+    return;
+  }
+
+  target[key] = normalizeSitesElectricDateTime(value);
+}
+
+function hasEveryElectricValue(
+  row: Record<string, unknown>,
+  keys: readonly string[]
+) {
+  return keys.every((key) => {
+    const value = electricValue(row, key);
+
+    return value !== null && value !== undefined;
+  });
 }
 
 function electricValue(row: Record<string, unknown>, key: string) {
