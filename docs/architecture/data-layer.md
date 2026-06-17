@@ -364,7 +364,7 @@ is time-sensitive and must be refreshed for each public shape request. Active
 membership invalidation is intentionally out of scope for v1, so revocation
 exposure is bounded by the short TTL.
 Pull-request previews and ephemeral push-to-main cloud E2E now provision the
-full Worker, Durable Object, Container, R2, and Neon path. Their deploy
+full Worker, Durable Object, Electric Container, and Neon path. Their deploy
 workflows run an authenticated sync canary through `PLAYWRIGHT_SYNC_URL` after
 reading the stage database URL from Alchemy state: the canary verifies a
 throwaway user, creates and activates a stage-local organization, then requests

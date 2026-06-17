@@ -19,14 +19,15 @@ pnpm alchemy login
 
 CI uses `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_KEY`, and `CLOUDFLARE_EMAIL`
 from GitHub environment secrets for non-interactive provider auth. The app
-stack owns stage-scoped Electric R2 account tokens, so CI must not provide
-`CLOUDFLARE_API_TOKEN`; Alchemy's environment auth prefers the token when both
-token and key credentials are present. CI also stores the existing Cloudflare
-state-store credentials JSON as `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`
-and writes it to Alchemy's expected credentials path before deploy or destroy.
-Local operators should leave Cloudflare provider auth and state-store
-credentials in the Alchemy profile instead of exporting those variables for
-normal Alchemy runs.
+stack uses key/email credentials so it can reconcile the Cloudflare state store
+and deployed resources consistently; CI must not provide
+`CLOUDFLARE_API_TOKEN` because Alchemy's environment auth prefers the token when
+both token and key credentials are present. CI also stores the existing
+Cloudflare state-store credentials JSON as
+`ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS` and writes it to Alchemy's
+expected credentials path before deploy or destroy. Local operators should
+leave Cloudflare provider auth and state-store credentials in the Alchemy
+profile instead of exporting those variables for normal Alchemy runs.
 
 Before starting a provider-backed worktree for the first time, run:
 
@@ -527,7 +528,7 @@ domain Worker, then runs `scripts/run-deployed-sync-canary.mjs` against
 throwaway user, verifies that user in the stage database, creates and activates
 a stage-local organization, and requests the authenticated `jobs` Electric
 shape. This avoids transient route, domain, TLS, service binding, container
-startup, R2 mount, or Electric shape-serving failures on freshly created preview
+startup, or Electric shape-serving failures on freshly created preview
 hostnames. The domain Worker disables auth rate limiting by default only for
 `pr-<number>` stages so repeated E2E runs against the persistent preview
 database do not accumulate lockout counters; set `AUTH_RATE_LIMIT_ENABLED=true`
