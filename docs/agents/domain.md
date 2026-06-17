@@ -37,3 +37,12 @@ project's current product and architecture vocabulary:
 
 If a term is ambiguous, ask or record the chosen meaning in the relevant Linear
 PRD or architecture guide rather than inventing a parallel vocabulary.
+
+`CONTEXT.md` is the product glossary. Keep it free of implementation details,
+plans, and scratch notes. Use `domain-modeling` when a task actively changes the
+domain language; merely reading `CONTEXT.md` for vocabulary does not require
+that skill.
+
+Use `codebase-design` for architecture vocabulary such as module, interface,
+seam, adapter, depth, leverage, and locality. Do not duplicate that vocabulary
+inside workflow skills.

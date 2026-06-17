@@ -1,66 +1,113 @@
 ---
 name: systematic-debugging
-description: Root-cause debugging loop for bugs, failing tests, flakes, build failures, CI failures, and unexpected behavior. Use before proposing fixes when anything is broken, especially during worker implementation or CI-watch repair.
+description: Root-cause debugging loop for bugs, failing tests, flakes, CI failures, performance regressions, and unexpected behavior. Use before proposing fixes when anything is broken, especially during worker implementation or CI-watch repair.
 ---
 
 # Systematic Debugging
 
-No fixes without a root-cause investigation first.
+No fixes without a red-capable feedback loop and a root-cause investigation.
+Skip phases only when explicitly justified.
 
-## Process
+When exploring the codebase, read `CONTEXT.md` and relevant architecture guides
+so the reproduction and fix use the right domain/module language.
 
-### 1. Reproduce
+## Phase 1: Build A Tight Feedback Loop
 
-- Read the full error, stack trace, failing assertion, or CI log.
-- Identify exact command, route, request, or workflow that fails.
-- Re-run the narrowest reproduction if safe.
-- If the failure is not reproducible, gather more evidence before changing code.
+If you have a **tight** pass/fail signal for the bug, you can find the cause. If
+you do not, no amount of staring at code is enough.
 
-### 2. Trace
+Try feedback loops in roughly this order:
 
-Follow the bad value, state, request, or event across boundaries:
+1. failing test at the seam that reaches the bug
+2. curl or HTTP script against a running service
+3. CLI invocation with a fixture input
+4. Playwright or browser script asserting on DOM, console, or network behavior
+5. replayed trace: saved request, payload, event log, or fixture
+6. throwaway harness around the smallest runnable subset
+7. property or fuzz loop for "sometimes wrong" behavior
+8. bisection harness if the bug appeared between known states
+9. differential loop between old/new versions or configs
+10. human-in-the-loop script only when a human must click or inspect
 
-- app route -> server function -> API/domain Worker
-- domain service -> repository -> Drizzle/Postgres
-- auth/session/org context -> route guards -> API calls
-- sync/agent/MCP adapter -> private domain Worker
-- CI command -> package script -> test/build tool
+Phase 1 is done only when you can name one command you have run at least once
+and it is:
 
-Add temporary diagnostics only when they answer a specific question. Remove them
-before finalizing unless they are useful production observability.
+- **red-capable**: it drives the user's exact symptom, not just nearby code
+- **deterministic**: or, for flakes, has a high enough reproduction rate
+- **fast**: seconds when practical
+- **agent-runnable**: unattended unless the task truly requires HITL
 
-### 3. Compare
+Tighten the loop before moving on: make it faster, sharper, and more
+deterministic.
 
-Find a working example in the repo or local dependency source. Compare:
+## Phase 2: Reproduce And Minimize
 
-- inputs and decoded schemas
-- configuration and environment
-- ordering and async behavior
-- error handling and tagged errors
-- transactions, idempotency, retries, and cleanup
+Run the loop and watch it fail. Confirm the failure mode matches the user's
+symptom.
 
-### 4. Hypothesize
+Then minimize the reproduction. Cut inputs, callers, config, data, and steps
+one at a time, re-running the loop after each cut. Stop when every remaining
+element is load-bearing: removing any one of them makes the loop pass.
 
-State one hypothesis:
+## Phase 3: Hypothesize
 
-> I think <root cause> because <evidence>.
+Generate 3-5 ranked hypotheses before testing any of them. Each hypothesis must
+be falsifiable:
 
-Test one variable at a time. Do not bundle guesses.
+> If <X> is the cause, then <changing Y> will make the bug disappear or
+> <changing Z> will make it worse.
 
-### 5. Fix
+Show the ranked list to the user when they are present, but proceed with the
+best-ranked hypothesis if they are AFK.
 
-- Write or identify a failing test/reproduction first when practical.
-- Fix the root cause, not the symptom.
-- Keep the change inside the Linear issue scope.
-- Verify the original failure and relevant regression suite.
+## Phase 4: Instrument
 
-### 6. Escalate
+Each probe must map to a prediction from Phase 3. Change one variable at a time.
 
-If three fix attempts fail, stop and question the architecture or the issue
-spec. Update Linear with evidence and ask for direction instead of stacking more
-patches.
+Prefer:
 
-## Project-Specific Checks
+1. debugger or REPL inspection when available
+2. targeted logs at boundaries that distinguish hypotheses
+3. never "log everything and grep"
+
+Tag temporary diagnostics with a unique prefix such as `[DEBUG-a4f2]` so cleanup
+is a single search.
+
+For performance regressions, establish a baseline measurement first. Use timing
+harnesses, profiling, query plans, or bisection before changing code.
+
+## Phase 5: Fix And Regression Test
+
+Write or identify the regression test before the fix when a correct seam exists.
+A correct seam exercises the real bug pattern as it occurs at the call site. If
+the available seam is too shallow, note that architecture finding and fix the
+bug without pretending the shallow test proves it.
+
+Then:
+
+1. turn the minimized repro into a failing test when practical
+2. watch it fail
+3. apply the root-cause fix
+4. watch the regression pass
+5. re-run the original Phase 1 loop
+
+Keep the change inside the Linear issue scope when running as a worker or
+CI-watch repair.
+
+## Phase 6: Cleanup And Post-Mortem
+
+Before declaring done:
+
+- original repro no longer reproduces
+- regression test passes, or absence of correct seam is documented
+- all `[DEBUG-...]` diagnostics are removed
+- throwaway harnesses/prototypes are deleted or clearly marked
+- the correct hypothesis is stated in the PR, commit, or Linear evidence
+
+Then ask what would have prevented the bug. If the answer is architectural, hand
+off the specifics to `/improve-codebase-architecture` after the fix is in.
+
+## Ceird-Specific Checks
 
 - Effect code: prefer typed errors, `Schema`, `Config`, services, and layers;
   avoid casual thrown errors at boundaries.

@@ -5,8 +5,8 @@ The agent workflow has three roles.
 ## Planner
 
 The planner turns ideas into Linear Projects, PRDs, and issue graphs. It does
-not implement product code. It should use `to-prd`, `to-issues`, `triage`, and
-`grill-with-docs` as needed.
+not implement product code. It should use `ask-ceird`, `grill-with-docs`,
+`prototype`, `to-prd`, `to-issues`, and `triage` as needed.
 
 ## Orchestrator
 
@@ -44,7 +44,9 @@ checks, watches CI and PR/Linear comments until green/resolved or blocked, and
 records evidence back in Linear.
 
 Use `subagent-execution` inside the worker when bounded implementation,
-investigation, spec review, or quality review can be delegated safely.
+investigation, spec review, or quality review can be delegated safely. Use
+`systematic-debugging` for bugs, failing checks, flakes, and unexpected
+behavior before proposing fixes.
 
 ## Review And Completion
 
