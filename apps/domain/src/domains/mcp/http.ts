@@ -10,6 +10,7 @@ import { SqlClient } from "effect/unstable/sql";
 import { DomainDrizzle } from "../../platform/database/database.js";
 import type { DomainDrizzleService } from "../../platform/database/database.js";
 import { oauthConsent } from "../../platform/database/schema.js";
+import { ActivityEventsRepository } from "../activity/repository.js";
 import { CommentsRepository } from "../comments/repository.js";
 import type { AuthenticationConfig } from "../identity/authentication/config.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
@@ -835,6 +836,7 @@ function makeMcpToolLayer<ERuntime>(
     Layer.provide(
       Layer.mergeAll(
         OrganizationAuthorization.Default,
+        ActivityEventsRepository.Default,
         LabelsRepository.Default,
         JobsAuthorization.Default,
         JobsActivityRecorder.Default,
