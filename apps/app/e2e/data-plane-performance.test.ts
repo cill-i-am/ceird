@@ -51,9 +51,19 @@ test.describe("data-plane browser performance", () => {
         name: "sites.route",
         page,
         visible: page.getByRole("heading", { level: 1, name: "Sites" }),
-      }),
+      })
+    );
+
+    await expect(
+      page.getByText("Live Sites read model ready", { exact: true })
+    ).toBeVisible({ timeout: 60_000 });
+
+    const newSiteButton = page.getByRole("button", { name: /new site/i });
+    await expect(newSiteButton).toBeEnabled({ timeout: 60_000 });
+
+    metrics.push(
       await measureVisibleInteraction({
-        action: () => page.getByRole("button", { name: /new site/i }).click(),
+        action: () => newSiteButton.click(),
         name: "sites.workspace-create",
         page,
         visible: page.getByRole("form", { name: "Create site" }),
