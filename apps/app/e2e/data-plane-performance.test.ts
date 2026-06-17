@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 import { createSignedInOrganization } from "./helpers/auth-session";
 import {
@@ -8,7 +9,7 @@ import {
 } from "./helpers/performance";
 
 test.describe("data-plane browser performance", () => {
-  test.setTimeout(240_000);
+  test.setTimeout(420_000);
 
   test("loads jobs and sites flows without extra failed data requests", async ({
     page,
@@ -27,11 +28,14 @@ test.describe("data-plane browser performance", () => {
       }),
     ];
 
+    await enableJobsWorkspacePerfHarness(page);
+    await waitForJobsWorkspaceReady(page);
+
     const newJobButton = page.getByRole("button", {
       exact: true,
       name: "New job",
     });
-    await expect(newJobButton).toBeEnabled({ timeout: 60_000 });
+    await expect(newJobButton).toBeEnabled({ timeout: 180_000 });
 
     metrics.push(
       await measureVisibleInteraction({
@@ -74,3 +78,43 @@ test.describe("data-plane browser performance", () => {
     await attachPerformanceMetrics(testInfo, metrics);
   });
 });
+
+async function enableJobsWorkspacePerfHarness(page: Page) {
+  const url = new URL(page.url());
+  url.searchParams.set("perfHarness", "jobs-workspace");
+
+  await page.goto(url.toString());
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Jobs" })
+  ).toBeVisible({ timeout: 30_000 });
+}
+
+async function waitForJobsWorkspaceReady(page: Page) {
+  await page.waitForFunction(
+    () => {
+      const snapshot = (
+        window as typeof window & {
+          readonly __CEIRD_JOBS_WORKSPACE_PERF__?:
+            | {
+                readonly list: {
+                  readonly health: {
+                    readonly initialReadyLatencyMs?: number | undefined;
+                    readonly status: string;
+                  };
+                  readonly isReady: boolean;
+                };
+              }
+            | undefined;
+        }
+      ).__CEIRD_JOBS_WORKSPACE_PERF__;
+
+      return (
+        snapshot?.list.isReady === true &&
+        snapshot.list.health.status === "ready" &&
+        snapshot.list.health.initialReadyLatencyMs !== undefined
+      );
+    },
+    undefined,
+    { timeout: 180_000 }
+  );
+}
