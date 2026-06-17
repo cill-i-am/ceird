@@ -43,11 +43,13 @@ import {
   toJobCommentEdgeRow,
   toJobCommentElectricRow,
   toJobContactSummaryRow,
+  toJobListItemElectricRow,
   toJobLabelAssignmentRow,
   toJobSiteSummaryRow,
   toJobVisitElectricRow,
   toProductActivityActorElectricRow,
   toProductMemberActorSummaryElectricRow,
+  toJobsWorkspaceJobElectricRow,
   toJobsWorkspaceJobRow,
 } from "./jobs-data-plane";
 import type { JobLabelAssignmentRow } from "./jobs-data-plane";
@@ -711,6 +713,30 @@ describe("jobs data plane", () => {
       id: "019ed247-7fcb-7114-9d5c-af3e0dc7fdc2",
       title: "TSK-237 realtime",
       updatedAt: "2026-06-16T21:12:41.802Z",
+    });
+  });
+
+  it("allows Electric update old values to be partial Jobs workspace rows", () => {
+    expect(
+      toJobsWorkspaceJobElectricRow({
+        priority: "none",
+        updatedAt: "2026-06-17 08:34:13.1604+00",
+      })
+    ).toStrictEqual({
+      priority: "none",
+      updatedAt: "2026-06-17T08:34:13.160Z",
+    });
+  });
+
+  it("allows Electric update old values to be partial legacy Jobs list rows", () => {
+    expect(
+      toJobListItemElectricRow({
+        priority: "none",
+        updatedAt: "2026-06-17 08:34:13.1604+00",
+      })
+    ).toStrictEqual({
+      priority: "none",
+      updatedAt: "2026-06-17T08:34:13.160Z",
     });
   });
 

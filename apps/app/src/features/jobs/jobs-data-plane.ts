@@ -135,8 +135,8 @@ type JobsElectricRowValue =
   | null
   | number
   | string
-  | readonly JobsElectricRowValue[]
-  | { readonly [key: string]: JobsElectricRowValue };
+  | JobsElectricRowValue[]
+  | { [key: string]: JobsElectricRowValue };
 type JobsElectricRow = Record<string, JobsElectricRowValue>;
 
 interface JobsWorkspaceObservableCollection<Item> {
@@ -2070,7 +2070,7 @@ export function createJobsWorkspaceJobsElectricContract(
     schema: Schema.toStandardSchemaV1(JobsWorkspaceJobRowSchema),
     shapeName: "jobs",
     shapeOptions: {
-      transformer: toJobsWorkspaceJobRow,
+      transformer: toJobsWorkspaceJobElectricRow,
     },
   });
 }
@@ -2609,24 +2609,49 @@ function createJobsCollection({
   );
 }
 
-function toJobListItemElectricRow(row: Record<string, unknown>) {
-  const item: JobsElectricRow = {
-    createdAt: normalizeJobsElectricDateTime(row.createdAt),
-    id: String(row.id),
-    kind: String(row.kind),
-    labels: [],
-    priority: String(row.priority),
-    status: String(row.status),
-    title: String(row.title),
-    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
-  };
+export function toJobListItemElectricRow(
+  row: Record<string, unknown>
+): JobsElectricRow {
+  const item = toPartialJobElectricRow(row, [
+    "assigneeId",
+    "contactId",
+    "coordinatorId",
+    "id",
+    "kind",
+    "priority",
+    "siteId",
+    "status",
+    "title",
+  ]);
 
-  addOptionalString(item, "assigneeId", row.assigneeId);
-  addOptionalString(item, "contactId", row.contactId);
-  addOptionalString(item, "coordinatorId", row.coordinatorId);
-  addOptionalString(item, "siteId", row.siteId);
+  if (hasEveryPresent(row, JOB_LIST_ITEM_REQUIRED_ELECTRIC_FIELDS)) {
+    item.labels = [];
+  }
 
   return item;
+}
+
+export function toJobsWorkspaceJobElectricRow(
+  row: Record<string, unknown>
+): JobsWorkspaceJobRow | JobsElectricRow {
+  if (!hasEveryPresent(row, JOBS_WORKSPACE_JOB_REQUIRED_ELECTRIC_FIELDS)) {
+    return toPartialJobElectricRow(row, [
+      "assigneeId",
+      "blockedReason",
+      "completedByUserId",
+      "contactId",
+      "coordinatorId",
+      "createdByUserId",
+      "id",
+      "kind",
+      "priority",
+      "siteId",
+      "status",
+      "title",
+    ]);
+  }
+
+  return toJobsWorkspaceJobRow(row);
 }
 
 export function toJobsWorkspaceJobRow(
@@ -2652,6 +2677,51 @@ export function toJobsWorkspaceJobRow(
   addOptionalString(item, "siteId", row.siteId);
 
   return Schema.decodeUnknownSync(JobsWorkspaceJobRowSchema)(item);
+}
+
+const JOB_LIST_ITEM_REQUIRED_ELECTRIC_FIELDS = [
+  "createdAt",
+  "id",
+  "kind",
+  "priority",
+  "status",
+  "title",
+  "updatedAt",
+] as const;
+
+const JOBS_WORKSPACE_JOB_REQUIRED_ELECTRIC_FIELDS = [
+  "createdAt",
+  "createdByUserId",
+  "id",
+  "kind",
+  "priority",
+  "status",
+  "title",
+  "updatedAt",
+] as const;
+
+function hasEveryPresent(
+  row: Record<string, unknown>,
+  keys: readonly string[]
+) {
+  return keys.every((key) => row[key] !== null && row[key] !== undefined);
+}
+
+function toPartialJobElectricRow(
+  row: Record<string, unknown>,
+  stringKeys: readonly string[]
+) {
+  const item: JobsElectricRow = {};
+
+  addOptionalDateTime(item, "createdAt", row.createdAt);
+  addOptionalDateTime(item, "completedAt", row.completedAt);
+  addOptionalDateTime(item, "updatedAt", row.updatedAt);
+
+  for (const key of stringKeys) {
+    addOptionalString(item, key, row[key]);
+  }
+
+  return item;
 }
 
 export function toJobLabelAssignmentRow(
