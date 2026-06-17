@@ -231,12 +231,8 @@ test("state audit flags legacy migration state and validates expected managed re
           ElectricSql: { name: "ElectricSql" },
           AUTH_APP_ORIGIN: "https://app.ceird.app",
           CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
-          ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID: "r2-access-key-id",
-          ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY: "r2-secret-access-key",
           ELECTRIC_CONTAINER_DATABASE_URL: "postgresql://redacted",
           ELECTRIC_CONTAINER_ELECTRIC_SECRET: "electric-secret",
-          ELECTRIC_CONTAINER_R2_ACCOUNT_ID: "cloudflare-account-id",
-          ELECTRIC_CONTAINER_R2_BUCKET_NAME: "ceird-main-electric-storage",
           ELECTRIC_SOURCE_SECRET: "secret",
           ELECTRIC_SQL_LOCATION_HINT: "weur",
         },
@@ -244,10 +240,6 @@ test("state audit flags legacy migration state and validates expected managed re
     },
     ElectricSql: {
       resourceType: "Cloudflare.Container",
-      props: {},
-    },
-    ElectricStorageBucket: {
-      resourceType: "Cloudflare.R2Bucket",
       props: {},
     },
     PostgresBranch: {
@@ -317,7 +309,6 @@ test("state audit flags legacy migration state and validates expected managed re
       "mcp_worker",
       "agent_worker",
       "sync_worker",
-      "electric_storage_bucket",
       "electric_container",
       "electric_container_runtime_env",
       "tenant_route_pattern",
@@ -417,7 +408,6 @@ test("state audit flags legacy migration state and validates expected managed re
       resources: {
         ...healthyResources,
         ElectricSql: undefined,
-        ElectricStorageBucket: undefined,
         TenantWildcardDnsRecord: undefined,
         TenantWorkerRoute: undefined,
       },
@@ -430,7 +420,6 @@ test("state audit flags legacy migration state and validates expected managed re
     resources: {
       ...healthyResources,
       ElectricSql: undefined,
-      ElectricStorageBucket: undefined,
       TenantWorkerRoute: {
         resourceType: "Ceird.CloudflareTenantWorkerRoute",
         attr: { pattern: "*--pr-104.ceird.app/*" },
@@ -443,12 +432,6 @@ test("state audit flags legacy migration state and validates expected managed re
   assert.equal(previewMissingElectricReport.ok, false);
   assert.equal(
     previewMissingElectricReport.checks.find(
-      (check) => check.name === "electric_storage_bucket"
-    )?.status,
-    "fail"
-  );
-  assert.equal(
-    previewMissingElectricReport.checks.find(
       (check) => check.name === "electric_container"
     )?.status,
     "fail"
@@ -457,7 +440,6 @@ test("state audit flags legacy migration state and validates expected managed re
     resources: {
       ...healthyResources,
       ElectricSql: undefined,
-      ElectricStorageBucket: undefined,
       TenantWorkerRoute: {
         resourceType: "Ceird.CloudflareTenantWorkerRoute",
         attr: { pattern: "*--qa-sync.ceird.app/*" },
@@ -468,12 +450,6 @@ test("state audit flags legacy migration state and validates expected managed re
   });
 
   assert.equal(nonPreviewMissingElectricReport.ok, false);
-  assert.equal(
-    nonPreviewMissingElectricReport.checks.find(
-      (check) => check.name === "electric_storage_bucket"
-    )?.status,
-    "fail"
-  );
   const missingElectricRuntimeEnvReport = analyzeAlchemyStateResources({
     resources: {
       ...healthyResources,

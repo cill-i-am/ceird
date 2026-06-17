@@ -53,12 +53,7 @@ type WorkerEnvInput<Env extends object> = {
 type SyncWorkerElectricContainerConfiguredEnv = Required<
   Pick<
     SyncWorkerConfiguredEnv,
-    | "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
-    | "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
-    | "ELECTRIC_CONTAINER_DATABASE_URL"
-    | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
-    | "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
-    | "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+    "ELECTRIC_CONTAINER_DATABASE_URL" | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
   >
 >;
 
@@ -73,12 +68,8 @@ export interface SyncWorkerConfiguredEnv {
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_TRUSTED_ORIGINS: string;
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
-  readonly ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID?: Redacted.Redacted<string>;
-  readonly ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY?: Redacted.Redacted<string>;
   readonly ELECTRIC_CONTAINER_DATABASE_URL?: Redacted.Redacted<string>;
   readonly ELECTRIC_CONTAINER_ELECTRIC_SECRET?: Redacted.Redacted<string>;
-  readonly ELECTRIC_CONTAINER_R2_ACCOUNT_ID?: string;
-  readonly ELECTRIC_CONTAINER_R2_BUCKET_NAME?: string;
   readonly ELECTRIC_SQL_LOCATION_HINT: DurableObjectLocationHint;
   readonly ELECTRIC_SOURCE_SECRET: Redacted.Redacted<string>;
   readonly NODE_ENV: "production";
@@ -86,10 +77,7 @@ export interface SyncWorkerConfiguredEnv {
 }
 
 export interface ElectricContainerConfiguredEnv {
-  readonly AWS_ACCESS_KEY_ID: Input<Redacted.Redacted<string>>;
-  readonly AWS_SECRET_ACCESS_KEY: Input<Redacted.Redacted<string>>;
-  readonly CEIRD_ELECTRIC_STORAGE_BACKEND: "r2";
-  readonly CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric";
+  readonly CEIRD_ELECTRIC_STORAGE_BACKEND: "local";
   readonly DATABASE_URL: Input<Redacted.Redacted<string>>;
   readonly ELECTRIC_INSECURE: "false";
   readonly ELECTRIC_LOG_LEVEL: "info";
@@ -99,15 +87,6 @@ export interface ElectricContainerConfiguredEnv {
   readonly ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true";
   readonly ELECTRIC_STORAGE: "fast_file";
   readonly ELECTRIC_STORAGE_DIR: "/var/lib/electric";
-  readonly R2_ACCOUNT_ID: Input<string>;
-  readonly R2_BUCKET_NAME: Input<string>;
-}
-
-export interface ElectricContainerStorageConfig {
-  readonly accessKeyId: Input<Redacted.Redacted<string>>;
-  readonly accountId: Input<string>;
-  readonly bucketName: Input<string>;
-  readonly awsSecretAccessKey: Input<Redacted.Redacted<string>>;
 }
 
 export interface ElectricContainerConfig {
@@ -181,13 +160,9 @@ export function makeSyncWorkerConfiguredEnv(input: {
 export function makeElectricContainerEnv(input: {
   readonly databaseUrl: Input<Redacted.Redacted<string>>;
   readonly electricSecret: Input<Redacted.Redacted<string>>;
-  readonly storage: ElectricContainerStorageConfig;
 }): ElectricContainerConfiguredEnv {
   return {
-    AWS_ACCESS_KEY_ID: input.storage.accessKeyId,
-    AWS_SECRET_ACCESS_KEY: input.storage.awsSecretAccessKey,
-    CEIRD_ELECTRIC_STORAGE_BACKEND: "r2",
-    CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric",
+    CEIRD_ELECTRIC_STORAGE_BACKEND: "local",
     DATABASE_URL: input.databaseUrl,
     ELECTRIC_INSECURE: "false",
     ELECTRIC_LOG_LEVEL: "info",
@@ -197,8 +172,6 @@ export function makeElectricContainerEnv(input: {
     ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true",
     ELECTRIC_STORAGE: "fast_file",
     ELECTRIC_STORAGE_DIR: "/var/lib/electric",
-    R2_ACCOUNT_ID: input.storage.accountId,
-    R2_BUCKET_NAME: input.storage.bucketName,
   };
 }
 
@@ -210,42 +183,19 @@ function makeSyncWorkerElectricContainerEnv(
   }
 
   return {
-    ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID:
-      electricContainer.env.AWS_ACCESS_KEY_ID,
-    ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY:
-      electricContainer.env.AWS_SECRET_ACCESS_KEY,
     ELECTRIC_CONTAINER_DATABASE_URL: electricContainer.env.DATABASE_URL,
     ELECTRIC_CONTAINER_ELECTRIC_SECRET: electricContainer.env.ELECTRIC_SECRET,
-    ELECTRIC_CONTAINER_R2_ACCOUNT_ID: electricContainer.env.R2_ACCOUNT_ID,
-    ELECTRIC_CONTAINER_R2_BUCKET_NAME: electricContainer.env.R2_BUCKET_NAME,
   };
 }
 
-function shellEnv(name: string) {
-  return `$${"{"}${name}${"}"}`;
-}
-
-const tigrisfsVersionEnv = shellEnv("TIGRISFS_VERSION");
-
 export const electricContainerDockerfile = [
-  "FROM --platform=linux/amd64 golang:1.25-bookworm AS tigrisfs-build",
-  "",
-  "ARG TIGRISFS_VERSION=1.2.1",
-  `RUN git clone --depth=1 --branch v${tigrisfsVersionEnv} https://github.com/tigrisdata/tigrisfs.git /tmp/tigrisfs \\`,
-  "  && cd /tmp/tigrisfs \\",
-  "  && GOBIN=/out /usr/local/go/bin/go install . \\",
-  "  && rm -rf /tmp/tigrisfs",
-  "",
   "FROM --platform=linux/amd64 electricsql/electric:subqueries-beta-7",
   "",
   "USER root",
-  "COPY --from=tigrisfs-build /out/tigrisfs /usr/local/bin/tigrisfs",
   "RUN set -eux; \\",
   "  apt-get update; \\",
-  "  apt-get install -y --no-install-recommends ca-certificates fuse3 nodejs; \\",
-  "  chmod +x /usr/local/bin/tigrisfs; \\",
+  "  apt-get install -y --no-install-recommends ca-certificates nodejs; \\",
   "  mkdir -p /home/electric /var/lib/electric; \\",
-  "  ln -sf /proc/mounts /etc/mtab; \\",
   "  if ! getent group 65532 >/dev/null; then echo 'electric:x:65532:' >> /etc/group; fi; \\",
   "  if ! getent passwd 65532 >/dev/null; then echo 'electric:x:65532:65532:Electric Runtime:/home/electric:/usr/sbin/nologin' >> /etc/passwd; fi; \\",
   "  rm -rf /var/lib/apt/lists/*; \\",

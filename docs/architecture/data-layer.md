@@ -296,47 +296,37 @@ parent Neon project must have logical replication enabled so Electric can
 create replication slots and consume Postgres WAL changes on every child
 branch.
 
-Electric stores shape logs and metadata on a filesystem that must survive sync
-service restarts. Cloudflare Container disks are ephemeral, so the Alchemy stack
-provisions a stage-scoped R2 bucket for Electric storage. In local
-`alchemy dev` stages, the stack also mints a bucket-scoped R2 API token so the
-storage path is ready, but it does not create the Cloudflare Container
+Electric stores shape logs and metadata under the Cloudflare Container's
+writable filesystem at `/var/lib/electric`. Cloudflare Container disk can be
+recreated, so restarts may force Electric to rebuild shape state from Postgres
+instead of resuming from a durable object-store mount. This is intentional: the
+Cloudflare Containers runtime does not expose a usable FUSE device for the
+previous R2-over-FUSE design, and blocking startup on that mount prevents sync
+from serving any shapes. Local `alchemy dev` stages still run the sync Worker
+against the stage Neon branch, but they do not create the Cloudflare Container
 application. Alchemy local Workers run in workerd with local Durable Object
 namespaces, and the cloud Containers API can only attach a container to a cloud
 Durable Object namespace. In deployed stages, including pull-request previews
-and ephemeral push-to-main cloud E2E stages, the app stack creates a
-bucket-scoped Cloudflare account API token for the stage Electric R2 bucket.
-Production, preview, and ephemeral CI therefore provision the Electric
-Container and stage-scoped R2 bucket without GitHub-provided Electric storage
-secrets, but the Cloudflare credential running the app stack must be able to
-manage account API tokens. During full Electric reconciliation, the app stack
-passes the R2 credentials, stage Neon connection URL, and generated Electric
-source secret into the Sync Worker as secrets. The `ElectricSql` Durable Object
-passes those values to the Cloudflare Container as startup environment
-variables, so the Containers application configuration does not need
-account-secret references. `ElectricSql` must remain
+and ephemeral push-to-main cloud E2E stages, the app stack provisions the
+Electric Container and passes only the stage Neon connection URL plus generated
+Electric source secret into the Sync Worker as secrets. The `ElectricSql`
+Durable Object passes those values to the Cloudflare Container as startup
+environment variables, so the Containers application configuration does not
+need account-secret references. `ElectricSql` must remain
 an exported `cloudflare:workers` `DurableObject` subclass whose class name
 matches the Alchemy container `className`; Cloudflare validates that class as
 the container-enabled Durable Object when the Containers application is
 attached.
 
-The token id is exposed to the container as `AWS_ACCESS_KEY_ID`; the SHA-256
-hash of the token value is exposed as `AWS_SECRET_ACCESS_KEY`, which matches
-Cloudflare R2's S3 credential derivation. The container mounts the R2 bucket at
-`/var/lib/electric` with TigrisFS, verifies the mountpoint is active and
-writable before starting Electric, and runs with `ELECTRIC_STORAGE=fast_file`,
-`ELECTRIC_PERSISTENT_STATE=file`, and `ELECTRIC_STORAGE_DIR=/var/lib/electric`.
-It also sets
-`ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true` so Electric's active-shape SQLite
-database is configured for the R2-backed network filesystem. The sync Worker
-resolves the singleton `ElectricSql` Durable Object with a stage-derived
-`locationHint` based on the Neon region so the container is placed near the
-database.
-
-The durability tradeoff is now explicit: restarts and reschedules rebuild a
-fresh Container VM, but Electric's shape storage is backed by R2. R2-over-FUSE
-does not behave like local SSD storage, so stage rollout should include sync
-latency and restart-resume checks before raising traffic or shape count.
+The container runs with `CEIRD_ELECTRIC_STORAGE_BACKEND=local`,
+`ELECTRIC_STORAGE=fast_file`, `ELECTRIC_PERSISTENT_STATE=file`, and
+`ELECTRIC_STORAGE_DIR=/var/lib/electric`. It also sets
+`ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true` for the single Electric writer process.
+The sync Worker resolves the singleton `ElectricSql` Durable Object with a
+stage-derived `locationHint` based on the Neon region so the container is
+placed near the database. The durability tradeoff is now explicit: restart and
+reschedule evidence should watch shape warmup/catch-up latency, but startup
+must not depend on provider-specific filesystem mounts.
 
 Sync is domain-layer only. Better Auth tables, sessions, accounts, rate limits,
 organizations, members, and invitations are not exposed as Electric shapes.
@@ -374,7 +364,7 @@ is time-sensitive and must be refreshed for each public shape request. Active
 membership invalidation is intentionally out of scope for v1, so revocation
 exposure is bounded by the short TTL.
 Pull-request previews and ephemeral push-to-main cloud E2E now provision the
-full Worker, Durable Object, Container, R2, and Neon path. Their deploy
+full Worker, Durable Object, Electric Container, and Neon path. Their deploy
 workflows run an authenticated sync canary through `PLAYWRIGHT_SYNC_URL` after
 reading the stage database URL from Alchemy state: the canary verifies a
 throwaway user, creates and activates a stage-local organization, then requests

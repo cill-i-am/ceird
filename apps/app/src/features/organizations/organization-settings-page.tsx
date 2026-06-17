@@ -516,12 +516,13 @@ export function OrganizationSettingsPage({
             </form.Subscribe>
 
             {successMessage ? (
-              <output
-                aria-live="polite"
+              <div
                 className="text-sm text-muted-foreground"
+                role="status"
+                aria-live="polite"
               >
                 {successMessage}
-              </output>
+              </div>
             ) : null}
 
             <form.Subscribe

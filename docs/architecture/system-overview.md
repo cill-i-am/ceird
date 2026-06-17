@@ -24,7 +24,7 @@ browser sync clients
   -> apps/sync Electric SQL adapter at sync.<stage>.ceird.app
   -> apps/domain private sync authorization through DOMAIN service binding
   -> Electric SQL in a Cloudflare Container
-  -> R2-backed FUSE storage for Electric shape logs
+  -> local container storage for Electric shape logs
   -> Neon Postgres
 
 apps/app server-side helpers
@@ -54,10 +54,10 @@ apps/api, apps/mcp, apps/agent, and apps/sync Cloudflare Workers
 ```
 
 Local development and production deployment both use the root Alchemy stack.
-Alchemy provisions Cloudflare Workers/Vite, Cloudflare Containers, R2,
-Hyperdrive, queues, routes, and stage-scoped Neon branches. The app and API health
-endpoints expose the resolved Alchemy stack and stage identity so a running
-Worker can be tied back to the stage that produced it.
+Alchemy provisions Cloudflare Workers/Vite, the Electric Cloudflare Container,
+Hyperdrive, queues, routes, and stage-scoped Neon branches. The app and API
+health endpoints expose the resolved Alchemy stack and stage identity so a
+running Worker can be tied back to the stage that produced it.
 
 ## Monorepo Ownership
 
