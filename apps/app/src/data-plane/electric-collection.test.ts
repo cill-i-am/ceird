@@ -270,7 +270,7 @@ describe("Ceird Electric collection factory", () => {
     );
     expect(shapeOptions.subscribe).toBeTruthy();
     expect(shapeOptions.liveSse).toBeTruthy();
-    expect(shapeOptions.params).toStrictEqual({ replica: "full" });
+    expect(shapeOptions.params).toStrictEqual({});
     expect(shapeOptions.columnMapper?.decode("created_at")).toBe("createdAt");
     expect(shapeOptions.columnMapper?.encode("createdAt")).toBe("created_at");
 
@@ -297,13 +297,22 @@ describe("Ceird Electric collection factory", () => {
     );
   });
 
-  it("lets callers override the default full replica row mode", () => {
+  it("does not request full replica rows by default", () => {
+    const shapeOptions = createElectricShapeOptions(testContract, {
+      fetch: makeTestFetch(new Response("ok")),
+      shapeUrl: "https://sync.codex.ceird.localhost/v1/shapes/labels",
+    });
+
+    expect(shapeOptions.params).toStrictEqual({});
+  });
+
+  it("lets callers opt into full replica row mode", () => {
     const shapeOptions = createElectricShapeOptions(
       defineElectricCollectionContract({
         ...testContract,
         shapeOptions: {
           params: {
-            replica: "default",
+            replica: "full",
           },
         },
       }),
@@ -313,7 +322,7 @@ describe("Ceird Electric collection factory", () => {
       }
     );
 
-    expect(shapeOptions.params).toStrictEqual({ replica: "default" });
+    expect(shapeOptions.params).toStrictEqual({ replica: "full" });
   });
 
   it("rejects caller-controlled trusted Electric source params", () => {
