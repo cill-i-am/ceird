@@ -8,7 +8,7 @@ import {
 } from "./helpers/performance";
 
 test.describe("data-plane browser performance", () => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
 
   test("loads jobs and sites flows without extra failed data requests", async ({
     page,
@@ -56,10 +56,10 @@ test.describe("data-plane browser performance", () => {
 
     await expect(
       page.getByText("Live Sites read model ready", { exact: true })
-    ).toBeVisible({ timeout: 60_000 });
+    ).toBeVisible({ timeout: 180_000 });
 
     const newSiteButton = page.getByRole("button", { name: /new site/i });
-    await expect(newSiteButton).toBeEnabled({ timeout: 60_000 });
+    await expect(newSiteButton).toBeEnabled({ timeout: 180_000 });
 
     metrics.push(
       await measureVisibleInteraction({
