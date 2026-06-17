@@ -53,7 +53,14 @@ async function openSettingsFromAccountMenu(page: Page) {
   await page
     .getByRole("menuitem", { name: "Organization settings" })
     .click({ timeout: AUTHENTICATED_HOME_TIMEOUT_MS });
-  await expect(page).toHaveURL(/\/organization\/settings$/);
+  await expect(page).toHaveURL(/\/organization\/settings$/, {
+    timeout: AUTHENTICATED_HOME_TIMEOUT_MS,
+  });
+  await expect(
+    page.getByRole("heading", { name: "Organization settings" })
+  ).toBeVisible({
+    timeout: AUTHENTICATED_HOME_TIMEOUT_MS,
+  });
 }
 
 async function signUpAndCreateOrganization(
@@ -102,9 +109,6 @@ test("an organization admin can update the organization name from account settin
   });
 
   await openSettingsFromAccountMenu(page);
-  await expect(
-    page.getByRole("heading", { name: "Organization settings" })
-  ).toBeVisible();
   await expect(page.getByLabel("Organization name")).toHaveValue(
     initialOrganizationName
   );
@@ -145,9 +149,6 @@ test("an organization admin can manage job labels from account settings", async 
   });
 
   await openSettingsFromAccountMenu(page);
-  await expect(
-    page.getByRole("heading", { name: "Organization settings" })
-  ).toBeVisible();
   await expect(page.getByText("No labels yet.")).toBeVisible();
 
   await page.getByLabel("New label name").fill(labelName);
