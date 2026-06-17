@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import { OrganizationId, UserId } from "@ceird/identity-core";
-import { LabelNotFoundError, LabelSchema } from "@ceird/labels-core";
+import {
+  LabelAccessDeniedError,
+  LabelNotFoundError,
+  LabelSchema,
+} from "@ceird/labels-core";
 import type { Label } from "@ceird/labels-core";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Option, Schema } from "effect";
@@ -18,9 +22,15 @@ import {
   createTestDatabase,
   withPool,
 } from "../../platform/database/test-database.js";
+import {
+  ActivityEventsRepository,
+  ProductActivityActorsRepository,
+} from "../activity/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
+import { OrganizationAuthorizationDeniedError } from "../organizations/errors.js";
+import { LabelActivityRecorder } from "./activity-recorder.js";
 import { LabelsRepository } from "./repositories.js";
 import { LabelsService } from "./service.js";
 
@@ -86,6 +96,8 @@ describe("LabelsService", () => {
   });
 
   it("keeps label not-found failures visible instead of returning confirmation", async () => {
+    const activityCalls: string[] = [];
+
     await expect(
       runLabelsServiceEffect(
         Effect.gen(function* () {
@@ -95,9 +107,93 @@ describe("LabelsService", () => {
         }),
         {
           update: () => Effect.succeed(Option.none()),
+        },
+        {
+          activityRecorder: {
+            recordUpdated: () => {
+              activityCalls.push("updated");
+              return Effect.void;
+            },
+          },
         }
       )
     ).rejects.toBeInstanceOf(LabelNotFoundError);
+    expect(activityCalls).toStrictEqual([]);
+  });
+
+  it("records label activity only after successful label writes", async () => {
+    const activityCalls: string[] = [];
+
+    await runLabelsServiceEffect(
+      Effect.gen(function* () {
+        const labels = yield* LabelsService;
+
+        yield* labels.create({ name: label.name });
+        yield* labels.update(label.id, { name: updatedLabel.name });
+        yield* labels.archive(label.id);
+      }),
+      {
+        archive: () => Effect.succeed(Option.some(label)),
+        create: () => Effect.succeed(label),
+        update: () => Effect.succeed(Option.some(updatedLabel)),
+      },
+      {
+        activityRecorder: {
+          recordArchived: (_actor, recordedLabel) => {
+            activityCalls.push(`archived:${recordedLabel.name}`);
+            return Effect.void;
+          },
+          recordCreated: (_actor, recordedLabel) => {
+            activityCalls.push(`created:${recordedLabel.name}`);
+            return Effect.void;
+          },
+          recordUpdated: (_actor, recordedLabel) => {
+            activityCalls.push(`updated:${recordedLabel.name}`);
+            return Effect.void;
+          },
+        },
+      }
+    );
+
+    expect(activityCalls).toStrictEqual([
+      "created:Plumbing",
+      "updated:Electrical",
+      "archived:Plumbing",
+    ]);
+  });
+
+  it("does not record label activity when authorization rejects the write", async () => {
+    const activityCalls: string[] = [];
+
+    await expect(
+      runLabelsServiceEffect(
+        Effect.gen(function* () {
+          const labels = yield* LabelsService;
+
+          return yield* labels.create({ name: label.name });
+        }),
+        {
+          create: () => Effect.succeed(label),
+        },
+        {
+          activityRecorder: {
+            recordCreated: () => {
+              activityCalls.push("created");
+              return Effect.void;
+            },
+          },
+          authorization: {
+            ensureCanManageLabels: () =>
+              Effect.fail(
+                new OrganizationAuthorizationDeniedError({
+                  message: "Labels are owner-managed",
+                })
+              ),
+          },
+        }
+      )
+    ).rejects.toBeInstanceOf(LabelAccessDeniedError);
+    expect(activityCalls).toStrictEqual([]);
   });
 
   it("returns txids from the same DomainDrizzle transaction as label write rows", async (context: {
@@ -137,6 +233,12 @@ describe("LabelsService", () => {
         id: organizationId,
         name: "Labels Txid",
       });
+      await seedMember(pool, {
+        email: "labels-txid@example.com",
+        name: "Labels Txid Owner",
+        organizationId,
+        userId,
+      });
     });
 
     const result = await runLabelsServiceIntegrationEffect(
@@ -168,6 +270,105 @@ describe("LabelsService", () => {
     expect(result.updated.mutation.txid).toBe(result.updatedXmin);
     expect(result.archived.mutation.txid).toBe(result.archivedXmin);
   });
+
+  it("persists product-safe activity rows for label create, rename, and archive", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "labels_service_activity",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Postgres integration database unavailable; skipping selected label activity coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    const organizationId =
+      Schema.decodeUnknownSync(OrganizationId)(randomUUID());
+    const userId = Schema.decodeUnknownSync(UserId)(
+      `labels_activity_${Date.now()}`
+    );
+    const integrationActor = {
+      organizationId,
+      role: "owner",
+      userId,
+    } satisfies OrganizationActor;
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Labels Activity",
+      });
+      await seedMember(pool, {
+        email: "labels-activity@example.com",
+        name: "Activity Owner",
+        organizationId,
+        userId,
+      });
+    });
+
+    const result = await runLabelsServiceIntegrationEffect(
+      testDatabase.url,
+      integrationActor,
+      Effect.gen(function* () {
+        const labels = yield* LabelsService;
+        const activityEvents = yield* ActivityEventsRepository;
+
+        const created = yield* labels.create({ name: "Planning" });
+        const updated = yield* labels.update(created.label.id, {
+          name: "Procurement",
+        });
+        const archived = yield* labels.archive(created.label.id);
+        const events = yield* activityEvents.listRecent(organizationId);
+
+        return {
+          archived,
+          created,
+          events,
+          updated,
+        };
+      })
+    );
+
+    expect(result.events.map((event) => event.eventType)).toStrictEqual([
+      "label.archived",
+      "label.updated",
+      "label.created",
+    ]);
+    expect(result.events.map((event) => event.targetType)).toStrictEqual([
+      "label",
+      "label",
+      "label",
+    ]);
+    expect(result.events.map((event) => event.targetId)).toStrictEqual([
+      result.archived.label.id,
+      result.updated.label.id,
+      result.created.label.id,
+    ]);
+    expect(result.events.map((event) => event.display.route)).toStrictEqual([
+      {
+        href: "/organization/settings/labels",
+        label: "Procurement",
+      },
+      {
+        href: "/organization/settings/labels",
+        label: "Procurement",
+      },
+      {
+        href: "/organization/settings/labels",
+        label: "Planning",
+      },
+    ]);
+  });
 });
 
 function decodeLabel(input: unknown): Label {
@@ -176,7 +377,15 @@ function decodeLabel(input: unknown): Label {
 
 async function runLabelsServiceEffect<Value, Error, Requirements>(
   effect: Effect.Effect<Value, Error, Requirements>,
-  repository: Partial<ContextService<typeof LabelsRepository>>
+  repository: Partial<ContextService<typeof LabelsRepository>>,
+  options: {
+    readonly activityRecorder?: Partial<
+      ContextService<typeof LabelActivityRecorder>
+    >;
+    readonly authorization?: Partial<
+      ContextService<typeof OrganizationAuthorization>
+    >;
+  } = {}
 ): Promise<Value> {
   let nextTxid = 700;
 
@@ -191,7 +400,28 @@ async function runLabelsServiceEffect<Value, Error, Requirements>(
               get: () => Effect.succeed(actor),
             })
           ),
-          OrganizationAuthorization.Default,
+          Layer.succeed(
+            LabelActivityRecorder,
+            LabelActivityRecorder.of({
+              recordArchived:
+                options.activityRecorder?.recordArchived ?? (() => Effect.void),
+              recordCreated:
+                options.activityRecorder?.recordCreated ?? (() => Effect.void),
+              recordUpdated:
+                options.activityRecorder?.recordUpdated ?? (() => Effect.void),
+            } as unknown as ContextService<typeof LabelActivityRecorder>)
+          ),
+          Layer.succeed(
+            OrganizationAuthorization,
+            OrganizationAuthorization.of({
+              ensureCanCreateSite: () => Effect.void,
+              ensureCanManageConfiguration: () => Effect.void,
+              ensureCanManageLabels: () => Effect.void,
+              ensureCanViewOrganizationData: () => Effect.void,
+              ensureCanViewOrganizationSecurityActivity: () => Effect.void,
+              ...options.authorization,
+            } as unknown as ContextService<typeof OrganizationAuthorization>)
+          ),
           Layer.succeed(
             SqlClient.SqlClient,
             makeFakeSqlClient(() => {
@@ -253,6 +483,9 @@ async function runLabelsServiceIntegrationEffect<Value, Error, Requirements>(
     Effect.scoped(
       effect.pipe(
         Effect.provide(LabelsService.DefaultWithoutDependencies),
+        Effect.provide(LabelActivityRecorder.Default),
+        Effect.provide(ActivityEventsRepository.Default),
+        Effect.provide(ProductActivityActorsRepository.Default),
         Effect.provide(LabelsRepository.Default),
         Effect.provide(OrganizationAuthorization.Default),
         Effect.provide(
@@ -268,6 +501,27 @@ async function runLabelsServiceIntegrationEffect<Value, Error, Requirements>(
         )
       ) as Effect.Effect<Value, Error, never>
     )
+  );
+}
+
+async function seedMember(
+  pool: Pool,
+  input: {
+    readonly email: string;
+    readonly name: string;
+    readonly organizationId: string;
+    readonly userId: string;
+  }
+) {
+  await pool.query(
+    `insert into "user" (id, name, email, email_verified, two_factor_enabled, created_at, updated_at)
+     values ($1, $2, $3, false, false, now(), now())`,
+    [input.userId, input.name, input.email]
+  );
+  await pool.query(
+    `insert into member (id, organization_id, user_id, role, created_at)
+     values ($1, $2, $3, 'owner', now())`,
+    [randomUUID(), input.organizationId, input.userId]
   );
 }
 

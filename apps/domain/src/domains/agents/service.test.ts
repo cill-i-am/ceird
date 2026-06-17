@@ -21,6 +21,7 @@ import {
   UserPreferencesStorageError,
 } from "@ceird/identity-core";
 import { SiteId, SiteOptionSchema } from "@ceird/sites-core";
+import type { Label } from "@ceird/labels-core";
 import { describe, expect, it } from "@effect/vitest";
 import { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Cause, Effect, Exit, Layer, Option, Schema } from "effect";
@@ -47,6 +48,7 @@ import {
   JobLabelAssignmentsRepository,
   JobsRepository,
 } from "../jobs/repositories.js";
+import { LabelActivityRecorder } from "../labels/activity-recorder.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -1360,6 +1362,46 @@ describe("agent threads service", () => {
     ]);
   });
 
+  it("records label activity for agent-triggered label writes", async () => {
+    const createdLabel = {
+      createdAt: "2026-05-20T10:00:00.000Z",
+      id: "33333333-3333-4333-8333-333333333333",
+      name: "Plumbing",
+      updatedAt: "2026-05-20T10:00:00.000Z",
+    } as Label;
+    const activityCalls: string[] = [];
+
+    const response = await Effect.runPromise(
+      runAgentActions(
+        Effect.gen(function* () {
+          const actions = yield* AgentActions;
+
+          return yield* actions.execute(actor, "ceird.labels.create", {
+            name: "Plumbing",
+          });
+        }),
+        {
+          labelActivityRecorder: {
+            recordCreated: (recordingActor, label) =>
+              Effect.sync(() => {
+                activityCalls.push(
+                  `${recordingActor.userId}:${label.id}:${label.name}`
+                );
+              }),
+          },
+          labelsRepository: {
+            create: () => Effect.succeed(createdLabel),
+          },
+        }
+      )
+    );
+
+    expect(response).toBe(createdLabel);
+    expect(activityCalls).toStrictEqual([
+      "user_123:33333333-3333-4333-8333-333333333333:Plumbing",
+    ]);
+  });
+
   it("validates internal current-location access for an enabled thread owner", async () => {
     const response = await Effect.runPromise(
       runAgentThreadsService(
@@ -1716,6 +1758,17 @@ function makeAgentActionsTestLayer(options: AgentActionsTestOptions) {
     ),
     Layer.succeed(JobsRepository, {} as ContextService<typeof JobsRepository>),
     Layer.succeed(
+      LabelActivityRecorder,
+      LabelActivityRecorder.of({
+        recordArchived:
+          options.labelActivityRecorder?.recordArchived ?? (() => Effect.void),
+        recordCreated:
+          options.labelActivityRecorder?.recordCreated ?? (() => Effect.void),
+        recordUpdated:
+          options.labelActivityRecorder?.recordUpdated ?? (() => Effect.void),
+      } as unknown as ContextService<typeof LabelActivityRecorder>)
+    ),
+    Layer.succeed(
       LabelsRepository,
       LabelsRepository.of({
         create: () => Effect.die("Unexpected LabelsRepository.create"),
@@ -1838,6 +1891,9 @@ interface AgentThreadsServiceTestOptions {
 interface AgentActionsTestOptions {
   readonly activityEventsRepository?: Partial<
     ContextService<typeof ActivityEventsRepository>
+  >;
+  readonly labelActivityRecorder?: Partial<
+    ContextService<typeof LabelActivityRecorder>
   >;
   readonly labelsRepository?: Partial<ContextService<typeof LabelsRepository>>;
   readonly organizationAuthorization?: Partial<

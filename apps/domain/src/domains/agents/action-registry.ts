@@ -13,6 +13,7 @@ import type { SqlClient } from "effect/unstable/sql";
 
 import type { DomainDrizzleService } from "../../platform/database/database.js";
 import { JobsService } from "../jobs/service.js";
+import { LabelActivityRecorder } from "../labels/activity-recorder.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
@@ -21,6 +22,7 @@ import { SitesService } from "../sites/service.js";
 
 type DomainAgentActionRequirements =
   | LabelsRepository
+  | LabelActivityRecorder
   | OrganizationAuthorization
   | SitesRepository
   | JobsService
@@ -66,14 +68,18 @@ const domainAgentActions = [
       Effect.gen(function* () {
         const payload = yield* decodeActionInput("ceird.labels.create", input);
         const labelsRepository = yield* LabelsRepository;
+        const labelActivityRecorder = yield* LabelActivityRecorder;
         const organizationAuthorization = yield* OrganizationAuthorization;
 
         yield* organizationAuthorization.ensureCanManageLabels(actor);
 
-        return yield* labelsRepository.create({
+        const label = yield* labelsRepository.create({
           name: payload.name,
           organizationId: actor.organizationId,
         });
+        yield* labelActivityRecorder.recordCreated(actor, label);
+
+        return label;
       }),
   }),
   defineDomainAgentAction({
@@ -82,6 +88,7 @@ const domainAgentActions = [
       Effect.gen(function* () {
         const payload = yield* decodeActionInput("ceird.labels.update", input);
         const labelsRepository = yield* LabelsRepository;
+        const labelActivityRecorder = yield* LabelActivityRecorder;
         const organizationAuthorization = yield* OrganizationAuthorization;
 
         yield* organizationAuthorization.ensureCanManageLabels(actor);
@@ -101,6 +108,8 @@ const domainAgentActions = [
           );
         }
 
+        yield* labelActivityRecorder.recordUpdated(actor, label);
+
         return label;
       }),
   }),
@@ -110,6 +119,7 @@ const domainAgentActions = [
       Effect.gen(function* () {
         const payload = yield* decodeActionInput("ceird.labels.delete", input);
         const labelsRepository = yield* LabelsRepository;
+        const labelActivityRecorder = yield* LabelActivityRecorder;
         const organizationAuthorization = yield* OrganizationAuthorization;
 
         yield* organizationAuthorization.ensureCanManageLabels(actor);
@@ -126,6 +136,8 @@ const domainAgentActions = [
             })
           );
         }
+
+        yield* labelActivityRecorder.recordArchived(actor, label);
 
         return label;
       }),

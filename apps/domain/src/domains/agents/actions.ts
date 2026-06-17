@@ -61,6 +61,7 @@ import {
   JobsRepository,
 } from "../jobs/repositories.js";
 import { JobsService } from "../jobs/service.js";
+import { LabelActivityRecorder } from "../labels/activity-recorder.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -128,6 +129,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
       const jobsActivityRecorder = yield* JobsActivityRecorder;
       const jobsAuthorization = yield* JobsAuthorization;
       const jobsRepository = yield* JobsRepository;
+      const labelActivityRecorder = yield* LabelActivityRecorder;
       const labelsRepository = yield* LabelsRepository;
       const organizationAuthorization = yield* OrganizationAuthorization;
       const productActivityActorsRepository =
@@ -168,6 +170,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
                   jobsActivityRecorder,
                   jobsAuthorization,
                   jobsRepository,
+                  labelActivityRecorder,
                   labelsRepository,
                   organizationAuthorization,
                   productActivityActorsRepository,
@@ -206,6 +209,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
         JobsActivityRecorder.Default,
         JobsAuthorization.Default,
         JobsRepository.Default,
+        LabelActivityRecorder.Default,
         LabelsRepository.Default,
         OrganizationAuthorization.Default,
         ProductActivityActorsRepository.Default,
@@ -254,6 +258,9 @@ interface JobsServiceLayerDependencies {
   >;
   readonly jobsAuthorization: Context.Service.Shape<typeof JobsAuthorization>;
   readonly jobsRepository: Context.Service.Shape<typeof JobsRepository>;
+  readonly labelActivityRecorder: Context.Service.Shape<
+    typeof LabelActivityRecorder
+  >;
   readonly labelsRepository: Context.Service.Shape<typeof LabelsRepository>;
   readonly routeProximityService?: Context.Service.Shape<
     typeof RouteProximityService
@@ -270,6 +277,7 @@ interface AgentActionExecutionContext {
 }
 
 type AgentActionRequirements =
+  | LabelActivityRecorder
   | LabelsRepository
   | OrganizationAuthorization
   | SitesRepository
@@ -285,6 +293,7 @@ type DirectAgentActionRequirements =
   | JobsActivityRecorder
   | JobsAuthorization
   | JobsRepository
+  | LabelActivityRecorder
   | LabelsRepository
   | OrganizationAuthorization
   | SiteLabelAssignmentsRepository
@@ -369,6 +378,10 @@ function provideDirectActionServices(
     ),
     Effect.provideService(JobsAuthorization, dependencies.jobsAuthorization),
     Effect.provideService(JobsRepository, dependencies.jobsRepository),
+    Effect.provideService(
+      LabelActivityRecorder,
+      dependencies.labelActivityRecorder
+    ),
     Effect.provideService(LabelsRepository, dependencies.labelsRepository),
     Effect.provideService(DomainDrizzle, dependencies.domainDrizzle),
     Effect.provideService(SqlClient.SqlClient, dependencies.sqlClient),
