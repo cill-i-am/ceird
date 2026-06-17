@@ -135,8 +135,8 @@ type JobsElectricRowValue =
   | null
   | number
   | string
-  | readonly JobsElectricRowValue[]
-  | { readonly [key: string]: JobsElectricRowValue };
+  | JobsElectricRowValue[]
+  | { [key: string]: JobsElectricRowValue };
 type JobsElectricRow = Record<string, JobsElectricRowValue>;
 
 interface JobsWorkspaceObservableCollection<Item> {
@@ -1462,17 +1462,23 @@ export function createJobsWorkspaceReadModelHealth({
       snapshots: healthSources.map((health) => health.current),
       subscriptionName,
     });
+  let snapshot = computeCurrent();
+  const refreshSnapshot = () => {
+    snapshot = computeCurrent();
+    return snapshot;
+  };
 
   return {
     get current() {
-      return computeCurrent();
+      return snapshot;
     },
-    markFallbackActive: () => computeCurrent(),
-    markReady: () => computeCurrent(),
-    markUnavailable: () => computeCurrent(),
+    markFallbackActive: () => refreshSnapshot(),
+    markReady: () => refreshSnapshot(),
+    markRetrying: () => refreshSnapshot(),
+    markUnavailable: () => refreshSnapshot(),
     subscribe: (listener) => {
       const unsubscribes = healthSources.map((health) =>
-        health.subscribe(() => listener(computeCurrent()))
+        health.subscribe(() => listener(refreshSnapshot()))
       );
 
       return () => {
@@ -1548,7 +1554,13 @@ export function aggregateJobsWorkspaceReadModelHealth({
 function getJobsWorkspaceReadModelHealthStatus(
   snapshots: readonly DataPlaneCollectionHealthSnapshot[]
 ): DataPlaneCollectionHealthStatus {
-  if (snapshots.some((snapshot) => snapshot.status === "unavailable")) {
+  if (
+    snapshots.some(
+      (snapshot) =>
+        snapshot.status === "unavailable" &&
+        snapshot.lastError?.retryable !== true
+    )
+  ) {
     return "unavailable";
   }
 
@@ -2058,7 +2070,7 @@ export function createJobsWorkspaceJobsElectricContract(
     schema: Schema.toStandardSchemaV1(JobsWorkspaceJobRowSchema),
     shapeName: "jobs",
     shapeOptions: {
-      transformer: toJobsWorkspaceJobRow,
+      transformer: toJobsWorkspaceJobElectricRow,
     },
   });
 }
@@ -2597,49 +2609,119 @@ function createJobsCollection({
   );
 }
 
-function toJobListItemElectricRow(row: Record<string, unknown>) {
-  const item: JobsElectricRow = {
-    createdAt: String(row.createdAt),
-    id: String(row.id),
-    kind: String(row.kind),
-    labels: [],
-    priority: String(row.priority),
-    status: String(row.status),
-    title: String(row.title),
-    updatedAt: String(row.updatedAt),
-  };
+export function toJobListItemElectricRow(
+  row: Record<string, unknown>
+): JobsElectricRow {
+  const item = toPartialJobElectricRow(row, [
+    "assigneeId",
+    "contactId",
+    "coordinatorId",
+    "id",
+    "kind",
+    "priority",
+    "siteId",
+    "status",
+    "title",
+  ]);
 
-  addOptionalString(item, "assigneeId", row.assigneeId);
-  addOptionalString(item, "contactId", row.contactId);
-  addOptionalString(item, "coordinatorId", row.coordinatorId);
-  addOptionalString(item, "siteId", row.siteId);
+  if (hasEveryPresent(row, JOB_LIST_ITEM_REQUIRED_ELECTRIC_FIELDS)) {
+    item.labels = [];
+  }
 
   return item;
+}
+
+export function toJobsWorkspaceJobElectricRow(
+  row: Record<string, unknown>
+): JobsWorkspaceJobRow | JobsElectricRow {
+  if (!hasEveryPresent(row, JOBS_WORKSPACE_JOB_REQUIRED_ELECTRIC_FIELDS)) {
+    return toPartialJobElectricRow(row, [
+      "assigneeId",
+      "blockedReason",
+      "completedByUserId",
+      "contactId",
+      "coordinatorId",
+      "createdByUserId",
+      "id",
+      "kind",
+      "priority",
+      "siteId",
+      "status",
+      "title",
+    ]);
+  }
+
+  return toJobsWorkspaceJobRow(row);
 }
 
 export function toJobsWorkspaceJobRow(
   row: Record<string, unknown>
 ): JobsWorkspaceJobRow {
   const item: JobsElectricRow = {
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     createdByUserId: String(row.createdByUserId),
     id: String(row.id),
     kind: String(row.kind),
     priority: String(row.priority),
     status: String(row.status),
     title: String(row.title),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   };
 
   addOptionalString(item, "assigneeId", row.assigneeId);
   addOptionalString(item, "blockedReason", row.blockedReason);
-  addOptionalString(item, "completedAt", row.completedAt);
+  addOptionalDateTime(item, "completedAt", row.completedAt);
   addOptionalString(item, "completedByUserId", row.completedByUserId);
   addOptionalString(item, "contactId", row.contactId);
   addOptionalString(item, "coordinatorId", row.coordinatorId);
   addOptionalString(item, "siteId", row.siteId);
 
   return Schema.decodeUnknownSync(JobsWorkspaceJobRowSchema)(item);
+}
+
+const JOB_LIST_ITEM_REQUIRED_ELECTRIC_FIELDS = [
+  "createdAt",
+  "id",
+  "kind",
+  "priority",
+  "status",
+  "title",
+  "updatedAt",
+] as const;
+
+const JOBS_WORKSPACE_JOB_REQUIRED_ELECTRIC_FIELDS = [
+  "createdAt",
+  "createdByUserId",
+  "id",
+  "kind",
+  "priority",
+  "status",
+  "title",
+  "updatedAt",
+] as const;
+
+function hasEveryPresent(
+  row: Record<string, unknown>,
+  keys: readonly string[]
+) {
+  return keys.every((key) => row[key] !== null && row[key] !== undefined);
+}
+
+function toPartialJobElectricRow(
+  row: Record<string, unknown>,
+  stringKeys: readonly string[]
+) {
+  const item: JobsElectricRow = {};
+
+  addOptionalDateTime(item, "createdAt", row.createdAt);
+  addOptionalDateTime(item, "completedAt", row.completedAt);
+  addOptionalDateTime(item, "updatedAt", row.updatedAt);
+
+  for (const key of stringKeys) {
+    addOptionalString(item, key, row[key]);
+  }
+
+  return item;
 }
 
 export function toJobLabelAssignmentRow(
@@ -2649,7 +2731,7 @@ export function toJobLabelAssignmentRow(
   const labelId = String(row.labelId);
 
   return Schema.decodeUnknownSync(JobLabelAssignmentRowSchema)({
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     id: `${workItemId}:${labelId}`,
     labelId,
     workItemId,
@@ -2669,7 +2751,7 @@ export function toJobSiteSummaryRow(
     id: String(row.id),
     locationStatus: String(row.locationStatus),
     name: String(row.name),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   };
 
   addOptionalString(item, "accessNotes", row.accessNotes);
@@ -2687,7 +2769,7 @@ export function toJobContactSummaryRow(
   const item: JobsElectricRow = {
     id: String(row.id),
     name: String(row.name),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   };
 
   addOptionalString(item, "email", row.email);
@@ -2699,10 +2781,10 @@ export function toJobContactSummaryRow(
 
 export function toJobsWorkspaceLabelRow(row: Record<string, unknown>): Label {
   return Schema.decodeUnknownSync(LabelSchema)({
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     id: String(row.id),
     name: String(row.name),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   });
 }
 
@@ -2711,11 +2793,11 @@ export function toJobCollaboratorElectricRow(
 ): JobCollaborator {
   const item: JobsElectricRow = {
     accessLevel: String(row.accessLevel),
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     id: String(row.id),
     roleLabel: String(row.roleLabel),
     subjectType: String(row.subjectType),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
     workItemId: String(row.workItemId),
   };
 
@@ -2728,7 +2810,7 @@ export function toJobActivityElectricRow(
   row: Record<string, unknown>
 ): JobsWorkspaceActivityRow {
   const item: JobsElectricRow = {
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     eventType: String(row.eventType),
     id: String(row.id),
     payload: parseJsonColumn(row.payload) as JobsElectricRowValue,
@@ -2746,7 +2828,7 @@ export function toJobVisitElectricRow(
 ): Schema.Schema.Type<typeof JobVisitSchema> {
   return Schema.decodeUnknownSync(JobVisitSchema)({
     authorUserId: String(row.authorUserId),
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     durationMinutes: Number(row.durationMinutes),
     id: String(row.id),
     note: String(row.note),
@@ -2763,7 +2845,7 @@ export function toJobCommentEdgeRow(
 
   return Schema.decodeUnknownSync(JobCommentEdgeRowSchema)({
     commentId,
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     id: `${workItemId}:${commentId}`,
     workItemId,
   });
@@ -2775,17 +2857,31 @@ export function toJobCommentElectricRow(
   const item: JobsElectricRow = {
     actorId: String(row.actorId),
     body: String(row.body),
-    createdAt: String(row.createdAt),
+    createdAt: normalizeJobsElectricDateTime(row.createdAt),
     id: String(row.id),
-    updatedAt: String(row.updatedAt),
+    updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   };
 
   return Schema.decodeUnknownSync(JobsWorkspaceCommentRowSchema)(item);
 }
 
 export function toProductActivityActorElectricRow(
+  row: Record<string, unknown> & {
+    readonly displayName: unknown;
+    readonly id: unknown;
+    readonly kind: unknown;
+  }
+): JobsWorkspaceProductActorRow;
+export function toProductActivityActorElectricRow(
   row: Record<string, unknown>
-): JobsWorkspaceProductActorRow {
+): JobsWorkspaceProductActorRow | JobsElectricRow;
+export function toProductActivityActorElectricRow(
+  row: Record<string, unknown>
+): JobsWorkspaceProductActorRow | JobsElectricRow {
+  if (!hasEveryPresent(row, PRODUCT_ACTIVITY_ACTOR_REQUIRED_ELECTRIC_FIELDS)) {
+    return toPartialProductActivityActorElectricRow(row);
+  }
+
   const item: JobsElectricRow = {
     displayName: String(row.displayName),
     id: String(row.id),
@@ -2810,8 +2906,22 @@ export function toProductActivityActorElectricRow(
 }
 
 export function toProductMemberActorSummaryElectricRow(
+  row: Record<string, unknown> & {
+    readonly actorId: unknown;
+    readonly displayName: unknown;
+    readonly userId: unknown;
+  }
+): JobsWorkspaceMemberActorSummaryRow;
+export function toProductMemberActorSummaryElectricRow(
   row: Record<string, unknown>
-): JobsWorkspaceMemberActorSummaryRow {
+): JobsWorkspaceMemberActorSummaryRow | JobsElectricRow;
+export function toProductMemberActorSummaryElectricRow(
+  row: Record<string, unknown>
+): JobsWorkspaceMemberActorSummaryRow | JobsElectricRow {
+  if (!hasEveryPresent(row, PRODUCT_MEMBER_ACTOR_REQUIRED_ELECTRIC_FIELDS)) {
+    return toPartialProductMemberActorSummaryElectricRow(row);
+  }
+
   const item: JobsElectricRow = {
     displayName: String(row.displayName),
     id: String(row.actorId),
@@ -2838,12 +2948,91 @@ export function toProductMemberActorSummaryElectricRow(
   );
 }
 
+const PRODUCT_ACTIVITY_ACTOR_REQUIRED_ELECTRIC_FIELDS = [
+  "displayName",
+  "id",
+  "kind",
+] as const;
+
+const PRODUCT_MEMBER_ACTOR_REQUIRED_ELECTRIC_FIELDS = [
+  "actorId",
+  "displayName",
+  "userId",
+] as const;
+
+function toPartialProductActivityActorElectricRow(
+  row: Record<string, unknown>
+) {
+  const item: JobsElectricRow = {};
+
+  addOptionalString(item, "displayDetail", row.displayDetail);
+  addOptionalString(item, "displayName", row.displayName);
+  addOptionalString(item, "id", row.id);
+  addOptionalString(item, "kind", row.kind);
+  addOptionalRoute(item, row);
+
+  return item;
+}
+
+function toPartialProductMemberActorSummaryElectricRow(
+  row: Record<string, unknown>
+) {
+  const item: JobsElectricRow = {};
+
+  addOptionalString(item, "displayDetail", row.displayDetail);
+  addOptionalString(item, "displayName", row.displayName);
+  addOptionalString(item, "id", row.actorId);
+  addOptionalString(item, "userId", row.userId);
+  addOptionalRoute(item, row);
+
+  return item;
+}
+
+function addOptionalRoute(item: JobsElectricRow, row: Record<string, unknown>) {
+  if (
+    row.routeHref !== null &&
+    row.routeHref !== undefined &&
+    row.routeLabel !== null &&
+    row.routeLabel !== undefined
+  ) {
+    item.route = {
+      href: String(row.routeHref),
+      label: String(row.routeLabel),
+    };
+  }
+}
+
 function addOptionalString(item: JobsElectricRow, key: string, value: unknown) {
   if (value === null || value === undefined) {
     return;
   }
 
   item[key] = String(value);
+}
+
+function addOptionalDateTime(
+  item: JobsElectricRow,
+  key: string,
+  value: unknown
+) {
+  if (value === null || value === undefined) {
+    return;
+  }
+
+  item[key] = normalizeJobsElectricDateTime(value);
+}
+
+function normalizeJobsElectricDateTime(value: unknown) {
+  const raw = String(value);
+
+  if (raw.includes("T")) {
+    return raw;
+  }
+
+  const normalized = raw.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
+  const date = new Date(normalized);
+
+  return Number.isNaN(date.getTime()) ? raw : date.toISOString();
 }
 
 function addOptionalNumber(item: JobsElectricRow, key: string, value: unknown) {

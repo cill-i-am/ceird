@@ -8,13 +8,12 @@ const APP_SRC_DIR = resolve(process.cwd(), "src");
 const DOMAIN_HEAVY_ROUTE_FILES = [
   "routes/_app._org.activity.tsx",
   "routes/_app._org.index.tsx",
-  "routes/_app._org.jobs.tsx",
   "routes/_app._org.organization.security.tsx",
   "routes/_app._org.organization.settings.tsx",
   "routes/_app._org.sites.tsx",
 ] as const;
 
-const FORM_HEAVY_ROUTE_FILES = [
+const COMPONENT_SPLIT_ROUTE_FILES = [
   "routes/_app._org.members.tsx",
   "routes/forgot-password.tsx",
   "routes/login.tsx",
@@ -65,8 +64,8 @@ describe("app route code splitting", () => {
     }
   });
 
-  it("keeps form-heavy route pages in lazy route chunks", () => {
-    const unsplitRouteFiles = FORM_HEAVY_ROUTE_FILES.filter((filePath) => {
+  it("keeps component-heavy route pages in lazy route chunks", () => {
+    const unsplitRouteFiles = COMPONENT_SPLIT_ROUTE_FILES.filter((filePath) => {
       const source = readAppSource(filePath);
 
       return !hasComponentCodeSplitGrouping(source);

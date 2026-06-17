@@ -115,9 +115,7 @@ function OrganizationRouteComponent() {
   });
   const stack = Route.useSearch().sheets ?? [];
   const routeOwnsSheetStack = useRouterState({
-    select: (state) =>
-      state.location.pathname === "/jobs" ||
-      state.location.pathname === "/sites",
+    select: (state) => state.location.pathname === "/sites",
   });
 
   return (

@@ -46,6 +46,9 @@ export interface DataPlaneCollectionHealth {
     options?: DataPlaneCollectionFallbackOptions
   ) => DataPlaneCollectionHealthSnapshot;
   readonly markReady: () => DataPlaneCollectionHealthSnapshot;
+  readonly markRetrying: (
+    error: DataPlaneCollectionHealthError
+  ) => DataPlaneCollectionHealthSnapshot;
   readonly markUnavailable: (
     error: DataPlaneCollectionHealthError
   ) => DataPlaneCollectionHealthSnapshot;
@@ -127,6 +130,13 @@ export function createDataPlaneCollectionHealth({
       updateStatus("ready", {
         initialReadyLatencyMs:
           snapshot.initialReadyLatencyMs ?? now() - snapshot.startedAtMs,
+      }),
+    markRetrying: (error) =>
+      updateStatus(snapshot.status === "ready" ? "ready" : "connecting", {
+        lastError: sanitizeCollectionHealthError(error),
+        recoveryAttempts: error.retryable
+          ? snapshot.recoveryAttempts + 1
+          : snapshot.recoveryAttempts,
       }),
     markUnavailable: (error) =>
       updateStatus("unavailable", {

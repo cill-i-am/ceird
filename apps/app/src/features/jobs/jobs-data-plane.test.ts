@@ -29,6 +29,7 @@ import {
   createJobsWorkspaceCommandRunner,
   createJobsWorkspaceCommentCommandRunner,
   createJobsWorkspaceReadModelContracts,
+  createJobsWorkspaceReadModelHealth,
   deriveJobsWorkspaceDetail,
   deriveJobsWorkspaceVisibleRows,
   createJobsListSeed,
@@ -42,11 +43,13 @@ import {
   toJobCommentEdgeRow,
   toJobCommentElectricRow,
   toJobContactSummaryRow,
+  toJobListItemElectricRow,
   toJobLabelAssignmentRow,
   toJobSiteSummaryRow,
   toJobVisitElectricRow,
   toProductActivityActorElectricRow,
   toProductMemberActorSummaryElectricRow,
+  toJobsWorkspaceJobElectricRow,
   toJobsWorkspaceJobRow,
 } from "./jobs-data-plane";
 import type { JobLabelAssignmentRow } from "./jobs-data-plane";
@@ -523,7 +526,7 @@ describe("jobs data plane", () => {
     });
   });
 
-  it("does not report the Jobs workspace read model ready when a required join collection is unavailable", () => {
+  it("keeps the Jobs workspace read model recovering when a required join collection has a retryable outage", () => {
     const jobsHealth = createDataPlaneCollectionHealth({
       collection: "jobs",
       collectionId: "jobs",
@@ -587,11 +590,77 @@ describe("jobs data plane", () => {
       collectionId: "jobs-workspace-list",
       lastError: {
         message: "labels: labels shape unavailable",
+        retryable: true,
         status: 503,
       },
-      status: "unavailable",
+      recoveryAttempts: 1,
+      status: "connecting",
       subscriptionName: "jobs-workspace-list",
     });
+  });
+
+  it("keeps the Jobs workspace read model health snapshot stable between source updates", () => {
+    const jobsHealth = createDataPlaneCollectionHealth({
+      collection: "jobs",
+      collectionId: "jobs",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "jobs",
+    });
+    const labelsHealth = createDataPlaneCollectionHealth({
+      collection: "labels",
+      collectionId: "labels",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "labels",
+    });
+    const assignmentsHealth = createDataPlaneCollectionHealth({
+      collection: "job-label-assignments",
+      collectionId: "job-label-assignments",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "work-item-labels",
+    });
+    const sitesHealth = createDataPlaneCollectionHealth({
+      collection: "job-sites",
+      collectionId: "job-sites",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "sites",
+    });
+    const contactsHealth = createDataPlaneCollectionHealth({
+      collection: "job-contacts",
+      collectionId: "job-contacts",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "contacts",
+    });
+    const readModelHealth = createJobsWorkspaceReadModelHealth({
+      collectionHealth: {
+        contactSummaries: contactsHealth,
+        jobLabelAssignments: assignmentsHealth,
+        jobs: jobsHealth,
+        labels: labelsHealth,
+        siteSummaries: sitesHealth,
+      },
+      collectionId: "jobs-workspace-list",
+      subscriptionName: "jobs-workspace-list",
+    });
+    const listener =
+      vi.fn<(snapshot: ReturnType<typeof readModelHealth.markReady>) => void>();
+
+    expect(readModelHealth.current).toBe(readModelHealth.current);
+
+    const unsubscribe = readModelHealth.subscribe(listener);
+    const initial = readModelHealth.current;
+    jobsHealth.markReady();
+    const afterJobsReady = readModelHealth.current;
+
+    expect(afterJobsReady).not.toBe(initial);
+    expect(readModelHealth.current).toBe(afterJobsReady);
+    expect(listener).toHaveBeenLastCalledWith(afterJobsReady);
+
+    unsubscribe();
   });
 
   it("keeps the Jobs workspace read model connecting until every required collection is ready", () => {
@@ -618,6 +687,73 @@ describe("jobs data plane", () => {
       status: "connecting",
       subscriptionName: "jobs-workspace-list",
     });
+  });
+
+  it("normalizes Postgres timestamptz Electric rows for Jobs workspace jobs", () => {
+    expect(
+      toJobsWorkspaceJobRow({
+        assigneeId: null,
+        blockedReason: null,
+        completedAt: null,
+        completedByUserId: null,
+        contactId: null,
+        coordinatorId: null,
+        createdAt: "2026-06-16 21:12:41.802467+00",
+        createdByUserId: "user_123",
+        id: "019ed247-7fcb-7114-9d5c-af3e0dc7fdc2",
+        kind: "job",
+        priority: "none",
+        siteId: null,
+        status: "new",
+        title: "TSK-237 realtime",
+        updatedAt: "2026-06-16 21:12:41.802467+00",
+      })
+    ).toMatchObject({
+      createdAt: "2026-06-16T21:12:41.802Z",
+      id: "019ed247-7fcb-7114-9d5c-af3e0dc7fdc2",
+      title: "TSK-237 realtime",
+      updatedAt: "2026-06-16T21:12:41.802Z",
+    });
+  });
+
+  it("allows Electric update old values to be partial Jobs workspace rows", () => {
+    expect(
+      toJobsWorkspaceJobElectricRow({
+        priority: "none",
+        updatedAt: "2026-06-17 08:34:13.1604+00",
+      })
+    ).toStrictEqual({
+      priority: "none",
+      updatedAt: "2026-06-17T08:34:13.160Z",
+    });
+  });
+
+  it("allows Electric update old values to be partial legacy Jobs list rows", () => {
+    expect(
+      toJobListItemElectricRow({
+        priority: "none",
+        updatedAt: "2026-06-17 08:34:13.1604+00",
+      })
+    ).toStrictEqual({
+      priority: "none",
+      updatedAt: "2026-06-17T08:34:13.160Z",
+    });
+  });
+
+  it("allows Electric update old values to be partial product actor rows", () => {
+    expect(
+      toProductActivityActorElectricRow({
+        updatedAt: "2026-06-17 08:58:07.194174+00",
+      })
+    ).toStrictEqual({});
+  });
+
+  it("allows Electric update old values to be partial member actor summaries", () => {
+    expect(
+      toProductMemberActorSummaryElectricRow({
+        updatedAt: "2026-06-17 08:58:07.194174+00",
+      })
+    ).toStrictEqual({});
   });
 
   it("derives visible Jobs workspace rows from local joins, filters, search, and sort", () => {

@@ -19,7 +19,7 @@ import type { HotkeyDefinition } from "#/hotkeys/hotkey-registry";
 
 type AppNavigationIcon = React.ComponentProps<typeof HugeiconsIcon>["icon"];
 
-type AppNavigationAccess = "all" | "internal" | "administrators";
+type AppNavigationAccess = "internal" | "administrators";
 
 export interface AppNavigationItem {
   readonly access?: AppNavigationAccess;
@@ -30,7 +30,6 @@ export interface AppNavigationItem {
   readonly url:
     | "/"
     | "/jobs"
-    | "/jobs-workspace"
     | "/sites"
     | "/activity"
     | "/organization/security"
@@ -47,20 +46,12 @@ const APP_PRIMARY_NAV_ITEMS = [
     url: "/",
   },
   {
-    access: "all",
+    access: "internal",
     icon: Briefcase01Icon,
     id: "jobs",
     keywords: ["queue", "work"],
     title: "Jobs",
     url: "/jobs",
-  },
-  {
-    access: "internal",
-    icon: ComputerTerminalIcon,
-    id: "jobs-workspace",
-    keywords: ["realtime", "electric", "dispatch", "workspace"],
-    title: "Workspace",
-    url: "/jobs-workspace",
   },
   {
     access: "internal",
@@ -100,7 +91,6 @@ const APP_PRIMARY_NAV_SHORTCUTS_BY_URL = {
   "/": HOTKEYS.goHome,
   "/activity": HOTKEYS.goActivity,
   "/jobs": HOTKEYS.goJobs,
-  "/jobs-workspace": HOTKEYS.goJobsWorkspace,
   "/members": HOTKEYS.goMembers,
   "/organization/security": HOTKEYS.goOrganizationSecurity,
   "/sites": HOTKEYS.goSites,
@@ -112,10 +102,6 @@ export function getPrimaryNavItemsForRole(
   role?: OrganizationRole | null
 ): readonly AppNavigationItem[] {
   return APP_PRIMARY_NAV_ITEMS.filter((item) => {
-    if (item.access === "all") {
-      return true;
-    }
-
     if (!role) {
       return false;
     }

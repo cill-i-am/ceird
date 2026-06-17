@@ -10,7 +10,7 @@ describe("active shortcut scopes", () => {
       getActiveShortcutScopes("/jobs", {
         sheets: [{ kind: "job.create" }],
       })
-    ).toStrictEqual(["global", "jobs", "job-create"]);
+    ).toStrictEqual(["global", "jobs-workspace", "jobs", "job-create"]);
     expect(
       getActiveShortcutScopes("/sites", {
         sheets: [
@@ -27,7 +27,7 @@ describe("active shortcut scopes", () => {
     ).toStrictEqual(["global", "sites", "jobs", "job-detail"]);
   });
 
-  it("activates sites, sites workspace, members, settings, and map shortcut scopes on matching routes", () => {
+  it("activates jobs, sites, sites workspace, members, and settings shortcut scopes on matching routes", () => {
     expect(getActiveShortcutScopes("/sites")).toStrictEqual([
       "global",
       "sites",
@@ -63,10 +63,12 @@ describe("active shortcut scopes", () => {
     ).toStrictEqual(["global", "settings", "labels-settings"]);
     expect(getActiveShortcutScopes("/jobs", { view: "map" })).toStrictEqual([
       "global",
-      "jobs",
-      "map",
+      "jobs-workspace",
     ]);
-    expect(getActiveShortcutScopes("/jobs")).toStrictEqual(["global", "jobs"]);
+    expect(getActiveShortcutScopes("/jobs")).toStrictEqual([
+      "global",
+      "jobs-workspace",
+    ]);
     expect(getActiveShortcutScopes("/jobs-workspace")).toStrictEqual([
       "global",
       "jobs-workspace",

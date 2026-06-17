@@ -13,6 +13,8 @@ import { electricCollectionOptions } from "@tanstack/electric-db-collection";
 import type { ElectricCollectionConfig } from "@tanstack/electric-db-collection";
 import { createCollection } from "@tanstack/react-db";
 
+import { resolveSyncOrigin } from "#/lib/sync-origin";
+
 import type {
   DataPlaneCollectionCompleteness,
   DataPlaneCollectionName,
@@ -46,6 +48,7 @@ export interface DataPlaneElectricRuntime {
   readonly fetch?: typeof fetch | undefined;
   readonly isBrowser: boolean;
   readonly now?: (() => number) | undefined;
+  readonly syncOrigin?: string | undefined;
 }
 
 interface ResolvedDataPlaneElectricRuntime extends DataPlaneElectricRuntime {
@@ -141,6 +144,9 @@ const TRUSTED_ELECTRIC_SOURCE_PARAMS = new Set([
   "where",
 ]);
 const ALLOWED_ELECTRIC_CLIENT_PARAMS = new Set(["replica"]);
+const DEFAULT_ELECTRIC_CLIENT_PARAMS = {
+  replica: "full",
+} as const satisfies ExternalParamsRecord;
 
 export function defineElectricCollectionContract<
   Schema extends StandardSchemaV1<unknown, ElectricRow<unknown>>,
@@ -217,7 +223,7 @@ export function createElectricCollectionFromContract<
   const shapeOptions = createElectricShapeOptions(contract, {
     fetch: runtime.fetch,
     onSyncError: (error) => {
-      health.markUnavailable(error);
+      recordElectricCollectionSyncError(health, error);
       options.onSyncError?.(error);
     },
     shapeUrl,
@@ -240,6 +246,15 @@ export function createElectricCollectionFromContract<
     shapeUrl,
     status: "enabled",
   } as const;
+}
+
+export function recordElectricCollectionSyncError(
+  health: DataPlaneCollectionHealth,
+  error: DataPlaneElectricSyncError
+) {
+  return error.retryable
+    ? health.markRetrying(error)
+    : health.markUnavailable(error);
 }
 
 export function createElectricShapeOptions<
@@ -265,6 +280,10 @@ export function createElectricShapeOptions<
     transformer,
     ...passThroughShapeOptions
   } = contract.shapeOptions ?? {};
+  const params = {
+    ...DEFAULT_ELECTRIC_CLIENT_PARAMS,
+    ...passThroughShapeOptions.params,
+  } satisfies ExternalParamsRecord<DataPlaneElectricSchemaOutput<Schema>>;
 
   return {
     ...passThroughShapeOptions,
@@ -283,6 +302,7 @@ export function createElectricShapeOptions<
 
       return normalized.retryable ? {} : undefined;
     },
+    params,
     transformer,
     url: options.shapeUrl,
   };
@@ -564,11 +584,13 @@ function formatElectricSyncErrorMessage(
 function resolveElectricRuntime(
   runtime: Partial<DataPlaneElectricRuntime> | undefined
 ): ResolvedDataPlaneElectricRuntime {
+  const browserOrigin = isBrowserRuntime() ? window.location.origin : undefined;
+
   return {
     fetch: runtime?.fetch,
     isBrowser: runtime?.isBrowser ?? isBrowserRuntime(),
     now: runtime?.now,
-    syncOrigin: readViteSyncOrigin(),
+    syncOrigin: runtime?.syncOrigin ?? resolveSyncOrigin(browserOrigin),
   };
 }
 
@@ -633,20 +655,4 @@ export function connectElectricCollectionHealth(
 
 function isBrowserRuntime() {
   return typeof window !== "undefined" && typeof document !== "undefined";
-}
-
-function readViteSyncOrigin() {
-  const { env } = import.meta as ImportMeta & {
-    readonly env?: { readonly VITE_SYNC_ORIGIN?: string | undefined };
-  };
-  const processEnv = (
-    globalThis as typeof globalThis & {
-      readonly process?: {
-        readonly env?: { readonly VITE_SYNC_ORIGIN?: string | undefined };
-      };
-    }
-  ).process?.env;
-  const value = (env?.VITE_SYNC_ORIGIN ?? processEnv?.VITE_SYNC_ORIGIN)?.trim();
-
-  return value && value.length > 0 ? value : undefined;
 }

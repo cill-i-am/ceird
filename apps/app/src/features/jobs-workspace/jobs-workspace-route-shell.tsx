@@ -170,11 +170,11 @@ export function JobsWorkspaceRouteShell({
   currentOrganizationRole,
   ...props
 }: JobsWorkspaceRouteShellProps) {
-  const canPreviewWorkspace =
+  const canUseRealtimeJobs =
     currentOrganizationRole !== undefined &&
     IdentityCore.isInternalOrganizationRole(currentOrganizationRole);
 
-  if (!canPreviewWorkspace) {
+  if (!canUseRealtimeJobs) {
     return <JobsWorkspacePermissionState />;
   }
 
@@ -534,31 +534,24 @@ function JobsWorkspaceLiveRouteShell({
   return (
     <main className="flex min-h-full min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
       <AppPageHeader
-        eyebrow="Preview route"
+        eyebrow="Live operations"
         leading={<HugeiconsIcon icon={DatabaseSync01Icon} strokeWidth={2} />}
-        title="Jobs Workspace"
-        description="Electric-backed live jobs list for the replacement workspace. The current Jobs route remains the production route until realtime evidence passes."
+        title="Jobs"
+        description="Electric-backed live jobs list and detail workspace for internal teams."
         actions={
-          <>
-            <Badge variant="outline">Not the active Jobs route</Badge>
-            <Button
-              disabled={!liveList.isReady}
-              onClick={() => createTitleRef.current?.focus()}
-              type="button"
-            >
-              <HugeiconsIcon
-                aria-hidden
-                icon={Briefcase01Icon}
-                strokeWidth={2}
-              />
-              New job
-              <ShortcutHint
-                decorative
-                hotkey={HOTKEYS.jobsWorkspaceCreate.hotkey}
-                label={HOTKEYS.jobsWorkspaceCreate.label}
-              />
-            </Button>
-          </>
+          <Button
+            disabled={!liveList.isReady}
+            onClick={() => createTitleRef.current?.focus()}
+            type="button"
+          >
+            <HugeiconsIcon aria-hidden icon={Briefcase01Icon} strokeWidth={2} />
+            New job
+            <ShortcutHint
+              decorative
+              hotkey={HOTKEYS.jobsWorkspaceCreate.hotkey}
+              label={HOTKEYS.jobsWorkspaceCreate.label}
+            />
+          </Button>
         }
       />
 
@@ -1728,16 +1721,22 @@ function HealthPanel({
 
 function JobsWorkspacePermissionState() {
   return (
-    <main className="flex min-h-full min-w-0 flex-1 p-4 md:p-6">
+    <main className="flex min-h-full min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
+      <AppPageHeader
+        eyebrow="Live operations"
+        leading={<HugeiconsIcon icon={DatabaseSync01Icon} strokeWidth={2} />}
+        title="Jobs"
+        description="Electric-backed live jobs list and detail workspace for internal teams."
+      />
       <Empty className="min-h-[32rem] rounded-md">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <HugeiconsIcon aria-hidden icon={Alert01Icon} strokeWidth={2} />
           </EmptyMedia>
-          <EmptyTitle>Jobs workspace preview is internal only</EmptyTitle>
+          <EmptyTitle>Realtime Jobs is internal only</EmptyTitle>
           <EmptyDescription>
-            External collaborator access remains on the current Jobs route until
-            collaborator-safe realtime shapes are designed and approved.
+            External collaborator realtime access needs collaborator-safe shapes
+            before this surface can expose job data outside the organization.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -1758,8 +1757,8 @@ function JobsWorkspaceUnavailableState() {
         </EmptyMedia>
         <EmptyTitle>Realtime jobs are unavailable</EmptyTitle>
         <EmptyDescription>
-          Electric sync is disabled or unavailable for this workspace. This
-          preview does not fall back to the old Jobs route data path.
+          Electric sync is disabled or unavailable for this workspace. The
+          realtime Jobs route does not fall back to the old route data path.
         </EmptyDescription>
       </EmptyHeader>
     </Empty>

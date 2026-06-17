@@ -27,23 +27,15 @@ export function RouteHotkeys({
   );
   const canUseActivityHotkey = primaryNavigationUrls.has("/activity");
   const canUseInternalHotkeys = primaryNavigationUrls.has("/");
-  const canUseJobsWorkspaceHotkey =
-    primaryNavigationUrls.has("/jobs-workspace");
-
-  useAppHotkeySequence("goJobs", () => {
-    React.startTransition(() => {
-      navigate({ to: "/jobs" });
-    });
-  });
 
   useAppHotkeySequence(
-    "goJobsWorkspace",
+    "goJobs",
     () => {
       React.startTransition(() => {
-        navigate({ to: "/jobs-workspace" });
+        navigate({ to: "/jobs" });
       });
     },
-    { enabled: canUseJobsWorkspaceHotkey }
+    { enabled: canUseInternalHotkeys }
   );
 
   useAppHotkeySequence(
@@ -97,16 +89,6 @@ export function RouteHotkeys({
       });
     },
     { enabled: canUseActivityHotkey }
-  );
-
-  useAppHotkeySequence(
-    "goMap",
-    () => {
-      React.startTransition(() => {
-        navigate({ to: "/jobs", search: { view: "map" } });
-      });
-    },
-    { enabled: canUseInternalHotkeys }
   );
 
   return canUseAdministratorHotkeys ? <AdministratorRouteHotkeys /> : null;

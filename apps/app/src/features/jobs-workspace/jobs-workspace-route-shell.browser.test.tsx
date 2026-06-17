@@ -167,13 +167,13 @@ describe("jobs workspace route shell", () => {
     };
   });
 
-  it("renders the live preview shell for internal members", () => {
+  it("renders the live jobs shell for internal members", () => {
     renderShell();
 
+    expect(screen.getByRole("heading", { name: "Jobs" })).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Jobs Workspace" })
-    ).toBeVisible();
-    expect(screen.getByText("Not the active Jobs route")).toBeVisible();
+      screen.queryByText("Not the active Jobs route")
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /new job/i })).toBeEnabled();
     expect(
       screen.getByRole("searchbox", { name: /search live jobs/i })
@@ -185,9 +185,7 @@ describe("jobs workspace route shell", () => {
   it("renders a permission-aware state for external collaborators", () => {
     renderShell({ currentOrganizationRole: "external" });
 
-    expect(
-      screen.getByText("Jobs workspace preview is internal only")
-    ).toBeVisible();
+    expect(screen.getByText("Realtime Jobs is internal only")).toBeVisible();
     expect(
       screen.queryByText("Not the active Jobs route")
     ).not.toBeInTheDocument();

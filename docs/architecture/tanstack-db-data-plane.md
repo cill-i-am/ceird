@@ -66,10 +66,8 @@ The initial factory supports eager full-shape sync only. Electric
 `on-demand`/`progressive` subset loading remains a future extension because the
 current sync Worker intentionally accepts named shape requests and protocol-safe
 resume/live parameters, not caller-supplied subset predicates.
-The existing jobs route collection still uses a fallback wrapper so current
-route-visible first-paint data remains API-backed unless a caller explicitly
-opts into Electric. The Electric-native Jobs workspace contract is separate and
-explicit in `apps/app/src/features/jobs/jobs-data-plane.ts` through
+The primary `/jobs` route now uses the Electric-native Jobs workspace contract
+defined in `apps/app/src/features/jobs/jobs-data-plane.ts` through
 `createJobsWorkspaceReadModelContracts(...)`. Its list graph derives from the
 domain-approved `jobs`, `work-item-labels`, `labels`, `sites`, and `contacts`
 shapes. Its detail graph adds `work-item-collaborators`,
@@ -90,7 +88,7 @@ backfills existing job member references, so detail rendering does not depend on
 those users having previously emitted comments or activity. Site-level active
 job rollups remain domain-owned projection follow-ups rather than browser
 business-rule recomputation.
-The `/jobs-workspace` live list consumes the list graph through
+The `/jobs` live list consumes the list graph through
 `features/jobs-workspace/jobs-workspace-live-list.ts`, which creates the
 Electric collections through the data-plane boundary, subscribes with the
 shared live-query wrapper, joins labels/sites/contacts locally, and exposes
@@ -144,7 +142,7 @@ JOBS_WORKSPACE_STAGE_PERF_OUTPUT=/tmp/tsk-236-jobs-workspace-stage.json \
 pnpm --filter app perf:jobs-workspace:stage
 ```
 
-The stage harness opens `/jobs-workspace?perfHarness=jobs-workspace`, waits for
+The stage harness opens `/jobs?perfHarness=jobs-workspace`, waits for
 the Electric list graph to report `ready`, records the aggregated initial
 ready latency from collection health, verifies the seeded shape, and measures
 representative browser search, status filter, label filter, priority sort, and
@@ -158,14 +156,10 @@ minimums only when recording a deliberately smaller exploratory run by setting
 must use the TSK-200 shape. If the stage URL, authenticated storage state, or
 seeded rows are absent, the harness skips in normal E2E runs and fails clearly
 when invoked through `perf:jobs-workspace:stage`.
-The jobs primary route collection has a conservative Electric read canary behind
-that same fallback wrapper. It is disabled by default and must be opted in
-through the jobs data-plane sync options, so a configured `VITE_SYNC_ORIGIN`
-alone does not migrate the visible jobs list. When enabled, it requests the
-public sync Worker `jobs` shape and maps `work_items` rows into the narrow jobs
-list item shape with joined fields such as labels left empty; Query Collection
-fallback remains the default and fallback path for route-visible first-paint
-data. Settings Labels is intentionally different: it requests the named
+The old API-backed jobs list collection and its fallback wrapper are no longer
+the production `/jobs` data path. Keep shared job options, detail, collaborator,
+and sheet helpers only where other routes still mount those flows. Settings
+Labels is intentionally different: it requests the named
 `labels` Electric shape directly through
 `getOrCreateSettingsLabelsCollectionState(...)` and exposes disabled or
 unavailable collection health to the route instead of silently activating an API

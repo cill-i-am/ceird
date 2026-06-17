@@ -4,16 +4,14 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 
-import { JobsRouteContent } from "#/features/jobs/jobs-route-content";
-import { shouldEnableJobsListHotkeys } from "#/features/jobs/jobs-route-hotkeys";
-import { loadJobsRouteData } from "#/features/jobs/jobs-route-loader";
-import {
-  decodeJobsSearch,
-  filtersToJobsSearch,
-  getJobsRouteLoaderDeps,
-  jobsSearchToFilters,
-  toJobsListQuery,
-} from "#/features/jobs/jobs-search";
+import { shouldEnableJobsWorkspaceHotkeys } from "#/features/jobs-workspace/jobs-workspace-route-hotkeys";
+import { JobsWorkspaceRouteShell } from "#/features/jobs-workspace/jobs-workspace-route-shell";
+import { decodeJobsWorkspaceSearch } from "#/features/jobs-workspace/jobs-workspace-search";
+import type {
+  JobsWorkspaceSort,
+  JobsWorkspaceStatus,
+  JobsWorkspaceView,
+} from "#/features/jobs-workspace/jobs-workspace-search";
 
 export const Route = createFileRoute("/_app/_org/jobs")({
   staticData: {
@@ -22,90 +20,90 @@ export const Route = createFileRoute("/_app/_org/jobs")({
       to: "/jobs",
     },
   },
-  codeSplitGroupings: [["loader", "component"]],
-  validateSearch: decodeJobsSearch,
-  loaderDeps: ({ search }) => getJobsRouteLoaderDeps(search),
-  loader: ({ context, deps }) =>
-    loadJobsRouteData(context, toJobsListQuery(deps)),
+  validateSearch: decodeJobsWorkspaceSearch,
   component: JobsRoute,
 });
 
 function JobsRoute() {
-  const { activeOrganizationId, queryClient } = Route.useRouteContext();
-  const {
-    dataPlaneSeeds,
-    list,
-    listScope,
-    options,
-    routeProximityLocationEnabled,
-    viewer,
-  } = Route.useLoaderData();
-  const navigate = useNavigate({ from: "/jobs" });
+  const { currentOrganizationRole } = Route.useRouteContext();
   const search = Route.useSearch();
+  const navigate = useNavigate({ from: "/jobs" });
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const stack = search.sheets ?? [];
-  const listHotkeysEnabled = shouldEnableJobsListHotkeys({
-    pathname,
-    stack,
-  });
 
   return (
-    <JobsRouteContent
-      activeOrganizationId={activeOrganizationId}
-      dataPlaneSeeds={dataPlaneSeeds}
-      listHotkeysEnabled={listHotkeysEnabled}
-      list={list}
-      listFilters={jobsSearchToFilters(search)}
-      onViewModeChange={(viewMode) => {
+    <JobsWorkspaceRouteShell
+      currentOrganizationRole={currentOrganizationRole}
+      detailJobId={search.detailJobId}
+      hotkeysEnabled={shouldEnableJobsWorkspaceHotkeys({ pathname })}
+      labelId={search.labelId}
+      onDetailJobChange={(detailJobId: string | undefined) => {
         navigate({
           search: (current) => ({
             ...current,
-            view: viewMode === "list" ? undefined : viewMode,
+            detailJobId,
           }),
         });
       }}
-      nearMeEnabled={search.near ?? false}
-      onListFiltersChange={(filters) => {
+      onLabelChange={(labelId: string | undefined) => {
         navigate({
           replace: true,
           search: (current) => ({
             ...current,
-            ...filtersToJobsSearch(filters),
-            cursor: undefined,
+            labelId,
           }),
         });
       }}
-      onNearMeChange={(near) => {
+      onQueryChange={(query: string | undefined) => {
+        navigate({
+          replace: true,
+          search: (current) => ({
+            ...current,
+            query,
+          }),
+        });
+      }}
+      onRecentSearchCommit={(recentSearch: string | undefined) => {
+        navigate({
+          replace: true,
+          search: (current) => ({
+            ...current,
+            recentSearch,
+          }),
+        });
+      }}
+      onSortChange={(sort: JobsWorkspaceSort | undefined) => {
+        navigate({
+          replace: true,
+          search: (current) => ({
+            ...current,
+            sort,
+          }),
+        });
+      }}
+      onStatusChange={(status: JobsWorkspaceStatus | undefined) => {
+        navigate({
+          replace: true,
+          search: (current) => ({
+            ...current,
+            status,
+          }),
+        });
+      }}
+      onViewChange={(view: JobsWorkspaceView) => {
         navigate({
           search: (current) => ({
             ...current,
-            near: near ? true : undefined,
+            view: view === "list" ? undefined : view,
           }),
         });
       }}
-      onRouteLimitChange={(routeLimit) => {
-        const nextRouteLimit = decodeJobsSearch({ routeLimit }).routeLimit;
-
-        navigate({
-          search: (current) => ({
-            ...current,
-            routeLimit:
-              nextRouteLimit === undefined || nextRouteLimit === 10
-                ? undefined
-                : nextRouteLimit,
-          }),
-        });
-      }}
-      options={options}
-      listScope={listScope}
-      queryClient={queryClient}
-      routeLimit={search.routeLimit ?? 10}
-      routeProximityLocationEnabled={routeProximityLocationEnabled}
-      stack={stack}
-      viewMode={search.view ?? "list"}
-      viewer={viewer}
+      query={search.query}
+      recentSearch={search.recentSearch}
+      sort={search.sort ?? "updated-desc"}
+      status={search.status}
+      view={search.view ?? "list"}
     />
   );
 }

@@ -1,4 +1,3 @@
-import { isJobsMapViewSearch } from "#/features/jobs/jobs-search";
 import {
   decodeWorkspaceSheetSearch,
   getActiveWorkspaceSheet,
@@ -10,7 +9,7 @@ export function getActiveShortcutScopes(
   pathname: string,
   search?: unknown
 ): readonly HotkeyScope[] {
-  const baseScopes = getBaseShortcutScopes(pathname, search);
+  const baseScopes = getBaseShortcutScopes(pathname);
   const activeSheet = getActiveWorkspaceSheet(
     decodeWorkspaceSheetSearch(search)
   );
@@ -36,18 +35,13 @@ export function getActiveShortcutScopes(
   }
 }
 
-function getBaseShortcutScopes(
-  pathname: string,
-  search?: unknown
-): readonly HotkeyScope[] {
+function getBaseShortcutScopes(pathname: string): readonly HotkeyScope[] {
   if (pathname === "/") {
     return ["global", "home"];
   }
 
   if (pathname === "/jobs") {
-    return isJobsMapViewSearch(search)
-      ? ["global", "jobs", "map"]
-      : ["global", "jobs"];
+    return ["global", "jobs-workspace"];
   }
 
   if (pathname === "/jobs-workspace") {

@@ -9,7 +9,6 @@ describe("app navigation", () => {
       ).toStrictEqual([
         "/",
         "/jobs",
-        "/jobs-workspace",
         "/sites",
         "/activity",
         "/organization/security",
@@ -22,12 +21,12 @@ describe("app navigation", () => {
   it("shows internal navigation items for member users", () => {
     expect(
       getPrimaryNavItemsForRole("member").map((item) => item.url)
-    ).toStrictEqual(["/", "/jobs", "/jobs-workspace", "/sites", "/activity"]);
+    ).toStrictEqual(["/", "/jobs", "/sites", "/activity"]);
   }, 1000);
 
-  it("shows only jobs navigation for external users", () => {
+  it("hides internal navigation for external users", () => {
     expect(
       getPrimaryNavItemsForRole("external").map((item) => item.url)
-    ).toStrictEqual(["/jobs"]);
+    ).toStrictEqual([]);
   }, 1000);
 });

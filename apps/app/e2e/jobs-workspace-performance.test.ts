@@ -111,7 +111,7 @@ test.describe("jobs workspace stage performance evidence", () => {
       );
     }
 
-    const route = `${STAGE_ORIGIN}/jobs-workspace?perfHarness=jobs-workspace`;
+    const route = `${STAGE_ORIGIN}/jobs?perfHarness=jobs-workspace`;
     const interactions: BrowserInteractionMetric[] = [];
 
     await page.goto(route);
