@@ -79,16 +79,17 @@ individual Workers.
 ## Electric Container Boundary
 
 The Electric SQL Cloudflare Container is deployed only for non-local Alchemy
-stages that have stage-appropriate runtime storage credentials. Local
+stages that have stage-appropriate database/source credentials. Local
 `alchemy dev` Workers run in workerd with local Durable Object namespaces, but
 the Cloudflare Containers API validates attachment against a cloud Durable
 Object namespace. Keep local dev on the Sync Worker path and let `ElectricSql`
 fail explicitly with `electric_container_unavailable` if a local shape request
 reaches the container bridge. All non-local deployed stages, including
 production, pull-request previews, and ephemeral CI stages, must provision the
-Sync Worker, `ElectricSql` Durable Object, Cloudflare Container, R2 bucket,
-stage Neon branch, and generated per-stage Electric runtime credentials
-together.
+Sync Worker, `ElectricSql` Durable Object, Cloudflare Container, stage Neon
+branch, and generated per-stage Electric database/source credentials together.
+Electric stores shape state on the container filesystem and can warm back up
+from Postgres after a container restart.
 
 The private domain Worker is the only Worker with Smart Placement enabled. It
 owns Hyperdrive/database access, so it is the only current Worker where

@@ -24,7 +24,7 @@ browser sync clients
   -> apps/sync Electric SQL adapter at sync.<stage>.ceird.app
   -> apps/domain private sync authorization through DOMAIN service binding
   -> Electric SQL in a Cloudflare Container
-  -> R2-backed FUSE storage for Electric shape logs
+  -> local container storage for Electric shape logs
   -> Neon Postgres
 
 apps/app server-side helpers

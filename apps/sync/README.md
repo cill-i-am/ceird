@@ -18,26 +18,23 @@ pnpm dev -- --stage codex-my-task
 ```
 
 Alchemy runs the sync Worker locally at the injected `VITE_SYNC_ORIGIN` and
-keeps the stage Neon/R2 resources ready. Local `alchemy dev` deliberately skips
+keeps the stage Neon resources ready. Local `alchemy dev` deliberately skips
 the Cloudflare Container application because Cloudflare can only attach
 Containers to cloud Durable Object namespaces, while local Alchemy Workers use
 workerd-only Durable Object namespaces. Package-local sync tests use dependency
 injection for the domain authorization and Electric forwarding boundaries.
 
-Electric requires its shape-log storage to survive service restarts. Deployed
-Alchemy stages provision a stage-scoped R2 bucket, pass the derived S3
-credentials to the Cloudflare Container as secrets, and mount that bucket at
-`/var/lib/electric` with TigrisFS. The container verifies that the mountpoint is
-active and writable with a startup probe, and only then starts Electric.
-Electric is configured with `ELECTRIC_STORAGE=fast_file`,
+Deployed Alchemy stages run Electric with local writable container storage at
+`/var/lib/electric`. Electric is configured with `ELECTRIC_STORAGE=fast_file`,
 `ELECTRIC_PERSISTENT_STATE=file`, `ELECTRIC_STORAGE_DIR=/var/lib/electric`, and
-`ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true` so its active-shape SQLite database is
-safe on the R2-backed network filesystem. Cloudflare still treats Container disk
-as ephemeral, so the durable state lives in R2 rather than on the VM filesystem.
-The sync Worker also receives an Alchemy-derived Durable Object `locationHint`
-from the stage Neon region so the singleton Electric container is placed near
-Postgres in deployed stages. The exported `ElectricSql` runtime class must
-remain a
+`ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true`. Cloudflare Container disk can be
+recreated, so restarts may rebuild shape logs from Postgres instead of relying
+on an object-storage mount. The sync Worker receives the generated stage Neon
+connection URL and Electric source secret as secrets, then supplies them to the
+container at startup. It also receives an Alchemy-derived Durable Object
+`locationHint` from the stage Neon region so the singleton Electric container is
+placed near Postgres in deployed stages. The exported `ElectricSql` runtime
+class must remain a
 `cloudflare:workers` `DurableObject` subclass and its class name must match the
 Alchemy container binding; this is the class Cloudflare marks as
 container-enabled during application attachment.

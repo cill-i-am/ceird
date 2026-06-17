@@ -15,7 +15,6 @@ const knownResources = [
   "Agent",
   "Sync",
   "ElectricSql",
-  "ElectricStorageBucket",
   "Drizzle.Migrations",
   "TenantWorkerRoute",
   "TenantWildcardDnsRecord",
@@ -280,7 +279,6 @@ function electricSyncStorageChecks(input) {
   const syncWorker = input.resources.Sync;
   const syncWorkerAttr = resourceAttr(syncWorker);
   const electricContainer = input.resources.ElectricSql;
-  const electricStorageBucket = input.resources.ElectricStorageBucket;
 
   if (input.stage !== productionStage && input.tenantRoutingRequired !== true) {
     return [];
@@ -289,29 +287,14 @@ function electricSyncStorageChecks(input) {
   const stageDescription =
     input.stage === productionStage ? "production sync" : "audited cloud sync";
   const requiredContainerEnv = [
-    "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID",
-    "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY",
     "ELECTRIC_CONTAINER_DATABASE_URL",
     "ELECTRIC_CONTAINER_ELECTRIC_SECRET",
-    "ELECTRIC_CONTAINER_R2_ACCOUNT_ID",
-    "ELECTRIC_CONTAINER_R2_BUCKET_NAME",
   ];
   const missingContainerEnv = requiredContainerEnv.filter(
     (envName) => !workerHasEnvValue(syncWorkerAttr, envName)
   );
 
   return [
-    resourceType(electricStorageBucket) === "Cloudflare.R2Bucket"
-      ? check(
-          "electric_storage_bucket",
-          "pass",
-          `Electric storage R2 bucket exists for ${stageDescription}.`
-        )
-      : check(
-          "electric_storage_bucket",
-          "fail",
-          `Electric storage R2 bucket is required for ${stageDescription}.`
-        ),
     resourceType(electricContainer) === "Cloudflare.Container"
       ? check(
           "electric_container",

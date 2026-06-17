@@ -176,16 +176,7 @@ function ensureElectricContainerStarted(
 
 function makeElectricContainerStartupEnv(env: SyncWorkerEnv) {
   return {
-    AWS_ACCESS_KEY_ID: readRequiredElectricContainerEnv(
-      env,
-      "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
-    ),
-    AWS_SECRET_ACCESS_KEY: readRequiredElectricContainerEnv(
-      env,
-      "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
-    ),
-    CEIRD_ELECTRIC_STORAGE_BACKEND: "r2",
-    CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric",
+    CEIRD_ELECTRIC_STORAGE_BACKEND: "local",
     DATABASE_URL: readRequiredElectricContainerEnv(
       env,
       "ELECTRIC_CONTAINER_DATABASE_URL"
@@ -201,26 +192,12 @@ function makeElectricContainerStartupEnv(env: SyncWorkerEnv) {
     ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true",
     ELECTRIC_STORAGE: "fast_file",
     ELECTRIC_STORAGE_DIR: "/var/lib/electric",
-    R2_ACCOUNT_ID: readRequiredElectricContainerEnv(
-      env,
-      "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
-    ),
-    R2_BUCKET_NAME: readRequiredElectricContainerEnv(
-      env,
-      "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
-    ),
   } satisfies Record<string, string>;
 }
 
 function readRequiredElectricContainerEnv(
   env: SyncWorkerEnv,
-  key:
-    | "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
-    | "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
-    | "ELECTRIC_CONTAINER_DATABASE_URL"
-    | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
-    | "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
-    | "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+  key: "ELECTRIC_CONTAINER_DATABASE_URL" | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
 ) {
   const value = env[key]?.trim();
 

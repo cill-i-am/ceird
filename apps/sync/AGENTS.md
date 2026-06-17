@@ -12,10 +12,12 @@ runtime.
 - Treat `@ceird/domain-core` as the source of truth for allowed sync shape
   names, authorization paths, authorization payloads, and typed sync errors.
   Product authorization decisions still belong in `apps/domain`.
-- Keep Electric source secrets, generated database URLs, R2 storage
-  credentials, container startup environment, and Durable Object/container
-  wiring in this app's runtime or app-owned infra boundary.
-- Preserve the R2-backed Electric storage contract: container disk is
-  ephemeral, and durable shape logs/state live under the mounted storage path.
+- Keep Electric source secrets, generated database URLs, container startup
+  environment, and Durable Object/container wiring in this app's runtime or
+  app-owned infra boundary.
+- Keep the Cloudflare Container runtime free of FUSE/object-storage mounts.
+  Electric shape state lives under the container's writable storage directory;
+  restarts may rebuild shape cache from Postgres rather than blocking startup on
+  provider-specific filesystem mounts.
 - Do not add product repositories, Drizzle schema or migrations, Better Auth
   runtime, or domain authorization policy here.

@@ -28,12 +28,8 @@ const baseEnv = {
     },
     fetch: () => Promise.resolve(Response.json({ error: "unused" })),
   },
-  ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID: "r2-access-key-id",
-  ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY: "r2-secret-access-key",
   ELECTRIC_CONTAINER_DATABASE_URL: "postgres://electric.example/db",
   ELECTRIC_CONTAINER_ELECTRIC_SECRET: "electric-secret",
-  ELECTRIC_CONTAINER_R2_ACCOUNT_ID: "cloudflare-account-id",
-  ELECTRIC_CONTAINER_R2_BUCKET_NAME: "ceird-main-electric-storage",
   ELECTRIC_SOURCE_SECRET: "electric-secret",
   ElectricSql: {} as DurableObjectNamespace,
 } satisfies SyncWorkerEnv;
@@ -84,10 +80,7 @@ describe("ElectricSql Durable Object", () => {
     expect(container.start).toHaveBeenCalledExactlyOnceWith({
       enableInternet: true,
       env: {
-        AWS_ACCESS_KEY_ID: "r2-access-key-id",
-        AWS_SECRET_ACCESS_KEY: "r2-secret-access-key",
-        CEIRD_ELECTRIC_STORAGE_BACKEND: "r2",
-        CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric",
+        CEIRD_ELECTRIC_STORAGE_BACKEND: "local",
         DATABASE_URL: "postgres://electric.example/db",
         ELECTRIC_INSECURE: "false",
         ELECTRIC_LOG_LEVEL: "info",
@@ -97,8 +90,6 @@ describe("ElectricSql Durable Object", () => {
         ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true",
         ELECTRIC_STORAGE: "fast_file",
         ELECTRIC_STORAGE_DIR: "/var/lib/electric",
-        R2_ACCOUNT_ID: "cloudflare-account-id",
-        R2_BUCKET_NAME: "ceird-main-electric-storage",
       },
     });
     expect(state.blockConcurrencyWhile).toHaveBeenCalledOnce();
