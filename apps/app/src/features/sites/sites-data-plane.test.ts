@@ -219,6 +219,29 @@ describe("sites data plane", () => {
     });
   });
 
+  it("maps deployed snake_case Electric site rows through the shared SiteOption boundary", () => {
+    const transformed = toSiteOptionElectricRow({
+      access_notes: "Gate 2",
+      display_location: "",
+      id: "22222222-2222-4222-8222-222222222222",
+      latitude: null,
+      location_status: "unverified",
+      longitude: null,
+      name: "Dublin Port",
+      updated_at: "2026-05-31 00:00:00+00",
+    });
+
+    expect(transformed).toMatchObject({
+      accessNotes: "Gate 2",
+      displayLocation: "",
+      id: site.id,
+      labels: [],
+      locationStatus: "unverified",
+      name: "Dublin Port",
+      updatedAt: "2026-05-31T00:00:00.000Z",
+    });
+  });
+
   it("surfaces shared Electric health for every Sites read model collection", () => {
     const collections = createSitesElectricReadModelCollections({
       scope,

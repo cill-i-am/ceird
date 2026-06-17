@@ -18,7 +18,14 @@ import {
   createSitesWorkspaceCommandRunner,
   deriveSitesWorkspaceVisibleRows,
   getOrCreateSitesWorkspaceReadModelCollectionState,
+  toLabelElectricRow,
+  toProductActivityActorElectricRow,
+  toSiteActiveJobSummaryElectricRow,
   toSiteCommentBodyElectricRow,
+  toSiteCommentEdgeElectricRow,
+  toSiteLabelAssignmentElectricRow,
+  toSiteOptionElectricRow,
+  toSiteRelatedJobElectricRow,
 } from "./sites-workspace-data-plane";
 import type {
   SiteCommentBodyRow,
@@ -176,6 +183,96 @@ describe("sites workspace data plane", () => {
     expect(comment).toStrictEqual(dublinComment);
     expect(comment).not.toHaveProperty("authorUserId");
     expect(comment).not.toHaveProperty("updatedByUserId");
+  });
+
+  it("normalizes snake_case Electric rows from deployed Sites shapes", () => {
+    const transformedSite = toSiteOptionElectricRow({
+      access_notes: "Gate 2",
+      address_components: null,
+      display_location: "",
+      id: dublinSite.id,
+      latitude: null,
+      location_status: "unverified",
+      longitude: null,
+      name: "Dublin Port",
+      updated_at: "2026-06-02 00:00:00+00",
+    });
+    const transformedLabel = toLabelElectricRow({
+      created_at: "2026-05-30 00:00:00+00",
+      id: urgentLabel.id,
+      name: urgentLabel.name,
+      updated_at: "2026-05-30 00:00:00+00",
+    });
+    const transformedAssignment = toSiteLabelAssignmentElectricRow({
+      created_at: "2026-05-30 00:00:00+00",
+      label_id: urgentLabel.id,
+      organization_id: "org_123",
+      site_id: dublinSite.id,
+    });
+    const transformedSummary = toSiteActiveJobSummaryElectricRow({
+      active_job_count: 3,
+      highest_active_job_priority: "urgent",
+      organization_id: "org_123",
+      site_id: dublinSite.id,
+      updated_at: "2026-06-02 00:00:00+00",
+    });
+    const transformedJob = toSiteRelatedJobElectricRow({
+      created_at: "2026-05-30 00:00:00+00",
+      id: dublinJob.id,
+      kind: dublinJob.kind,
+      priority: dublinJob.priority,
+      site_id: dublinSite.id,
+      status: dublinJob.status,
+      title: dublinJob.title,
+      updated_at: "2026-05-31 00:00:00+00",
+    });
+    const transformedActor = toProductActivityActorElectricRow({
+      display_detail: productActor.displayDetail,
+      display_name: productActor.displayName,
+      id: productActor.id,
+      kind: productActor.kind,
+    });
+    const transformedCommentEdge = toSiteCommentEdgeElectricRow({
+      comment_id: dublinComment.id,
+      created_at: "2026-06-02 09:30:00+00",
+      site_id: dublinSite.id,
+    });
+    const transformedComment = toSiteCommentBodyElectricRow({
+      actor_id: productActor.id,
+      body: dublinComment.body,
+      created_at: "2026-06-02 09:30:00+00",
+      id: dublinComment.id,
+      updated_at: "2026-06-02 09:30:00+00",
+    });
+
+    expect(transformedSite).toMatchObject({
+      accessNotes: "Gate 2",
+      displayLocation: "",
+      id: dublinSite.id,
+      locationStatus: "unverified",
+    });
+    expect(transformedLabel).toStrictEqual(urgentLabel);
+    expect(transformedAssignment).toStrictEqual({
+      createdAt: "2026-05-30T00:00:00.000Z",
+      labelId: urgentLabel.id,
+      organizationId: "org_123",
+      siteId: dublinSite.id,
+    });
+    expect(transformedSummary).toStrictEqual({
+      activeJobCount: 3,
+      highestActiveJobPriority: "urgent",
+      organizationId: "org_123",
+      siteId: dublinSite.id,
+      updatedAt: "2026-06-02T00:00:00.000Z",
+    });
+    expect(transformedJob).toMatchObject({
+      id: dublinJob.id,
+      siteId: dublinSite.id,
+      title: dublinJob.title,
+    });
+    expect(transformedActor).toStrictEqual(productActor);
+    expect(transformedCommentEdge).toStrictEqual(dublinCommentEdge);
+    expect(transformedComment).toStrictEqual(dublinComment);
   });
 
   it("derives selection-ready visible rows from the actual Sites workspace graph inputs", () => {

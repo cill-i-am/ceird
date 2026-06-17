@@ -943,39 +943,42 @@ function listBrowserSiteComments(siteId: SiteIdType) {
 export function toSiteOptionElectricRow(
   row: Record<string, unknown>
 ): SitesElectricRow {
+  const latitude = electricValue(row, "latitude");
+  const longitude = electricValue(row, "longitude");
+  const locationStatus = electricValue(row, "locationStatus");
   const site: Record<string, unknown> = {
-    displayLocation: String(row.displayLocation ?? ""),
+    displayLocation: String(electricValue(row, "displayLocation") ?? ""),
     hasUsableCoordinates:
-      row.latitude !== null &&
-      row.latitude !== undefined &&
-      row.longitude !== null &&
-      row.longitude !== undefined &&
+      latitude !== null &&
+      latitude !== undefined &&
+      longitude !== null &&
+      longitude !== undefined &&
       ["google_resolved", "manually_adjusted", "validated"].includes(
-        String(row.locationStatus)
+        String(locationStatus)
       ),
-    id: String(row.id),
+    id: String(electricValue(row, "id")),
     labels: [],
-    locationStatus: String(row.locationStatus),
-    name: String(row.name),
-    updatedAt: String(row.updatedAt),
+    locationStatus: String(locationStatus),
+    name: String(electricValue(row, "name")),
+    updatedAt: normalizeSitesElectricDateTime(electricValue(row, "updatedAt")),
     activeJobCount: 0,
   };
 
-  addOptionalValue(site, "accessNotes", row.accessNotes);
-  addOptionalValue(site, "addressComponents", row.addressComponents);
-  addOptionalValue(site, "addressLine1", row.addressLine1);
-  addOptionalValue(site, "addressLine2", row.addressLine2);
-  addOptionalValue(site, "country", row.country);
-  addOptionalValue(site, "county", row.county);
-  addOptionalValue(site, "eircode", row.eircode);
-  addOptionalValue(site, "formattedAddress", row.formattedAddress);
-  addOptionalValue(site, "googlePlaceId", row.googlePlaceId);
-  addOptionalValue(site, "latitude", row.latitude);
-  addOptionalValue(site, "locationProvider", row.locationProvider);
-  addOptionalValue(site, "locationResolvedAt", row.locationResolvedAt);
-  addOptionalValue(site, "longitude", row.longitude);
-  addOptionalValue(site, "rawLocationInput", row.rawLocationInput);
-  addOptionalValue(site, "town", row.town);
+  addOptionalElectricValue(site, row, "accessNotes");
+  addOptionalElectricValue(site, row, "addressComponents");
+  addOptionalElectricValue(site, row, "addressLine1");
+  addOptionalElectricValue(site, row, "addressLine2");
+  addOptionalElectricValue(site, row, "country");
+  addOptionalElectricValue(site, row, "county");
+  addOptionalElectricValue(site, row, "eircode");
+  addOptionalElectricValue(site, row, "formattedAddress");
+  addOptionalElectricValue(site, row, "googlePlaceId");
+  addOptionalElectricValue(site, row, "latitude");
+  addOptionalElectricValue(site, row, "locationProvider");
+  addOptionalElectricValue(site, row, "locationResolvedAt");
+  addOptionalElectricValue(site, row, "longitude");
+  addOptionalElectricValue(site, row, "rawLocationInput");
+  addOptionalElectricValue(site, row, "town");
 
   Schema.decodeUnknownSync(SiteOptionSchema)(site);
 
@@ -986,10 +989,10 @@ function toSiteLabelAssignmentElectricRow(
   row: Record<string, unknown>
 ): SitesElectricRow {
   const assignment = {
-    createdAt: String(row.createdAt),
-    labelId: String(row.labelId),
-    organizationId: String(row.organizationId),
-    siteId: String(row.siteId),
+    createdAt: normalizeSitesElectricDateTime(electricValue(row, "createdAt")),
+    labelId: String(electricValue(row, "labelId")),
+    organizationId: String(electricValue(row, "organizationId")),
+    siteId: String(electricValue(row, "siteId")),
   };
 
   Schema.decodeUnknownSync(SiteLabelAssignmentElectricRowSchema)(assignment);
@@ -1000,20 +1003,24 @@ function toSiteLabelAssignmentElectricRow(
 function toSiteActiveJobSummaryElectricRow(
   row: Record<string, unknown>
 ): SitesElectricRow {
+  const highestActiveJobPriorityValue = electricValue(
+    row,
+    "highestActiveJobPriority"
+  );
   const highestActiveJobPriority =
-    row.highestActiveJobPriority === null ||
-    row.highestActiveJobPriority === undefined
+    highestActiveJobPriorityValue === null ||
+    highestActiveJobPriorityValue === undefined
       ? undefined
-      : (String(row.highestActiveJobPriority) as SiteActiveJobPriority);
+      : (String(highestActiveJobPriorityValue) as SiteActiveJobPriority);
 
   const summary = {
-    activeJobCount: Number(row.activeJobCount ?? 0),
+    activeJobCount: Number(electricValue(row, "activeJobCount") ?? 0),
     ...(highestActiveJobPriority === undefined
       ? {}
       : { highestActiveJobPriority }),
-    organizationId: String(row.organizationId),
-    siteId: String(row.siteId),
-    updatedAt: String(row.updatedAt),
+    organizationId: String(electricValue(row, "organizationId")),
+    siteId: String(electricValue(row, "siteId")),
+    updatedAt: normalizeSitesElectricDateTime(electricValue(row, "updatedAt")),
   };
 
   Schema.decodeUnknownSync(SiteActiveJobSummaryElectricRowSchema)(summary);
@@ -1025,20 +1032,20 @@ function toSiteRelatedJobElectricRow(
   row: Record<string, unknown>
 ): SitesElectricRow {
   const job: Record<string, unknown> = {
-    createdAt: String(row.createdAt),
-    id: String(row.id),
-    kind: String(row.kind),
+    createdAt: normalizeSitesElectricDateTime(electricValue(row, "createdAt")),
+    id: String(electricValue(row, "id")),
+    kind: String(electricValue(row, "kind")),
     labels: [],
-    priority: String(row.priority),
-    status: String(row.status),
-    title: String(row.title),
-    updatedAt: String(row.updatedAt),
+    priority: String(electricValue(row, "priority")),
+    status: String(electricValue(row, "status")),
+    title: String(electricValue(row, "title")),
+    updatedAt: normalizeSitesElectricDateTime(electricValue(row, "updatedAt")),
   };
 
-  addOptionalValue(job, "assigneeId", row.assigneeId);
-  addOptionalValue(job, "contactId", row.contactId);
-  addOptionalValue(job, "coordinatorId", row.coordinatorId);
-  addOptionalValue(job, "siteId", row.siteId);
+  addOptionalElectricValue(job, row, "assigneeId");
+  addOptionalElectricValue(job, row, "contactId");
+  addOptionalElectricValue(job, row, "coordinatorId");
+  addOptionalElectricValue(job, row, "siteId");
 
   Schema.decodeUnknownSync(JobListItemSchema)(job);
 
@@ -1055,6 +1062,39 @@ function addOptionalValue(
   }
 
   target[key] = value;
+}
+
+function addOptionalElectricValue(
+  target: Record<string, unknown>,
+  row: Record<string, unknown>,
+  key: string
+) {
+  addOptionalValue(target, key, electricValue(row, key));
+}
+
+function electricValue(row: Record<string, unknown>, key: string) {
+  if (key in row) {
+    return row[key];
+  }
+
+  return row[toSnakeCase(key)];
+}
+
+function toSnakeCase(key: string) {
+  return key.replaceAll(/[A-Z]/g, (match) => `_${match.toLowerCase()}`);
+}
+
+function normalizeSitesElectricDateTime(value: unknown) {
+  const raw = String(value);
+
+  if (raw.includes("T")) {
+    return raw;
+  }
+
+  const normalized = raw.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
+  const date = new Date(normalized);
+
+  return Number.isNaN(date.getTime()) ? raw : date.toISOString();
 }
 
 function sortSiteComments(comments: readonly SiteComment[]) {
