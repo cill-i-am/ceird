@@ -1,4 +1,4 @@
-import { OrganizationRole } from "@ceird/identity-core";
+import { InvitableOrganizationRole } from "@ceird/identity-core";
 /* oxlint-disable eslint/max-classes-per-file, unicorn/no-array-method-this-argument */
 import { Layer, Context, Effect, Schema } from "effect";
 
@@ -108,7 +108,7 @@ export const OrganizationInvitationEmailInput = Schema.Struct({
   organizationName: Schema.String,
   inviterEmail: EmailAddress,
   invitationUrl: InvitationUrl,
-  role: OrganizationRole,
+  role: InvitableOrganizationRole,
 });
 
 export type OrganizationInvitationEmailInput = Schema.Schema.Type<

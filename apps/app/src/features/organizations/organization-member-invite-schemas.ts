@@ -1,23 +1,14 @@
-import { InvitableOrganizationRole } from "@ceird/identity-core";
+import { InviteOrganizationMemberInputSchema } from "@ceird/identity-core";
+import type { InviteOrganizationMemberInput } from "@ceird/identity-core";
 import { Schema } from "effect";
 
-import { accountEmailSchema } from "#/features/auth/auth-schemas";
-
-const OrganizationMemberInviteInputSchema = Schema.Struct({
-  email: accountEmailSchema,
-  role: InvitableOrganizationRole,
-}).annotate({
-  parseOptions: { onExcessProperty: "error" },
-});
-
-export type OrganizationMemberInviteInput =
-  typeof OrganizationMemberInviteInputSchema.Type;
+export type OrganizationMemberInviteInput = InviteOrganizationMemberInput;
 
 export const organizationMemberInviteSchema =
-  OrganizationMemberInviteInputSchema;
+  InviteOrganizationMemberInputSchema;
 
 export function decodeOrganizationMemberInviteInput(
   input: unknown
 ): OrganizationMemberInviteInput {
-  return Schema.decodeUnknownSync(OrganizationMemberInviteInputSchema)(input);
+  return Schema.decodeUnknownSync(InviteOrganizationMemberInputSchema)(input);
 }

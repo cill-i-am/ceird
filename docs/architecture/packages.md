@@ -81,6 +81,9 @@ Exports shared identity and organization primitives:
 - organization slug schema, generation, retry suffixing, reserved system slug
   checks, and the shared `isOrganizationSlug` predicate
 - organization role literals and role subsets
+- organization member ids, member DTOs, invitation DTOs, finite invitation
+  status literals, list responses, and mutation input/response schemas for
+  invite, cancel, role update, and removal flows
 - product-safe actor projection DTOs for member, agent, and system display in
   activity and comments without exposing Better Auth user/session/account data
 - `ProductMemberActorSummarySchema`, the shared decoded product read shape for
@@ -102,8 +105,9 @@ Exports shared identity and organization primitives:
 - connected-app grant DTOs, scope-group schemas, disconnect input/response
   schemas, and typed connected-app errors used by app settings, domain identity
   handlers, and MCP consent enforcement
-- `IdentityApiGroup` endpoints for organization security activity plus
-  current-user connected-app listing and disconnect
+- `IdentityApiGroup` endpoints for organization security activity,
+  organization member/invitation management, and current-user connected-app
+  listing and disconnect
 - decode helpers for untrusted payloads
 
 Use this package when app, API adapter, MCP adapter, and domain code need the

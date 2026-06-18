@@ -1,8 +1,8 @@
 import {
+  decodeInvitableOrganizationRole,
   decodeOrganizationId,
-  decodeOrganizationRole,
 } from "@ceird/identity-core";
-import type { OrganizationRole } from "@ceird/identity-core";
+import type { InvitableOrganizationRole } from "@ceird/identity-core";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
@@ -31,7 +31,7 @@ import { INVITE_ROLE_LABELS } from "./organization-invite-role-options";
 interface InvitationPreviewDetails {
   readonly email: string;
   readonly organizationName: string;
-  readonly role: OrganizationRole;
+  readonly role: InvitableOrganizationRole;
 }
 
 interface InvitationDetails extends InvitationPreviewDetails {
@@ -73,8 +73,8 @@ const INVITATION_LOOKUP_ERROR_MESSAGE =
 const INVITATION_ACCEPT_ERROR_MESSAGE =
   "We couldn't accept this invitation. Please try again.";
 
-function formatInvitationRole(role: OrganizationRole) {
-  return role === "owner" ? "Owner" : INVITE_ROLE_LABELS[role];
+function formatInvitationRole(role: InvitableOrganizationRole) {
+  return INVITE_ROLE_LABELS[role];
 }
 
 function getInvitationShellCopy(
@@ -340,7 +340,7 @@ function useAcceptInvitationPageModel(
         status: "ready",
         invitation: {
           ...invitation.data,
-          role: decodeOrganizationRole(invitation.data.role),
+          role: decodeInvitableOrganizationRole(invitation.data.role),
         },
       });
     }

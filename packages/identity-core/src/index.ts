@@ -1,5 +1,5 @@
 /* oxlint-disable eslint/max-classes-per-file */
-import { Schema, SchemaTransformation } from "effect";
+import { Effect, Schema, SchemaTransformation } from "effect";
 import {
   HttpApi,
   HttpApiEndpoint,
@@ -103,6 +103,13 @@ export const InvitationId = Schema.NonEmptyString.pipe(
 );
 export type InvitationId = Schema.Schema.Type<typeof InvitationId>;
 
+export const OrganizationMemberId = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/identity-core/OrganizationMemberId")
+);
+export type OrganizationMemberId = Schema.Schema.Type<
+  typeof OrganizationMemberId
+>;
+
 export const IsoDateTimeString = Schema.String.pipe(
   Schema.refine((value): value is string => isIsoDateTimeString(value), {
     message: "Expected an ISO-8601 UTC datetime string",
@@ -150,6 +157,13 @@ export const INVITABLE_ORGANIZATION_ROLES = [
   "member",
   "external",
 ] as const;
+export const ORGANIZATION_INVITATION_STATUSES = [
+  "pending",
+  "accepted",
+  "canceled",
+  "rejected",
+] as const;
+const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const OrganizationRole = Schema.Literals(ORGANIZATION_ROLES);
 export type OrganizationRole = Schema.Schema.Type<typeof OrganizationRole>;
@@ -173,6 +187,20 @@ export const InvitableOrganizationRole = Schema.Literals(
 );
 export type InvitableOrganizationRole = Schema.Schema.Type<
   typeof InvitableOrganizationRole
+>;
+
+export const OrganizationInvitationStatus = Schema.Literals(
+  ORGANIZATION_INVITATION_STATUSES
+);
+export type OrganizationInvitationStatus = Schema.Schema.Type<
+  typeof OrganizationInvitationStatus
+>;
+
+export const OrganizationEmailAddress = Schema.Trim.pipe(
+  Schema.check(Schema.isNonEmpty(), Schema.isPattern(EMAIL_ADDRESS_PATTERN))
+);
+export type OrganizationEmailAddress = Schema.Schema.Type<
+  typeof OrganizationEmailAddress
 >;
 
 export const PRODUCT_ACTOR_KINDS = ["member", "agent", "system"] as const;
@@ -529,9 +557,10 @@ export type ConnectedAppGrantContext = Schema.Schema.Type<
   typeof ConnectedAppGrantContextSchema
 >;
 
-const NonNegativeInteger = Schema.Number.pipe(
+export const NonNegativeInteger = Schema.Number.pipe(
   Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
 );
+export type NonNegativeInteger = Schema.Schema.Type<typeof NonNegativeInteger>;
 
 export const ConnectedAppGrantActiveTokenCountSchema = NonNegativeInteger;
 export type ConnectedAppGrantActiveTokenCount = Schema.Schema.Type<
@@ -627,6 +656,201 @@ export class ConnectedAppGrantStorageError extends Schema.TaggedErrorClass<Conne
   { httpApiStatus: 503 }
 ) {}
 
+export const OrganizationMemberSchema = Schema.Struct({
+  createdAt: IsoDateTimeString,
+  email: OrganizationEmailAddress,
+  id: OrganizationMemberId,
+  name: Schema.Trim.pipe(Schema.check(Schema.isMinLength(1))),
+  organizationId: OrganizationId,
+  role: OrganizationRole,
+  userId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationMember = Schema.Schema.Type<
+  typeof OrganizationMemberSchema
+>;
+
+export const OrganizationMemberListQuerySchema = Schema.Struct({
+  limit: Schema.NumberFromString.pipe(
+    Schema.check(
+      Schema.isInt(),
+      Schema.isGreaterThan(0),
+      Schema.isLessThanOrEqualTo(100)
+    ),
+    Schema.withDecodingDefault(Effect.succeed("100"))
+  ),
+  offset: Schema.NumberFromString.pipe(
+    Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+    Schema.withDecodingDefault(Effect.succeed("0"))
+  ),
+});
+export type OrganizationMemberListQuery = Schema.Schema.Type<
+  typeof OrganizationMemberListQuerySchema
+>;
+
+export const OrganizationMemberListResponseSchema = Schema.Struct({
+  members: Schema.Array(OrganizationMemberSchema),
+  total: NonNegativeInteger,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationMemberListResponse = Schema.Schema.Type<
+  typeof OrganizationMemberListResponseSchema
+>;
+
+export const OrganizationInvitationSchema = Schema.Struct({
+  createdAt: IsoDateTimeString,
+  email: OrganizationEmailAddress,
+  expiresAt: IsoDateTimeString,
+  id: InvitationId,
+  organizationId: OrganizationId,
+  role: InvitableOrganizationRole,
+  status: OrganizationInvitationStatus,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationInvitation = Schema.Schema.Type<
+  typeof OrganizationInvitationSchema
+>;
+
+export const OrganizationInvitationListResponseSchema = Schema.Struct({
+  invitations: Schema.Array(OrganizationInvitationSchema),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationInvitationListResponse = Schema.Schema.Type<
+  typeof OrganizationInvitationListResponseSchema
+>;
+
+export const InviteOrganizationMemberInputSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  resend: Schema.optional(Schema.Boolean),
+  role: InvitableOrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type InviteOrganizationMemberInput = Schema.Schema.Type<
+  typeof InviteOrganizationMemberInputSchema
+>;
+
+export const InviteOrganizationMemberResponseSchema = Schema.Struct({
+  invitation: OrganizationInvitationSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type InviteOrganizationMemberResponse = Schema.Schema.Type<
+  typeof InviteOrganizationMemberResponseSchema
+>;
+
+export const CancelOrganizationInvitationInputSchema = Schema.Struct({
+  invitationId: InvitationId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type CancelOrganizationInvitationInput = Schema.Schema.Type<
+  typeof CancelOrganizationInvitationInputSchema
+>;
+
+export const CancelOrganizationInvitationResponseSchema = Schema.Struct({
+  invitation: OrganizationInvitationSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type CancelOrganizationInvitationResponse = Schema.Schema.Type<
+  typeof CancelOrganizationInvitationResponseSchema
+>;
+
+export const UpdateOrganizationMemberRoleInputSchema = Schema.Struct({
+  memberId: OrganizationMemberId,
+  role: OrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type UpdateOrganizationMemberRoleInput = Schema.Schema.Type<
+  typeof UpdateOrganizationMemberRoleInputSchema
+>;
+
+export const UpdateOrganizationMemberRolePayloadSchema = Schema.Struct({
+  role: OrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type UpdateOrganizationMemberRolePayload = Schema.Schema.Type<
+  typeof UpdateOrganizationMemberRolePayloadSchema
+>;
+
+export const UpdateOrganizationMemberRoleResponseSchema = Schema.Struct({
+  member: OrganizationMemberSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type UpdateOrganizationMemberRoleResponse = Schema.Schema.Type<
+  typeof UpdateOrganizationMemberRoleResponseSchema
+>;
+
+export const RemoveOrganizationMemberInputSchema = Schema.Struct({
+  memberId: OrganizationMemberId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type RemoveOrganizationMemberInput = Schema.Schema.Type<
+  typeof RemoveOrganizationMemberInputSchema
+>;
+
+export const RemoveOrganizationMemberResponseSchema = Schema.Struct({
+  removedMemberId: OrganizationMemberId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type RemoveOrganizationMemberResponse = Schema.Schema.Type<
+  typeof RemoveOrganizationMemberResponseSchema
+>;
+
+export const ORGANIZATION_IDENTITY_ACCESS_DENIED_ERROR_TAG =
+  "@ceird/identity-core/OrganizationIdentityAccessDeniedError" as const;
+export class OrganizationIdentityAccessDeniedError extends Schema.TaggedErrorClass<OrganizationIdentityAccessDeniedError>()(
+  ORGANIZATION_IDENTITY_ACCESS_DENIED_ERROR_TAG,
+  {
+    message: Schema.String,
+  },
+  { httpApiStatus: 403 }
+) {}
+
+export const ORGANIZATION_IDENTITY_NOT_FOUND_ERROR_TAG =
+  "@ceird/identity-core/OrganizationIdentityNotFoundError" as const;
+export class OrganizationIdentityNotFoundError extends Schema.TaggedErrorClass<OrganizationIdentityNotFoundError>()(
+  ORGANIZATION_IDENTITY_NOT_FOUND_ERROR_TAG,
+  {
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 }
+) {}
+
+export const ORGANIZATION_IDENTITY_REJECTED_ERROR_TAG =
+  "@ceird/identity-core/OrganizationIdentityRejectedError" as const;
+export class OrganizationIdentityRejectedError extends Schema.TaggedErrorClass<OrganizationIdentityRejectedError>()(
+  ORGANIZATION_IDENTITY_REJECTED_ERROR_TAG,
+  {
+    code: Schema.optional(Schema.String),
+    message: Schema.String,
+    status: Schema.optional(Schema.Number),
+    statusText: Schema.optional(Schema.String),
+  },
+  { httpApiStatus: 400 }
+) {}
+
+export const ORGANIZATION_IDENTITY_STORAGE_ERROR_TAG =
+  "@ceird/identity-core/OrganizationIdentityStorageError" as const;
+export class OrganizationIdentityStorageError extends Schema.TaggedErrorClass<OrganizationIdentityStorageError>()(
+  ORGANIZATION_IDENTITY_STORAGE_ERROR_TAG,
+  {
+    cause: Schema.optional(Schema.String),
+    message: Schema.String,
+  },
+  { httpApiStatus: 503 }
+) {}
+
 export type CreateOrganizationInput = Schema.Schema.Type<
   typeof CreateOrganizationInputSchema
 >;
@@ -642,7 +866,7 @@ export type UpdateOrganizationInput = Schema.Schema.Type<
 export const PublicInvitationPreviewSchema = Schema.Struct({
   email: Schema.String,
   organizationName: Schema.String,
-  role: OrganizationRole,
+  role: InvitableOrganizationRole,
 });
 
 export type PublicInvitationPreview = Schema.Schema.Type<
@@ -815,6 +1039,10 @@ export type IdentityError =
   | ConnectedAppGrantAccessDeniedError
   | ConnectedAppGrantNotFoundError
   | ConnectedAppGrantStorageError
+  | OrganizationIdentityAccessDeniedError
+  | OrganizationIdentityNotFoundError
+  | OrganizationIdentityRejectedError
+  | OrganizationIdentityStorageError
   | OrganizationSecurityActivityAccessDeniedError
   | OrganizationSecurityActivityCursorInvalidError
   | OrganizationSecurityActivityStorageError
@@ -858,6 +1086,94 @@ export const IdentityApiGroup = HttpApiGroup.make("identity")
         ],
         params: { grantId: ConnectedAppGrantId },
         success: DisconnectConnectedAppGrantResponseSchema,
+      }
+    )
+  )
+  .add(
+    HttpApiEndpoint.get("listOrganizationMembers", "/organization/members", {
+      error: [
+        OrganizationIdentityAccessDeniedError,
+        OrganizationIdentityStorageError,
+      ],
+      query: OrganizationMemberListQuerySchema,
+      success: OrganizationMemberListResponseSchema,
+    })
+  )
+  .add(
+    HttpApiEndpoint.get(
+      "listOrganizationInvitations",
+      "/organization/invitations",
+      {
+        error: [
+          OrganizationIdentityAccessDeniedError,
+          OrganizationIdentityStorageError,
+        ],
+        success: OrganizationInvitationListResponseSchema,
+      }
+    )
+  )
+  .add(
+    HttpApiEndpoint.post(
+      "inviteOrganizationMember",
+      "/organization/invitations",
+      {
+        error: [
+          OrganizationIdentityAccessDeniedError,
+          OrganizationIdentityNotFoundError,
+          OrganizationIdentityRejectedError,
+          OrganizationIdentityStorageError,
+        ],
+        payload: InviteOrganizationMemberInputSchema,
+        success: InviteOrganizationMemberResponseSchema,
+      }
+    )
+  )
+  .add(
+    HttpApiEndpoint.post(
+      "cancelOrganizationInvitation",
+      "/organization/invitations/:invitationId/cancel",
+      {
+        error: [
+          OrganizationIdentityAccessDeniedError,
+          OrganizationIdentityNotFoundError,
+          OrganizationIdentityRejectedError,
+          OrganizationIdentityStorageError,
+        ],
+        params: { invitationId: InvitationId },
+        success: CancelOrganizationInvitationResponseSchema,
+      }
+    )
+  )
+  .add(
+    HttpApiEndpoint.patch(
+      "updateOrganizationMemberRole",
+      "/organization/members/:memberId/role",
+      {
+        error: [
+          OrganizationIdentityAccessDeniedError,
+          OrganizationIdentityNotFoundError,
+          OrganizationIdentityRejectedError,
+          OrganizationIdentityStorageError,
+        ],
+        params: { memberId: OrganizationMemberId },
+        payload: UpdateOrganizationMemberRolePayloadSchema,
+        success: UpdateOrganizationMemberRoleResponseSchema,
+      }
+    )
+  )
+  .add(
+    HttpApiEndpoint.delete(
+      "removeOrganizationMember",
+      "/organization/members/:memberId",
+      {
+        error: [
+          OrganizationIdentityAccessDeniedError,
+          OrganizationIdentityNotFoundError,
+          OrganizationIdentityRejectedError,
+          OrganizationIdentityStorageError,
+        ],
+        params: { memberId: OrganizationMemberId },
+        success: RemoveOrganizationMemberResponseSchema,
       }
     )
   );
@@ -920,6 +1236,64 @@ export function decodeConnectedAppGrantListResponse(
   return Schema.decodeUnknownSync(ConnectedAppGrantListResponseSchema)(input);
 }
 
+export function decodeOrganizationMember(input: unknown): OrganizationMember {
+  return Schema.decodeUnknownSync(OrganizationMemberSchema)(input);
+}
+
+export function decodeOrganizationMemberListResponse(
+  input: unknown
+): OrganizationMemberListResponse {
+  return Schema.decodeUnknownSync(OrganizationMemberListResponseSchema)(input);
+}
+
+export function decodeOrganizationMemberListQuery(
+  input: unknown
+): OrganizationMemberListQuery {
+  return Schema.decodeUnknownSync(OrganizationMemberListQuerySchema)(input);
+}
+
+export function decodeOrganizationInvitation(
+  input: unknown
+): OrganizationInvitation {
+  return Schema.decodeUnknownSync(OrganizationInvitationSchema)(input);
+}
+
+export function decodeOrganizationInvitationListResponse(
+  input: unknown
+): OrganizationInvitationListResponse {
+  return Schema.decodeUnknownSync(OrganizationInvitationListResponseSchema)(
+    input
+  );
+}
+
+export function decodeInviteOrganizationMemberInput(
+  input: unknown
+): InviteOrganizationMemberInput {
+  return Schema.decodeUnknownSync(InviteOrganizationMemberInputSchema)(input);
+}
+
+export function decodeCancelOrganizationInvitationInput(
+  input: unknown
+): CancelOrganizationInvitationInput {
+  return Schema.decodeUnknownSync(CancelOrganizationInvitationInputSchema)(
+    input
+  );
+}
+
+export function decodeUpdateOrganizationMemberRoleInput(
+  input: unknown
+): UpdateOrganizationMemberRoleInput {
+  return Schema.decodeUnknownSync(UpdateOrganizationMemberRoleInputSchema)(
+    input
+  );
+}
+
+export function decodeRemoveOrganizationMemberInput(
+  input: unknown
+): RemoveOrganizationMemberInput {
+  return Schema.decodeUnknownSync(RemoveOrganizationMemberInputSchema)(input);
+}
+
 export function decodeDisconnectConnectedAppGrantInput(
   input: unknown
 ): DisconnectConnectedAppGrantInput {
@@ -940,8 +1314,20 @@ export function decodeInvitationId(input: unknown): InvitationId {
   return Schema.decodeUnknownSync(InvitationId)(input);
 }
 
+export function decodeOrganizationMemberId(
+  input: unknown
+): OrganizationMemberId {
+  return Schema.decodeUnknownSync(OrganizationMemberId)(input);
+}
+
 export function decodeOrganizationRole(input: unknown): OrganizationRole {
   return Schema.decodeUnknownSync(OrganizationRole)(input);
+}
+
+export function decodeInvitableOrganizationRole(
+  input: unknown
+): InvitableOrganizationRole {
+  return Schema.decodeUnknownSync(InvitableOrganizationRole)(input);
 }
 
 const administrativeOrganizationRoleSet = new Set<OrganizationRole>(

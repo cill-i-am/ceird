@@ -544,9 +544,15 @@ request logs until a separate failed-attempt audit taxonomy is designed.
 
 `@ceird/identity-core` exposes the typed `identity` HTTP API group for the
 owner/admin organization security activity read model and current-user
-connected-app management:
+connected-app management plus the owner/admin organization member workspace:
 
 - `GET /organization/security/activity`
+- `GET /organization/members`
+- `GET /organization/invitations`
+- `POST /organization/invitations`
+- `POST /organization/invitations/:invitationId/cancel`
+- `PATCH /organization/members/:memberId/role`
+- `DELETE /organization/members/:memberId`
 - `GET /user/connected-apps`
 - `DELETE /user/connected-apps/:grantId`
 - the organization security activity service resolves the current Better Auth
@@ -583,6 +589,17 @@ connected-app management:
   OAuth client id, consent scopes, and reference metadata. It has no step-up
   authentication gate in this release; the UI uses explicit inline
   confirmation.
+- organization member and invitation responses are Ceird DTOs decoded with
+  Effect Schema. Member ids, invitation ids, organization ids, user ids, roles,
+  and invitation statuses are shared branded/literal contracts from
+  `@ceird/identity-core`.
+- the domain lists members and pending non-expired invitations from Better
+  Auth-owned tables, decodes rows before returning them, and never returns raw
+  Better Auth member, invitation, user, or session payloads to browser code.
+- invite, resend, cancel, role update, and removal mutations still delegate to
+  Better Auth's organization handler so Better Auth authorization, rate limits,
+  verified-email policy, email delivery, and success-only organization security
+  audit side effects remain the source of behavior.
 
 The app renders this read model at `/organization/security` as a read-only
 admin route. It shows filters in the page header, hides raw provenance, and
@@ -836,6 +853,9 @@ Current architectural decision:
 - Better Auth uses the Drizzle adapter directly
 - the surrounding Effect database layers support domain repositories, not a
   wrapper around Better Auth
+- Better Auth organization `invitation.status` is constrained in the database
+  to the current upstream lifecycle values: `pending`, `accepted`, `canceled`,
+  and `rejected`
 
 ## Frontend Ownership
 
@@ -857,6 +877,9 @@ Rules:
 - do not instantiate ad hoc Better Auth clients throughout the app
 - do not add custom fetch wrappers or app-owned auth endpoint shims unless a
   real product need appears
+- do not interpret raw Better Auth organization member or invitation payloads in
+  browser code; use the `@ceird/identity-core` identity API DTOs exposed through
+  the app API client
 
 ### App-Origin to API-Origin Mapping
 

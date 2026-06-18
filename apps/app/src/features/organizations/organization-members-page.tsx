@@ -1,12 +1,8 @@
-import {
-  InvitableOrganizationRole,
-  IsoDateTimeString,
-  decodeOrganizationRole,
-  isAdministrativeOrganizationRole,
-} from "@ceird/identity-core";
+import { isAdministrativeOrganizationRole } from "@ceird/identity-core";
 import type {
-  IsoDateTimeString as IsoDateTimeStringType,
   OrganizationId,
+  OrganizationInvitation,
+  OrganizationMember,
   OrganizationRole as OrganizationRoleType,
   UserId,
 } from "@ceird/identity-core";
@@ -61,7 +57,6 @@ import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
-import { authClient } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 import { cn } from "#/lib/utils";
@@ -72,14 +67,12 @@ import {
   isInviteRole,
 } from "./organization-invite-role-options";
 import {
-  formatRoleLabel,
+  formatOrganizationRoleLabel,
   getMemberDisplayName,
 } from "./organization-member-display";
 import type {
   InvitationAction,
-  InvitationSummary,
   MemberAction,
-  OrganizationMemberSummary,
 } from "./organization-member-display";
 import {
   decodeOrganizationMemberInviteInput,
@@ -90,7 +83,14 @@ import {
   CurrentMemberRow,
   PendingInvitationRow,
 } from "./organization-member-row-actions";
-import { decodeOrganizationViewerUserId } from "./organization-viewer";
+import {
+  cancelOrganizationInvitation,
+  inviteOrganizationMember,
+  listOrganizationInvitations,
+  listOrganizationMembers,
+  removeOrganizationMember,
+  updateOrganizationMemberRole,
+} from "./organization-members-api";
 
 interface CurrentMemberSummary {
   readonly email: string;
@@ -140,7 +140,7 @@ type CurrentMembersDisplayState =
       readonly count: number;
       readonly kind: "ready";
       readonly loadErrorMessage: string | null;
-      readonly members: readonly OrganizationMemberSummary[];
+      readonly members: readonly OrganizationMember[];
     };
 
 function formatInvitationCount(count: number) {
@@ -162,7 +162,7 @@ function getCurrentMembersDisplayState({
   readonly hasLoadedMembers: boolean;
   readonly memberLoadErrorMessage: string | null;
   readonly memberTotal: number | null;
-  readonly members: readonly OrganizationMemberSummary[];
+  readonly members: readonly OrganizationMember[];
 }): CurrentMembersDisplayState {
   if (memberLoadErrorMessage && (!hasLoadedMembers || !hasCurrentMemberState)) {
     return { kind: "error", message: memberLoadErrorMessage };
@@ -194,7 +194,7 @@ function getCurrentMembersDisplayState({
 }
 
 function isCurrentOrganizationMember(
-  member: OrganizationMemberSummary,
+  member: OrganizationMember,
   currentUserId: UserId | undefined
 ) {
   return currentUserId !== undefined && member.userId === currentUserId;
@@ -224,9 +224,9 @@ export function OrganizationMembersPage({
 }) {
   const isHydrated = useIsHydrated();
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
-  const [members, setMembers] = React.useState<
-    readonly OrganizationMemberSummary[]
-  >([]);
+  const [members, setMembers] = React.useState<readonly OrganizationMember[]>(
+    []
+  );
   const [memberTotal, setMemberTotal] = React.useState<number | null>(null);
   const [memberLoadErrorMessage, setMemberLoadErrorMessage] = React.useState<
     string | null
@@ -239,7 +239,7 @@ export function OrganizationMembersPage({
   const [activeMemberAction, setActiveMemberAction] =
     React.useState<MemberAction | null>(null);
   const [invitations, setInvitations] = React.useState<
-    readonly InvitationSummary[]
+    readonly OrganizationInvitation[]
   >([]);
   const [loadErrorMessage, setLoadErrorMessage] = React.useState<string | null>(
     null
@@ -292,18 +292,15 @@ export function OrganizationMembersPage({
     setMemberLoadErrorMessage(null);
 
     try {
-      const loadedMembers: OrganizationMemberSummary[] = [];
+      const loadedMembers: OrganizationMember[] = [];
       let memberCount = 0;
 
       while (true) {
         // Offset pagination advances from the number of members already loaded.
         // react-doctor-disable-next-line
-        const result = await authClient.organization.listMembers({
-          query: {
-            limit: MEMBERS_PAGE_SIZE,
-            offset: loadedMembers.length,
-            organizationId: activeOrganizationId,
-          },
+        const result = await listOrganizationMembers({
+          limit: MEMBERS_PAGE_SIZE,
+          offset: loadedMembers.length,
         });
 
         if (
@@ -313,17 +310,12 @@ export function OrganizationMembersPage({
           return;
         }
 
-        if (result.error || !result.data) {
-          setMemberLoadErrorMessage(MEMBER_LOAD_FAILURE_MESSAGE);
-          return;
-        }
-
-        memberCount = result.data.total;
-        loadedMembers.push(...result.data.members.map(toOrganizationMember));
+        memberCount = result.total;
+        loadedMembers.push(...result.members);
 
         if (
-          loadedMembers.length >= result.data.total ||
-          result.data.members.length < MEMBERS_PAGE_SIZE
+          loadedMembers.length >= result.total ||
+          result.members.length < MEMBERS_PAGE_SIZE
         ) {
           break;
         }
@@ -359,11 +351,7 @@ export function OrganizationMembersPage({
     setIsLoadingInvitations(true);
 
     try {
-      const result = await authClient.organization.listInvitations({
-        query: {
-          organizationId: activeOrganizationId,
-        },
-      });
+      const result = await listOrganizationInvitations();
 
       if (
         requestSequence !== invitationRequestSequence.current ||
@@ -372,16 +360,7 @@ export function OrganizationMembersPage({
         return;
       }
 
-      if (result.error || !result.data) {
-        setLoadErrorMessage(INVITATION_LOAD_FAILURE_MESSAGE);
-        return;
-      }
-
-      setInvitations(
-        result.data.flatMap((invitation) =>
-          isPendingInvitation(invitation) ? [toInvitation(invitation)] : []
-        )
-      );
+      setInvitations(result.invitations);
     } catch {
       if (
         requestSequence !== invitationRequestSequence.current ||
@@ -439,15 +418,14 @@ export function OrganizationMembersPage({
       const actionOrganizationId = activeOrganizationId;
       const invite = decodeOrganizationMemberInviteInput(value);
       const mutationFeedback = beginMutationFeedback();
-      const result = await authClient.organization.inviteMember({
-        email: invite.email,
-        organizationId: actionOrganizationId,
-        role: invite.role,
-      });
-
-      if (result.error) {
+      try {
+        await inviteOrganizationMember({
+          email: invite.email,
+          role: invite.role,
+        });
+      } catch (error) {
         setErrorMessage(
-          getInviteMemberFailureMessage(result.error, INVITE_FAILURE_MESSAGE)
+          getInviteMemberFailureMessage(error, INVITE_FAILURE_MESSAGE)
         );
         return;
       }
@@ -467,7 +445,7 @@ export function OrganizationMembersPage({
   });
 
   const handleInvitationAction = React.useCallback(
-    async (invitation: InvitationSummary, action: InvitationAction) => {
+    async (invitation: OrganizationInvitation, action: InvitationAction) => {
       const actionOrganizationId = activeOrganizationId;
 
       setActiveInvitationAction({
@@ -483,23 +461,21 @@ export function OrganizationMembersPage({
 
       try {
         const mutationFeedback = beginMutationFeedback();
-        const result =
-          action === "resend"
-            ? await authClient.organization.inviteMember({
+        try {
+          await (action === "resend"
+            ? inviteOrganizationMember({
                 email: invitation.email,
-                organizationId: actionOrganizationId,
                 resend: true,
                 role: invitation.role,
               })
-            : await authClient.organization.cancelInvitation({
+            : cancelOrganizationInvitation({
                 invitationId: invitation.id,
-              });
-
-        if (result.error) {
+              }));
+        } catch (error) {
           setInvitationActionErrorMessage(
             action === "resend"
               ? getInviteMemberFailureMessage(
-                  result.error,
+                  error,
                   INVITATION_ACTION_FAILURE_MESSAGE
                 )
               : INVITATION_ACTION_FAILURE_MESSAGE
@@ -556,7 +532,7 @@ export function OrganizationMembersPage({
   });
 
   const handleMemberRoleChange = React.useCallback(
-    async (member: OrganizationMemberSummary, role: OrganizationRoleType) => {
+    async (member: OrganizationMember, role: OrganizationRoleType) => {
       const actionOrganizationId = activeOrganizationId;
       const displayName = getMemberDisplayName(member);
 
@@ -574,21 +550,12 @@ export function OrganizationMembersPage({
 
       try {
         const mutationFeedback = beginMutationFeedback();
-        const result = await authClient.organization.updateMemberRole({
+        const result = await updateOrganizationMemberRole({
           memberId: member.id,
-          organizationId: actionOrganizationId,
           role,
         });
 
         if (!isLatestActiveOrganization(actionOrganizationId)) {
-          return;
-        }
-
-        if (result.error || !result.data) {
-          setMemberActionErrors((current) => ({
-            ...current,
-            [member.id]: `We couldn't update ${displayName}'s role.`,
-          }));
           return;
         }
 
@@ -598,7 +565,7 @@ export function OrganizationMembersPage({
           return;
         }
 
-        const updatedRole = decodeOrganizationRole(result.data.role);
+        const updatedRole = result.member.role;
 
         setMembers((current) =>
           current.map((listedMember) =>
@@ -611,7 +578,7 @@ export function OrganizationMembersPage({
           )
         );
         setMemberActionSuccessMessage(
-          `${displayName} is now ${formatRoleLabel(updatedRole)}.`
+          `${displayName} is now ${formatOrganizationRoleLabel(updatedRole)}.`
         );
         await loadMembers();
 
@@ -647,7 +614,7 @@ export function OrganizationMembersPage({
   );
 
   const handleMemberRemoval = React.useCallback(
-    async (member: OrganizationMemberSummary) => {
+    async (member: OrganizationMember) => {
       const actionOrganizationId = activeOrganizationId;
       const displayName = getMemberDisplayName(member);
 
@@ -664,20 +631,11 @@ export function OrganizationMembersPage({
 
       try {
         const mutationFeedback = beginMutationFeedback();
-        const result = await authClient.organization.removeMember({
-          memberIdOrEmail: member.id,
-          organizationId: actionOrganizationId,
+        await removeOrganizationMember({
+          memberId: member.id,
         });
 
         if (!isLatestActiveOrganization(actionOrganizationId)) {
-          return;
-        }
-
-        if (result.error || !result.data) {
-          setMemberActionErrors((current) => ({
-            ...current,
-            [member.id]: `We couldn't remove ${displayName}.`,
-          }));
           return;
         }
 
@@ -1050,11 +1008,9 @@ function CurrentMembersSection({
   readonly memberActionErrors: Readonly<Record<string, string>>;
   readonly memberActionSuccessMessage: string | null;
   readonly ownerCount: number;
-  readonly onMemberRemoval: (
-    member: OrganizationMemberSummary
-  ) => Promise<void>;
+  readonly onMemberRemoval: (member: OrganizationMember) => Promise<void>;
   readonly onMemberRoleChange: (
-    member: OrganizationMemberSummary,
+    member: OrganizationMember,
     role: OrganizationRoleType
   ) => Promise<void>;
 }) {
@@ -1201,12 +1157,12 @@ function PendingInvitationsSection({
   } | null;
   readonly invitationActionErrorMessage: string | null;
   readonly invitationActionSuccessMessage: string | null;
-  readonly invitations: readonly InvitationSummary[];
+  readonly invitations: readonly OrganizationInvitation[];
   readonly isHydrated: boolean;
   readonly isLoadingInvitations: boolean;
   readonly loadErrorMessage: string | null;
   readonly onInvitationAction: (
-    invitation: InvitationSummary,
+    invitation: OrganizationInvitation,
     action: InvitationAction
   ) => Promise<void>;
 }) {
@@ -1275,7 +1231,7 @@ function shouldRenderPendingInvitationsSection({
 }: {
   readonly invitationActionErrorMessage: string | null;
   readonly invitationActionSuccessMessage: string | null;
-  readonly invitations: readonly InvitationSummary[];
+  readonly invitations: readonly OrganizationInvitation[];
   readonly isLoadingInvitations: boolean;
   readonly loadErrorMessage: string | null;
 }) {
@@ -1288,54 +1244,6 @@ function shouldRenderPendingInvitationsSection({
   );
 }
 
-function isPendingInvitation(input: { readonly status: string }) {
-  return input.status === "pending";
-}
-
-function decodeInvitationExpiresAt(input: unknown): IsoDateTimeStringType {
-  return Schema.decodeUnknownSync(IsoDateTimeString)(
-    input instanceof Date ? input.toISOString() : input
-  );
-}
-
-function toInvitation(input: {
-  readonly email: string;
-  readonly expiresAt: unknown;
-  readonly id: string;
-  readonly role: unknown;
-  readonly status: string;
-}): InvitationSummary {
-  return {
-    email: input.email,
-    expiresAt: decodeInvitationExpiresAt(input.expiresAt),
-    id: input.id,
-    role: Schema.decodeUnknownSync(InvitableOrganizationRole)(input.role),
-    status: input.status,
-  };
-}
-
-function toOrganizationMember(input: {
-  readonly id: string;
-  readonly role: unknown;
-  readonly user?: {
-    readonly email?: string | null | undefined;
-    readonly id?: string | null | undefined;
-    readonly name?: string | null | undefined;
-  } | null;
-  readonly userId: string;
-}): OrganizationMemberSummary {
-  const email = input.user?.email ?? input.userId;
-  const name = input.user?.name ?? email;
-
-  return {
-    email,
-    id: input.id,
-    name,
-    role: decodeOrganizationRole(input.role),
-    userId: decodeOrganizationViewerUserId(input.userId),
-  };
-}
-
 function resolveCurrentViewerRole({
   currentMember,
   currentUserId,
@@ -1343,7 +1251,7 @@ function resolveCurrentViewerRole({
 }: {
   readonly currentMember: CurrentMemberSummary;
   readonly currentUserId?: UserId | undefined;
-  readonly members: readonly OrganizationMemberSummary[];
+  readonly members: readonly OrganizationMember[];
 }): OrganizationRoleType {
   if (currentUserId === undefined) {
     return currentMember.role;

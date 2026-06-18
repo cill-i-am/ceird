@@ -72,12 +72,6 @@ async function expectAuthenticatedHome(page: Page) {
   ).toBeVisible();
 }
 
-async function getCookieHeader(page: Page) {
-  const cookies = await page.context().cookies();
-
-  return cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
-}
-
 function updateCookieJarFromResponse(
   cookieJar: CookieJar,
   response: Awaited<ReturnType<APIRequestContext["fetch"]>>
@@ -337,52 +331,38 @@ async function seedOwnerOrganization(
   return organizationPayload.id;
 }
 
-async function findInvitationIdForEmail(
-  request: APIRequestContext,
-  page: Page,
-  email: string
-) {
-  const cookie = await getCookieHeader(page);
-  const response = await request.get(
-    `${API_ORIGIN}/api/auth/organization/list-invitations`,
-    {
-      headers: {
-        accept: "application/json",
-        cookie,
-      },
-    }
-  );
+async function findInvitationIdForEmail(email: string) {
+  const client = new PgClient({
+    connectionString: readPlaywrightDatabaseUrl(),
+  });
 
-  if (!response.ok()) {
-    return null;
+  await client.connect();
+
+  try {
+    const result = await client.query<{ readonly id: string }>(
+      `select id
+       from invitation
+       where email = $1
+         and status = 'pending'
+         and expires_at > now()
+       order by created_at desc
+       limit 1`,
+      [email]
+    );
+
+    return result.rows[0]?.id ?? null;
+  } finally {
+    await client.end();
   }
-
-  const invitations = (await response.json()) as {
-    email: string;
-    id: string;
-    status: string;
-  }[];
-
-  const invitation = invitations.find(
-    (currentInvitation) =>
-      currentInvitation.email === email &&
-      currentInvitation.status === "pending"
-  );
-
-  return invitation?.id ?? null;
 }
 
-async function getInvitationIdForEmail(
-  request: APIRequestContext,
-  page: Page,
-  email: string
-) {
+async function getInvitationIdForEmail(email: string) {
   let invitationId: string | null = null;
 
   await expect
     .poll(
       async () => {
-        invitationId = await findInvitationIdForEmail(request, page, email);
+        invitationId = await findInvitationIdForEmail(email);
 
         return invitationId;
       },
@@ -483,18 +463,14 @@ async function createExistingUser(
   await markUserEmailVerified(email);
 }
 
-async function inviteMemberFromMembersPage(
-  page: Page,
-  request: APIRequestContext,
-  email: string
-) {
+async function inviteMemberFromMembersPage(page: Page, email: string) {
   const membersPage = new MembersPage(page);
   await membersPage.openFromNavigation();
   await membersPage.openInviteDialog();
   await membersPage.email.fill(email);
   await membersPage.submit.click();
 
-  const invitationId = await getInvitationIdForEmail(request, page, email);
+  const invitationId = await getInvitationIdForEmail(email);
 
   await expect(membersPage.pendingInvitation(email)).toBeVisible({
     timeout: 15_000,
@@ -521,11 +497,7 @@ test.describe("organization invitations", () => {
 
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
 
-    const invitationId = await inviteMemberFromMembersPage(
-      page,
-      request,
-      invitedEmail
-    );
+    const invitationId = await inviteMemberFromMembersPage(page, invitedEmail);
     await expectPublicInvitationPreviewReady(request, invitationId);
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
@@ -592,11 +564,7 @@ test.describe("organization invitations", () => {
 
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
 
-    const invitationId = await inviteMemberFromMembersPage(
-      page,
-      request,
-      invitedEmail
-    );
+    const invitationId = await inviteMemberFromMembersPage(page, invitedEmail);
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
     const invitedContext = await browser.newContext();
@@ -640,11 +608,7 @@ test.describe("organization invitations", () => {
     await createExistingUser(request, invitedEmail, invitedPassword);
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
 
-    const invitationId = await inviteMemberFromMembersPage(
-      page,
-      request,
-      invitedEmail
-    );
+    const invitationId = await inviteMemberFromMembersPage(page, invitedEmail);
 
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
@@ -690,11 +654,7 @@ test.describe("organization invitations", () => {
     await createExistingUser(request, invitedEmail, invitedPassword);
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
 
-    const invitationId = await inviteMemberFromMembersPage(
-      page,
-      request,
-      invitedEmail
-    );
+    const invitationId = await inviteMemberFromMembersPage(page, invitedEmail);
 
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
@@ -756,11 +716,7 @@ test.describe("organization invitations", () => {
     );
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
 
-    const invitationId = await inviteMemberFromMembersPage(
-      page,
-      request,
-      invitedEmail
-    );
+    const invitationId = await inviteMemberFromMembersPage(page, invitedEmail);
 
     const invitedContext = await browser.newContext();
     try {
@@ -801,20 +757,17 @@ test.describe("organization invitations", () => {
     const ownerPassword = createTestPassword("CeirdInviteOwner");
 
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
-    await page.route(
-      "**/api/auth/organization/list-invitations**",
-      async (route) => {
-        await route.fulfill({
-          status: 500,
-          body: JSON.stringify({
-            error: {
-              message: "Forced failure for e2e coverage",
-            },
-          }),
-          contentType: "application/json",
-        });
-      }
-    );
+    await page.route("**/organization/invitations**", async (route) => {
+      await route.fulfill({
+        status: 500,
+        body: JSON.stringify({
+          error: {
+            message: "Forced failure for e2e coverage",
+          },
+        }),
+        contentType: "application/json",
+      });
+    });
 
     const membersPage = new MembersPage(page);
     await membersPage.openFromNavigation();
@@ -828,6 +781,6 @@ test.describe("organization invitations", () => {
       page.getByText("No pending invitations yet.")
     ).not.toBeVisible();
 
-    await page.unroute("**/api/auth/organization/list-invitations**");
+    await page.unroute("**/organization/invitations**");
   });
 });

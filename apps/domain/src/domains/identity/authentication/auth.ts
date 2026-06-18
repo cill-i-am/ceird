@@ -5,6 +5,8 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import {
   decodeInvitationId,
   decodeCreateOrganizationInput,
+  decodeInvitableOrganizationRole,
+  decodeOrganizationId,
   decodeOrganizationRole,
   decodePublicInvitationPreview,
   decodeSessionId,
@@ -283,6 +285,14 @@ function throwOrganizationLimitReached(): never {
 function decodeWritableOrganizationRole(input: unknown) {
   try {
     return decodeOrganizationRole(input);
+  } catch {
+    throwInvalidOrganizationRole();
+  }
+}
+
+function decodeWritableOrganizationInvitationRole(input: unknown) {
+  try {
+    return decodeInvitableOrganizationRole(input);
   } catch {
     throwInvalidOrganizationRole();
   }
@@ -659,7 +669,9 @@ export function createAuthentication(options: {
             return Promise.resolve({
               data: {
                 ...nextInvitation,
-                role: decodeWritableOrganizationRole(nextInvitation.role),
+                role: decodeWritableOrganizationInvitationRole(
+                  nextInvitation.role
+                ),
               },
             });
           },
@@ -753,7 +765,9 @@ export function createAuthentication(options: {
               organizationName: organizationInvitation.organization.name,
               recipientEmail: organizationInvitation.email,
               recipientName: organizationInvitation.email,
-              role: decodeOrganizationRole(organizationInvitation.role),
+              role: decodeInvitableOrganizationRole(
+                organizationInvitation.role
+              ),
             } as const satisfies OrganizationInvitationEmailInput,
           });
         },

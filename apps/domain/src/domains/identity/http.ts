@@ -5,6 +5,7 @@ import { AppApi } from "../../http-api.js";
 import { observeApiOperation } from "../api-observability.js";
 import { DomainCorsLive } from "../http-cors.js";
 import { ConnectedAppGrantsService } from "./connected-apps.js";
+import { OrganizationMembersService } from "./organization-members.js";
 import { OrganizationSecurityActivityService } from "./security-activity.js";
 
 const observeIdentityOperation = (operation: string, service: string) =>
@@ -20,6 +21,7 @@ const IdentityHandlersLive = HttpApiBuilder.group(
   (handlers) =>
     Effect.gen(function* () {
       const connectedAppGrantsService = yield* ConnectedAppGrantsService;
+      const organizationMembersService = yield* OrganizationMembersService;
       const securityActivityService =
         yield* OrganizationSecurityActivityService;
 
@@ -53,6 +55,69 @@ const IdentityHandlersLive = HttpApiBuilder.group(
                 "ConnectedAppGrantsService"
               )
             )
+        )
+        .handle("listOrganizationMembers", ({ query }) =>
+          organizationMembersService
+            .listMembers(query)
+            .pipe(
+              observeIdentityOperation(
+                "listOrganizationMembers",
+                "OrganizationMembersService"
+              )
+            )
+        )
+        .handle("listOrganizationInvitations", () =>
+          organizationMembersService
+            .listInvitations()
+            .pipe(
+              observeIdentityOperation(
+                "listOrganizationInvitations",
+                "OrganizationMembersService"
+              )
+            )
+        )
+        .handle("inviteOrganizationMember", ({ payload }) =>
+          organizationMembersService
+            .invite(payload)
+            .pipe(
+              observeIdentityOperation(
+                "inviteOrganizationMember",
+                "OrganizationMembersService"
+              )
+            )
+        )
+        .handle("cancelOrganizationInvitation", ({ params }) =>
+          organizationMembersService
+            .cancelInvitation({ invitationId: params.invitationId })
+            .pipe(
+              observeIdentityOperation(
+                "cancelOrganizationInvitation",
+                "OrganizationMembersService"
+              )
+            )
+        )
+        .handle("updateOrganizationMemberRole", ({ params, payload }) =>
+          organizationMembersService
+            .updateMemberRole({
+              memberId: params.memberId,
+              role: payload.role,
+            })
+            .pipe(
+              observeIdentityOperation(
+                "updateOrganizationMemberRole",
+                "OrganizationMembersService"
+              )
+            )
+        )
+        .handle("removeOrganizationMember", ({ params }) =>
+          organizationMembersService
+            .removeMember({ memberId: params.memberId })
+            .pipe(
+              observeIdentityOperation(
+                "removeOrganizationMember",
+                "OrganizationMembersService"
+              )
+            )
         );
     })
 );
@@ -64,6 +129,7 @@ export const IdentityHttpLive = Layer.mergeAll(
   Layer.provide(
     Layer.mergeAll(
       ConnectedAppGrantsService.Default,
+      OrganizationMembersService.Default,
       OrganizationSecurityActivityService.Default
     )
   )

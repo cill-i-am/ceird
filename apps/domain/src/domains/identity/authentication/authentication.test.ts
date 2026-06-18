@@ -7164,6 +7164,40 @@ describe("createAuthentication()", () => {
     }
   }, 10_000);
 
+  it("rejects owner organization invitations through the Better Auth hook", async () => {
+    const { auth, cleanup } = createAuthenticationForPluginInspection();
+
+    try {
+      const organizationPlugin = getOrganizationPluginOptions(auth);
+
+      await expect(async () => {
+        await organizationPlugin.organizationHooks?.beforeCreateInvitation?.({
+          invitation: {
+            email: "owner@example.com",
+            organizationId: "org_123",
+            inviterId: "user_123",
+            role: "owner",
+          },
+          inviter: makeOrganizationPluginUser(true),
+          organization: {
+            id: "org_123",
+            name: "Acme Field Ops",
+            slug: "acme-field-ops",
+            createdAt: new Date(),
+            metadata: null,
+          },
+        });
+      }).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_ROLE",
+        },
+      });
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
   it("requires verified email before approving OAuth consent", async () => {
     let delegated = false;
     const handler = withAuthenticationAuthorizationGuards(

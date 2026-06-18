@@ -52,6 +52,15 @@ describe("organization member invite schemas", () => {
     });
   }, 10_000);
 
+  it("rejects invalid invite emails through the shared contract", () => {
+    expect(() =>
+      decodeOrganizationMemberInviteInput({
+        email: "not-an-email",
+        role: "member",
+      })
+    ).toThrow(/Expected/);
+  }, 10_000);
+
   it("rejects fields outside the invite contract", () => {
     expect(() =>
       decodeOrganizationMemberInviteInput({

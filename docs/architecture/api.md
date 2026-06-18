@@ -111,12 +111,26 @@ The standalone MCP Worker remains a forwarding adapter so generated/action UI,
 Agents SDK Workers, and bot surfaces can call the same domain surface.
 
 The identity HTTP group also exposes current-user connected-app management for
-the account settings Security tab:
+the account settings Security tab and organization member management for the
+members workspace:
 
-| Method   | Path                            | Purpose                                                                              |
-| -------- | ------------------------------- | ------------------------------------------------------------------------------------ |
-| `GET`    | `/user/connected-apps`          | List user-approved OAuth/MCP clients without token or client-secret data.            |
-| `DELETE` | `/user/connected-apps/:grantId` | Delete the consent, revoke refresh tokens, clear DB-backed access tokens, and audit. |
+| Method   | Path                                             | Purpose                                                                                        |
+| -------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `GET`    | `/organization/members`                          | List active organization members as Ceird DTOs with branded ids, role literals, and ISO dates. |
+| `GET`    | `/organization/invitations`                      | List pending non-expired invitations as Ceird DTOs with finite status literals.                |
+| `POST`   | `/organization/invitations`                      | Invite or resend an organization member through Better Auth's organization handler.            |
+| `POST`   | `/organization/invitations/:invitationId/cancel` | Cancel an invitation through Better Auth's organization handler.                               |
+| `PATCH`  | `/organization/members/:memberId/role`           | Update a member role, then reload and decode the member DTO from domain persistence.           |
+| `DELETE` | `/organization/members/:memberId`                | Remove a member through Better Auth's organization handler.                                    |
+| `GET`    | `/user/connected-apps`                           | List user-approved OAuth/MCP clients without token or client-secret data.                      |
+| `DELETE` | `/user/connected-apps/:grantId`                  | Delete the consent, revoke refresh tokens, clear DB-backed access tokens, and audit.           |
+
+The organization member endpoints are owned by the domain identity module, not
+the browser Better Auth client. The domain resolves the active organization and
+administrative actor from the current Better Auth session, decodes SQL rows and
+Better Auth mutation responses with Effect Schema, and returns only
+`@ceird/identity-core` DTOs. Browser code must not repair Better Auth roles,
+dates, statuses, or fallback user labels.
 
 ## Agent Runtime
 
@@ -517,7 +531,11 @@ being selected by an environment variable.
 Organization rules are enforced through Better Auth plugin hooks and shared
 decoders from `@ceird/identity-core`. Only organization name can be
 updated through the supported update path, and writable roles are decoded
-against the shared role schema.
+against the shared role schema. Organization member and invitation reads expose
+Ceird-owned DTOs from `apps/domain/src/domains/identity/organization-members.ts`;
+mutations delegate through Better Auth's organization handler so native
+organization semantics, verified-email checks, rate limits, email delivery, and
+security audit capture remain intact.
 
 ## MCP Resource Server
 

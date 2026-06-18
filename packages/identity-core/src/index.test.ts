@@ -6,6 +6,7 @@ import {
   createOrganizationSlugFromName,
   decodeCreateOrganizationNameInput,
   decodeCreateOrganizationInput,
+  decodeInvitableOrganizationRole,
   decodeInvitationId,
   decodeProductMemberActorSummaryElectricRow,
   decodeOrganizationSummary,
@@ -35,9 +36,21 @@ import {
   ConnectedAppGrantAccessDeniedError,
   ConnectedAppGrantNotFoundError,
   ConnectedAppGrantStorageError,
+  decodeCancelOrganizationInvitationInput,
   decodeConnectedAppGrantListResponse,
   decodeDisconnectConnectedAppGrantInput,
+  decodeInviteOrganizationMemberInput,
+  decodeOrganizationInvitation,
+  decodeOrganizationInvitationListResponse,
+  decodeOrganizationMember,
+  decodeOrganizationMemberListQuery,
+  decodeOrganizationMemberId,
+  decodeOrganizationMemberListResponse,
+  decodePublicInvitationPreview,
+  decodeRemoveOrganizationMemberInput,
+  decodeUpdateOrganizationMemberRoleInput,
   IdentityApi,
+  ORGANIZATION_INVITATION_STATUSES,
   ProductMemberActorSummaryElectricRowSchema,
   ProductMemberActorSummarySchema,
   ProductActorSchema,
@@ -419,16 +432,194 @@ describe("organization role boundary", () => {
 });
 
 describe("identity id boundaries", () => {
-  it("brands user, session, and invitation ids", () => {
+  it("brands user, session, invitation, and organization member ids", () => {
     expect(decodeUserId("user_123")).toBe("user_123");
     expect(decodeSessionId("session_123")).toBe("session_123");
     expect(decodeInvitationId("invitation_123")).toBe("invitation_123");
+    expect(decodeOrganizationMemberId("member_123")).toBe("member_123");
   }, 1000);
 
   it("rejects empty identity ids", () => {
     expect(() => decodeUserId("")).toThrow(/Expected/);
     expect(() => decodeSessionId("")).toThrow(/Expected/);
     expect(() => decodeInvitationId("")).toThrow(/Expected/);
+    expect(() => decodeOrganizationMemberId("")).toThrow(/Expected/);
+  }, 1000);
+});
+
+describe("organization member identity boundary", () => {
+  const member = {
+    createdAt: "2026-04-01T09:30:00.000Z",
+    email: "owner@example.com",
+    id: "mem_owner",
+    name: "Owner Example",
+    organizationId: "org_123",
+    role: "owner",
+    userId: "user_owner",
+  };
+  const invitation = {
+    createdAt: "2026-04-01T09:30:00.000Z",
+    email: "pending@example.com",
+    expiresAt: "2026-04-12T09:30:00.000Z",
+    id: "inv_123",
+    organizationId: "org_123",
+    role: "member",
+    status: "pending",
+  };
+
+  it("tracks Better Auth's invitation status lifecycle as a finite contract", () => {
+    expect(ORGANIZATION_INVITATION_STATUSES).toStrictEqual([
+      "pending",
+      "accepted",
+      "canceled",
+      "rejected",
+    ]);
+
+    for (const status of ORGANIZATION_INVITATION_STATUSES) {
+      expect(
+        decodeOrganizationInvitation({ ...invitation, status }).status
+      ).toBe(status);
+    }
+
+    expect(() =>
+      decodeOrganizationInvitation({
+        ...invitation,
+        status: "expired",
+      })
+    ).toThrow(/Expected/);
+  }, 1000);
+
+  it("decodes member and invitation DTOs without Better Auth payload fields", () => {
+    expect(decodeOrganizationMember(member)).toStrictEqual(member);
+    expect(decodeOrganizationInvitation(invitation)).toStrictEqual(invitation);
+    expect(
+      decodeOrganizationMemberListResponse({
+        members: [member],
+        total: 1,
+      })
+    ).toStrictEqual({
+      members: [member],
+      total: 1,
+    });
+    expect(
+      decodeOrganizationInvitationListResponse({
+        invitations: [invitation],
+      })
+    ).toStrictEqual({
+      invitations: [invitation],
+    });
+
+    expect(() =>
+      decodeOrganizationMember({
+        ...member,
+        user: {
+          email: "owner@example.com",
+          id: "user_owner",
+          image: null,
+          name: "Owner Example",
+        },
+      })
+    ).toThrow(/[Uu]nexpected/);
+    expect(() =>
+      decodeOrganizationInvitation({
+        ...invitation,
+        inviter: { id: "user_owner" },
+      })
+    ).toThrow(/[Uu]nexpected/);
+  }, 1000);
+
+  it("rejects invalid organization member and invitation emails", () => {
+    expect(() =>
+      decodeOrganizationMember({ ...member, email: "not-an-email" })
+    ).toThrow(/Expected/);
+    expect(() =>
+      decodeOrganizationInvitation({ ...invitation, email: "not-an-email" })
+    ).toThrow(/Expected/);
+    expect(() =>
+      decodeInviteOrganizationMemberInput({
+        email: "not-an-email",
+        role: "member",
+      })
+    ).toThrow(/Expected/);
+  }, 1000);
+
+  it("rejects owner invitations at the shared role contract", () => {
+    expect(decodeInvitableOrganizationRole("admin")).toBe("admin");
+    expect(() => decodeInvitableOrganizationRole("owner")).toThrow(/Expected/);
+    expect(() =>
+      decodeInviteOrganizationMemberInput({
+        email: "owner@example.com",
+        role: "owner",
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      decodeOrganizationInvitation({
+        ...invitation,
+        role: "owner",
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      decodePublicInvitationPreview({
+        email: "o***@e***.com",
+        organizationName: "Acme Field Ops",
+        role: "owner",
+      })
+    ).toThrow(/Expected/);
+  }, 1000);
+
+  it("decodes organization member list query defaults at the schema boundary", () => {
+    expect(decodeOrganizationMemberListQuery({})).toStrictEqual({
+      limit: 100,
+      offset: 0,
+    });
+    expect(
+      decodeOrganizationMemberListQuery({ limit: "25", offset: "50" })
+    ).toStrictEqual({
+      limit: 25,
+      offset: 50,
+    });
+  }, 1000);
+
+  it("decodes organization member mutation inputs", () => {
+    expect(
+      decodeInviteOrganizationMemberInput({
+        email: " member@example.com ",
+        role: "external",
+      })
+    ).toStrictEqual({
+      email: "member@example.com",
+      role: "external",
+    });
+    expect(
+      decodeInviteOrganizationMemberInput({
+        email: "member@example.com",
+        resend: true,
+        role: "admin",
+      })
+    ).toStrictEqual({
+      email: "member@example.com",
+      resend: true,
+      role: "admin",
+    });
+    expect(
+      decodeCancelOrganizationInvitationInput({ invitationId: "inv_123" })
+    ).toStrictEqual({ invitationId: "inv_123" });
+    expect(
+      decodeUpdateOrganizationMemberRoleInput({
+        memberId: "mem_member",
+        role: "admin",
+      })
+    ).toStrictEqual({ memberId: "mem_member", role: "admin" });
+    expect(
+      decodeRemoveOrganizationMemberInput({ memberId: "mem_member" })
+    ).toStrictEqual({ memberId: "mem_member" });
+    expect(() =>
+      decodeInviteOrganizationMemberInput({
+        email: "member@example.com",
+        organizationId: "org_123",
+        role: "member",
+      })
+    ).toThrow(/[Uu]nexpected/);
   }, 1000);
 });
 

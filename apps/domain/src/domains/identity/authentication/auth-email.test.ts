@@ -111,7 +111,7 @@ describe("auth email sender password reset delivery", () => {
     ]);
   }, 10_000);
 
-  it("accepts the owner role used by Better Auth invitations", async () => {
+  it("rejects owner organization invitation emails before sending", async () => {
     const sentMessages: TransportMessage[] = [];
 
     const result = await Effect.runPromise(
@@ -124,6 +124,7 @@ describe("auth email sender password reset delivery", () => {
         invitationUrl: "https://app.ceird.localhost/accept-invitation/inv_456",
         role: "owner",
       }).pipe(
+        effectEither,
         Effect.provide(
           makeAuthEmailSenderTestLayer((message) =>
             Effect.sync(() => {
@@ -134,8 +135,15 @@ describe("auth email sender password reset delivery", () => {
       )
     );
 
-    expect(result).toBeUndefined();
-    expect(sentMessages[0]?.text).toContain("as a owner.");
+    expect(result._tag).toBe("Left");
+    if (result._tag !== "Left") {
+      return;
+    }
+
+    expect(sentMessages).toStrictEqual([]);
+    expect(result.left).toBeInstanceOf(
+      InvalidOrganizationInvitationEmailInputError
+    );
   }, 10_000);
 
   it("rejects invalid organization invitation input before sending", async () => {
