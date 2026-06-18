@@ -17,6 +17,7 @@ export interface SyncWorkerConfigEnv {
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE?: string;
   readonly ELECTRIC_CONTAINER_DATABASE_URL?: string;
   readonly ELECTRIC_CONTAINER_ELECTRIC_SECRET?: string;
+  readonly ELECTRIC_SQL_JURISDICTION?: DurableObjectJurisdiction;
   readonly ELECTRIC_SQL_LOCATION_HINT?: DurableObjectLocationHint;
   readonly ELECTRIC_SOURCE_SECRET: string;
   readonly NODE_ENV?: string;
@@ -33,6 +34,9 @@ export const SyncWorkerConfigEnvSchema = Schema.Struct({
   CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: Schema.optional(Schema.String),
   ELECTRIC_CONTAINER_DATABASE_URL: Schema.optional(Schema.NonEmptyString),
   ELECTRIC_CONTAINER_ELECTRIC_SECRET: Schema.optional(Schema.NonEmptyString),
+  ELECTRIC_SQL_JURISDICTION: Schema.optional(
+    Schema.Literals(["eu", "fedramp", "fedramp-high"] as const)
+  ),
   ELECTRIC_SQL_LOCATION_HINT: Schema.optional(
     Schema.Literals([
       "wnam",
@@ -70,6 +74,7 @@ export function syncWorkerEnvConfigMap(env: SyncWorkerEnv) {
       ELECTRIC_CONTAINER_DATABASE_URL: env.ELECTRIC_CONTAINER_DATABASE_URL,
       ELECTRIC_CONTAINER_ELECTRIC_SECRET:
         env.ELECTRIC_CONTAINER_ELECTRIC_SECRET,
+      ELECTRIC_SQL_JURISDICTION: env.ELECTRIC_SQL_JURISDICTION,
       ELECTRIC_SQL_LOCATION_HINT: env.ELECTRIC_SQL_LOCATION_HINT,
       ELECTRIC_SOURCE_SECRET: env.ELECTRIC_SOURCE_SECRET,
       NODE_ENV: env.NODE_ENV,

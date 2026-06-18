@@ -563,7 +563,11 @@ function makeElectricFetcher(env: SyncWorkerEnv) {
           env.ELECTRIC_SQL_LOCATION_HINT === undefined
             ? undefined
             : { locationHint: env.ELECTRIC_SQL_LOCATION_HINT };
-        const stub = env.ElectricSql.getByName("primary", options);
+        const namespace =
+          env.ELECTRIC_SQL_JURISDICTION === undefined
+            ? env.ElectricSql
+            : env.ElectricSql.jurisdiction(env.ELECTRIC_SQL_JURISDICTION);
+        const stub = namespace.getByName("primary", options);
 
         return stub.fetch(request);
       },

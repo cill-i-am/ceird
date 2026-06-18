@@ -68,6 +68,7 @@ export interface SyncWorkerConfiguredEnv {
   readonly AUTH_APP_ORIGIN: string;
   readonly AUTH_TRUSTED_ORIGINS: string;
   readonly CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: string;
+  readonly ELECTRIC_SQL_JURISDICTION?: DurableObjectJurisdiction;
   readonly ELECTRIC_CONTAINER_DATABASE_URL?: Redacted.Redacted<string>;
   readonly ELECTRIC_CONTAINER_ELECTRIC_SECRET?: Redacted.Redacted<string>;
   readonly ELECTRIC_SQL_LOCATION_HINT: DurableObjectLocationHint;
@@ -114,6 +115,7 @@ export function makeSyncWorkerResourceEnv(input: {
 export function makeSyncWorkerConfiguredEnv(input: {
   readonly config: SyncWorkerStageConfig;
   readonly electricContainer?: ElectricContainerConfig | undefined;
+  readonly electricSqlJurisdiction?: DurableObjectJurisdiction | undefined;
   readonly electricSqlLocationHint: DurableObjectLocationHint;
   readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
   readonly localDev?: boolean | undefined;
@@ -138,6 +140,9 @@ export function makeSyncWorkerConfiguredEnv(input: {
     CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: String(
       input.config.workerAnalyticsSampleRate
     ),
+    ...(input.electricSqlJurisdiction === undefined
+      ? {}
+      : { ELECTRIC_SQL_JURISDICTION: input.electricSqlJurisdiction }),
     ELECTRIC_SQL_LOCATION_HINT: input.electricSqlLocationHint,
     ELECTRIC_SOURCE_SECRET: input.electricSourceSecret,
     NODE_ENV: "production",
@@ -231,6 +236,7 @@ export function makeSyncWorkerProps(input: {
   readonly config: SyncWorkerStageConfig;
   readonly domain: DomainWorkerResource;
   readonly electricContainer?: ElectricContainerConfig | undefined;
+  readonly electricSqlJurisdiction?: DurableObjectJurisdiction | undefined;
   readonly electricSqlLocationHint: DurableObjectLocationHint;
   readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
   readonly hostname: string;
@@ -247,6 +253,7 @@ export function makeSyncWorkerProps(input: {
       config: input.config,
       domain: input.domain,
       electricContainer: input.electricContainer,
+      electricSqlJurisdiction: input.electricSqlJurisdiction,
       electricSqlLocationHint: input.electricSqlLocationHint,
       electricSourceSecret: input.electricSourceSecret,
       localDev: input.localDev,
@@ -263,6 +270,7 @@ export function makeSyncWorkerEnv(input: {
   readonly config: SyncWorkerStageConfig;
   readonly domain: DomainWorkerResource;
   readonly electricContainer?: ElectricContainerConfig | undefined;
+  readonly electricSqlJurisdiction?: DurableObjectJurisdiction | undefined;
   readonly electricSqlLocationHint: DurableObjectLocationHint;
   readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
   readonly localDev?: boolean | undefined;
@@ -277,6 +285,7 @@ export function makeSyncWorkerEnv(input: {
     ...makeSyncWorkerConfiguredEnv({
       config: input.config,
       electricContainer: input.electricContainer,
+      electricSqlJurisdiction: input.electricSqlJurisdiction,
       electricSqlLocationHint: input.electricSqlLocationHint,
       electricSourceSecret: input.electricSourceSecret,
       localDev: input.localDev,
@@ -290,6 +299,7 @@ export function makeSyncWorker(input: {
   readonly config: SyncWorkerStageConfig;
   readonly domain: DomainWorkerResource;
   readonly electricContainer?: ElectricContainerConfig | undefined;
+  readonly electricSqlJurisdiction?: DurableObjectJurisdiction | undefined;
   readonly electricSqlLocationHint: DurableObjectLocationHint;
   readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
   readonly hostname: string;
