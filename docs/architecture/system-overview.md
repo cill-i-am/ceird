@@ -198,6 +198,10 @@ retained_until > $2`, where `$2` is the domain Worker's current time.
 stale rows even if cleanup lags. Repository retention also prunes expired rows
 and keeps only the latest 5,000 events per organization, which is the guardrail
 that cannot be represented as an Electric predicate.
+Jobs and Sites domain command paths create feed rows for product writes instead
+of relying on browser interpretation: Jobs writes source events from
+`work_item_activity`, while Sites writes source create/update/label events from
+the same transaction as the site write.
 The browser Activity route subscribes to both `activity-events` and
 `product-activity-actors`, joins product-safe actor display locally, and applies
 event/entity/status filters over synced rows.

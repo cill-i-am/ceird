@@ -1,3 +1,4 @@
+import type { ProductActivityEvent } from "@ceird/activity-core";
 import {
   AgentAccessDeniedError,
   AGENT_ACCESS_DENIED_ERROR_TAG,
@@ -19,6 +20,7 @@ import {
   UserId,
   UserPreferencesStorageError,
 } from "@ceird/identity-core";
+import { SiteId, SiteOptionSchema } from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
 import { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Cause, Effect, Exit, Layer, Option, Schema } from "effect";
@@ -74,6 +76,8 @@ const decodeAgentActionRunId = Schema.decodeUnknownSync(AgentActionRunId);
 const decodeAgentThreadId = Schema.decodeUnknownSync(AgentThreadId);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeProductActorId = Schema.decodeUnknownSync(ProductActorId);
+const decodeSiteId = Schema.decodeUnknownSync(SiteId);
+const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
 
 const organizationId = decodeOrganizationId("org_123");
@@ -1235,6 +1239,127 @@ describe("agent threads service", () => {
     expect(error.cause).toContain("EffectDrizzleQueryError");
   });
 
+  it("executes site read actions through the derived SitesService layer", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111111");
+    const site = decodeSiteOption({
+      displayLocation: "",
+      hasUsableCoordinates: false,
+      id: siteId,
+      labels: [],
+      locationStatus: "unverified",
+      name: "Agent-visible depot",
+      updatedAt: "2026-05-20T09:00:00.000Z",
+    });
+
+    const result = await Effect.runPromise(
+      runAgentActions(
+        Effect.gen(function* () {
+          const actions = yield* AgentActions;
+
+          return yield* actions.execute(actor, "ceird.sites.options", {});
+        }),
+        {
+          sitesRepository: {
+            listOptions: (requestedOrganizationId) =>
+              Effect.sync(() => {
+                expect(requestedOrganizationId).toBe(actor.organizationId);
+
+                return [site];
+              }),
+          },
+        }
+      )
+    );
+
+    expect(result).toStrictEqual({ sites: [site] });
+  });
+
+  it("executes site write actions with product activity actor dependencies", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111112");
+    const existingSite = decodeSiteOption({
+      displayLocation: "",
+      hasUsableCoordinates: false,
+      id: siteId,
+      labels: [],
+      locationStatus: "unverified",
+      name: "Original depot",
+      updatedAt: "2026-05-20T09:00:00.000Z",
+    });
+    const updatedSite = decodeSiteOption({
+      ...existingSite,
+      name: "Updated depot",
+      updatedAt: "2026-05-20T09:15:00.000Z",
+    });
+    const recordedEvents: RecordActivityEventInput[] = [];
+    let actorResolutionCalls = 0;
+
+    const result = await Effect.runPromise(
+      runAgentActions(
+        Effect.gen(function* () {
+          const actions = yield* AgentActions;
+
+          return yield* actions.execute(actor, "ceird.sites.update", {
+            input: { name: "Updated depot" },
+            siteId,
+          });
+        }),
+        {
+          activityEventsRepository: {
+            recordEvent: (input) =>
+              Effect.sync(() => {
+                recordedEvents.push(input);
+
+                return {} as ProductActivityEvent;
+              }),
+          },
+          productActivityActorsRepository: {
+            ensureMemberActor: (input) =>
+              Effect.sync(() => {
+                actorResolutionCalls += 1;
+                expect(input).toStrictEqual({
+                  organizationId: actor.organizationId,
+                  userId: actor.userId,
+                });
+
+                return {
+                  actor: {
+                    displayDetail: "Team member",
+                    displayName: "Taylor Member",
+                    id: decodeProductActorId(
+                      "99999999-9999-4999-8999-999999999999"
+                    ),
+                    kind: "member",
+                  },
+                  sourceUserId: actor.userId,
+                };
+              }),
+          },
+          sitesRepository: {
+            getOptionById: () => Effect.succeed(Option.some(existingSite)),
+            update: () => Effect.succeed(Option.some(updatedSite)),
+          },
+          sqlClient: makeFakeSqlClient(),
+        }
+      )
+    );
+
+    expect(result).toStrictEqual({
+      mutation: { txid: 701 },
+      site: updatedSite,
+    });
+    expect(actorResolutionCalls).toBe(1);
+    expect(recordedEvents).toStrictEqual([
+      expect.objectContaining({
+        actorId: decodeProductActorId("99999999-9999-4999-8999-999999999999"),
+        eventType: "site.updated",
+        organizationId: actor.organizationId,
+        sourceId: expect.stringMatching(`^site:${siteId}:updated:[0-9a-z]+$`),
+        targetId: siteId,
+        targetType: "site",
+      }),
+    ]);
+  });
+
   it("validates internal current-location access for an enabled thread owner", async () => {
     const response = await Effect.runPromise(
       runAgentThreadsService(
@@ -1555,7 +1680,20 @@ function makeAgentThreadsServiceTestLayer(
 function makeAgentActionsTestLayer(options: AgentActionsTestOptions) {
   return Layer.mergeAll(
     makeUnusedDomainDrizzleLayer(),
-    makeUnusedSqlClientLayer(),
+    options.sqlClient === undefined
+      ? makeUnusedSqlClientLayer()
+      : Layer.succeed(SqlClient.SqlClient, options.sqlClient),
+    Layer.succeed(
+      ActivityEventsRepository,
+      ActivityEventsRepository.of({
+        applyRetention: () => Effect.void,
+        listRecent: () => Effect.succeed([]),
+        recordEvent:
+          options.activityEventsRepository?.recordEvent ??
+          (() => Effect.succeed({} as ProductActivityEvent)),
+        ...options.activityEventsRepository,
+      } as unknown as ContextService<typeof ActivityEventsRepository>)
+    ),
     Layer.succeed(
       CommentsRepository,
       {} as ContextService<typeof CommentsRepository>
@@ -1595,6 +1733,26 @@ function makeAgentActionsTestLayer(options: AgentActionsTestOptions) {
         ...options.organizationAuthorization,
       } as unknown as ContextService<typeof OrganizationAuthorization>)
     ),
+    Layer.succeed(
+      ProductActivityActorsRepository,
+      ProductActivityActorsRepository.of({
+        ensureMemberActor:
+          options.productActivityActorsRepository?.ensureMemberActor ??
+          (() =>
+            Effect.succeed({
+              actor: {
+                displayDetail: "Team member",
+                displayName: "Taylor Member",
+                id: decodeProductActorId(
+                  "99999999-9999-4999-8999-999999999999"
+                ),
+                kind: "member",
+              },
+              sourceUserId: actor.userId,
+            })),
+        ...options.productActivityActorsRepository,
+      } as unknown as ContextService<typeof ProductActivityActorsRepository>)
+    ),
     Layer.succeed(HttpServerRequest.HttpServerRequest, {
       headers: new Headers({
         authorization: "Bearer agent-secret",
@@ -1610,7 +1768,9 @@ function makeAgentActionsTestLayer(options: AgentActionsTestOptions) {
     ),
     Layer.succeed(
       SitesRepository,
-      {} as ContextService<typeof SitesRepository>
+      SitesRepository.of({
+        ...options.sitesRepository,
+      } as unknown as ContextService<typeof SitesRepository>)
     ),
     Layer.succeed(
       UserPreferencesRepository,
@@ -1676,10 +1836,41 @@ interface AgentThreadsServiceTestOptions {
 }
 
 interface AgentActionsTestOptions {
+  readonly activityEventsRepository?: Partial<
+    ContextService<typeof ActivityEventsRepository>
+  >;
   readonly labelsRepository?: Partial<ContextService<typeof LabelsRepository>>;
   readonly organizationAuthorization?: Partial<
     ContextService<typeof OrganizationAuthorization>
   >;
+  readonly productActivityActorsRepository?: Partial<
+    ContextService<typeof ProductActivityActorsRepository>
+  >;
+  readonly sitesRepository?: Partial<ContextService<typeof SitesRepository>>;
+  readonly sqlClient?: SqlClient.SqlClient;
+}
+
+function makeFakeSqlClient(): SqlClient.SqlClient {
+  let nextTxid = 700;
+  const sql = Object.assign(
+    <Row>() =>
+      Effect.sync(() => {
+        nextTxid += 1;
+
+        return [
+          {
+            txid: String(nextTxid),
+          },
+        ] as Row[];
+      }),
+    {
+      withTransaction: <Value, Error, Requirements>(
+        effect: Effect.Effect<Value, Error, Requirements>
+      ) => effect,
+    }
+  );
+
+  return sql as unknown as SqlClient.SqlClient;
 }
 
 function makeSqlError(): SqlError.SqlError {

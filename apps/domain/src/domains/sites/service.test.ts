@@ -26,6 +26,7 @@ import type {
 } from "@ceird/sites-core";
 import {
   CreateSiteInputSchema,
+  SiteAccessDeniedError,
   SiteId,
   SiteOptionSchema,
   SitesOptionsResponseSchema,
@@ -41,13 +42,17 @@ import {
   configProviderFromMap,
   withConfigProvider,
 } from "../../test/effect-test-helpers.js";
-import { ActivityEventsRepository } from "../activity/repository.js";
+import {
+  ActivityEventsRepository,
+  ProductActivityActorsRepository,
+} from "../activity/repository.js";
 import type { RecordActivityEventInput } from "../activity/repository.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
+import { OrganizationAuthorizationDeniedError } from "../organizations/errors.js";
 import { RouteProvider } from "../proximity/route-provider.js";
 import type {
   RankRoutesInput,
@@ -160,6 +165,7 @@ describe("SitesService contracts", () => {
     let createdRecord:
       | Parameters<ContextService<typeof SitesRepository>["create"]>[0]
       | undefined;
+    const recordedEvents: RecordActivityEventInput[] = [];
 
     const result = await runSitesServiceEffect(
       sitesServiceCall((sites) =>
@@ -173,6 +179,10 @@ describe("SitesService contracts", () => {
           return Effect.succeed(siteId);
         },
         getOptionById: () => Effect.succeed(Option.some(createdSite)),
+        recordActivityEvent: (input) => {
+          recordedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
       }
     );
 
@@ -186,6 +196,68 @@ describe("SitesService contracts", () => {
       name: "Laydown yard",
       organizationId: actor.organizationId,
     });
+    expect(recordedEvents).toStrictEqual([
+      expect.objectContaining({
+        actorId: decodeProductActorId("99999999-9999-4999-8999-999999999999"),
+        display: {
+          detail: "Site details updated.",
+          route: {
+            href: `/sites?selectedSiteId=${siteId}`,
+            label: "Laydown yard",
+          },
+          summary: "Created Laydown yard",
+        },
+        eventType: "site.created",
+        organizationId: actor.organizationId,
+        sourceId: expect.stringMatching(`^site:${siteId}:created:`),
+        sourceType: "site",
+        status: "synced",
+        targetId: siteId,
+        targetType: "site",
+      }),
+    ]);
+  });
+
+  it("does not emit site activity when creation is unauthorized", async () => {
+    const recordedEvents: RecordActivityEventInput[] = [];
+    let createCalls = 0;
+
+    const exit = await Effect.runPromiseExit(
+      sitesServiceCall((sites) =>
+        sites.create({
+          name: "Unauthorized yard",
+        })
+      ).pipe(
+        Effect.provide(SitesService.DefaultWithoutDependencies),
+        Effect.provide(
+          makeSitesServiceTestLayer({
+            create: () => {
+              createCalls += 1;
+              return Effect.die("SitesRepository.create should not be called");
+            },
+            ensureCanCreateSite: () =>
+              Effect.fail(
+                new OrganizationAuthorizationDeniedError({
+                  message: "Not allowed",
+                })
+              ),
+            recordActivityEvent: (input) => {
+              recordedEvents.push(input);
+              return Effect.succeed({} as ProductActivityEvent);
+            },
+          })
+        )
+      )
+    );
+
+    expect(exit._tag).toBe("Failure");
+    if (exit._tag === "Failure") {
+      const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
+      expect(failure).toBeInstanceOf(SiteAccessDeniedError);
+    }
+    expect(createCalls).toBe(0);
+    expect(recordedEvents).toStrictEqual([]);
   });
 
   it("adds site comments with product-safe actors and records Activity compatibility events", async () => {
@@ -679,6 +751,7 @@ describe("SitesService contracts", () => {
     let updatedRecord:
       | Parameters<ContextService<typeof SitesRepository>["update"]>[2]
       | undefined;
+    const recordedEvents: RecordActivityEventInput[] = [];
 
     const result = await runSitesServiceEffect(
       sitesServiceCall((sites) =>
@@ -693,6 +766,10 @@ describe("SitesService contracts", () => {
           updatedRecord = input;
           return Effect.succeed(Option.some(updatedSite));
         },
+        recordActivityEvent: (input) => {
+          recordedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
       }
     );
 
@@ -700,6 +777,24 @@ describe("SitesService contracts", () => {
     expect(updatedRecord).toStrictEqual({
       accessNotes: "Use yard gate",
       name: "Existing Depot Updated",
+    });
+    expect(recordedEvents).toStrictEqual([
+      expect.objectContaining({
+        eventType: "site.updated",
+        organizationId: actor.organizationId,
+        sourceId: expect.stringMatching(`^site:${siteId}:updated:[0-9a-z]+$`),
+        sourceType: "site",
+        targetId: siteId,
+        targetType: "site",
+      }),
+    ]);
+    expect(recordedEvents[0]?.display).toStrictEqual({
+      detail: "Existing Depot · Use yard gate",
+      route: {
+        href: `/sites?selectedSiteId=${siteId}`,
+        label: "Existing Depot Updated",
+      },
+      summary: "Updated Existing Depot Updated",
     });
   });
 
@@ -725,6 +820,7 @@ describe("SitesService contracts", () => {
     let updatedRecord:
       | Parameters<ContextService<typeof SitesRepository>["update"]>[2]
       | undefined;
+    const recordedEvents: RecordActivityEventInput[] = [];
 
     const result = await runSitesServiceEffect(
       sitesServiceCall((sites) =>
@@ -748,6 +844,10 @@ describe("SitesService contracts", () => {
           updatedRecord = input;
           return Effect.succeed(Option.some(existingSite));
         },
+        recordActivityEvent: (input) => {
+          recordedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
       }
     );
 
@@ -756,6 +856,55 @@ describe("SitesService contracts", () => {
       accessNotes: undefined,
       name: "Unchanged Depot",
     });
+    expect(recordedEvents).toStrictEqual([]);
+  });
+
+  it("uses stable update activity source ids for equivalent retry attempts", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111119");
+    const existingSite = decodeSiteOption({
+      accessNotes: "Use side gate",
+      displayLocation: "",
+      hasUsableCoordinates: false,
+      id: siteId,
+      labels: [],
+      locationStatus: "unverified",
+      name: "Retry Depot",
+      updatedAt: "2026-05-20T09:30:00.000Z",
+    });
+    const updatedSite = decodeSiteOption({
+      ...existingSite,
+      accessNotes: "Use side gate after 5pm",
+      updatedAt: "2026-05-20T09:35:00.000Z",
+    });
+    const recordedEvents: RecordActivityEventInput[] = [];
+
+    await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        Effect.gen(function* () {
+          yield* sites.update(siteId, {
+            accessNotes: "Use side gate after 5pm",
+            name: "Retry Depot",
+          });
+          yield* sites.update(siteId, {
+            accessNotes: "Use side gate after 5pm",
+            name: "Retry Depot",
+          });
+        })
+      ),
+      {
+        getOptionById: () => Effect.succeed(Option.some(existingSite)),
+        update: () => Effect.succeed(Option.some(updatedSite)),
+        recordActivityEvent: (input) => {
+          recordedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
+      }
+    );
+
+    expect(recordedEvents.map((event) => event.sourceId)).toStrictEqual([
+      expect.stringMatching(`^site:${siteId}:updated:[0-9a-z]+$`),
+      recordedEvents[0]?.sourceId,
+    ]);
   });
 
   it("clears an existing location when an update explicitly sends null", async () => {
@@ -839,6 +988,7 @@ describe("SitesService contracts", () => {
           ContextService<typeof SiteLabelAssignmentsRepository>["assignToSite"]
         >[0]
       | undefined;
+    const recordedEvents: RecordActivityEventInput[] = [];
 
     const result = await runSitesServiceEffect(
       sitesServiceCall((sites) => sites.assignLabel(siteId, { labelId })),
@@ -851,6 +1001,10 @@ describe("SitesService contracts", () => {
           });
         },
         getOptionById: () => Effect.succeed(Option.some(labeledSite)),
+        recordActivityEvent: (input) => {
+          recordedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
       }
     );
 
@@ -862,6 +1016,26 @@ describe("SitesService contracts", () => {
       labelId,
       organizationId: actor.organizationId,
       siteId,
+    });
+    expect(recordedEvents).toStrictEqual([
+      expect.objectContaining({
+        eventType: "site.label_added",
+        organizationId: actor.organizationId,
+        sourceId: expect.stringMatching(
+          `^site:${siteId}:label_added:${labelId}:`
+        ),
+        sourceType: "site",
+        targetId: siteId,
+        targetType: "site",
+      }),
+    ]);
+    expect(recordedEvents[0]?.display).toStrictEqual({
+      detail: "Added label Fire safety",
+      route: {
+        href: `/sites?selectedSiteId=${siteId}`,
+        label: "Labelled depot",
+      },
+      summary: "Added label to Labelled depot",
     });
   });
 
@@ -890,6 +1064,7 @@ describe("SitesService contracts", () => {
           >["removeFromSite"]
         >[0]
       | undefined;
+    const recordedEvents: RecordActivityEventInput[] = [];
 
     const result = await runSitesServiceEffect(
       sitesServiceCall((sites) => sites.removeLabel(siteId, labelId)),
@@ -902,6 +1077,10 @@ describe("SitesService contracts", () => {
             label,
           });
         },
+        recordActivityEvent: (input) => {
+          recordedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
       }
     );
 
@@ -913,6 +1092,26 @@ describe("SitesService contracts", () => {
       labelId,
       organizationId: actor.organizationId,
       siteId,
+    });
+    expect(recordedEvents).toStrictEqual([
+      expect.objectContaining({
+        eventType: "site.label_removed",
+        organizationId: actor.organizationId,
+        sourceId: expect.stringMatching(
+          `^site:${siteId}:label_removed:${labelId}:`
+        ),
+        sourceType: "site",
+        targetId: siteId,
+        targetType: "site",
+      }),
+    ]);
+    expect(recordedEvents[0]?.display).toStrictEqual({
+      detail: "Removed label Fire safety",
+      route: {
+        href: `/sites?selectedSiteId=${siteId}`,
+        label: "Unlabelled depot",
+      },
+      summary: "Removed label from Unlabelled depot",
     });
   });
 
@@ -1422,6 +1621,7 @@ type TestSitesServiceRequirements =
   | DomainDrizzleService
   | HttpServerRequest.HttpServerRequest
   | OrganizationAuthorization
+  | ProductActivityActorsRepository
   | RouteProximityService
   | SiteLabelAssignmentsRepository
   | SiteLocationProvider
@@ -1483,6 +1683,15 @@ interface TestSitesDependencies {
   readonly getActiveJobSummary: ContextService<
     typeof SitesRepository
   >["getActiveJobSummary"];
+  readonly ensureCanCreateSite: ContextService<
+    typeof OrganizationAuthorization
+  >["ensureCanCreateSite"];
+  readonly ensureCanManageLabels: ContextService<
+    typeof OrganizationAuthorization
+  >["ensureCanManageLabels"];
+  readonly ensureCanViewOrganizationData: ContextService<
+    typeof OrganizationAuthorization
+  >["ensureCanViewOrganizationData"];
   readonly listProximityCandidates: ContextService<
     typeof SitesRepository
   >["listProximityCandidates"];
@@ -1517,8 +1726,7 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
         listRecent: () => Effect.succeed([]),
         recordEvent:
           options.recordActivityEvent ??
-          (() =>
-            Effect.die("ActivityEventsRepository.recordEvent not stubbed")),
+          (() => Effect.succeed({} as ProductActivityEvent)),
       } as unknown as ContextService<typeof ActivityEventsRepository>)
     ),
     Layer.succeed(
@@ -1553,10 +1761,27 @@ function makeSitesServiceTestLayer(options: Partial<TestSitesDependencies>) {
     Layer.succeed(
       OrganizationAuthorization,
       OrganizationAuthorization.of({
-        ensureCanCreateSite: () => Effect.void,
-        ensureCanManageLabels: () => Effect.void,
-        ensureCanViewOrganizationData: () => Effect.void,
+        ensureCanCreateSite: options.ensureCanCreateSite ?? (() => Effect.void),
+        ensureCanManageLabels:
+          options.ensureCanManageLabels ?? (() => Effect.void),
+        ensureCanViewOrganizationData:
+          options.ensureCanViewOrganizationData ?? (() => Effect.void),
       } as unknown as ContextService<typeof OrganizationAuthorization>)
+    ),
+    Layer.succeed(
+      ProductActivityActorsRepository,
+      ProductActivityActorsRepository.of({
+        ensureMemberActor: () =>
+          Effect.succeed({
+            actor: {
+              displayDetail: "Team member",
+              displayName: "Taylor Member",
+              id: decodeProductActorId("99999999-9999-4999-8999-999999999999"),
+              kind: "member",
+            },
+            sourceUserId: actor.userId,
+          }),
+      } as unknown as ContextService<typeof ProductActivityActorsRepository>)
     ),
     makeUserPreferencesRepositoryLayer({
       get: options.userPreferencesGet,

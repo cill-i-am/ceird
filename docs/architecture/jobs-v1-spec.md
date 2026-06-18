@@ -132,6 +132,13 @@ Jobs also have append-only system activity generated from state changes such as:
 - label added or removed
 
 The activity feed is organization-scoped and remains read-only from the app.
+The domain Worker owns feed event meaning. Jobs command paths emit global
+activity rows for create, update, transition, reopen, and label writes while
+preserving the append-only job activity log; Sites command paths emit global
+activity rows for create, update, and label assignment/removal writes. Comment
+commands for both records emit comment activity rows. Feed rows use product-safe
+actors and display payloads, and browser clients must not derive feed semantics
+from local mutation state.
 
 ### Labels
 

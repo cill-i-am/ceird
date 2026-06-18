@@ -46,6 +46,10 @@ import { SqlClient } from "effect/unstable/sql";
 
 import { DomainDrizzle } from "../../platform/database/database.js";
 import type { DomainDrizzleService } from "../../platform/database/database.js";
+import {
+  ActivityEventsRepository,
+  ProductActivityActorsRepository,
+} from "../activity/repository.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
@@ -116,6 +120,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
   "@ceird/domains/agents/AgentActions",
   {
     make: Effect.gen(function* AgentActionsLive() {
+      const activityEventsRepository = yield* ActivityEventsRepository;
       const commentsRepository = yield* CommentsRepository;
       const contactsRepository = yield* ContactsRepository;
       const jobLabelAssignmentsRepository =
@@ -125,6 +130,8 @@ export class AgentActions extends Context.Service<AgentActions>()(
       const jobsRepository = yield* JobsRepository;
       const labelsRepository = yield* LabelsRepository;
       const organizationAuthorization = yield* OrganizationAuthorization;
+      const productActivityActorsRepository =
+        yield* ProductActivityActorsRepository;
       const domainDrizzle = yield* DomainDrizzle;
       const sqlClient = yield* SqlClient.SqlClient;
       const siteLocationProvider = yield* SiteLocationProvider;
@@ -154,6 +161,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
                 actor,
                 context,
                 {
+                  activityEventsRepository,
                   commentsRepository,
                   contactsRepository,
                   jobLabelAssignmentsRepository,
@@ -162,6 +170,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
                   jobsRepository,
                   labelsRepository,
                   organizationAuthorization,
+                  productActivityActorsRepository,
                   domainDrizzle,
                   sqlClient,
                   siteLocationProvider,
@@ -190,6 +199,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
   static readonly Default = AgentActions.DefaultWithoutDependencies.pipe(
     Layer.provide(
       Layer.mergeAll(
+        ActivityEventsRepository.Default,
         CommentsRepository.Default,
         ContactsRepository.Default,
         JobLabelAssignmentsRepository.Default,
@@ -198,6 +208,7 @@ export class AgentActions extends Context.Service<AgentActions>()(
         JobsRepository.Default,
         LabelsRepository.Default,
         OrganizationAuthorization.Default,
+        ProductActivityActorsRepository.Default,
         SiteLabelAssignmentsRepository.Default,
         SitesRepository.Default,
         UserPreferencesRepository.Default
@@ -207,10 +218,16 @@ export class AgentActions extends Context.Service<AgentActions>()(
 }
 
 interface SitesServiceLayerDependencies {
+  readonly activityEventsRepository: Context.Service.Shape<
+    typeof ActivityEventsRepository
+  >;
   readonly commentsRepository: Context.Service.Shape<typeof CommentsRepository>;
   readonly domainDrizzle: DomainDrizzleService;
   readonly organizationAuthorization: Context.Service.Shape<
     typeof OrganizationAuthorization
+  >;
+  readonly productActivityActorsRepository: Context.Service.Shape<
+    typeof ProductActivityActorsRepository
   >;
   readonly routeProximityService?: Context.Service.Shape<
     typeof RouteProximityService
@@ -408,6 +425,10 @@ function makeSitesServiceLayer(
   return Layer.provide(
     SitesService.DefaultWithoutDependencies,
     Layer.mergeAll(
+      Layer.succeed(
+        ActivityEventsRepository,
+        dependencies.activityEventsRepository
+      ),
       Layer.succeed(CommentsRepository, dependencies.commentsRepository),
       Layer.succeed(
         CurrentOrganizationActor,
@@ -418,6 +439,10 @@ function makeSitesServiceLayer(
       Layer.succeed(
         OrganizationAuthorization,
         dependencies.organizationAuthorization
+      ),
+      Layer.succeed(
+        ProductActivityActorsRepository,
+        dependencies.productActivityActorsRepository
       ),
       Layer.succeed(DomainDrizzle, dependencies.domainDrizzle),
       makeRouteProximityServiceLayer(dependencies.routeProximityService),

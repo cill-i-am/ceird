@@ -2,10 +2,13 @@ import type { ProductActivityEvent } from "@ceird/activity-core";
 import {
   decodeUserPreferences,
   OrganizationId,
+  ProductActorId,
   UserId,
   UserPreferencesStorageError,
 } from "@ceird/identity-core";
+import type { ProductActor } from "@ceird/identity-core";
 import {
+  ActivityId,
   CreateJobInputSchema,
   HomeDashboardSummaryResponseSchema,
   JobCollaboratorSchema,
@@ -15,13 +18,16 @@ import {
   JobDetailSchema,
   JobOptionsResponseSchema,
   JobSchema,
+  VisitId,
 } from "@ceird/jobs-core";
 import type {
   Job,
+  JobActivity,
   JobCollaborator,
   JobOptionsResponse,
   JobProximityFilters,
 } from "@ceird/jobs-core";
+import { LabelId } from "@ceird/labels-core";
 import {
   GooglePlaceId,
   ProximityAccessDeniedError,
@@ -37,7 +43,10 @@ import {
   configProviderFromMap,
   withConfigProvider,
 } from "../../test/effect-test-helpers.js";
-import { ActivityEventsRepository } from "../activity/repository.js";
+import {
+  ActivityEventsRepository,
+  ProductActivityActorsRepository,
+} from "../activity/repository.js";
 import type { RecordActivityEventInput } from "../activity/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { LabelsRepository } from "../labels/repositories.js";
@@ -67,6 +76,7 @@ type ContextService<Service> = Service extends {
   : never;
 
 const decodeJob = Schema.decodeUnknownSync(JobSchema);
+const decodeJobActivityId = Schema.decodeUnknownSync(ActivityId);
 const decodeJobCollaborator = Schema.decodeUnknownSync(JobCollaboratorSchema);
 const decodeJobComment = Schema.decodeUnknownSync(JobCommentSchema);
 const decodeJobDetail = Schema.decodeUnknownSync(JobDetailSchema);
@@ -75,9 +85,13 @@ const decodeJobOptionsResponse = Schema.decodeUnknownSync(
   JobOptionsResponseSchema
 );
 const decodeGooglePlaceId = Schema.decodeUnknownSync(GooglePlaceId);
+const decodeLabelId = Schema.decodeUnknownSync(LabelId);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
+const decodeProductActorId = Schema.decodeUnknownSync(ProductActorId);
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
+const decodeVisitId = Schema.decodeUnknownSync(VisitId);
+const missingProductActors = new Map<string, ProductActor>();
 const PROXIMITY_ORIGIN_TOKEN_SECRET = "proximity-origin-secret";
 const proximityOriginConfigProvider = configProviderFromMap(
   new Map([["AGENT_INTERNAL_SECRET", PROXIMITY_ORIGIN_TOKEN_SECRET]])
@@ -276,6 +290,7 @@ describe("JobsService contracts", () => {
     expect(exit._tag).toBe("Failure");
     expect(calls.withTransaction).toBe(0);
     expect(calls.addComment).toBe(0);
+    expect(calls.recordCommentCreated).toBe(0);
   });
 
   it("allows comment-level external collaborators to add comments", async () => {
@@ -368,6 +383,192 @@ describe("JobsService contracts", () => {
       `/jobs-workspace?detailJobId=${workItemId}`
     );
     expect(JSON.stringify(capturedEvents)).not.toContain(internalActor.userId);
+  });
+
+  it("emits product-safe global activity for successful job create and priority writes", async () => {
+    const capturedEvents: RecordActivityEventInput[] = [];
+    const addedActivities: JobActivity["payload"][] = [];
+    const resolvedActors: {
+      readonly organizationId: string;
+      readonly userId: string;
+    }[] = [];
+    const updatedJob = decodeJob({
+      ...existingJob,
+      priority: "urgent",
+      updatedAt: "2026-05-20T10:00:00.000Z",
+    });
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const recorder = yield* JobsActivityRecorder;
+
+        yield* recorder.recordCreated(internalActor, existingJob);
+        yield* recorder.recordPatched(internalActor, existingJob, updatedJob);
+      }).pipe(
+        Effect.provide(JobsActivityRecorder.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsActivityRecorderTestLayer({
+            addedActivities,
+            capturedEvents,
+            resolvedActors,
+          })
+        )
+      )
+    );
+
+    expect(resolvedActors).toStrictEqual([
+      {
+        organizationId: internalActor.organizationId,
+        userId: internalActor.userId,
+      },
+      {
+        organizationId: internalActor.organizationId,
+        userId: internalActor.userId,
+      },
+    ]);
+    expect(addedActivities.map((payload) => payload.eventType)).toStrictEqual([
+      "job_created",
+      "priority_changed",
+    ]);
+    expect(capturedEvents).toStrictEqual([
+      expect.objectContaining({
+        actorId: "99999999-9999-4999-8999-999999999999",
+        display: {
+          detail: "Priority: none",
+          route: {
+            href: `/jobs-workspace?detailJobId=${workItemId}`,
+            label: "Inspect boiler",
+          },
+          summary: "Created Inspect boiler",
+        },
+        eventType: "job.created",
+        organizationId: internalActor.organizationId,
+        sourceId: "44444444-4444-4444-8444-444444444441",
+        sourceType: "job_activity",
+        status: "synced",
+        targetId: workItemId,
+        targetType: "job",
+      }),
+      expect.objectContaining({
+        actorId: "99999999-9999-4999-8999-999999999999",
+        display: {
+          detail: "Priority changed from none to urgent",
+          route: {
+            href: `/jobs-workspace?detailJobId=${workItemId}`,
+            label: "Inspect boiler",
+          },
+          summary: "Changed priority on Inspect boiler",
+        },
+        eventType: "job.priority_changed",
+        organizationId: internalActor.organizationId,
+        sourceId: "44444444-4444-4444-8444-444444444442",
+        sourceType: "job_activity",
+        status: "synced",
+        targetId: workItemId,
+        targetType: "job",
+      }),
+    ]);
+  });
+
+  it("emits product-safe global activity for successful job label writes", async () => {
+    const capturedEvents: RecordActivityEventInput[] = [];
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const recorder = yield* JobsActivityRecorder;
+
+        yield* recorder.recordLabelAssigned(internalActor, existingJob, {
+          createdAt: "2026-05-20T09:00:00.000Z",
+          id: decodeLabelId("22222222-2222-4222-8222-222222222222"),
+          name: "Fire safety",
+          updatedAt: "2026-05-20T09:00:00.000Z",
+        });
+      }).pipe(
+        Effect.provide(JobsActivityRecorder.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsActivityRecorderTestLayer({
+            addedActivities: [],
+            capturedEvents,
+          })
+        )
+      )
+    );
+
+    expect(capturedEvents).toStrictEqual([
+      expect.objectContaining({
+        display: {
+          detail: "Added label Fire safety",
+          route: {
+            href: `/jobs-workspace?detailJobId=${workItemId}`,
+            label: "Inspect boiler",
+          },
+          summary: "Added label to Inspect boiler",
+        },
+        eventType: "job.label_added",
+        sourceType: "job_activity",
+        targetId: workItemId,
+        targetType: "job",
+      }),
+    ]);
+  });
+
+  it("emits product-safe global activity for successful job visit writes", async () => {
+    const capturedEvents: RecordActivityEventInput[] = [];
+    const addedActivities: JobActivity["payload"][] = [];
+    const resolvedActors: {
+      readonly organizationId: string;
+      readonly userId: string;
+    }[] = [];
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const recorder = yield* JobsActivityRecorder;
+
+        yield* recorder.recordVisitLogged(internalActor, {
+          job: existingJob,
+          visitId: decodeVisitId("22222222-2222-4222-8222-222222222222"),
+        });
+      }).pipe(
+        Effect.provide(JobsActivityRecorder.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsActivityRecorderTestLayer({
+            addedActivities,
+            capturedEvents,
+            resolvedActors,
+          })
+        )
+      )
+    );
+
+    expect(resolvedActors).toStrictEqual([
+      {
+        organizationId: internalActor.organizationId,
+        userId: internalActor.userId,
+      },
+    ]);
+    expect(addedActivities).toStrictEqual([
+      {
+        eventType: "visit_logged",
+        visitId: decodeVisitId("22222222-2222-4222-8222-222222222222"),
+      },
+    ]);
+    expect(capturedEvents).toStrictEqual([
+      expect.objectContaining({
+        display: {
+          route: {
+            href: `/jobs-workspace?detailJobId=${workItemId}`,
+            label: "Inspect boiler",
+          },
+          summary: "Logged visit on Inspect boiler",
+        },
+        eventType: "job.visit_logged",
+        organizationId: internalActor.organizationId,
+        sourceId: "44444444-4444-4444-8444-444444444441",
+        sourceType: "job_activity",
+        targetId: workItemId,
+        targetType: "job",
+      }),
+    ]);
   });
 
   it("returns empty scoped options for external collaborators with no accessible option data", async () => {
@@ -1061,6 +1262,76 @@ function makeGrant(
   });
 }
 
+function makeJobsActivityRecorderTestLayer(options: {
+  readonly addedActivities: JobActivity["payload"][];
+  readonly capturedEvents: RecordActivityEventInput[];
+  readonly resolvedActors?: {
+    readonly organizationId: string;
+    readonly userId: string;
+  }[];
+}) {
+  let nextActivity = 0;
+
+  return Layer.mergeAll(
+    Layer.succeed(
+      ActivityEventsRepository,
+      ActivityEventsRepository.of({
+        recordEvent: (input: RecordActivityEventInput) => {
+          options.capturedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
+      } as unknown as ContextService<typeof ActivityEventsRepository>)
+    ),
+    Layer.succeed(
+      ProductActivityActorsRepository,
+      ProductActivityActorsRepository.of({
+        ensureMemberActor: (
+          input: Parameters<
+            ContextService<
+              typeof ProductActivityActorsRepository
+            >["ensureMemberActor"]
+          >[0]
+        ) => {
+          options.resolvedActors?.push(input);
+          return Effect.succeed({
+            actor: {
+              displayDetail: "Team member",
+              displayName: "Taylor Member",
+              id: decodeProductActorId("99999999-9999-4999-8999-999999999999"),
+              kind: "member",
+            },
+            sourceUserId: input.userId,
+          });
+        },
+        getById: () => Effect.succeed(missingProductActors.get("missing")),
+      } as unknown as ContextService<typeof ProductActivityActorsRepository>)
+    ),
+    Layer.succeed(
+      JobsRepository,
+      JobsRepository.of({
+        addActivity: (
+          input: Parameters<
+            ContextService<typeof JobsRepository>["addActivity"]
+          >[0]
+        ) => {
+          nextActivity += 1;
+          options.addedActivities.push(input.payload);
+
+          return Effect.succeed({
+            actorUserId: input.actorUserId,
+            createdAt: "2026-05-20T10:00:00.000Z",
+            id: decodeJobActivityId(
+              `44444444-4444-4444-8444-44444444444${nextActivity}`
+            ),
+            payload: input.payload,
+            workItemId: input.workItemId,
+          } satisfies JobActivity);
+        },
+      } as unknown as ContextService<typeof JobsRepository>)
+    )
+  );
+}
+
 function makeJobsServiceTestLayer(options: {
   readonly calls: {
     addComment: number;
@@ -1171,6 +1442,22 @@ function makeJobsLongCommentActivityTestLayer(options: {
       },
     } as unknown as ContextService<typeof ActivityEventsRepository>)
   );
+  const activityActorsLayer = Layer.succeed(
+    ProductActivityActorsRepository,
+    ProductActivityActorsRepository.of({
+      ensureMemberActor: () =>
+        Effect.succeed({
+          actor: {
+            displayDetail: "Team member",
+            displayName: "Taylor Member",
+            id: decodeProductActorId("99999999-9999-4999-8999-999999999999"),
+            kind: "member",
+          },
+          sourceUserId: internalActor.userId,
+        }),
+      getById: () => Effect.succeed(missingProductActors.get("missing")),
+    } as unknown as ContextService<typeof ProductActivityActorsRepository>)
+  );
   const jobsRepositoryLayer = Layer.succeed(
     JobsRepository,
     JobsRepository.of({
@@ -1227,7 +1514,13 @@ function makeJobsLongCommentActivityTestLayer(options: {
       )
     ),
     JobsActivityRecorder.DefaultWithoutDependencies.pipe(
-      Layer.provide(Layer.mergeAll(activityEventsLayer, jobsRepositoryLayer))
+      Layer.provide(
+        Layer.mergeAll(
+          activityActorsLayer,
+          activityEventsLayer,
+          jobsRepositoryLayer
+        )
+      )
     ),
     JobsAuthorization.Default,
     jobsRepositoryLayer,

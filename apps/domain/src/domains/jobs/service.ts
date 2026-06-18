@@ -920,8 +920,8 @@ export class JobsService extends Context.Service<JobsService>()(
               });
 
               yield* activityRecorder.recordVisitLogged(actor, {
+                job,
                 visitId: visit.id,
-                workItemId,
               });
 
               return visit;
