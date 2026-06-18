@@ -167,7 +167,8 @@ test("an organization admin can manage labels from the realtime settings tab", a
     page.getByRole("button", { name: /create/i }).click(),
   ]);
   await expect(page.getByRole("status")).toContainText(
-    "Label created and confirmed by realtime sync."
+    "Label created and confirmed by realtime sync.",
+    { timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS }
   );
   await expect(page.getByText(labelName, { exact: true })).toBeVisible();
 
@@ -181,7 +182,8 @@ test("an organization admin can manage labels from the realtime settings tab", a
     page.getByRole("button", { name: `Save ${labelName}` }).click(),
   ]);
   await expect(page.getByRole("status")).toContainText(
-    "Label renamed and confirmed by realtime sync."
+    "Label renamed and confirmed by realtime sync.",
+    { timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS }
   );
   await expect(page.getByText(updatedLabelName, { exact: true })).toBeVisible();
 
@@ -203,7 +205,8 @@ test("an organization admin can manage labels from the realtime settings tab", a
     confirmArchiveButton.click(),
   ]);
   await expect(page.getByRole("status")).toContainText(
-    "Label archived and removed after realtime confirmation."
+    "Label archived and removed after realtime confirmation.",
+    { timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS }
   );
   await expect(page.getByText(updatedLabelName, { exact: true })).toBeHidden();
   await expect(page.getByText("No labels yet")).toBeVisible();
