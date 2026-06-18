@@ -26,10 +26,9 @@ const teardownScript = path.join(
 const worktreeInclude = path.join(repoRoot, ".worktreeinclude");
 
 test(".worktreeinclude includes ignored local env files", async () => {
+  const worktreeIncludeText = await readFile(worktreeInclude, "utf8");
   const patterns = new Set(
-    (await readFile(worktreeInclude, "utf8"))
-      .split(/\r?\n/u)
-      .filter((line) => line.trim().length > 0)
+    worktreeIncludeText.split(/\r?\n/u).filter((line) => line.trim().length > 0)
   );
 
   assert.equal(patterns.has(".env"), true);
