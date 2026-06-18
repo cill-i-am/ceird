@@ -2,33 +2,58 @@
 import {
   ConnectedAppGrantAccessDeniedError,
   ConnectedAppGrantListResponseSchema,
+  ConnectedAppGrantSchema,
   ConnectedAppGrantNotFoundError,
   ConnectedAppGrantStorageError,
   DisconnectConnectedAppGrantResponseSchema,
-  OrganizationId,
-  UserPreferencesAccessDeniedError,
-  UserPreferencesStorageError,
+  USER_PREFERENCES_ACCESS_DENIED_ERROR_TAG,
+  USER_PREFERENCES_STORAGE_ERROR_TAG,
 } from "@ceird/identity-core";
 import type {
   ConnectedAppGrant,
+  ConnectedAppGrantContext,
   ConnectedAppGrantId,
+  ConnectedAppGrantListResponse,
   ConnectedAppScopeGroup,
   ConnectedAppScopeGroupKey,
   DisconnectConnectedAppGrantInput,
+  UserPreferencesAccessDeniedError,
+  UserPreferencesStorageError,
   UserId,
 } from "@ceird/identity-core";
 import { Context, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
+import {
+  ConnectedAppGrantDisconnectRowSchema,
+  ConnectedAppGrantListRowsSchema,
+  OAuthConsentRevokedAuditWriteSchema,
+} from "./persistence-schemas.js";
+import type {
+  ConnectedAppGrantDisconnectRow,
+  ConnectedAppGrantListRow,
+  OAuthConsentRevokedAuditWrite,
+} from "./persistence-schemas.js";
 import { CurrentUser } from "./preferences/current-user.js";
 
 const decodeConnectedAppGrantListResponse = Schema.decodeUnknownSync(
   ConnectedAppGrantListResponseSchema
 );
+const decodeConnectedAppGrant = Schema.decodeUnknownSync(
+  ConnectedAppGrantSchema
+);
 const decodeDisconnectConnectedAppGrantResponse = Schema.decodeUnknownSync(
   DisconnectConnectedAppGrantResponseSchema
 );
-const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
+const decodeConnectedAppGrantListRows = Schema.decodeUnknownSync(
+  ConnectedAppGrantListRowsSchema
+);
+const decodeConnectedAppGrantDisconnectRow = Schema.decodeUnknownSync(
+  ConnectedAppGrantDisconnectRowSchema
+);
+const decodeOAuthConsentRevokedAuditWrite = Schema.decodeUnknownSync(
+  OAuthConsentRevokedAuditWriteSchema
+);
 
 const SCOPE_GROUPS: readonly {
   readonly key: ConnectedAppScopeGroupKey;
@@ -50,33 +75,6 @@ const SCOPE_GROUPS: readonly {
   },
 ];
 
-export interface ConnectedAppGrantRow {
-  readonly active_access_token_count: number | string | bigint;
-  readonly active_refresh_token_count: number | string | bigint;
-  readonly client_id: string;
-  readonly client_name: string | null;
-  readonly client_uri: string | null;
-  readonly consent_created_at: Date;
-  readonly consent_id: string;
-  readonly consent_updated_at: Date;
-  readonly latest_access_token_expires_at: Date | null;
-  readonly latest_refresh_token_expires_at: Date | null;
-  readonly organization_id: string | null;
-  readonly organization_name: string | null;
-  readonly policy_uri: string | null;
-  readonly redirect_uris: readonly string[] | null;
-  readonly reference_id: string | null;
-  readonly scopes: readonly string[];
-  readonly tos_uri: string | null;
-}
-
-interface ConnectedAppGrantDisconnectRow {
-  readonly client_id: string;
-  readonly id: string;
-  readonly reference_id: string | null;
-  readonly scopes: readonly string[];
-}
-
 interface DisconnectConnectedAppGrantRecordInput {
   readonly grantId: ConnectedAppGrantId;
   readonly userId: UserId;
@@ -91,7 +89,7 @@ export class ConnectedAppGrantsRepository extends Context.Service<ConnectedAppGr
       const list = Effect.fn("ConnectedAppGrantsRepository.list")(function* (
         userId: UserId
       ) {
-        const rows = yield* sql<ConnectedAppGrantRow>`
+        const rows = yield* sql<Record<string, unknown>>`
           select
             oauth_consent.id as consent_id,
             oauth_consent.client_id,
@@ -99,10 +97,10 @@ export class ConnectedAppGrantsRepository extends Context.Service<ConnectedAppGr
             oauth_consent.scopes,
             oauth_consent.created_at as consent_created_at,
             oauth_consent.updated_at as consent_updated_at,
-            oauth_client.name as client_name,
-            oauth_client.uri as client_uri,
-            oauth_client.policy as policy_uri,
-            oauth_client.tos as tos_uri,
+            nullif(btrim(oauth_client.name), '') as client_name,
+            nullif(btrim(oauth_client.uri), '') as client_uri,
+            nullif(btrim(oauth_client.policy), '') as policy_uri,
+            nullif(btrim(oauth_client.tos), '') as tos_uri,
             oauth_client.redirect_uris,
             organization.id as organization_id,
             organization.name as organization_name,
@@ -142,7 +140,7 @@ export class ConnectedAppGrantsRepository extends Context.Service<ConnectedAppGr
             oauth_consent.id desc
         `.pipe(Effect.catchTag("SqlError", failConnectedAppStorage));
 
-        return rows.map(mapConnectedAppGrantRow);
+        return yield* decodeConnectedAppGrantList(rows);
       });
 
       const disconnect = Effect.fn("ConnectedAppGrantsRepository.disconnect")(
@@ -150,7 +148,7 @@ export class ConnectedAppGrantsRepository extends Context.Service<ConnectedAppGr
           return yield* sql
             .withTransaction(
               Effect.gen(function* () {
-                const consentRows = yield* sql<ConnectedAppGrantDisconnectRow>`
+                const consentRows = yield* sql<Record<string, unknown>>`
                 select id, client_id, reference_id, scopes
                 from oauth_consent
                 where id = ${input.grantId}
@@ -167,38 +165,44 @@ export class ConnectedAppGrantsRepository extends Context.Service<ConnectedAppGr
                     })
                   );
                 }
+                const decodedConsent =
+                  yield* decodeConnectedAppGrantDisconnect(consent);
 
                 yield* sql`
                 delete from oauth_consent
                 where user_id = ${input.userId}
-                  and client_id = ${consent.client_id}
-                  and reference_id is not distinct from ${consent.reference_id}
+                  and client_id = ${decodedConsent.client_id}
+                  and reference_id is not distinct from ${decodedConsent.reference_id}
               `;
 
                 yield* sql`
                 update oauth_refresh_token
                 set revoked = now()
                 where user_id = ${input.userId}
-                  and client_id = ${consent.client_id}
-                  and reference_id is not distinct from ${consent.reference_id}
+                  and client_id = ${decodedConsent.client_id}
+                  and reference_id is not distinct from ${decodedConsent.reference_id}
                   and revoked is null
               `;
 
                 yield* sql`
                 delete from oauth_access_token
-                where client_id = ${consent.client_id}
-                  and reference_id is not distinct from ${consent.reference_id}
+                where client_id = ${decodedConsent.client_id}
+                  and reference_id is not distinct from ${decodedConsent.reference_id}
                   and (
                     user_id = ${input.userId}
                     or refresh_id in (
                       select id
                       from oauth_refresh_token
                       where user_id = ${input.userId}
-                        and client_id = ${consent.client_id}
-                        and reference_id is not distinct from ${consent.reference_id}
+                        and client_id = ${decodedConsent.client_id}
+                        and reference_id is not distinct from ${decodedConsent.reference_id}
                     )
                   )
               `;
+                const auditWrite = yield* makeOAuthConsentRevokedAuditWrite({
+                  consent: decodedConsent,
+                  userId: input.userId,
+                });
 
                 yield* sql`
                 insert into auth_security_audit_event (
@@ -210,15 +214,12 @@ export class ConnectedAppGrantsRepository extends Context.Service<ConnectedAppGr
                   metadata
                 )
                 values (
-                  'oauth_consent_revoked',
-                  ${input.userId},
-                  ${consent.reference_id},
-                  ${consent.client_id},
-                  ${consent.scopes},
-                  ${JSON.stringify({
-                    consentId: consent.id,
-                    referenceId: consent.reference_id,
-                  })}::jsonb
+                  ${auditWrite.eventType},
+                  ${auditWrite.actorUserId},
+                  ${auditWrite.organizationId},
+                  ${auditWrite.oauthClientId},
+                  ${auditWrite.scopes},
+                  ${JSON.stringify(auditWrite.metadata)}::jsonb
                 )
               `;
 
@@ -263,9 +264,7 @@ export class ConnectedAppGrantsService extends Context.Service<ConnectedAppGrant
 
       const list = Effect.fn("ConnectedAppGrantsService.list")(function* () {
         const userId = yield* currentUser.get().pipe(mapCurrentUserErrors);
-        const grants = yield* repository.list(userId);
-
-        return decodeConnectedAppGrantListResponse({ grants });
+        return yield* repository.list(userId);
       });
 
       const disconnect = Effect.fn("ConnectedAppGrantsService.disconnect")(
@@ -308,43 +307,43 @@ export class ConnectedAppGrantsService extends Context.Service<ConnectedAppGrant
     );
 }
 
-export function mapConnectedAppGrantRow(
-  row: ConnectedAppGrantRow
+function mapConnectedAppGrantRow(
+  row: ConnectedAppGrantListRow
 ): ConnectedAppGrant {
-  return {
-    activeAccessTokenCount: Number(row.active_access_token_count),
-    activeRefreshTokenCount: Number(row.active_refresh_token_count),
+  return decodeConnectedAppGrant({
+    activeAccessTokenCount: row.active_access_token_count,
+    activeRefreshTokenCount: row.active_refresh_token_count,
     clientId: row.client_id,
-    clientName: toOptionalString(row.client_name),
-    clientUri: toOptionalString(row.client_uri),
+    clientName: row.client_name ?? undefined,
+    clientUri: row.client_uri ?? undefined,
     context: makeConnectedAppContext(row),
-    grantId: row.consent_id as ConnectedAppGrantId,
+    grantId: row.consent_id,
     grantedAt: row.consent_created_at.toISOString(),
     latestAccessTokenExpiresAt:
       row.latest_access_token_expires_at?.toISOString(),
     latestRefreshTokenExpiresAt:
       row.latest_refresh_token_expires_at?.toISOString(),
     offlineAccess: row.scopes.includes("offline_access"),
-    policyUri: toOptionalString(row.policy_uri),
-    redirectHosts: getRedirectHosts(row.redirect_uris ?? []),
+    policyUri: row.policy_uri ?? undefined,
+    redirectHosts: getRedirectHosts(row.redirect_uris),
     scopes: [...row.scopes],
     scopeGroups: groupConnectedAppScopes(row.scopes),
-    tosUri: toOptionalString(row.tos_uri),
+    tosUri: row.tos_uri ?? undefined,
     updatedAt: row.consent_updated_at.toISOString(),
-  };
+  });
 }
 
-function makeConnectedAppContext(row: ConnectedAppGrantRow) {
+function makeConnectedAppContext(
+  row: ConnectedAppGrantListRow
+): ConnectedAppGrantContext {
   if (row.reference_id === null) {
-    return { type: "account" as const };
+    return { type: "account" };
   }
 
   return {
-    organizationId: decodeOrganizationId(
-      row.organization_id ?? row.reference_id
-    ),
-    organizationName: row.organization_name ?? row.reference_id,
-    type: "organization" as const,
+    organizationId: row.organization_id,
+    organizationName: row.organization_name,
+    type: "organization",
   };
 }
 
@@ -409,12 +408,6 @@ function isNonEmpty(value: string | undefined): value is string {
   return value !== undefined && value.length > 0;
 }
 
-function toOptionalString(value: string | null | undefined) {
-  return value === undefined || value === null || value.trim().length === 0
-    ? undefined
-    : value;
-}
-
 function mapCurrentUserErrors<A, R>(
   effect: Effect.Effect<
     A,
@@ -427,32 +420,98 @@ function mapCurrentUserErrors<A, R>(
   R
 > {
   return effect.pipe(
-    Effect.mapError((error) => {
-      if (error instanceof UserPreferencesAccessDeniedError) {
-        return new ConnectedAppGrantAccessDeniedError({
-          message: "Authentication is required to manage connected apps",
-        });
-      }
-
-      if (error instanceof UserPreferencesStorageError) {
-        return new ConnectedAppGrantStorageError({
-          cause: error.cause,
-          message: "Connected app session lookup failed",
-        });
-      }
-
-      return new ConnectedAppGrantStorageError({
-        message: "Connected app session lookup failed",
-      });
+    Effect.catchTags({
+      [USER_PREFERENCES_ACCESS_DENIED_ERROR_TAG]: () =>
+        Effect.fail(
+          new ConnectedAppGrantAccessDeniedError({
+            message: "Authentication is required to manage connected apps",
+          })
+        ),
+      [USER_PREFERENCES_STORAGE_ERROR_TAG]: (error) =>
+        Effect.fail(
+          new ConnectedAppGrantStorageError({
+            cause: error.cause,
+            message: "Connected app session lookup failed",
+          })
+        ),
     })
   );
 }
 
 function failConnectedAppStorage(error: unknown) {
   return Effect.fail(
-    new ConnectedAppGrantStorageError({
-      cause: error instanceof Error ? error.message : String(error),
-      message: "Connected app storage operation failed",
-    })
+    makeConnectedAppStorageError(
+      error,
+      "Connected app storage operation failed"
+    )
   );
+}
+
+function decodeConnectedAppGrantList(
+  rows: unknown
+): Effect.Effect<ConnectedAppGrantListResponse, ConnectedAppGrantStorageError> {
+  return Effect.try({
+    catch: (error) =>
+      makeConnectedAppStorageError(
+        error,
+        "Connected app grant projection decode failed"
+      ),
+    try: () =>
+      decodeConnectedAppGrantListResponse({
+        grants: decodeConnectedAppGrantListRows(rows).map(
+          mapConnectedAppGrantRow
+        ),
+      }),
+  });
+}
+
+function decodeConnectedAppGrantDisconnect(
+  row: unknown
+): Effect.Effect<
+  ConnectedAppGrantDisconnectRow,
+  ConnectedAppGrantStorageError
+> {
+  return Effect.try({
+    catch: (error) =>
+      makeConnectedAppStorageError(
+        error,
+        "Connected app grant disconnect row decode failed"
+      ),
+    try: () => decodeConnectedAppGrantDisconnectRow(row),
+  });
+}
+
+function makeOAuthConsentRevokedAuditWrite(input: {
+  readonly consent: ConnectedAppGrantDisconnectRow;
+  readonly userId: UserId;
+}): Effect.Effect<
+  OAuthConsentRevokedAuditWrite,
+  ConnectedAppGrantStorageError
+> {
+  return Effect.try({
+    catch: (error) =>
+      makeConnectedAppStorageError(
+        error,
+        "Connected app grant audit write decode failed"
+      ),
+    try: () =>
+      decodeOAuthConsentRevokedAuditWrite({
+        actorUserId: input.userId,
+        eventType: "oauth_consent_revoked",
+        metadata: {
+          consentId: input.consent.id,
+          referenceId: input.consent.reference_id,
+        },
+        oauthClientId: input.consent.client_id,
+        organizationId: input.consent.reference_id,
+        scopes: input.consent.scopes,
+      }),
+  });
+}
+
+function makeConnectedAppStorageError(error: unknown, message: string) {
+  return new ConnectedAppGrantStorageError({
+    cause: error instanceof Error ? error.message : undefined,
+    message,
+  });
 }

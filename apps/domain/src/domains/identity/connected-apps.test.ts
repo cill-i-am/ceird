@@ -1,6 +1,8 @@
 import {
   ConnectedAppGrantNotFoundError,
+  ConnectedAppGrantStorageError,
   decodeDisconnectConnectedAppGrantInput,
+  decodeOAuthClientId,
   decodeOrganizationId,
   decodeUserId,
 } from "@ceird/identity-core";
@@ -18,7 +20,6 @@ import { effectEither } from "../../test/effect-test-helpers.js";
 import {
   ConnectedAppGrantsRepository,
   ConnectedAppGrantsService,
-  mapConnectedAppGrantRow,
 } from "./connected-apps.js";
 import { CurrentUser } from "./preferences/current-user.js";
 
@@ -26,103 +27,7 @@ const userId = decodeUserId("user_123");
 const { grantId } = decodeDisconnectConnectedAppGrantInput({
   grantId: "consent_123",
 });
-
-describe("connected app grant mapping", () => {
-  it("maps OAuth consent rows into a safe connected-app read model", () => {
-    expect(
-      mapConnectedAppGrantRow({
-        active_access_token_count: 1,
-        active_refresh_token_count: 2,
-        client_id: "client_external_mcp",
-        client_name: "External MCP",
-        client_uri: "https://mcp.example.com",
-        consent_created_at: new Date("2026-06-08T10:30:00.000Z"),
-        consent_id: "consent_123",
-        consent_updated_at: new Date("2026-06-08T10:45:00.000Z"),
-        latest_access_token_expires_at: new Date("2026-06-08T11:30:00.000Z"),
-        latest_refresh_token_expires_at: new Date("2026-07-08T10:30:00.000Z"),
-        organization_id: "org_acme",
-        organization_name: "Acme Field Ops",
-        policy_uri: "https://mcp.example.com/privacy",
-        redirect_uris: [
-          "https://mcp.example.com/oauth/callback",
-          "https://mcp.example.com/alternate/callback",
-        ],
-        reference_id: "org_acme",
-        scopes: ["openid", "profile", "ceird:read", "offline_access"],
-        tos_uri: "https://mcp.example.com/terms",
-      })
-    ).toStrictEqual({
-      activeAccessTokenCount: 1,
-      activeRefreshTokenCount: 2,
-      clientId: "client_external_mcp",
-      clientName: "External MCP",
-      clientUri: "https://mcp.example.com",
-      context: {
-        organizationId: "org_acme",
-        organizationName: "Acme Field Ops",
-        type: "organization",
-      },
-      grantId: "consent_123",
-      grantedAt: "2026-06-08T10:30:00.000Z",
-      latestAccessTokenExpiresAt: "2026-06-08T11:30:00.000Z",
-      latestRefreshTokenExpiresAt: "2026-07-08T10:30:00.000Z",
-      offlineAccess: true,
-      policyUri: "https://mcp.example.com/privacy",
-      redirectHosts: ["mcp.example.com"],
-      scopes: ["openid", "profile", "ceird:read", "offline_access"],
-      scopeGroups: [
-        {
-          key: "identity",
-          label: "Identity",
-          scopes: ["openid", "profile"],
-        },
-        {
-          key: "read",
-          label: "Read",
-          scopes: ["ceird:read"],
-        },
-        {
-          key: "offline",
-          label: "Offline access",
-          scopes: ["offline_access"],
-        },
-      ],
-      tosUri: "https://mcp.example.com/terms",
-      updatedAt: "2026-06-08T10:45:00.000Z",
-    });
-  });
-
-  it("maps consents without an organization reference as account-level grants", () => {
-    const grant = mapConnectedAppGrantRow({
-      active_access_token_count: 0,
-      active_refresh_token_count: 0,
-      client_id: "client_identity",
-      client_name: null,
-      client_uri: null,
-      consent_created_at: new Date("2026-06-08T12:00:00.000Z"),
-      consent_id: "consent_identity",
-      consent_updated_at: new Date("2026-06-08T12:00:00.000Z"),
-      latest_access_token_expires_at: null,
-      latest_refresh_token_expires_at: null,
-      organization_id: null,
-      organization_name: null,
-      policy_uri: null,
-      redirect_uris: ["com.example.app:/oauth/callback"],
-      reference_id: null,
-      scopes: ["openid", "email"],
-      tos_uri: null,
-    });
-
-    expect(grant).toMatchObject({
-      clientId: "client_identity",
-      clientName: undefined,
-      context: { type: "account" },
-      offlineAccess: false,
-      redirectHosts: ["com.example.app"],
-    });
-  });
-});
+const clientId = decodeOAuthClientId("client_external_mcp");
 
 describe("connected app grants service", () => {
   it("lists grants for the authenticated user", async () => {
@@ -141,7 +46,7 @@ describe("connected app grants service", () => {
             list: (requestedUserId) => {
               expect(requestedUserId).toBe(userId);
 
-              return Effect.succeed([connectedApp]);
+              return Effect.succeed({ grants: [connectedApp] });
             },
           })
         )
@@ -181,11 +86,145 @@ describe("connected app grants service", () => {
 });
 
 describe("connected app grants repository", () => {
+  it("lists schema-decoded connected-app grants from raw SQL projections", async () => {
+    const sql = makeConnectedAppsSqlClient({
+      consentRows: [],
+      listRows: [
+        {
+          active_access_token_count: 1,
+          active_refresh_token_count: 2,
+          client_id: "client_external_mcp",
+          client_name: "External MCP",
+          client_uri: "https://mcp.example.com",
+          consent_created_at: new Date("2026-06-08T10:30:00.000Z"),
+          consent_id: "consent_123",
+          consent_updated_at: new Date("2026-06-08T10:45:00.000Z"),
+          latest_access_token_expires_at: new Date("2026-06-08T11:30:00.000Z"),
+          latest_refresh_token_expires_at: new Date("2026-07-08T10:30:00.000Z"),
+          organization_id: "org_acme",
+          organization_name: "Acme Field Ops",
+          policy_uri: "https://mcp.example.com/privacy",
+          redirect_uris: ["https://mcp.example.com/oauth/callback"],
+          reference_id: "org_acme",
+          scopes: ["openid", "ceird:read", "offline_access"],
+          tos_uri: "https://mcp.example.com/terms",
+        },
+        {
+          active_access_token_count: 0,
+          active_refresh_token_count: 0,
+          client_id: "client_identity",
+          client_name: null,
+          client_uri: null,
+          consent_created_at: new Date("2026-06-08T12:00:00.000Z"),
+          consent_id: "consent_identity",
+          consent_updated_at: new Date("2026-06-08T12:00:00.000Z"),
+          latest_access_token_expires_at: null,
+          latest_refresh_token_expires_at: null,
+          organization_id: null,
+          organization_name: null,
+          policy_uri: null,
+          redirect_uris: ["com.example.app:/oauth/callback"],
+          reference_id: null,
+          scopes: ["openid", "email"],
+          tos_uri: null,
+        },
+      ],
+    });
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const repository = yield* ConnectedAppGrantsRepository;
+
+        return yield* repository.list(userId);
+      }).pipe(
+        Effect.provide(ConnectedAppGrantsRepository.DefaultWithoutDependencies),
+        Effect.provide(sql.layer)
+      )
+    );
+
+    expect(result).toStrictEqual({
+      grants: [
+        expect.objectContaining({
+          activeAccessTokenCount: 1,
+          activeRefreshTokenCount: 2,
+          clientId,
+          context: {
+            organizationId: "org_acme",
+            organizationName: "Acme Field Ops",
+            type: "organization",
+          },
+          grantId,
+          offlineAccess: true,
+          redirectHosts: ["mcp.example.com"],
+        }),
+        expect.objectContaining({
+          activeAccessTokenCount: 0,
+          activeRefreshTokenCount: 0,
+          clientId: decodeOAuthClientId("client_identity"),
+          clientName: undefined,
+          context: { type: "account" },
+          grantId: decodeDisconnectConnectedAppGrantInput({
+            grantId: "consent_identity",
+          }).grantId,
+          offlineAccess: false,
+          redirectHosts: ["com.example.app"],
+        }),
+      ],
+    });
+  }, 10_000);
+
+  it("fails at the repository boundary instead of repairing stale organization references", async () => {
+    const sql = makeConnectedAppsSqlClient({
+      consentRows: [],
+      listRows: [
+        {
+          active_access_token_count: 0,
+          active_refresh_token_count: 0,
+          client_id: "client_external_mcp",
+          client_name: "External MCP",
+          client_uri: null,
+          consent_created_at: new Date("2026-06-08T10:30:00.000Z"),
+          consent_id: "consent_123",
+          consent_updated_at: new Date("2026-06-08T10:45:00.000Z"),
+          latest_access_token_expires_at: null,
+          latest_refresh_token_expires_at: null,
+          organization_id: null,
+          organization_name: null,
+          policy_uri: null,
+          redirect_uris: ["https://mcp.example.com/oauth/callback"],
+          reference_id: "org_acme",
+          scopes: ["ceird:read"],
+          tos_uri: null,
+        },
+      ],
+    });
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const repository = yield* ConnectedAppGrantsRepository;
+
+        return yield* repository.list(userId);
+      }).pipe(
+        Effect.provide(ConnectedAppGrantsRepository.DefaultWithoutDependencies),
+        Effect.provide(sql.layer),
+        effectEither
+      )
+    );
+
+    expect(result).toMatchObject({
+      _tag: "Left",
+      left: expect.any(ConnectedAppGrantStorageError),
+    });
+    expect(result._tag === "Left" ? result.left.message : "").toBe(
+      "Connected app grant projection decode failed"
+    );
+  }, 10_000);
+
   it("disconnects a grant by deleting consent, revoking tokens, deleting access tokens, and auditing", async () => {
     const sql = makeConnectedAppsSqlClient({
       consentRows: [
         {
-          client_id: "client_external_mcp",
+          client_id: clientId,
           id: grantId,
           reference_id: "org_acme",
           scopes: ["ceird:read", "offline_access"],
@@ -262,7 +301,7 @@ function makeConnectedAppGrant(): ConnectedAppGrant {
   return {
     activeAccessTokenCount: 1,
     activeRefreshTokenCount: 1,
-    clientId: "client_external_mcp",
+    clientId,
     clientName: "External MCP",
     context: {
       organizationId: decodeOrganizationId("org_acme"),
@@ -315,18 +354,14 @@ function makeRepositoryLayer(
       list:
         handlers.list ??
         ((_requestedUserId: UserId) =>
-          Effect.succeed([makeConnectedAppGrant()])),
+          Effect.succeed({ grants: [makeConnectedAppGrant()] })),
     })
   );
 }
 
 function makeConnectedAppsSqlClient(options: {
-  readonly consentRows: readonly {
-    readonly client_id: string;
-    readonly id: ConnectedAppGrantId;
-    readonly reference_id: string | null;
-    readonly scopes: readonly string[];
-  }[];
+  readonly consentRows: readonly unknown[];
+  readonly listRows?: readonly unknown[];
 }) {
   const statements: {
     readonly statement: string;
@@ -338,6 +373,13 @@ function makeConnectedAppsSqlClient(options: {
   ) => {
     const statement = strings.join(" ");
     statements.push({ statement, values });
+
+    if (
+      statement.includes("from oauth_consent") &&
+      statement.includes("join oauth_client")
+    ) {
+      return Effect.succeed(options.listRows ?? []);
+    }
 
     if (statement.includes("from oauth_consent")) {
       return Effect.succeed(options.consentRows);
