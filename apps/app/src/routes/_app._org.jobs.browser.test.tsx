@@ -3,7 +3,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps, ComponentType } from "react";
 
-import type { LocalConvenienceCollection } from "#/data-plane/local-convenience-collections";
+import type {
+  LocalConvenienceCollection,
+  LocalConvenienceRecord,
+} from "#/data-plane/local-convenience-collections";
 import type { JobsWorkspaceRouteShell } from "#/features/jobs-workspace/jobs-workspace-route-shell";
 
 type RouteSearchUpdate = Record<string, unknown>;
@@ -13,6 +16,7 @@ interface NavigateOptions {
 }
 
 const routeMock = vi.hoisted(() => ({
+  localRecords: [] as unknown[],
   navigate: vi.fn<(options: NavigateOptions) => Promise<void>>(() =>
     Promise.resolve()
   ),
@@ -70,7 +74,7 @@ vi.mock(
       useLocalConvenienceRecords: () => ({
         collection:
           throwingLocalCollection as unknown as LocalConvenienceCollection,
-        records: [],
+        records: routeMock.localRecords as LocalConvenienceRecord[],
         status: "disabled",
       }),
     };
@@ -82,6 +86,11 @@ vi.mock(import("#/features/jobs-workspace/jobs-workspace-route-shell"), () => ({
     props: ComponentProps<typeof JobsWorkspaceRouteShell>
   ) => (
     <div>
+      <div data-testid="jobs-view">{String(props.view)}</div>
+      <div data-testid="jobs-recent-search">{props.recentSearch ?? "none"}</div>
+      <div data-testid="jobs-recent-searches">
+        {props.recentSearches?.join(",") || "none"}
+      </div>
       <button
         type="button"
         onClick={() => props.onRecentSearchCommit("  pump  ")}
@@ -97,6 +106,7 @@ vi.mock(import("#/features/jobs-workspace/jobs-workspace-route-shell"), () => ({
 
 describe("Jobs route local convenience persistence", () => {
   beforeEach(() => {
+    routeMock.localRecords = [];
     routeMock.navigate.mockClear();
     routeMock.search = {};
     throwingLocalCollection.delete.mockClear();
@@ -141,5 +151,36 @@ describe("Jobs route local convenience persistence", () => {
     expect(routeMock.navigate.mock.calls[0]?.[0].search({})).toStrictEqual({
       view: "board",
     });
+  });
+
+  it("does not hydrate schema-invalid local records into route state", async () => {
+    routeMock.localRecords = [
+      {
+        id: "jobs:workspace-preferences",
+        kind: "workspace-preferences",
+        surface: "jobs",
+        updatedAtMs: 10,
+        view: "grid",
+      },
+      {
+        committedAtMs: -1,
+        id: "jobs:recent-search:boiler",
+        kind: "recent-search",
+        query: "boiler",
+        surface: "jobs",
+      },
+    ];
+    const { Route } = await import("./_app._org.jobs");
+    const JobsRouteComponent = (
+      Route as unknown as { component: ComponentType }
+    ).component;
+
+    render(<JobsRouteComponent />);
+
+    expect(screen.getByTestId("jobs-view")).toHaveTextContent("list");
+    expect(screen.getByTestId("jobs-recent-search")).toHaveTextContent("none");
+    expect(screen.getByTestId("jobs-recent-searches")).toHaveTextContent(
+      "none"
+    );
   });
 });

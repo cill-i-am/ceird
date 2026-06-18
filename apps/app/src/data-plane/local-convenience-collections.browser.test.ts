@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   commitRecentSearch,
   createLocalConvenienceCollection,
+  decodeLocalConvenienceRecords,
   getLocalConvenienceStorageKey,
   getRecentSearchesForSurface,
   getWorkspacePreferencesForSurface,
@@ -102,6 +103,105 @@ describe("local convenience collections", () => {
     await collection.preload();
 
     expect(collection.toArray).toStrictEqual([]);
+  });
+
+  it("discards JSON-valid rows that fail the local convenience schema", async () => {
+    const storageKey = "ceird:test:local-convenience:invalid-records";
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        "jobs%3Aworkspace-preferences": {
+          data: {
+            id: "jobs:workspace-preferences",
+            kind: "workspace-preferences",
+            surface: "jobs",
+            updatedAtMs: 10,
+            view: "grid",
+          },
+          versionKey: "invalid-jobs-view",
+        },
+        "sites%3Arecent-search%3Adepot": {
+          data: {
+            committedAtMs: 20,
+            id: "sites:recent-search:depot",
+            kind: "recent-search",
+            query: "depot",
+            surface: "sites",
+          },
+          versionKey: "valid-sites-search",
+        },
+        "sites%3Aworkspace-preferences": {
+          data: {
+            filter: "archived",
+            id: "sites:workspace-preferences",
+            kind: "workspace-preferences",
+            sort: "updated",
+            surface: "sites",
+            updatedAtMs: 30,
+          },
+          versionKey: "invalid-sites-filter",
+        },
+      })
+    );
+
+    const collection = createLocalConvenienceCollection({
+      storage: window.localStorage,
+      storageEventApi: noopStorageEventApi,
+      storageKey,
+    });
+    await collection.preload();
+
+    expect(decodeLocalConvenienceRecords(collection.toArray)).toStrictEqual([
+      {
+        committedAtMs: 20,
+        id: "sites:recent-search:depot",
+        kind: "recent-search",
+        query: "depot",
+        surface: "sites",
+      },
+    ]);
+    expect(
+      getWorkspacePreferencesForSurface(collection.toArray, "jobs")
+    ).toBeUndefined();
+    expect(
+      getWorkspacePreferencesForSurface(collection.toArray, "sites")
+    ).toBeUndefined();
+    expect(
+      getRecentSearchesForSurface(collection.toArray, "sites")
+    ).toStrictEqual(["depot"]);
+  });
+
+  it("falls back to memory storage when the browser localStorage accessor throws", async () => {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      window,
+      "localStorage"
+    );
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => {
+        throw new Error("localStorage unavailable");
+      },
+    });
+
+    try {
+      const collection = createLocalConvenienceCollection({
+        storageKey: "ceird:test:local-convenience:throwing-accessor",
+      });
+
+      await expect(collection.preload()).resolves.toBeUndefined();
+      expect(() =>
+        commitRecentSearch({
+          collection,
+          nowMs: 10,
+          query: "pump",
+          surface: "jobs",
+        })
+      ).not.toThrow();
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(window, "localStorage", originalDescriptor);
+      }
+    }
   });
 
   it("treats local write failures as non-fatal convenience misses", () => {

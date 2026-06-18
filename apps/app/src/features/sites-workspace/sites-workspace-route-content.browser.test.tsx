@@ -233,6 +233,49 @@ describe(SitesWorkspaceRouteContent, () => {
     }
   });
 
+  it("renders route controls when the localStorage accessor throws", () => {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      window,
+      "localStorage"
+    );
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => {
+        throw new Error("localStorage unavailable");
+      },
+    });
+    const onWorkspaceSearchChange =
+      vi.fn<
+        React.ComponentProps<
+          typeof SitesWorkspaceRouteContent
+        >["onWorkspaceSearchChange"]
+      >();
+
+    try {
+      renderSitesWorkspace({
+        onWorkspaceSearchChange,
+        workspaceSearch: { query: "Dub" },
+      });
+
+      expect(
+        screen.getByRole("searchbox", { name: /search sites/i })
+      ).toHaveValue("Dub");
+
+      fireEvent.change(
+        screen.getByRole("searchbox", { name: /search sites/i }),
+        {
+          target: { value: "Cork" },
+        }
+      );
+
+      expect(onWorkspaceSearchChange).toHaveBeenCalledWith({ query: "Cork" });
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(window, "localStorage", originalDescriptor);
+      }
+    }
+  });
+
   it("hydrates saved view preferences and recent searches from local collections", async () => {
     const storageKey = getLocalConvenienceStorageKey({
       scope: createOrganizationDataScope({
@@ -280,6 +323,60 @@ describe(SitesWorkspaceRouteContent, () => {
         sort: "updated",
       });
     });
+  });
+
+  it("does not hydrate schema-invalid saved view preferences or recent searches", async () => {
+    const storageKey = getLocalConvenienceStorageKey({
+      scope: createOrganizationDataScope({
+        organizationId: "org_123" as OrganizationId,
+        role: "owner",
+        userId: "user_123",
+      }),
+    });
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        "sites%3Arecent-search%3Adepot": {
+          data: {
+            committedAtMs: -1,
+            id: "sites:recent-search:depot",
+            kind: "recent-search",
+            query: "depot",
+            surface: "sites",
+          },
+          versionKey: "invalid-sites-search",
+        },
+        "sites%3Aworkspace-preferences": {
+          data: {
+            filter: "archived",
+            id: "sites:workspace-preferences",
+            kind: "workspace-preferences",
+            sort: "updated",
+            surface: "sites",
+            updatedAtMs: 30,
+          },
+          versionKey: "invalid-sites-filter",
+        },
+      })
+    );
+    const onWorkspaceSearchChange =
+      vi.fn<
+        React.ComponentProps<
+          typeof SitesWorkspaceRouteContent
+        >["onWorkspaceSearchChange"]
+      >();
+
+    renderSitesWorkspace({ onWorkspaceSearchChange });
+
+    await vi.waitFor(() => {
+      expect(onWorkspaceSearchChange).not.toHaveBeenCalledWith({
+        filter: "archived",
+        sort: "updated",
+      });
+    });
+    expect(
+      screen.queryByRole("button", { name: "depot" })
+    ).not.toBeInTheDocument();
   });
 
   it("fails closed when joined read-model slices are unavailable with base sites ready", () => {

@@ -138,12 +138,14 @@ export function createLocalConvenienceCollection({
     | undefined;
   readonly storageKey: string;
 }) {
+  const resolvedStorage = storage ?? getSafeBrowserStorage();
+
   return createCollection(
     localStorageCollectionOptions({
       getKey: (item) => item.id,
       id: `local-convenience:${storageKey}`,
       schema: LocalConvenienceRecordSchema,
-      storage,
+      storage: resolvedStorage,
       storageEventApi,
       storageKey,
     })
@@ -165,16 +167,16 @@ export function useLocalConvenienceRecords() {
 
   return {
     collection,
-    records: query.data ?? [],
+    records: decodeLocalConvenienceRecords(query.data ?? []),
     status: query.status,
   };
 }
 
 export function getRecentSearchesForSurface(
-  records: readonly LocalConvenienceRecord[],
+  records: readonly unknown[],
   surface: LocalConvenienceSurface
 ) {
-  return records
+  return decodeLocalConvenienceRecords(records)
     .filter(
       (record): record is LocalConvenienceRecentSearchRecord =>
         record.kind === "recent-search" && record.surface === surface
@@ -185,23 +187,31 @@ export function getRecentSearchesForSurface(
 }
 
 export function getWorkspacePreferencesForSurface(
-  records: readonly LocalConvenienceRecord[],
+  records: readonly unknown[],
   surface: LocalConvenienceSurface
 ) {
-  return records.find(
+  return decodeLocalConvenienceRecords(records).find(
     (record): record is LocalConvenienceWorkspacePreferenceRecord =>
       record.kind === "workspace-preferences" && record.surface === surface
   );
 }
 
 export function getSelectedEntityForSurface(
-  records: readonly LocalConvenienceRecord[],
+  records: readonly unknown[],
   surface: LocalConvenienceSurface
 ) {
-  return records.find(
+  return decodeLocalConvenienceRecords(records).find(
     (record): record is LocalConvenienceSelectedEntityRecord =>
       record.kind === "selected-entity" && record.surface === surface
   );
+}
+
+export function decodeLocalConvenienceRecords(records: readonly unknown[]) {
+  return records.flatMap((record) => {
+    const result = LocalConvenienceRecordSchema.safeParse(record);
+
+    return result.success ? [result.data] : [];
+  });
 }
 
 export function commitRecentSearch({
@@ -222,7 +232,7 @@ export function commitRecentSearch({
   }
 
   const existing = getRecentSearchesForSurface(
-    collection.toArray as readonly LocalConvenienceRecord[],
+    decodeLocalConvenienceRecords(collection.toArray),
     surface
   );
   const nextQueries = [
@@ -233,7 +243,7 @@ export function commitRecentSearch({
     nextQueries.map((search) => getRecentSearchRecordId(surface, search))
   );
 
-  for (const record of collection.toArray as readonly LocalConvenienceRecord[]) {
+  for (const record of decodeLocalConvenienceRecords(collection.toArray)) {
     if (
       record.kind === "recent-search" &&
       record.surface === surface &&
@@ -345,6 +355,39 @@ function deleteLocalConvenienceRecord(
   } catch {
     // Local convenience state is best-effort and must never block route state.
   }
+}
+
+function getSafeBrowserStorage() {
+  if (typeof window === "undefined") {
+    return createMemoryStorage();
+  }
+
+  try {
+    return window.localStorage;
+  } catch {
+    return createMemoryStorage();
+  }
+}
+
+function createMemoryStorage(): Storage {
+  const values = new Map<string, string>();
+
+  return {
+    clear: () => {
+      values.clear();
+    },
+    getItem: (key) => values.get(key) ?? null,
+    key: (index) => [...values.keys()][index] ?? null,
+    get length() {
+      return values.size;
+    },
+    removeItem: (key) => {
+      values.delete(key);
+    },
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
+  };
 }
 
 function getRecentSearchRecordId(
