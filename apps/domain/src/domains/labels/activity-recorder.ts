@@ -114,7 +114,11 @@ function recordLabelActivity({
         });
     const source = agentContext?.agentActionRunId
       ? {
-          sourceId: agentContext.agentActionRunId,
+          sourceId: buildAgentLabelActivitySourceId(
+            agentContext.agentActionRunId,
+            eventType,
+            label
+          ),
           sourceType: "agent_action_run" as const,
         }
       : {
@@ -195,6 +199,14 @@ function buildLabelActivitySourceId(
   }
 
   return `${eventType}:${label.id}:${label.updatedAt}`;
+}
+
+function buildAgentLabelActivitySourceId(
+  agentActionRunId: string,
+  eventType: ActivityEventType,
+  label: Label
+): string {
+  return `${agentActionRunId}:${buildLabelActivitySourceId(eventType, label)}`;
 }
 
 function formatActivityDisplayText(text: string, maxLength: number): string {

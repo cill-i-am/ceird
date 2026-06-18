@@ -20,8 +20,8 @@ import {
   UserId,
   UserPreferencesStorageError,
 } from "@ceird/identity-core";
-import { SiteId, SiteOptionSchema } from "@ceird/sites-core";
 import type { Label } from "@ceird/labels-core";
+import { SiteId, SiteOptionSchema } from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
 import { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
 import { Cause, Effect, Exit, Layer, Option, Schema } from "effect";

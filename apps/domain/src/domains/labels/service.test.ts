@@ -290,7 +290,7 @@ describe("LabelsService", () => {
         event: {
           actorId: agentActorId,
           eventType: "label.created",
-          sourceId: agentActionRunId,
+          sourceId: `${agentActionRunId}:label.created:${label.id}`,
           sourceType: "agent_action_run",
           targetId: label.id,
           targetType: "label",
@@ -298,6 +298,139 @@ describe("LabelsService", () => {
         kind: "event",
       },
     ]);
+  });
+
+  it("keeps agent label activity separate from generic agent action activity", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "labels_service_agent_activity_collision",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Postgres integration database unavailable; skipping agent label activity collision coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    const organizationId =
+      Schema.decodeUnknownSync(OrganizationId)(randomUUID());
+    const userId = Schema.decodeUnknownSync(UserId)(
+      `agent_label_activity_${Date.now()}`
+    );
+    const agentThreadId = Schema.decodeUnknownSync(AgentThreadId)(randomUUID());
+    const agentActionRunId =
+      Schema.decodeUnknownSync(AgentActionRunId)(randomUUID());
+    const integrationActor = {
+      organizationId,
+      role: "owner",
+      userId,
+    } satisfies OrganizationActor;
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Agent Labels",
+      });
+      await seedMember(pool, {
+        email: "agent-label-activity@example.com",
+        name: "Agent Label Owner",
+        organizationId,
+        userId,
+      });
+      await seedAgentThread(pool, {
+        id: agentThreadId,
+        organizationId,
+        title: "Private label cleanup plan",
+        userId,
+      });
+    });
+
+    const result = await runLabelsServiceIntegrationEffect(
+      testDatabase.url,
+      integrationActor,
+      Effect.gen(function* () {
+        const activityActors = yield* ProductActivityActorsRepository;
+        const activityEvents = yield* ActivityEventsRepository;
+        const labels = yield* LabelsService;
+
+        const productActor = yield* activityActors.ensureAgentActor({
+          agentThreadId,
+          organizationId,
+          userId,
+        });
+        yield* activityEvents.recordEvent({
+          actorId: productActor.actor.id,
+          display: {
+            summary: "Agent action synced",
+          },
+          eventType: "agent.product_effect",
+          organizationId,
+          sourceId: agentActionRunId,
+          sourceType: "agent_action_run",
+          status: "synced",
+          targetId: agentActionRunId,
+          targetType: "agent_action_run",
+        });
+
+        const created = yield* labels.create({ name: "Compliance" }).pipe(
+          Effect.provide(
+            Layer.succeed(
+              RouteInvocationContext,
+              RouteInvocationContext.of({
+                agentActionRunId,
+                agentThreadId,
+              })
+            )
+          )
+        );
+        const events = yield* activityEvents.listRecent(organizationId);
+
+        return {
+          created,
+          events,
+        };
+      })
+    );
+
+    const labelActivity = result.events.find(
+      (event) => event.eventType === "label.created"
+    );
+    const agentActivity = result.events.find(
+      (event) => event.eventType === "agent.product_effect"
+    );
+
+    expect(labelActivity).toMatchObject({
+      display: {
+        route: {
+          href: "/organization/settings/labels",
+          label: "Compliance",
+        },
+        summary: "Label created",
+      },
+      sourceId: `${agentActionRunId}:label.created:${result.created.label.id}`,
+      sourceType: "agent_action_run",
+      targetId: result.created.label.id,
+      targetType: "label",
+    });
+    expect(agentActivity).toMatchObject({
+      display: {
+        summary: "Agent action synced",
+      },
+      sourceId: agentActionRunId,
+      sourceType: "agent_action_run",
+      targetId: agentActionRunId,
+      targetType: "agent_action_run",
+    });
+    expect(result.events).toHaveLength(2);
   });
 
   it("returns txids from the same DomainDrizzle transaction as label write rows", async (context: {
@@ -730,6 +863,37 @@ async function seedMember(
     `insert into member (id, organization_id, user_id, role, created_at)
      values ($1, $2, $3, 'owner', now())`,
     [randomUUID(), input.organizationId, input.userId]
+  );
+}
+
+async function seedAgentThread(
+  pool: Pool,
+  input: {
+    readonly id: string;
+    readonly organizationId: string;
+    readonly title: string;
+    readonly userId: string;
+  }
+) {
+  await pool.query(
+    `insert into agent_threads (
+       id,
+       organization_id,
+       user_id,
+       agent_instance_name,
+       title,
+       status,
+       created_at,
+       updated_at
+     )
+     values ($1, $2, $3, $4, $5, 'active', now(), now())`,
+    [
+      input.id,
+      input.organizationId,
+      input.userId,
+      `agent-${input.organizationId}-${input.userId}-${input.id}`,
+      input.title,
+    ]
   );
 }
 
