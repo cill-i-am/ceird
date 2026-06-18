@@ -900,10 +900,11 @@ created time, and `retained_until`. The public Electric shape is bounded by a
 domain-owned `retained_until` cutoff predicate, while the repository prunes
 expired rows and keeps only the latest 5,000 events per organization. The
 latest-5,000 guardrail is enforced by retention cleanup because Electric shape
-predicates cannot express an ordered per-organization limit. Job comment writes
-emit `comment.created` rows into this model through the jobs activity recorder;
-additional product write paths adopt this projection through their owning
-activity issues rather than in the projection and shape slice.
+predicates cannot express an ordered per-organization limit. Job and site
+comment writes emit product-safe comment activity rows into this model, and
+mutating agent action-run ledger updates emit `agent.product_effect` rows keyed
+by the action run source so replays update the same feed item instead of adding
+noise.
 Route-aware proximity adds indexes for the hot ranking paths: active jobs can
 reuse the existing `work_items_organization_active_updated_at_idx`, site active
 job summaries use `work_items_organization_site_active_priority_idx`, and mapped

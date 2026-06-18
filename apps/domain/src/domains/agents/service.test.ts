@@ -15,6 +15,7 @@ import type { AgentThread } from "@ceird/agents-core";
 import {
   decodeUserPreferences,
   OrganizationId,
+  ProductActorId,
   UserId,
   UserPreferencesStorageError,
 } from "@ceird/identity-core";
@@ -30,6 +31,11 @@ import {
   configProviderFromMap,
   withConfigProvider,
 } from "../../test/effect-test-helpers.js";
+import {
+  ActivityEventsRepository,
+  ProductActivityActorsRepository,
+} from "../activity/repository.js";
+import type { RecordActivityEventInput } from "../activity/repository.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
@@ -67,6 +73,7 @@ const decodeAgentActionOperationId = Schema.decodeUnknownSync(
 const decodeAgentActionRunId = Schema.decodeUnknownSync(AgentActionRunId);
 const decodeAgentThreadId = Schema.decodeUnknownSync(AgentThreadId);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
+const decodeProductActorId = Schema.decodeUnknownSync(ProductActorId);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
 
 const organizationId = decodeOrganizationId("org_123");
@@ -74,6 +81,9 @@ const userId = decodeUserId("user_123");
 const threadId = decodeAgentThreadId("11111111-1111-4111-8111-111111111111");
 const actionRunId = decodeAgentActionRunId(
   "22222222-2222-4222-8222-222222222222"
+);
+const productAgentActorId = decodeProductActorId(
+  "33333333-3333-4333-8333-333333333333"
 );
 const operationId = decodeAgentActionOperationId("tool-call:1");
 const actor = {
@@ -97,6 +107,7 @@ const thread = {
 
 describe("agent threads service", () => {
   it("replays successful write operations without executing the action again", async () => {
+    const activityEvents: RecordActivityEventInput[] = [];
     let actionCalls = 0;
     const response = await Effect.runPromise(
       runAgentThreadsService(
@@ -132,6 +143,13 @@ describe("agent threads service", () => {
               effect: Effect.Effect<Value, Error, Requirements>
             ) => effect,
           },
+          activityEventsRepository: {
+            recordEvent: (input) =>
+              Effect.sync(() => {
+                activityEvents.push(input);
+                return {} as never;
+              }),
+          },
         }
       )
     );
@@ -142,6 +160,17 @@ describe("agent threads service", () => {
       result: { labelId: "label_123" },
     });
     expect(actionCalls).toBe(0);
+    expect(activityEvents).toStrictEqual([
+      expect.objectContaining({
+        actorId: productAgentActorId,
+        eventType: "agent.product_effect",
+        sourceId: actionRunId,
+        sourceType: "agent_action_run",
+        status: "synced",
+        targetId: actionRunId,
+        targetType: "agent_action_run",
+      }),
+    ]);
   });
 
   it("re-executes successful read replays instead of returning a null result", async () => {
@@ -590,6 +619,445 @@ describe("agent threads service", () => {
     expect(actionCalls).toBe(1);
   });
 
+  it("emits idempotent product activity for fresh write action runs", async () => {
+    const activityEvents: RecordActivityEventInput[] = [];
+    let ensuredAgentActor = 0;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: { name: "Plumbing" },
+            name: "ceird.labels.create",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          actions: {
+            execute: () => Effect.succeed({ labelId: "label_123" }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: true,
+                run: makeBeginRun(input),
+              }),
+            completeSucceeded: (
+              completedActionRunId: AgentActionRunId,
+              result: unknown
+            ) =>
+              Effect.succeed(
+                makeActionRun({
+                  id: completedActionRunId,
+                  result,
+                  status: "succeeded",
+                })
+              ),
+          },
+          activityEventsRepository: {
+            recordEvent: (input) =>
+              Effect.sync(() => {
+                activityEvents.push(input);
+                return {} as never;
+              }),
+          },
+          productActivityActorsRepository: {
+            ensureAgentThreadActor: (input) =>
+              Effect.sync(() => {
+                ensuredAgentActor += 1;
+                expect(input).toStrictEqual({
+                  organizationId,
+                  threadId,
+                  threadTitle: thread.title,
+                  userId,
+                });
+
+                return makeProductAgentActorResult();
+              }),
+          },
+        }
+      )
+    );
+
+    expect(response).toStrictEqual({
+      actionRunId,
+      replayed: false,
+      result: { labelId: "label_123" },
+    });
+    expect(ensuredAgentActor).toBe(1);
+    expect(activityEvents).toStrictEqual([
+      expect.objectContaining({
+        actorId: productAgentActorId,
+        display: {
+          summary: "Agent started Create label",
+        },
+        eventType: "agent.product_effect",
+        organizationId,
+        sourceId: actionRunId,
+        sourceType: "agent_action_run",
+        status: "pending",
+        targetId: actionRunId,
+        targetType: "agent_action_run",
+      }),
+      expect.objectContaining({
+        actorId: productAgentActorId,
+        display: {
+          summary: "Agent completed Create label",
+        },
+        eventType: "agent.product_effect",
+        organizationId,
+        sourceId: actionRunId,
+        sourceType: "agent_action_run",
+        status: "synced",
+        targetId: actionRunId,
+        targetType: "agent_action_run",
+      }),
+    ]);
+    expect(JSON.stringify(activityEvents)).not.toContain(userId);
+  });
+
+  it("continues fresh write action runs when agent actor projection fails before execution", async () => {
+    let actionCalls = 0;
+    let completedRuns = 0;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: { name: "Plumbing" },
+            name: "ceird.labels.create",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.sync(() => {
+                actionCalls += 1;
+
+                return { labelId: "label_123" };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: true,
+                run: makeBeginRun(input),
+              }),
+            completeSucceeded: (
+              completedActionRunId: AgentActionRunId,
+              result: unknown
+            ) =>
+              Effect.sync(() => {
+                completedRuns += 1;
+
+                return makeActionRun({
+                  id: completedActionRunId,
+                  result,
+                  status: "succeeded",
+                });
+              }),
+          },
+          activityEventsRepository: {
+            recordEvent: () =>
+              Effect.die("Actor projection failure should skip events"),
+          },
+          productActivityActorsRepository: {
+            ensureAgentThreadActor: () => Effect.fail(makeSqlError()),
+          },
+        }
+      )
+    );
+
+    expect(response).toStrictEqual({
+      actionRunId,
+      replayed: false,
+      result: { labelId: "label_123" },
+    });
+    expect(actionCalls).toBe(1);
+    expect(completedRuns).toBe(1);
+  });
+
+  it("continues fresh write action runs when pending activity projection fails before execution", async () => {
+    let actionCalls = 0;
+    let completedRuns = 0;
+    let recordCalls = 0;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: { name: "Plumbing" },
+            name: "ceird.labels.create",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.sync(() => {
+                actionCalls += 1;
+
+                return { labelId: "label_123" };
+              }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: true,
+                run: makeBeginRun(input),
+              }),
+            completeSucceeded: (
+              completedActionRunId: AgentActionRunId,
+              result: unknown
+            ) =>
+              Effect.sync(() => {
+                completedRuns += 1;
+
+                return makeActionRun({
+                  id: completedActionRunId,
+                  result,
+                  status: "succeeded",
+                });
+              }),
+          },
+          activityEventsRepository: {
+            recordEvent: () => {
+              recordCalls += 1;
+
+              if (recordCalls === 1) {
+                return Effect.fail(makeSqlError());
+              }
+
+              return Effect.succeed({} as never);
+            },
+          },
+          productActivityActorsRepository: {
+            ensureAgentThreadActor: () =>
+              Effect.succeed(makeProductAgentActorResult()),
+          },
+        }
+      )
+    );
+
+    expect(response).toStrictEqual({
+      actionRunId,
+      replayed: false,
+      result: { labelId: "label_123" },
+    });
+    expect(actionCalls).toBe(1);
+    expect(completedRuns).toBe(1);
+    expect(recordCalls).toBe(2);
+  });
+
+  it("returns successful fresh write results when final activity projection fails after terminal completion", async () => {
+    let completedRuns = 0;
+    let recordCalls = 0;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: { name: "Plumbing" },
+            name: "ceird.labels.create",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          actions: {
+            execute: () => Effect.succeed({ labelId: "label_123" }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: true,
+                run: makeBeginRun(input),
+              }),
+            completeSucceeded: (
+              completedActionRunId: AgentActionRunId,
+              result: unknown
+            ) =>
+              Effect.sync(() => {
+                completedRuns += 1;
+
+                return makeActionRun({
+                  id: completedActionRunId,
+                  result,
+                  status: "succeeded",
+                });
+              }),
+          },
+          activityEventsRepository: {
+            recordEvent: () => {
+              recordCalls += 1;
+
+              if (recordCalls === 2) {
+                return Effect.fail(makeSqlError());
+              }
+
+              return Effect.succeed({} as never);
+            },
+          },
+          productActivityActorsRepository: {
+            ensureAgentThreadActor: () =>
+              Effect.succeed(makeProductAgentActorResult()),
+          },
+        }
+      )
+    );
+
+    expect(response).toStrictEqual({
+      actionRunId,
+      replayed: false,
+      result: { labelId: "label_123" },
+    });
+    expect(completedRuns).toBe(1);
+    expect(recordCalls).toBe(2);
+  });
+
+  it("emits failed product activity for fresh failed write action runs", async () => {
+    const activityEvents: RecordActivityEventInput[] = [];
+    const error = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service
+            .runAction({
+              input: { name: "Plumbing" },
+              name: "ceird.labels.create",
+              operationId,
+              threadId,
+            })
+            .pipe(Effect.flip);
+        }),
+        {
+          actions: {
+            execute: () =>
+              Effect.fail(new AgentAccessDeniedError({ message: "No access" })),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: true,
+                run: makeBeginRun(input),
+              }),
+            completeFailed: (
+              completedActionRunId: AgentActionRunId,
+              message: string,
+              result: unknown
+            ) =>
+              Effect.succeed(
+                makeActionRun({
+                  errorMessage: message,
+                  id: completedActionRunId,
+                  result,
+                  status: "failed",
+                })
+              ),
+          },
+          activityEventsRepository: {
+            recordEvent: (input) =>
+              Effect.sync(() => {
+                activityEvents.push(input);
+                return {} as never;
+              }),
+          },
+          productActivityActorsRepository: {
+            ensureAgentThreadActor: () =>
+              Effect.succeed(makeProductAgentActorResult()),
+          },
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentAccessDeniedError);
+    expect(activityEvents).toStrictEqual([
+      expect.objectContaining({
+        display: {
+          summary: "Agent started Create label",
+        },
+        status: "pending",
+      }),
+      expect.objectContaining({
+        display: {
+          detail: "No access",
+          summary: "Agent failed Create label",
+        },
+        status: "failed",
+      }),
+    ]);
+  });
+
+  it("keeps read action runs out of product activity", async () => {
+    let ensuredAgentActor = 0;
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: {},
+            name: "ceird.labels.list",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          actions: {
+            execute: () => Effect.succeed({ labels: [] }),
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: true,
+                run: makeBeginRun(input),
+              }),
+            completeSucceeded: (
+              completedActionRunId: AgentActionRunId,
+              result: unknown
+            ) =>
+              Effect.succeed(
+                makeActionRun({
+                  actionKind: "read",
+                  actionName: "ceird.labels.list",
+                  id: completedActionRunId,
+                  result,
+                  status: "succeeded",
+                })
+              ),
+          },
+          activityEventsRepository: {
+            recordEvent: () =>
+              Effect.die("Read actions must not emit product activity"),
+          },
+          productActivityActorsRepository: {
+            ensureAgentThreadActor: () =>
+              Effect.sync(() => {
+                ensuredAgentActor += 1;
+                return makeProductAgentActorResult();
+              }),
+          },
+        }
+      )
+    );
+
+    expect(response).toStrictEqual({
+      actionRunId,
+      replayed: false,
+      result: { labels: [] },
+    });
+    expect(ensuredAgentActor).toBe(0);
+  });
+
   it("passes the current thread id into fresh action execution", async () => {
     let receivedThreadId: AgentThreadId | undefined;
     const response = await Effect.runPromise(
@@ -1027,12 +1495,27 @@ function makeAgentThreadsServiceTestLayer(
       } as unknown as ContextService<typeof AgentActionRunsRepository>)
     ),
     Layer.succeed(
+      ActivityEventsRepository,
+      ActivityEventsRepository.of({
+        recordEvent: () => Effect.succeed({} as never),
+        ...options.activityEventsRepository,
+      } as unknown as ContextService<typeof ActivityEventsRepository>)
+    ),
+    Layer.succeed(
       AgentThreadsRepository,
       AgentThreadsRepository.of({
         resolveActiveThreadActor: () =>
           Effect.succeed(Option.some({ actor, thread })),
         ...options.threadsRepository,
       } as unknown as ContextService<typeof AgentThreadsRepository>)
+    ),
+    Layer.succeed(
+      ProductActivityActorsRepository,
+      ProductActivityActorsRepository.of({
+        ensureAgentThreadActor: () =>
+          Effect.succeed(makeProductAgentActorResult()),
+        ...options.productActivityActorsRepository,
+      } as unknown as ContextService<typeof ProductActivityActorsRepository>)
     ),
     Layer.succeed(
       CurrentOrganizationActor,
@@ -1175,6 +1658,12 @@ interface AgentThreadsServiceTestOptions {
   readonly actionRunsRepository?: Partial<
     ContextService<typeof AgentActionRunsRepository>
   >;
+  readonly activityEventsRepository?: Partial<
+    ContextService<typeof ActivityEventsRepository>
+  >;
+  readonly productActivityActorsRepository?: Partial<
+    ContextService<typeof ProductActivityActorsRepository>
+  >;
   readonly threadsRepository?: Partial<
     ContextService<typeof AgentThreadsRepository>
   >;
@@ -1255,4 +1744,17 @@ function makeActionRun(
     userId,
     ...overrides,
   };
+}
+
+function makeProductAgentActorResult() {
+  return {
+    actor: {
+      displayDetail: "Agent product action",
+      displayName: "Ceird agent",
+      id: productAgentActorId,
+      kind: "agent",
+    },
+    sourceAgentThreadId: threadId,
+    sourceUserId: userId,
+  } as const;
 }
