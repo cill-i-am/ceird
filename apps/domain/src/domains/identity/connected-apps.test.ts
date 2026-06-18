@@ -581,7 +581,7 @@ async function seedConnectedAppGrant(
       seed.clientId,
       seed.userId,
       seed.organizationId,
-      new Date("2026-07-08T10:30:00.000Z"),
+      new Date("2099-07-08T10:30:00.000Z"),
       seed.scopes,
     ]
   );
@@ -606,7 +606,7 @@ async function seedConnectedAppGrant(
       seed.clientId,
       seed.userId,
       seed.organizationId,
-      new Date("2026-06-08T11:30:00.000Z"),
+      new Date("2099-06-08T11:30:00.000Z"),
       seed.scopes,
       seed.accessTokenIds[1],
       `access-token-refresh-${seed.slug}`,
