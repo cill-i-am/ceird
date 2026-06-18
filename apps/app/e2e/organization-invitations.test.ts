@@ -1,9 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 
-import { appendOrganizationSlugSuffix } from "@ceird/identity-core";
+import {
+  appendOrganizationSlugSuffix,
+  OrganizationInvitationListResponseSchema,
+} from "@ceird/identity-core";
 import { expect, test } from "@playwright/test";
-import type { APIRequestContext, Page } from "@playwright/test";
+import type {
+  APIRequestContext,
+  Page,
+  Response as PlaywrightResponse,
+} from "@playwright/test";
+import { Schema } from "effect";
 
 import { createTestPassword } from "./helpers/test-account";
 import { skipLocationAccessBeforeExpectedPage } from "./pages/location-access-page";
@@ -39,6 +47,9 @@ type PgClientConstructor = new (options: {
 const { Client: PgClient } = apiRequire("pg") as {
   readonly Client: PgClientConstructor;
 };
+const decodeOrganizationInvitationListResponse = Schema.decodeUnknownSync(
+  OrganizationInvitationListResponseSchema
+);
 
 function createTestEmail(prefix: string): string {
   return `${prefix}-${randomUUID()}@example.com`;
@@ -331,55 +342,6 @@ async function seedOwnerOrganization(
   return organizationPayload.id;
 }
 
-async function findInvitationIdForEmail(email: string) {
-  const client = new PgClient({
-    connectionString: readPlaywrightDatabaseUrl(),
-  });
-
-  await client.connect();
-
-  try {
-    const result = await client.query<{ readonly id: string }>(
-      `select id
-       from invitation
-       where email = $1
-         and status = 'pending'
-         and expires_at > now()
-       order by created_at desc
-       limit 1`,
-      [email]
-    );
-
-    return result.rows[0]?.id ?? null;
-  } finally {
-    await client.end();
-  }
-}
-
-async function getInvitationIdForEmail(email: string) {
-  let invitationId: string | null = null;
-
-  await expect
-    .poll(
-      async () => {
-        invitationId = await findInvitationIdForEmail(email);
-
-        return invitationId;
-      },
-      {
-        message: `pending invitation for ${email}`,
-        timeout: 15_000,
-      }
-    )
-    .not.toBeNull();
-
-  if (!invitationId) {
-    throw new Error(`Expected a pending invitation for ${email}`);
-  }
-
-  return invitationId;
-}
-
 async function expectPublicInvitationPreviewReady(
   request: APIRequestContext,
   invitationId: string
@@ -418,6 +380,95 @@ async function expectPublicInvitationPreviewReady(
     .toMatchObject({
       organizationName: "Acme Field Ops",
     });
+}
+
+function isInviteOrganizationMemberResponse(response: PlaywrightResponse) {
+  const url = new URL(response.url());
+
+  return (
+    response.request().method() === "POST" &&
+    url.origin === API_ORIGIN &&
+    url.pathname === "/organization/invitations"
+  );
+}
+
+async function waitForInviteOrganizationMemberResponse(page: Page) {
+  const response = await page.waitForResponse(
+    isInviteOrganizationMemberResponse,
+    {
+      timeout: 15_000,
+    }
+  );
+
+  if (!response.ok()) {
+    const text = await readResponseText(response);
+
+    throw new Error(
+      `Organization invite request failed with ${response.status()}: ${text}`
+    );
+  }
+}
+
+async function readResponseText(response: PlaywrightResponse) {
+  try {
+    return await response.text();
+  } catch (error) {
+    return error instanceof Error
+      ? `response body unavailable: ${error.message}`
+      : "response body unavailable";
+  }
+}
+
+async function listCurrentOrganizationInvitations(
+  request: APIRequestContext,
+  page: Page
+) {
+  const cookieJar = await createCookieJarFromPage(page);
+  const response = await request.fetch(
+    `${API_ORIGIN}/organization/invitations`,
+    {
+      headers: {
+        accept: "application/json",
+        cookie: [...cookieJar.entries()]
+          .map(([name, value]) => `${name}=${value}`)
+          .join("; "),
+        origin: APP_ORIGIN,
+      },
+    }
+  );
+
+  if (!response.ok()) {
+    throw new Error(
+      `Organization invitation list failed with ${response.status()}: ${await response.text()}`
+    );
+  }
+
+  const body: unknown = await response.json();
+
+  return decodeOrganizationInvitationListResponse(body).invitations;
+}
+
+async function getInvitationFromIdentityContract(
+  request: APIRequestContext,
+  page: Page,
+  email: string
+) {
+  const deadline = Date.now() + 15_000;
+
+  while (Date.now() < deadline) {
+    const invitations = await listCurrentOrganizationInvitations(request, page);
+    const invitation = invitations.find(
+      (item) => item.email === email && item.status === "pending"
+    );
+
+    if (invitation !== undefined) {
+      return invitation;
+    }
+
+    await page.waitForTimeout(500);
+  }
+
+  throw new Error(`Expected a pending identity invitation for ${email}`);
 }
 
 async function createOwnerOrganization(
@@ -463,20 +514,32 @@ async function createExistingUser(
   await markUserEmailVerified(email);
 }
 
-async function inviteMemberFromMembersPage(page: Page, email: string) {
+async function inviteMemberFromMembersPage(
+  request: APIRequestContext,
+  page: Page,
+  email: string
+) {
   const membersPage = new MembersPage(page);
   await membersPage.openFromNavigation();
   await membersPage.openInviteDialog();
   await membersPage.email.fill(email);
+  const inviteResponsePromise = waitForInviteOrganizationMemberResponse(page);
   await membersPage.submit.click();
+  await inviteResponsePromise;
+  const invitation = await getInvitationFromIdentityContract(
+    request,
+    page,
+    email
+  );
 
-  const invitationId = await getInvitationIdForEmail(email);
+  expect(invitation.email).toBe(email);
+  expect(invitation.status).toBe("pending");
 
   await expect(membersPage.pendingInvitation(email)).toBeVisible({
     timeout: 15_000,
   });
 
-  return invitationId;
+  return invitation.id;
 }
 
 test.describe("organization invitations", () => {
@@ -497,7 +560,11 @@ test.describe("organization invitations", () => {
 
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
 
-    const invitationId = await inviteMemberFromMembersPage(page, invitedEmail);
+    const invitationId = await inviteMemberFromMembersPage(
+      request,
+      page,
+      invitedEmail
+    );
     await expectPublicInvitationPreviewReady(request, invitationId);
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
@@ -564,7 +631,11 @@ test.describe("organization invitations", () => {
 
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
 
-    const invitationId = await inviteMemberFromMembersPage(page, invitedEmail);
+    const invitationId = await inviteMemberFromMembersPage(
+      request,
+      page,
+      invitedEmail
+    );
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
     const invitedContext = await browser.newContext();
@@ -608,7 +679,11 @@ test.describe("organization invitations", () => {
     await createExistingUser(request, invitedEmail, invitedPassword);
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
 
-    const invitationId = await inviteMemberFromMembersPage(page, invitedEmail);
+    const invitationId = await inviteMemberFromMembersPage(
+      request,
+      page,
+      invitedEmail
+    );
 
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
@@ -654,7 +729,11 @@ test.describe("organization invitations", () => {
     await createExistingUser(request, invitedEmail, invitedPassword);
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
 
-    const invitationId = await inviteMemberFromMembersPage(page, invitedEmail);
+    const invitationId = await inviteMemberFromMembersPage(
+      request,
+      page,
+      invitedEmail
+    );
 
     // The isolated browser context has to exist before the invited page can be opened.
     // react-doctor-disable-next-line
@@ -716,7 +795,11 @@ test.describe("organization invitations", () => {
     );
     await createOwnerOrganization(request, page, ownerEmail, ownerPassword);
 
-    const invitationId = await inviteMemberFromMembersPage(page, invitedEmail);
+    const invitationId = await inviteMemberFromMembersPage(
+      request,
+      page,
+      invitedEmail
+    );
 
     const invitedContext = await browser.newContext();
     try {
