@@ -1,5 +1,5 @@
 /* oxlint-disable eslint/max-classes-per-file */
-import { Schema } from "effect";
+import { Schema, SchemaTransformation } from "effect";
 import {
   HttpApi,
   HttpApiEndpoint,
@@ -25,6 +25,17 @@ function isIsoDateTimeString(value: string): boolean {
   return (
     ISO_DATE_TIME_UTC_PATTERN.test(value) && !Number.isNaN(Date.parse(value))
   );
+}
+
+function normalizeElectricPostgresDateTimeString(value: string): string {
+  if (value.includes("T")) {
+    return value;
+  }
+
+  const normalized = value.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
+  const date = new Date(normalized);
+
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
 function isIsoDateString(value: string): boolean {
@@ -97,6 +108,16 @@ export const IsoDateTimeString = Schema.String.pipe(
 );
 export type IsoDateTimeString = Schema.Schema.Type<typeof IsoDateTimeString>;
 
+const ElectricPostgresDateTimeString = Schema.String.pipe(
+  Schema.decodeTo(
+    IsoDateTimeString,
+    SchemaTransformation.transform({
+      decode: normalizeElectricPostgresDateTimeString,
+      encode: (value) => value,
+    })
+  )
+);
+
 export const IsoDateString = Schema.String.pipe(
   Schema.refine((value): value is string => isIsoDateString(value), {
     message: "Expected an ISO-8601 date string",
@@ -150,6 +171,7 @@ export type InvitableOrganizationRole = Schema.Schema.Type<
 >;
 
 export const PRODUCT_ACTOR_KINDS = ["member", "agent", "system"] as const;
+const PRODUCT_MEMBER_ACTOR_SUMMARY_KIND = "member";
 export const ProductActorKind = Schema.Literals(PRODUCT_ACTOR_KINDS);
 export type ProductActorKind = Schema.Schema.Type<typeof ProductActorKind>;
 
@@ -189,6 +211,80 @@ export const ProductActorSchema = Schema.Struct({
   parseOptions: { onExcessProperty: "error" },
 });
 export type ProductActor = Schema.Schema.Type<typeof ProductActorSchema>;
+
+export const ProductMemberActorSummarySchema = Schema.Struct({
+  displayDetail: Schema.optional(ProductActorDisplayDetail),
+  displayName: ProductActorDisplayName,
+  id: ProductActorId,
+  kind: Schema.Literal("member"),
+  organizationId: OrganizationId,
+  route: Schema.optional(ProductActorRoute),
+  userId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type ProductMemberActorSummary = Schema.Schema.Type<
+  typeof ProductMemberActorSummarySchema
+>;
+
+const NullableProductActorDisplayDetail = Schema.NullOr(
+  ProductActorDisplayDetail
+);
+
+const ProductMemberActorSummaryElectricBaseFields = {
+  actorId: ProductActorId,
+  createdAt: ElectricPostgresDateTimeString,
+  displayDetail: Schema.optional(NullableProductActorDisplayDetail),
+  displayName: ProductActorDisplayName,
+  organizationId: OrganizationId,
+  updatedAt: ElectricPostgresDateTimeString,
+  userId: UserId,
+} as const;
+
+export const ProductMemberActorSummaryElectricRowSchema = Schema.Union([
+  Schema.Struct({
+    ...ProductMemberActorSummaryElectricBaseFields,
+    routeHref: Schema.String,
+    routeLabel: Schema.String,
+  }),
+  Schema.Struct({
+    ...ProductMemberActorSummaryElectricBaseFields,
+    routeHref: Schema.optional(Schema.Null),
+    routeLabel: Schema.optional(Schema.Null),
+  }),
+]).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type ProductMemberActorSummaryElectricRow = Schema.Schema.Type<
+  typeof ProductMemberActorSummaryElectricRowSchema
+>;
+
+export function decodeProductMemberActorSummaryElectricRow(
+  input: unknown
+): ProductMemberActorSummary {
+  const row = Schema.decodeUnknownSync(
+    ProductMemberActorSummaryElectricRowSchema
+  )(input);
+
+  return Schema.decodeUnknownSync(ProductMemberActorSummarySchema)({
+    displayName: row.displayName,
+    id: row.actorId,
+    kind: PRODUCT_MEMBER_ACTOR_SUMMARY_KIND,
+    organizationId: row.organizationId,
+    userId: row.userId,
+    ...(row.displayDetail === null || row.displayDetail === undefined
+      ? {}
+      : { displayDetail: row.displayDetail }),
+    ...(typeof row.routeHref === "string" && typeof row.routeLabel === "string"
+      ? {
+          route: {
+            href: row.routeHref,
+            label: row.routeLabel,
+          },
+        }
+      : {}),
+  });
+}
 
 export const OrganizationMemberRoleResponseSchema = Schema.Struct({
   role: OrganizationRole,

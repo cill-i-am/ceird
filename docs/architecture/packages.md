@@ -83,6 +83,12 @@ Exports shared identity and organization primitives:
 - organization role literals and role subsets
 - product-safe actor projection DTOs for member, agent, and system display in
   activity and comments without exposing Better Auth user/session/account data
+- `ProductMemberActorSummarySchema`, the shared decoded product read shape for
+  `product_member_actor_summaries` Electric rows, preserving organization, user,
+  and product actor ids before app data-plane consumers join assignment display
+  rows; the paired Electric row schema decodes the raw shape row, including
+  DB-owned `createdAt` and `updatedAt` with Postgres timestamp normalization,
+  before omitting them from this product read model
 - role helpers such as `isAdministrativeOrganizationRole`,
   `isInternalOrganizationRole`, and `isExternalOrganizationRole`
 - organization summary schemas

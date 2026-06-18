@@ -4,7 +4,10 @@ import {
   ProductActorId,
   ProductActorKind,
   ProductActorRoute,
+  ProductMemberActorSummarySchema,
+  decodeProductMemberActorSummaryElectricRow,
 } from "@ceird/identity-core";
+import type { ProductMemberActorSummary } from "@ceird/identity-core";
 import type {
   AddJobCommentInput,
   AddJobCommentResponse,
@@ -312,17 +315,9 @@ export type JobsWorkspaceProductActorRow = Schema.Schema.Type<
   typeof JobsWorkspaceProductActorRowSchema
 >;
 
-export const JobsWorkspaceMemberActorSummaryRowSchema = Schema.Struct({
-  displayDetail: Schema.optional(ProductActorDisplayDetail),
-  displayName: ProductActorDisplayName,
-  id: ProductActorId,
-  kind: Schema.Literal("member"),
-  route: Schema.optional(ProductActorRoute),
-  userId: UserId,
-});
-export type JobsWorkspaceMemberActorSummaryRow = Schema.Schema.Type<
-  typeof JobsWorkspaceMemberActorSummaryRowSchema
->;
+export const JobsWorkspaceMemberActorSummaryRowSchema =
+  ProductMemberActorSummarySchema;
+export type JobsWorkspaceMemberActorSummaryRow = ProductMemberActorSummary;
 
 export interface JobsWorkspaceReadModelContracts {
   readonly activity: ReturnType<typeof createJobActivityElectricContract>;
@@ -2945,58 +2940,15 @@ export function toProductActivityActorElectricRow(
 }
 
 export function toProductMemberActorSummaryElectricRow(
-  row: Record<string, unknown> & {
-    readonly actorId: unknown;
-    readonly displayName: unknown;
-    readonly userId: unknown;
-  }
-): JobsWorkspaceMemberActorSummaryRow;
-export function toProductMemberActorSummaryElectricRow(
   row: Record<string, unknown>
-): JobsWorkspaceMemberActorSummaryRow | JobsElectricRow;
-export function toProductMemberActorSummaryElectricRow(
-  row: Record<string, unknown>
-): JobsWorkspaceMemberActorSummaryRow | JobsElectricRow {
-  if (!hasEveryPresent(row, PRODUCT_MEMBER_ACTOR_REQUIRED_ELECTRIC_FIELDS)) {
-    return toPartialProductMemberActorSummaryElectricRow(row);
-  }
-
-  const item: JobsElectricRow = {
-    displayName: String(row.displayName),
-    id: String(row.actorId),
-    kind: "member",
-    userId: String(row.userId),
-  };
-
-  addOptionalString(item, "displayDetail", row.displayDetail);
-
-  if (
-    row.routeHref !== null &&
-    row.routeHref !== undefined &&
-    row.routeLabel !== null &&
-    row.routeLabel !== undefined
-  ) {
-    item.route = {
-      href: String(row.routeHref),
-      label: String(row.routeLabel),
-    };
-  }
-
-  return Schema.decodeUnknownSync(JobsWorkspaceMemberActorSummaryRowSchema)(
-    item
-  );
+): JobsWorkspaceMemberActorSummaryRow {
+  return decodeProductMemberActorSummaryElectricRow(row);
 }
 
 const PRODUCT_ACTIVITY_ACTOR_REQUIRED_ELECTRIC_FIELDS = [
   "displayName",
   "id",
   "kind",
-] as const;
-
-const PRODUCT_MEMBER_ACTOR_REQUIRED_ELECTRIC_FIELDS = [
-  "actorId",
-  "displayName",
-  "userId",
 ] as const;
 
 function toPartialProductActivityActorElectricRow(
@@ -3008,20 +2960,6 @@ function toPartialProductActivityActorElectricRow(
   addOptionalString(item, "displayName", row.displayName);
   addOptionalString(item, "id", row.id);
   addOptionalString(item, "kind", row.kind);
-  addOptionalRoute(item, row);
-
-  return item;
-}
-
-function toPartialProductMemberActorSummaryElectricRow(
-  row: Record<string, unknown>
-) {
-  const item: JobsElectricRow = {};
-
-  addOptionalString(item, "displayDetail", row.displayDetail);
-  addOptionalString(item, "displayName", row.displayName);
-  addOptionalString(item, "id", row.actorId);
-  addOptionalString(item, "userId", row.userId);
   addOptionalRoute(item, row);
 
   return item;
