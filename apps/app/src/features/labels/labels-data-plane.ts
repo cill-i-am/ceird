@@ -101,6 +101,12 @@ interface LabelElectricMutationHandlerDependencies {
   ) => Effect.Effect<LabelWriteResponse, unknown>;
 }
 
+interface LabelElectricMutationResult {
+  readonly responses: readonly LabelWriteResponse[];
+  readonly timeout: number;
+  readonly txid: number | number[];
+}
+
 const LABEL_ELECTRIC_MUTATION_CONFIRMATION_TIMEOUT_MS = 10_000;
 
 const decodeCreateLabelInput = Schema.decodeUnknownSync(CreateLabelInputSchema);
@@ -375,7 +381,7 @@ export function createLabelElectricMutationHandlers(
 
 function toElectricLabelMatchingStrategy(
   responses: readonly LabelWriteResponse[]
-) {
+): LabelElectricMutationResult {
   const txids = responses.map((response) => response.mutation.txid);
   const [firstTxid] = txids;
 
@@ -384,6 +390,7 @@ function toElectricLabelMatchingStrategy(
   }
 
   return {
+    responses,
     timeout: LABEL_ELECTRIC_MUTATION_CONFIRMATION_TIMEOUT_MS,
     txid: txids.length === 1 ? firstTxid : txids,
   };

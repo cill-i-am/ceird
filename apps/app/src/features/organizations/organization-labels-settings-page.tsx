@@ -5,8 +5,12 @@ import type {
   OrganizationRole,
   OrganizationSummary,
 } from "@ceird/identity-core";
-import type { Label } from "@ceird/labels-core";
-import { LabelId, normalizeLabelName } from "@ceird/labels-core";
+import type { Label, LabelWriteResponse } from "@ceird/labels-core";
+import {
+  LabelId,
+  LabelWriteResponseSchema,
+  normalizeLabelName,
+} from "@ceird/labels-core";
 import { Schema } from "effect";
 import {
   Archive,
@@ -75,6 +79,11 @@ interface LabelsCollectionLike {
     key: Label["id"],
     callback: (draft: WritableLabelDraft) => void
   ) => LabelMutationTransaction;
+  readonly utils?: {
+    readonly writeBatch?: ((callback: () => void) => void) | undefined;
+    readonly writeDelete: (key: Label["id"]) => void;
+    readonly writeUpsert: (data: Label) => void;
+  };
 }
 
 export interface OrganizationLabelsSettingsPageProps {
@@ -441,11 +450,16 @@ function useLabelsMutationController({
     setMutationStatus(null);
 
     try {
-      await persistLabelCollectionMutation({
+      const output = await persistLabelCollectionMutation({
         commandName: "labels.create",
         input: { name: decodedName.name },
         journal: mutationJournal,
         operation: () => collection.insert?.(temporaryLabel),
+      });
+      reconcileCreatedLabel({
+        collection,
+        output,
+        temporaryLabel,
       });
       setCreateName("");
       setMutationStatus({
@@ -1330,7 +1344,7 @@ async function persistLabelCollectionMutation({
   readonly input: unknown;
   readonly journal?: DataPlaneMutationJournal | undefined;
   readonly operation: () => LabelMutationTransaction | undefined;
-}) {
+}): Promise<unknown> {
   const journalEntry = journal?.recordPending({
     affectedCollections: LABEL_COMMAND_COLLECTIONS,
     commandName,
@@ -1348,11 +1362,79 @@ async function persistLabelCollectionMutation({
     if (journalEntry) {
       journal?.recordSuccess(journalEntry.id, output);
     }
+    return output;
   } catch (error) {
     if (journalEntry) {
       journal?.recordFailure(journalEntry.id, error);
     }
     throw error;
+  }
+}
+
+function reconcileCreatedLabel({
+  collection,
+  output,
+  temporaryLabel,
+}: {
+  readonly collection: LabelsCollectionLike;
+  readonly output: unknown;
+  readonly temporaryLabel: Label;
+}) {
+  const serverResponse = readLabelWriteResponse(output);
+  const serverLabel = serverResponse?.label;
+
+  if (
+    serverLabel === undefined ||
+    serverLabel.id === temporaryLabel.id ||
+    collection.utils === undefined
+  ) {
+    return;
+  }
+
+  const reconcile = () => {
+    collection.utils?.writeDelete(temporaryLabel.id);
+    collection.utils?.writeUpsert(serverLabel);
+  };
+
+  if (collection.utils.writeBatch === undefined) {
+    reconcile();
+    return;
+  }
+
+  collection.utils.writeBatch(reconcile);
+}
+
+function readLabelWriteResponse(output: unknown): LabelWriteResponse | null {
+  const direct = decodeLabelWriteResponse(output);
+
+  if (direct !== null) {
+    return direct;
+  }
+
+  if (output === null || typeof output !== "object") {
+    return null;
+  }
+
+  const { responses } = output as { readonly responses?: unknown };
+  if (!Array.isArray(responses)) {
+    return null;
+  }
+
+  for (const response of responses) {
+    const decoded = decodeLabelWriteResponse(response);
+    if (decoded !== null) {
+      return decoded;
+    }
+  }
+
+  return null;
+}
+
+function decodeLabelWriteResponse(output: unknown): LabelWriteResponse | null {
+  try {
+    return Schema.decodeUnknownSync(LabelWriteResponseSchema)(output);
+  } catch {
+    return null;
   }
 }
 

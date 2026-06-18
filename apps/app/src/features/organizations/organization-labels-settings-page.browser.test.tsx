@@ -185,6 +185,66 @@ describe("organization labels settings page", () => {
     ]);
   });
 
+  it("reconciles temporary create ids before immediate rename actions", async () => {
+    const user = userEvent.setup();
+    const createTransaction = Promise.withResolvers<unknown>();
+    const serverLabel = makeLabel({
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Fire Safety",
+    });
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [],
+        status: "ready",
+        transactions: {
+          insert: [createTransaction],
+        },
+      }),
+      createTemporaryLabelId: () =>
+        "44444444-4444-4444-8444-444444444444" as Label["id"],
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: /new label name/i }),
+      "Fire Safety"
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+    createTransaction.resolve({
+      responses: [makeLabelWriteResponse(serverLabel, 123)],
+      timeout: 10_000,
+      txid: 123,
+    });
+
+    await expect(
+      screen.findByText("Label created and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open actions for fire safety/i,
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit label/i })
+    );
+    const editInput = screen.getByRole("textbox", {
+      name: /rename fire safety/i,
+    });
+    await user.clear(editInput);
+    await user.type(editInput, "Emergency");
+    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
+
+    await expect(
+      screen.findByText("Label renamed and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+    await waitFor(() => {
+      expect(screen.getByText("Emergency")).toBeVisible();
+    });
+    expect(screen.queryByText("Fire Safety")).not.toBeInTheDocument();
+  });
+
   it("disables mouse-driven row actions while another mutation is pending", async () => {
     const user = userEvent.setup();
     const createTransaction = Promise.withResolvers<unknown>();
@@ -552,10 +612,17 @@ function makeCollection(
     update: [...(transactions?.update ?? [])],
   };
   const notify = () => {
+    if (batchDepth > 0) {
+      shouldNotifyAfterBatch = true;
+      return;
+    }
+
     for (const listener of listeners) {
       listener();
     }
   };
+  let batchDepth = 0;
+  let shouldNotifyAfterBatch = false;
 
   return {
     entries: () =>
@@ -632,6 +699,34 @@ function makeCollection(
         },
       });
     },
+    utils: {
+      writeBatch: (callback: () => void) => {
+        batchDepth += 1;
+        try {
+          callback();
+        } finally {
+          batchDepth -= 1;
+        }
+
+        if (batchDepth === 0 && shouldNotifyAfterBatch) {
+          shouldNotifyAfterBatch = false;
+          notify();
+        }
+      },
+      writeDelete: (key: Label["id"]) => {
+        currentLabels = currentLabels.filter((label) => label.id !== key);
+        notify();
+      },
+      writeUpsert: (label: Label) => {
+        currentLabels = [
+          label,
+          ...currentLabels.filter(
+            (currentLabel) => currentLabel.id !== label.id
+          ),
+        ].toSorted(compareLabels);
+        notify();
+      },
+    },
   };
 }
 
@@ -689,6 +784,13 @@ function makeLabel({
     id: id as Label["id"],
     name,
     updatedAt: "2026-06-14T00:00:00.000Z",
+  };
+}
+
+function makeLabelWriteResponse(label: Label, txid: number) {
+  return {
+    label,
+    mutation: { txid },
   };
 }
 

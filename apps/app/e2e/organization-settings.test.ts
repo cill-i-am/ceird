@@ -200,11 +200,20 @@ test("an organization admin can manage labels from the realtime settings tab", a
   await expect(page.getByText("No labels yet")).toBeVisible();
 });
 
-function waitForLabelMutation(page: Page, method: "DELETE" | "PATCH" | "POST") {
-  return page.waitForResponse(
-    (response) =>
-      response.request().method() === method &&
-      /^\/labels(?:\/[^/]+)?$/.test(new URL(response.url()).pathname) &&
-      response.status() < 400
+async function waitForLabelMutation(
+  page: Page,
+  method: "DELETE" | "PATCH" | "POST"
+) {
+  const mutationResponse = await page.waitForResponse(
+    (candidate) =>
+      candidate.request().method() === method &&
+      /^\/labels(?:\/[^/]+)?$/.test(new URL(candidate.url()).pathname)
   );
+
+  expect(
+    mutationResponse.status(),
+    `${method} ${new URL(mutationResponse.url()).pathname} should succeed`
+  ).toBeLessThan(400);
+
+  return mutationResponse;
 }
