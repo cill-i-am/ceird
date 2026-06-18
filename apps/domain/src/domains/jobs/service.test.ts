@@ -17,6 +17,7 @@ import {
   JobDetailSchema,
   JobOptionsResponseSchema,
   JobSchema,
+  VisitId,
 } from "@ceird/jobs-core";
 import type {
   Job,
@@ -85,6 +86,7 @@ const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeProductActorId = Schema.decodeUnknownSync(ProductActorId);
 const decodeSiteOption = Schema.decodeUnknownSync(SiteOptionSchema);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
+const decodeVisitId = Schema.decodeUnknownSync(VisitId);
 const PROXIMITY_ORIGIN_TOKEN_SECRET = "proximity-origin-secret";
 const proximityOriginConfigProvider = configProviderFromMap(
   new Map([["AGENT_INTERNAL_SECRET", PROXIMITY_ORIGIN_TOKEN_SECRET]])
@@ -483,6 +485,54 @@ describe("JobsService contracts", () => {
           summary: "Added label to Inspect boiler",
         },
         eventType: "job.label_added",
+        sourceType: "job_activity",
+        targetId: workItemId,
+        targetType: "job",
+      }),
+    ]);
+  });
+
+  it("emits product-safe global activity for successful job visit writes", async () => {
+    const capturedEvents: RecordActivityEventInput[] = [];
+    const addedActivities: JobActivity["payload"][] = [];
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const recorder = yield* JobsActivityRecorder;
+
+        yield* recorder.recordVisitLogged(internalActor, {
+          job: existingJob,
+          visitId: decodeVisitId("22222222-2222-4222-8222-222222222222"),
+        });
+      }).pipe(
+        Effect.provide(JobsActivityRecorder.DefaultWithoutDependencies),
+        Effect.provide(
+          makeJobsActivityRecorderTestLayer({
+            addedActivities,
+            capturedEvents,
+          })
+        )
+      )
+    );
+
+    expect(addedActivities).toStrictEqual([
+      {
+        eventType: "visit_logged",
+        visitId: decodeVisitId("22222222-2222-4222-8222-222222222222"),
+      },
+    ]);
+    expect(capturedEvents).toStrictEqual([
+      expect.objectContaining({
+        display: {
+          route: {
+            href: `/jobs-workspace?detailJobId=${workItemId}`,
+            label: "Inspect boiler",
+          },
+          summary: "Logged visit on Inspect boiler",
+        },
+        eventType: "job.visit_logged",
+        organizationId: internalActor.organizationId,
+        sourceId: "44444444-4444-4444-8444-444444444441",
         sourceType: "job_activity",
         targetId: workItemId,
         targetType: "job",

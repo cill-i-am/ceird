@@ -74,6 +74,9 @@ type OrganizationAuthorizationService = Context.Service.Shape<
   typeof OrganizationAuthorization
 >;
 type SitesRepositoryService = Context.Service.Shape<typeof SitesRepository>;
+type SiteUpdateLocationRecord = NonNullable<
+  Parameters<SitesRepositoryService["update"]>[2]["location"]
+>;
 type ProductActivityActorsRepositoryService = Context.Service.Shape<
   typeof ProductActivityActorsRepository
 >;
@@ -237,6 +240,11 @@ export class SitesService extends Context.Service<SitesService>()(
                 input.location,
                 siteLocationProvider
               );
+        const shouldRecordUpdateActivity = siteUpdateChangesSemanticFields(
+          existingSite,
+          input,
+          location
+        );
 
         const site = yield* withElectricMutationConfirmation(
           Effect.gen(function* () {
@@ -248,7 +256,7 @@ export class SitesService extends Context.Service<SitesService>()(
               })
               .pipe(Effect.map(Option.getOrUndefined));
 
-            if (updatedSite !== undefined) {
+            if (updatedSite !== undefined && shouldRecordUpdateActivity) {
               yield* recordSiteActivityEvent({
                 activityActorsRepository,
                 activityEventsRepository,
@@ -256,6 +264,7 @@ export class SitesService extends Context.Service<SitesService>()(
                 eventType: "site.updated",
                 site: updatedSite,
                 sourceAction: "updated",
+                sourceId: buildSiteUpdateActivitySourceId(updatedSite),
               });
             }
 
@@ -791,6 +800,7 @@ function recordSiteActivityEvent({
   label,
   site,
   sourceAction,
+  sourceId,
 }: {
   readonly activityActorsRepository: ProductActivityActorsRepositoryService;
   readonly activityEventsRepository: Context.Service.Shape<
@@ -801,6 +811,7 @@ function recordSiteActivityEvent({
   readonly label?: Label;
   readonly site: SiteOption;
   readonly sourceAction: SiteActivitySourceAction;
+  readonly sourceId?: string;
 }) {
   return Effect.gen(function* () {
     const { actor: productActor } =
@@ -816,12 +827,14 @@ function recordSiteActivityEvent({
       eventType,
       id: eventId,
       organizationId: actor.organizationId,
-      sourceId: buildSiteActivitySourceId({
-        action: sourceAction,
-        eventId,
-        labelId: label?.id,
-        siteId: site.id,
-      }),
+      sourceId:
+        sourceId ??
+        buildSiteActivitySourceId({
+          action: sourceAction,
+          eventId,
+          labelId: label?.id,
+          siteId: site.id,
+        }),
       sourceType: "site",
       status: "synced",
       targetId: site.id,
@@ -913,6 +926,40 @@ function buildSiteActivitySourceId(input: {
     .join(":");
 }
 
+function buildSiteUpdateActivitySourceId(site: SiteOption): string {
+  return `site:${site.id}:updated:${hashActivitySource(
+    JSON.stringify({
+      accessNotes: site.accessNotes ?? null,
+      addressComponents: site.addressComponents ?? [],
+      addressLine1: site.addressLine1 ?? null,
+      addressLine2: site.addressLine2 ?? null,
+      country: site.country ?? null,
+      county: site.county ?? null,
+      displayLocation: site.displayLocation,
+      eircode: site.eircode ?? null,
+      formattedAddress: site.formattedAddress ?? null,
+      googlePlaceId: site.googlePlaceId ?? null,
+      latitude: site.latitude ?? null,
+      locationProvider: site.locationProvider ?? null,
+      locationStatus: site.locationStatus,
+      longitude: site.longitude ?? null,
+      name: site.name,
+      rawLocationInput: site.rawLocationInput ?? null,
+      town: site.town ?? null,
+    })
+  )}`;
+}
+
+function hashActivitySource(value: string): string {
+  let hash = 5381;
+
+  for (const char of value) {
+    hash = (hash * 33 + (char.codePointAt(0) ?? 0)) % 2_147_483_647;
+  }
+
+  return hash.toString(36);
+}
+
 function summarizeCommentActivityDetail(body: string): string {
   return formatActivityDisplayText(body, ACTIVITY_DETAIL_MAX_LENGTH);
 }
@@ -990,6 +1037,48 @@ function siteLocationInputMatchesExistingSite(
     site.displayLocation === input.displayText &&
     site.rawLocationInput === input.rawInput
   );
+}
+
+function siteUpdateChangesSemanticFields(
+  site: SiteOption,
+  input: UpdateSiteInput,
+  location: SiteUpdateLocationRecord | undefined
+) {
+  return (
+    site.name !== input.name ||
+    site.accessNotes !== input.accessNotes ||
+    (location !== undefined && !siteLocationRecordMatchesSite(location, site))
+  );
+}
+
+function siteLocationRecordMatchesSite(
+  location: SiteUpdateLocationRecord,
+  site: SiteOption
+) {
+  return (
+    arrayValuesMatch(location.addressComponents, site.addressComponents) &&
+    location.addressLine1 === site.addressLine1 &&
+    location.addressLine2 === site.addressLine2 &&
+    location.country === site.country &&
+    location.county === site.county &&
+    location.displayLocation === site.displayLocation &&
+    location.eircode === site.eircode &&
+    location.formattedAddress === site.formattedAddress &&
+    location.googlePlaceId === site.googlePlaceId &&
+    location.latitude === site.latitude &&
+    location.locationProvider === site.locationProvider &&
+    location.locationStatus === site.locationStatus &&
+    location.longitude === site.longitude &&
+    location.rawLocationInput === site.rawLocationInput &&
+    location.town === site.town
+  );
+}
+
+function arrayValuesMatch<Value>(
+  left: readonly Value[] | undefined,
+  right: readonly Value[] | undefined
+) {
+  return JSON.stringify(left ?? []) === JSON.stringify(right ?? []);
 }
 
 function failSitesStorageError(

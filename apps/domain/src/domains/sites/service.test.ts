@@ -782,7 +782,7 @@ describe("SitesService contracts", () => {
       expect.objectContaining({
         eventType: "site.updated",
         organizationId: actor.organizationId,
-        sourceId: expect.stringMatching(`^site:${siteId}:updated:`),
+        sourceId: expect.stringMatching(`^site:${siteId}:updated:[0-9a-z]+$`),
         sourceType: "site",
         targetId: siteId,
         targetType: "site",
@@ -820,6 +820,7 @@ describe("SitesService contracts", () => {
     let updatedRecord:
       | Parameters<ContextService<typeof SitesRepository>["update"]>[2]
       | undefined;
+    const recordedEvents: RecordActivityEventInput[] = [];
 
     const result = await runSitesServiceEffect(
       sitesServiceCall((sites) =>
@@ -843,6 +844,10 @@ describe("SitesService contracts", () => {
           updatedRecord = input;
           return Effect.succeed(Option.some(existingSite));
         },
+        recordActivityEvent: (input) => {
+          recordedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
       }
     );
 
@@ -851,6 +856,55 @@ describe("SitesService contracts", () => {
       accessNotes: undefined,
       name: "Unchanged Depot",
     });
+    expect(recordedEvents).toStrictEqual([]);
+  });
+
+  it("uses stable update activity source ids for equivalent retry attempts", async () => {
+    const siteId = decodeSiteId("11111111-1111-4111-8111-111111111119");
+    const existingSite = decodeSiteOption({
+      accessNotes: "Use side gate",
+      displayLocation: "",
+      hasUsableCoordinates: false,
+      id: siteId,
+      labels: [],
+      locationStatus: "unverified",
+      name: "Retry Depot",
+      updatedAt: "2026-05-20T09:30:00.000Z",
+    });
+    const updatedSite = decodeSiteOption({
+      ...existingSite,
+      accessNotes: "Use side gate after 5pm",
+      updatedAt: "2026-05-20T09:35:00.000Z",
+    });
+    const recordedEvents: RecordActivityEventInput[] = [];
+
+    await runSitesServiceEffect(
+      sitesServiceCall((sites) =>
+        Effect.gen(function* () {
+          yield* sites.update(siteId, {
+            accessNotes: "Use side gate after 5pm",
+            name: "Retry Depot",
+          });
+          yield* sites.update(siteId, {
+            accessNotes: "Use side gate after 5pm",
+            name: "Retry Depot",
+          });
+        })
+      ),
+      {
+        getOptionById: () => Effect.succeed(Option.some(existingSite)),
+        update: () => Effect.succeed(Option.some(updatedSite)),
+        recordActivityEvent: (input) => {
+          recordedEvents.push(input);
+          return Effect.succeed({} as ProductActivityEvent);
+        },
+      }
+    );
+
+    expect(recordedEvents.map((event) => event.sourceId)).toStrictEqual([
+      expect.stringMatching(`^site:${siteId}:updated:[0-9a-z]+$`),
+      recordedEvents[0]?.sourceId,
+    ]);
   });
 
   it("clears an existing location when an update explicitly sends null", async () => {

@@ -201,19 +201,26 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
       )(function* (
         actor: OrganizationActor,
         input: {
+          readonly job: JobActivityTarget;
           readonly visitId: VisitId;
-          readonly workItemId: Job["id"];
         }
       ) {
-        yield* repository.addActivity({
+        const activity = yield* repository.addActivity({
           actorUserId: actor.userId,
           organizationId: actor.organizationId,
           payload: {
             eventType: "visit_logged",
             visitId: input.visitId,
           },
-          workItemId: input.workItemId,
+          workItemId: input.job.id,
         });
+
+        yield* recordJobActivityEvent(
+          actor,
+          input.job,
+          activity,
+          activityEvents
+        );
       });
 
       const recordCommentCreated = Effect.fn(
