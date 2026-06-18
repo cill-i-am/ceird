@@ -21,6 +21,7 @@ test("uses an explicit test database env and enables strict integration mode", (
   assert.deepEqual(run.args.slice(4), [
     "src/domains/http.integration.test.ts",
     "src/domains/persistence.integration.test.ts",
+    "src/domains/identity/connected-apps.test.ts",
     "src/domains/identity/authentication/authentication.integration.test.ts",
   ]);
   assert.equal(run.env.CEIRD_REQUIRE_TEST_DATABASE, "1");

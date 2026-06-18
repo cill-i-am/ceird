@@ -8,6 +8,7 @@ import { extractPostgresConnectionUri } from "./export-playwright-database-url.m
 export const domainIntegrationTestFiles = [
   "src/domains/http.integration.test.ts",
   "src/domains/persistence.integration.test.ts",
+  "src/domains/identity/connected-apps.test.ts",
   "src/domains/identity/authentication/authentication.integration.test.ts",
 ];
 

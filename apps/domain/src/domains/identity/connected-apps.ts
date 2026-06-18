@@ -34,7 +34,6 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
 import { DomainDrizzle } from "../../platform/database/database.js";
-import type { DomainDrizzleDatabase } from "../../platform/database/database.js";
 import {
   authSecurityAuditEvent,
   oauthAccessToken,
@@ -99,50 +98,6 @@ interface DisconnectConnectedAppGrantRecordInput {
   readonly userId: UserId;
 }
 
-interface ConnectedAppGrantDisconnectMutationInput {
-  readonly consent: ConnectedAppGrantDisconnectRow;
-  readonly userId: UserId;
-}
-
-export interface ConnectedAppGrantsRepositoryShape {
-  readonly disconnect: (
-    input: DisconnectConnectedAppGrantRecordInput
-  ) => Effect.Effect<
-    ReturnType<typeof decodeDisconnectConnectedAppGrantResponse>,
-    ConnectedAppGrantNotFoundError | ConnectedAppGrantStorageError
-  >;
-  readonly list: (
-    userId: UserId
-  ) => Effect.Effect<
-    ConnectedAppGrantListResponse,
-    ConnectedAppGrantStorageError
-  >;
-}
-
-export interface ConnectedAppGrantStorage {
-  readonly deleteAccessTokens: (
-    input: ConnectedAppGrantDisconnectMutationInput
-  ) => Effect.Effect<void, ConnectedAppGrantStorageError>;
-  readonly deleteConsent: (
-    input: ConnectedAppGrantDisconnectMutationInput
-  ) => Effect.Effect<void, ConnectedAppGrantStorageError>;
-  readonly findDisconnectConsent: (
-    input: DisconnectConnectedAppGrantRecordInput
-  ) => Effect.Effect<readonly unknown[], ConnectedAppGrantStorageError>;
-  readonly insertRevokedAuditEvent: (
-    auditWrite: OAuthConsentRevokedAuditWrite
-  ) => Effect.Effect<void, ConnectedAppGrantStorageError>;
-  readonly listRows: (
-    userId: UserId
-  ) => Effect.Effect<unknown, ConnectedAppGrantStorageError>;
-  readonly revokeRefreshTokens: (
-    input: ConnectedAppGrantDisconnectMutationInput
-  ) => Effect.Effect<void, ConnectedAppGrantStorageError>;
-  readonly withTransaction: <A, E, R>(
-    effect: Effect.Effect<A, E, R>
-  ) => Effect.Effect<A, E | ConnectedAppGrantStorageError, R>;
-}
-
 export class ConnectedAppGrantsRepository extends Context.Service<ConnectedAppGrantsRepository>()(
   "@ceird/domains/identity/ConnectedAppGrantsRepository",
   {
@@ -150,9 +105,228 @@ export class ConnectedAppGrantsRepository extends Context.Service<ConnectedAppGr
       const rawSql = yield* SqlClient.SqlClient;
       const { db } = yield* DomainDrizzle;
 
-      return makeConnectedAppGrantsRepository(
-        makeConnectedAppGrantStorage({ db, rawSql })
+      const list = Effect.fn("ConnectedAppGrantsRepository.list")(function* (
+        userId: UserId
+      ) {
+        const rows = yield* db
+          .select({
+            active_access_token_count: drizzleSql<number>`coalesce((
+                select count(*)::integer
+                from ${oauthAccessToken}
+                where ${oauthAccessToken.userId} = ${oauthConsent.userId}
+                  and ${oauthAccessToken.clientId} = ${oauthConsent.clientId}
+                  and ${oauthAccessToken.referenceId} is not distinct from ${oauthConsent.referenceId}
+                  and ${oauthAccessToken.expiresAt} > now()
+              ), 0)::integer`,
+            active_refresh_token_count: drizzleSql<number>`coalesce((
+                select count(*)::integer
+                from ${oauthRefreshToken}
+                where ${oauthRefreshToken.userId} = ${oauthConsent.userId}
+                  and ${oauthRefreshToken.clientId} = ${oauthConsent.clientId}
+                  and ${oauthRefreshToken.referenceId} is not distinct from ${oauthConsent.referenceId}
+                  and ${oauthRefreshToken.revoked} is null
+                  and ${oauthRefreshToken.expiresAt} > now()
+              ), 0)::integer`,
+            client_id: oauthConsent.clientId,
+            client_name: drizzleSql<
+              string | null
+            >`nullif(btrim(${oauthClient.name}), '')`,
+            client_uri: drizzleSql<
+              string | null
+            >`nullif(btrim(${oauthClient.uri}), '')`,
+            consent_created_at: oauthConsent.createdAt,
+            consent_id: oauthConsent.id,
+            consent_updated_at: oauthConsent.updatedAt,
+            latest_access_token_expires_at: drizzleSql<Date | null>`(
+                select max(${oauthAccessToken.expiresAt})
+                from ${oauthAccessToken}
+                where ${oauthAccessToken.userId} = ${oauthConsent.userId}
+                  and ${oauthAccessToken.clientId} = ${oauthConsent.clientId}
+                  and ${oauthAccessToken.referenceId} is not distinct from ${oauthConsent.referenceId}
+                  and ${oauthAccessToken.expiresAt} > now()
+              )`,
+            latest_refresh_token_expires_at: drizzleSql<Date | null>`(
+                select max(${oauthRefreshToken.expiresAt})
+                from ${oauthRefreshToken}
+                where ${oauthRefreshToken.userId} = ${oauthConsent.userId}
+                  and ${oauthRefreshToken.clientId} = ${oauthConsent.clientId}
+                  and ${oauthRefreshToken.referenceId} is not distinct from ${oauthConsent.referenceId}
+                  and ${oauthRefreshToken.revoked} is null
+                  and ${oauthRefreshToken.expiresAt} > now()
+              )`,
+            organization_id: organization.id,
+            organization_name: organization.name,
+            policy_uri: drizzleSql<
+              string | null
+            >`nullif(btrim(${oauthClient.policy}), '')`,
+            redirect_uris: oauthClient.redirectUris,
+            reference_id: oauthConsent.referenceId,
+            scopes: oauthConsent.scopes,
+            tos_uri: drizzleSql<
+              string | null
+            >`nullif(btrim(${oauthClient.tos}), '')`,
+          })
+          .from(oauthConsent)
+          .innerJoin(
+            oauthClient,
+            eq(oauthClient.clientId, oauthConsent.clientId)
+          )
+          .leftJoin(organization, eq(organization.id, oauthConsent.referenceId))
+          .where(eq(oauthConsent.userId, userId))
+          .orderBy(
+            desc(oauthConsent.updatedAt),
+            desc(oauthConsent.createdAt),
+            desc(oauthConsent.id)
+          )
+          .pipe(
+            Effect.catchTag("EffectDrizzleQueryError", failConnectedAppStorage)
+          );
+
+        return yield* decodeConnectedAppGrantList(rows);
+      });
+
+      const disconnect = Effect.fn("ConnectedAppGrantsRepository.disconnect")(
+        function* (input: DisconnectConnectedAppGrantRecordInput) {
+          return yield* rawSql
+            .withTransaction(
+              Effect.gen(function* () {
+                const consentRows = yield* db
+                  .select({
+                    client_id: oauthConsent.clientId,
+                    id: oauthConsent.id,
+                    reference_id: oauthConsent.referenceId,
+                    scopes: oauthConsent.scopes,
+                  })
+                  .from(oauthConsent)
+                  .where(
+                    and(
+                      eq(oauthConsent.id, input.grantId),
+                      eq(oauthConsent.userId, input.userId)
+                    )
+                  )
+                  .limit(1)
+                  .pipe(
+                    Effect.catchTag(
+                      "EffectDrizzleQueryError",
+                      failConnectedAppStorage
+                    )
+                  );
+                const [consent] = consentRows;
+
+                if (consent === undefined) {
+                  return yield* Effect.fail(
+                    new ConnectedAppGrantNotFoundError({
+                      grantId: input.grantId,
+                      message: "Connected app grant was not found",
+                    })
+                  );
+                }
+                const decodedConsent =
+                  yield* decodeConnectedAppGrantDisconnect(consent);
+
+                yield* db
+                  .delete(oauthConsent)
+                  .where(
+                    and(
+                      eq(oauthConsent.userId, input.userId),
+                      eq(oauthConsent.clientId, decodedConsent.client_id),
+                      drizzleSql`${oauthConsent.referenceId} is not distinct from ${decodedConsent.reference_id}`
+                    )
+                  )
+                  .pipe(
+                    Effect.catchTag(
+                      "EffectDrizzleQueryError",
+                      failConnectedAppStorage
+                    ),
+                    Effect.asVoid
+                  );
+
+                yield* db
+                  .update(oauthRefreshToken)
+                  .set({ revoked: drizzleSql`now()` })
+                  .where(
+                    and(
+                      eq(oauthRefreshToken.userId, input.userId),
+                      eq(oauthRefreshToken.clientId, decodedConsent.client_id),
+                      drizzleSql`${oauthRefreshToken.referenceId} is not distinct from ${decodedConsent.reference_id}`,
+                      isNull(oauthRefreshToken.revoked)
+                    )
+                  )
+                  .pipe(
+                    Effect.catchTag(
+                      "EffectDrizzleQueryError",
+                      failConnectedAppStorage
+                    ),
+                    Effect.asVoid
+                  );
+
+                yield* db
+                  .delete(oauthAccessToken)
+                  .where(
+                    and(
+                      eq(oauthAccessToken.clientId, decodedConsent.client_id),
+                      drizzleSql`${oauthAccessToken.referenceId} is not distinct from ${decodedConsent.reference_id}`,
+                      or(
+                        eq(oauthAccessToken.userId, input.userId),
+                        inArray(
+                          oauthAccessToken.refreshId,
+                          db
+                            .select({ id: oauthRefreshToken.id })
+                            .from(oauthRefreshToken)
+                            .where(
+                              and(
+                                eq(oauthRefreshToken.userId, input.userId),
+                                eq(
+                                  oauthRefreshToken.clientId,
+                                  decodedConsent.client_id
+                                ),
+                                drizzleSql`${oauthRefreshToken.referenceId} is not distinct from ${decodedConsent.reference_id}`
+                              )
+                            )
+                        )
+                      )
+                    )
+                  )
+                  .pipe(
+                    Effect.catchTag(
+                      "EffectDrizzleQueryError",
+                      failConnectedAppStorage
+                    ),
+                    Effect.asVoid
+                  );
+                const auditWrite = yield* makeOAuthConsentRevokedAuditWrite({
+                  consent: decodedConsent,
+                  userId: input.userId,
+                });
+
+                yield* db
+                  .insert(authSecurityAuditEvent)
+                  .values({
+                    actorUserId: auditWrite.actorUserId,
+                    eventType: auditWrite.eventType,
+                    metadata: auditWrite.metadata,
+                    oauthClientId: auditWrite.oauthClientId,
+                    organizationId: auditWrite.organizationId,
+                    scopes: [...auditWrite.scopes],
+                  })
+                  .pipe(
+                    Effect.catchTag(
+                      "EffectDrizzleQueryError",
+                      failConnectedAppStorage
+                    ),
+                    Effect.asVoid
+                  );
+
+                return decodeDisconnectConnectedAppGrantResponse({
+                  disconnectedGrantId: input.grantId,
+                });
+              })
+            )
+            .pipe(Effect.catchTag("SqlError", failConnectedAppStorage));
+        }
       );
+
+      return { disconnect, list };
     }),
   }
 ) {
@@ -173,245 +347,6 @@ export class ConnectedAppGrantsRepository extends Context.Service<ConnectedAppGr
   );
   static readonly Default =
     ConnectedAppGrantsRepository.DefaultWithoutDependencies;
-}
-
-export function makeConnectedAppGrantsRepository(
-  storage: ConnectedAppGrantStorage
-): ConnectedAppGrantsRepositoryShape {
-  const list = Effect.fn("ConnectedAppGrantsRepository.list")(function* (
-    userId: UserId
-  ) {
-    const rows = yield* storage.listRows(userId);
-
-    return yield* decodeConnectedAppGrantList(rows);
-  });
-
-  const disconnect = Effect.fn("ConnectedAppGrantsRepository.disconnect")(
-    function* (input: DisconnectConnectedAppGrantRecordInput) {
-      return yield* storage.withTransaction(
-        Effect.gen(function* () {
-          const consentRows = yield* storage.findDisconnectConsent(input);
-          const [consent] = consentRows;
-
-          if (consent === undefined) {
-            return yield* Effect.fail(
-              new ConnectedAppGrantNotFoundError({
-                grantId: input.grantId,
-                message: "Connected app grant was not found",
-              })
-            );
-          }
-          const decodedConsent =
-            yield* decodeConnectedAppGrantDisconnect(consent);
-
-          yield* storage.deleteConsent({
-            consent: decodedConsent,
-            userId: input.userId,
-          });
-
-          yield* storage.revokeRefreshTokens({
-            consent: decodedConsent,
-            userId: input.userId,
-          });
-
-          yield* storage.deleteAccessTokens({
-            consent: decodedConsent,
-            userId: input.userId,
-          });
-          const auditWrite = yield* makeOAuthConsentRevokedAuditWrite({
-            consent: decodedConsent,
-            userId: input.userId,
-          });
-
-          yield* storage.insertRevokedAuditEvent(auditWrite);
-
-          return decodeDisconnectConnectedAppGrantResponse({
-            disconnectedGrantId: input.grantId,
-          });
-        })
-      );
-    }
-  );
-
-  return { disconnect, list };
-}
-
-function makeConnectedAppGrantStorage(input: {
-  readonly db: DomainDrizzleDatabase;
-  readonly rawSql: SqlClient.SqlClient;
-}): ConnectedAppGrantStorage {
-  const { db, rawSql } = input;
-
-  return {
-    deleteAccessTokens: ({ consent, userId }) =>
-      db
-        .delete(oauthAccessToken)
-        .where(
-          and(
-            eq(oauthAccessToken.clientId, consent.client_id),
-            drizzleSql`${oauthAccessToken.referenceId} is not distinct from ${consent.reference_id}`,
-            or(
-              eq(oauthAccessToken.userId, userId),
-              inArray(
-                oauthAccessToken.refreshId,
-                db
-                  .select({ id: oauthRefreshToken.id })
-                  .from(oauthRefreshToken)
-                  .where(
-                    and(
-                      eq(oauthRefreshToken.userId, userId),
-                      eq(oauthRefreshToken.clientId, consent.client_id),
-                      drizzleSql`${oauthRefreshToken.referenceId} is not distinct from ${consent.reference_id}`
-                    )
-                  )
-              )
-            )
-          )
-        )
-        .pipe(
-          Effect.catchTag("EffectDrizzleQueryError", failConnectedAppStorage),
-          Effect.asVoid
-        ),
-    deleteConsent: ({ consent, userId }) =>
-      db
-        .delete(oauthConsent)
-        .where(
-          and(
-            eq(oauthConsent.userId, userId),
-            eq(oauthConsent.clientId, consent.client_id),
-            drizzleSql`${oauthConsent.referenceId} is not distinct from ${consent.reference_id}`
-          )
-        )
-        .pipe(
-          Effect.catchTag("EffectDrizzleQueryError", failConnectedAppStorage),
-          Effect.asVoid
-        ),
-    findDisconnectConsent: (storageInput) =>
-      db
-        .select({
-          client_id: oauthConsent.clientId,
-          id: oauthConsent.id,
-          reference_id: oauthConsent.referenceId,
-          scopes: oauthConsent.scopes,
-        })
-        .from(oauthConsent)
-        .where(
-          and(
-            eq(oauthConsent.id, storageInput.grantId),
-            eq(oauthConsent.userId, storageInput.userId)
-          )
-        )
-        .limit(1)
-        .pipe(
-          Effect.catchTag("EffectDrizzleQueryError", failConnectedAppStorage)
-        ),
-    insertRevokedAuditEvent: (auditWrite) =>
-      db
-        .insert(authSecurityAuditEvent)
-        .values({
-          actorUserId: auditWrite.actorUserId,
-          eventType: auditWrite.eventType,
-          metadata: auditWrite.metadata,
-          oauthClientId: auditWrite.oauthClientId,
-          organizationId: auditWrite.organizationId,
-          scopes: [...auditWrite.scopes],
-        })
-        .pipe(
-          Effect.catchTag("EffectDrizzleQueryError", failConnectedAppStorage),
-          Effect.asVoid
-        ),
-    listRows: (userId) =>
-      db
-        .select({
-          active_access_token_count: drizzleSql<number>`coalesce((
-              select count(*)::integer
-              from ${oauthAccessToken}
-              where ${oauthAccessToken.userId} = ${oauthConsent.userId}
-                and ${oauthAccessToken.clientId} = ${oauthConsent.clientId}
-                and ${oauthAccessToken.referenceId} is not distinct from ${oauthConsent.referenceId}
-                and ${oauthAccessToken.expiresAt} > now()
-            ), 0)::integer`,
-          active_refresh_token_count: drizzleSql<number>`coalesce((
-              select count(*)::integer
-              from ${oauthRefreshToken}
-              where ${oauthRefreshToken.userId} = ${oauthConsent.userId}
-                and ${oauthRefreshToken.clientId} = ${oauthConsent.clientId}
-                and ${oauthRefreshToken.referenceId} is not distinct from ${oauthConsent.referenceId}
-                and ${oauthRefreshToken.revoked} is null
-                and ${oauthRefreshToken.expiresAt} > now()
-            ), 0)::integer`,
-          client_id: oauthConsent.clientId,
-          client_name: drizzleSql<
-            string | null
-          >`nullif(btrim(${oauthClient.name}), '')`,
-          client_uri: drizzleSql<
-            string | null
-          >`nullif(btrim(${oauthClient.uri}), '')`,
-          consent_created_at: oauthConsent.createdAt,
-          consent_id: oauthConsent.id,
-          consent_updated_at: oauthConsent.updatedAt,
-          latest_access_token_expires_at: drizzleSql<Date | null>`(
-              select max(${oauthAccessToken.expiresAt})
-              from ${oauthAccessToken}
-              where ${oauthAccessToken.userId} = ${oauthConsent.userId}
-                and ${oauthAccessToken.clientId} = ${oauthConsent.clientId}
-                and ${oauthAccessToken.referenceId} is not distinct from ${oauthConsent.referenceId}
-                and ${oauthAccessToken.expiresAt} > now()
-            )`,
-          latest_refresh_token_expires_at: drizzleSql<Date | null>`(
-              select max(${oauthRefreshToken.expiresAt})
-              from ${oauthRefreshToken}
-              where ${oauthRefreshToken.userId} = ${oauthConsent.userId}
-                and ${oauthRefreshToken.clientId} = ${oauthConsent.clientId}
-                and ${oauthRefreshToken.referenceId} is not distinct from ${oauthConsent.referenceId}
-                and ${oauthRefreshToken.revoked} is null
-                and ${oauthRefreshToken.expiresAt} > now()
-            )`,
-          organization_id: organization.id,
-          organization_name: organization.name,
-          policy_uri: drizzleSql<
-            string | null
-          >`nullif(btrim(${oauthClient.policy}), '')`,
-          redirect_uris: oauthClient.redirectUris,
-          reference_id: oauthConsent.referenceId,
-          scopes: oauthConsent.scopes,
-          tos_uri: drizzleSql<
-            string | null
-          >`nullif(btrim(${oauthClient.tos}), '')`,
-        })
-        .from(oauthConsent)
-        .innerJoin(oauthClient, eq(oauthClient.clientId, oauthConsent.clientId))
-        .leftJoin(organization, eq(organization.id, oauthConsent.referenceId))
-        .where(eq(oauthConsent.userId, userId))
-        .orderBy(
-          desc(oauthConsent.updatedAt),
-          desc(oauthConsent.createdAt),
-          desc(oauthConsent.id)
-        )
-        .pipe(
-          Effect.catchTag("EffectDrizzleQueryError", failConnectedAppStorage)
-        ),
-    revokeRefreshTokens: ({ consent, userId }) =>
-      db
-        .update(oauthRefreshToken)
-        .set({ revoked: drizzleSql`now()` })
-        .where(
-          and(
-            eq(oauthRefreshToken.userId, userId),
-            eq(oauthRefreshToken.clientId, consent.client_id),
-            drizzleSql`${oauthRefreshToken.referenceId} is not distinct from ${consent.reference_id}`,
-            isNull(oauthRefreshToken.revoked)
-          )
-        )
-        .pipe(
-          Effect.catchTag("EffectDrizzleQueryError", failConnectedAppStorage),
-          Effect.asVoid
-        ),
-    withTransaction: (effect) =>
-      rawSql
-        .withTransaction(effect)
-        .pipe(Effect.catchTag("SqlError", failConnectedAppStorage)),
-  };
 }
 
 export class ConnectedAppGrantsService extends Context.Service<ConnectedAppGrantsService>()(
