@@ -30,12 +30,13 @@ env:
   PREVIEW_STAGE: pr-${{ github.event.pull_request.number || inputs.pr_number }}
 
 jobs:
-  deploy-e2e:
-    name: Deploy Preview And E2E
+  deploy-preview:
+    name: Deploy Preview
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     environment: preview-deploy
     env:
+      AUTH_RATE_LIMIT_ENABLED: "false"
       PLAYWRIGHT_AGENT_URL: https://agent.pr-${{ github.event.pull_request.number }}.ceird.app
       PLAYWRIGHT_API_URL: https://api.pr-${{ github.event.pull_request.number }}.ceird.app
       PLAYWRIGHT_BASE_URL: https://app.pr-${{ github.event.pull_request.number }}.ceird.app
@@ -297,8 +298,83 @@ jobs:
               });
             }
 
+  preview-e2e:
+    name: Preview E2E shard ${{ matrix.shard }}
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: preview-deploy
+    needs:
+      - deploy-preview
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - 1/3
+          - 2/3
+          - 3/3
+    env:
+      AUTH_RATE_LIMIT_ENABLED: "false"
+      PLAYWRIGHT_AGENT_URL: https://agent.pr-${{ github.event.pull_request.number }}.ceird.app
+      PLAYWRIGHT_API_URL: https://api.pr-${{ github.event.pull_request.number }}.ceird.app
+      PLAYWRIGHT_BASE_URL: https://app.pr-${{ github.event.pull_request.number }}.ceird.app
+      PLAYWRIGHT_SYNC_URL: https://sync.pr-${{ github.event.pull_request.number }}.ceird.app
+      PLAYWRIGHT_TENANT_URL: https://preview-tenant-health--pr-${{ github.event.pull_request.number }}.ceird.app
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            package.json
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Ensure Linux native packages
+        run: node scripts/ensure-linux-native-packages.mjs
+
+      - name: Validate preview stage
+        run: |
+          set -euo pipefail
+          if [[ ! "$PREVIEW_STAGE" =~ ^pr-[0-9]+$ ]]; then
+            echo "Refusing to test unexpected preview stage: $PREVIEW_STAGE"
+            exit 1
+          fi
+
+      - name: Restore Alchemy state store credentials
+        run: node scripts/restore-alchemy-state-store-credentials.mjs
+        env:
+          ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS: ${{ secrets.ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS }}
+
+      - name: Export Playwright database URL
+        run: |
+          set -euo pipefail
+          pnpm --silent alchemy state get ceird "$PREVIEW_STAGE" PostgresBranch --stage "$PREVIEW_STAGE" \
+            | node scripts/export-playwright-database-url.mjs
+        env:
+          AUTH_EMAIL_FROM: ${{ secrets.AUTH_EMAIL_FROM }}
+          AUTH_EMAIL_FROM_NAME: ${{ vars.AUTH_EMAIL_FROM_NAME || 'Ceird' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
+
       - name: Run E2E tests
-        run: pnpm --filter app e2e
+        run: pnpm --filter app e2e --shard=${{ matrix.shard }} --workers=1
 
   cleanup:
     name: Destroy Preview

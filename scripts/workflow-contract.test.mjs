@@ -1085,7 +1085,8 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
     path.join(repoRoot, ".github/workflows/preview.yml"),
     "utf8"
   );
-  const previewDeployJob = getWorkflowJob(previewWorkflow, "deploy-e2e");
+  const previewDeployJob = getWorkflowJob(previewWorkflow, "deploy-preview");
+  const previewE2eJob = getWorkflowJob(previewWorkflow, "preview-e2e");
   const previewAuditStep = getWorkflowStep(
     previewDeployJob,
     "Audit preview Alchemy state"
@@ -1097,6 +1098,10 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   const previewSyncCanaryStep = getWorkflowStep(
     previewDeployJob,
     "Run deployed sync canary"
+  );
+  const previewE2eDatabaseExportStep = getWorkflowStep(
+    previewE2eJob,
+    "Export Playwright database URL"
   );
 
   assert.match(previewWorkflow, /^name: Preview$/m);
@@ -1209,10 +1214,33 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assertNoElectricStorageCredentialsEnv(previewAuditStep);
   assertNoElectricStorageCredentialsEnv(previewDatabaseExportStep);
   assertNoElectricStorageCredentialsEnv(previewSyncCanaryStep);
+  assertNoElectricStorageCredentialsEnv(previewE2eDatabaseExportStep);
   assertCloudflareGlobalKeyCredentials(previewDeployJob);
   assertCloudflareGlobalKeyCredentials(previewAuditStep);
   assertCloudflareGlobalKeyCredentials(previewDatabaseExportStep);
-  assert.match(previewWorkflow, /pnpm --filter app e2e/);
+  assertCloudflareGlobalKeyCredentials(previewE2eDatabaseExportStep);
+  assert.match(previewDeployJob, /AUTH_RATE_LIMIT_ENABLED: "false"/);
+  assert.match(previewE2eJob, /AUTH_RATE_LIMIT_ENABLED: "false"/);
+  assert.doesNotMatch(previewDeployJob, /pnpm --filter app e2e/);
+  assert.match(previewE2eJob, /needs:\n {6}- deploy-preview/);
+  assert.match(previewE2eJob, /strategy:\n {6}fail-fast: false/);
+  for (const shard of ["1/3", "2/3", "3/3"]) {
+    assert.match(
+      previewE2eJob,
+      new RegExp(`- ${shard.replace("/", "\\/")}\\b`),
+      `preview e2e should run shard ${shard}`
+    );
+  }
+  assert.match(
+    previewE2eJob,
+    /pnpm --silent alchemy state get ceird "\$PREVIEW_STAGE" PostgresBranch --stage "\$PREVIEW_STAGE"/
+  );
+  assert.match(
+    previewE2eJob,
+    /pnpm --filter app e2e --shard=\$\{\{ matrix\.shard \}\} --workers=1/
+  );
+  assert.doesNotMatch(previewE2eJob, /pnpm alchemy deploy/);
+  assert.doesNotMatch(previewE2eJob, /pnpm alchemy destroy/);
 });
 
 test("preview workflow destroys PR stages from the default branch on close", () => {
@@ -1276,13 +1304,15 @@ test("preview Electric credential posture keeps runtime secrets out of GitHub", 
     path.join(repoRoot, "docs/architecture/cloudflare-ci.md"),
     "utf8"
   );
-  const previewDeployJob = getWorkflowJob(previewWorkflow, "deploy-e2e");
+  const previewDeployJob = getWorkflowJob(previewWorkflow, "deploy-preview");
+  const previewE2eJob = getWorkflowJob(previewWorkflow, "preview-e2e");
   const previewCleanupJob = getWorkflowJob(previewWorkflow, "cleanup");
   const cloudE2eDeployJob = getWorkflowJob(buildWorkflow, "cloud-e2e-deploy");
   const cloudE2eDestroyJob = getWorkflowJob(buildWorkflow, "cloud-e2e-destroy");
 
   for (const [name, job] of [
     ["preview deploy", previewDeployJob],
+    ["preview E2E", previewE2eJob],
     ["preview cleanup", previewCleanupJob],
     ["cloud E2E deploy", cloudE2eDeployJob],
     ["cloud E2E destroy", cloudE2eDestroyJob],
