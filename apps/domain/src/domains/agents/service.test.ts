@@ -724,6 +724,111 @@ describe("agent threads service", () => {
     expect(JSON.stringify(activityEvents)).not.toContain(userId);
   });
 
+  it("runs agent label creation through the real action bridge with the thread actor", async () => {
+    const createdLabel = {
+      createdAt: "2026-05-20T10:00:00.000Z",
+      id: "33333333-3333-4333-8333-333333333333",
+      name: "Plumbing",
+      updatedAt: "2026-05-20T10:00:00.000Z",
+    } as Label;
+    const productActivityEvents: RecordActivityEventInput[] = [];
+    const labelActivityCalls: string[] = [];
+    const labelCreateCalls: {
+      readonly name: string;
+      readonly organizationId: typeof organizationId;
+    }[] = [];
+    const labelManageAuthorizationActors: OrganizationActor[] = [];
+
+    const response = await Effect.runPromise(
+      runAgentThreadsService(
+        Effect.gen(function* () {
+          const service = yield* AgentThreadsService;
+
+          return yield* service.runAction({
+            input: { name: "Plumbing" },
+            name: "ceird.labels.create",
+            operationId,
+            threadId,
+          });
+        }),
+        {
+          realActions: {
+            labelActivityRecorder: {
+              recordCreated: (recordingActor, label) =>
+                Effect.sync(() => {
+                  labelActivityCalls.push(
+                    `${recordingActor.userId}:${label.id}:${label.name}`
+                  );
+                }),
+            },
+            labelsRepository: {
+              create: (labelInput) =>
+                Effect.sync(() => {
+                  labelCreateCalls.push(labelInput);
+
+                  return createdLabel;
+                }),
+            },
+            organizationAuthorization: {
+              ensureCanManageLabels: (authorizedActor) =>
+                Effect.sync(() => {
+                  labelManageAuthorizationActors.push(authorizedActor);
+                }),
+            },
+          },
+          actionRunsRepository: {
+            begin: (input: BeginAgentActionRunInput) =>
+              Effect.succeed({
+                inserted: true,
+                run: makeBeginRun(input),
+              }),
+            completeSucceeded: (
+              completedActionRunId: AgentActionRunId,
+              result: unknown
+            ) =>
+              Effect.succeed(
+                makeActionRun({
+                  id: completedActionRunId,
+                  result,
+                  status: "succeeded",
+                })
+              ),
+          },
+          activityEventsRepository: {
+            recordEvent: (input) =>
+              Effect.sync(() => {
+                productActivityEvents.push(input);
+                return {} as never;
+              }),
+          },
+        }
+      )
+    );
+
+    expect(response).toStrictEqual({
+      actionRunId,
+      replayed: false,
+      result: createdLabel,
+    });
+    expect(labelCreateCalls).toStrictEqual([
+      { name: "Plumbing", organizationId },
+    ]);
+    expect(labelManageAuthorizationActors).toStrictEqual([actor]);
+    expect(labelActivityCalls).toStrictEqual([
+      "user_123:33333333-3333-4333-8333-333333333333:Plumbing",
+    ]);
+    expect(productActivityEvents).toStrictEqual([
+      expect.objectContaining({
+        actorId: productAgentActorId,
+        status: "pending",
+      }),
+      expect.objectContaining({
+        actorId: productAgentActorId,
+        status: "synced",
+      }),
+    ]);
+  });
+
   it("continues fresh write action runs when agent actor projection fails before execution", async () => {
     let actionCalls = 0;
     let completedRuns = 0;
@@ -1238,7 +1343,7 @@ describe("agent threads service", () => {
       message: "Agent action storage operation failed",
       operation: "action.execute",
     });
-    expect(error.cause).toContain("@ceird/labels-core/LabelStorageError");
+    expect(error.cause).toContain("EffectDrizzleQueryError");
   });
 
   it("executes site read actions through the derived SitesService layer", async () => {
@@ -1699,14 +1804,21 @@ function runAgentActions<Value, Error>(
 function makeAgentThreadsServiceTestLayer(
   options: AgentThreadsServiceTestOptions
 ) {
+  const agentActionsLayer =
+    options.realActions === undefined
+      ? Layer.succeed(
+          AgentActions,
+          AgentActions.of({
+            execute: () => Effect.die("Unexpected AgentActions.execute call"),
+            ...options.actions,
+          } as unknown as ContextService<typeof AgentActions>)
+        )
+      : AgentActions.DefaultWithoutDependencies.pipe(
+          Layer.provide(makeAgentActionsTestLayer(options.realActions))
+        );
+
   return Layer.mergeAll(
-    Layer.succeed(
-      AgentActions,
-      AgentActions.of({
-        execute: () => Effect.die("Unexpected AgentActions.execute call"),
-        ...options.actions,
-      } as unknown as ContextService<typeof AgentActions>)
-    ),
+    agentActionsLayer,
     Layer.succeed(
       AgentActionRunsRepository,
       AgentActionRunsRepository.of({
@@ -1931,6 +2043,7 @@ interface AgentThreadsServiceTestOptions {
   readonly userPreferencesRepository?: Partial<
     ContextService<typeof UserPreferencesRepository>
   >;
+  readonly realActions?: AgentActionsTestOptions;
 }
 
 interface AgentActionsTestOptions {

@@ -241,6 +241,7 @@ describe("SyncAuthorizationService", () => {
     const retainedAfterMs = Date.parse(
       readRequiredActivityRetainedAfter(authorization.params)
     );
+    const retainedAfter = new Date(retainedAfterMs);
 
     expect(authorization).toMatchObject({
       organizationId: "org_sync",
@@ -253,11 +254,33 @@ describe("SyncAuthorizationService", () => {
       userId: "user_sync",
       where: ACTIVITY_EVENTS_SYNC_WHERE,
     });
-    expect(retainedAfterMs).toBeGreaterThanOrEqual(before);
+    expect(retainedAfter.toISOString()).toBe(
+      new Date(
+        Date.UTC(
+          retainedAfter.getUTCFullYear(),
+          retainedAfter.getUTCMonth(),
+          retainedAfter.getUTCDate()
+        )
+      ).toISOString()
+    );
     expect(retainedAfterMs).toBeLessThanOrEqual(after);
+    expect(retainedAfterMs).toBeGreaterThan(before - 24 * 60 * 60 * 1000);
   });
 
-  it("uses retained-until current-time semantics so stale rows stay out of sync", async () => {
+  it("uses a stable UTC-day retention bucket so Electric shape resumes keep the same source params", async () => {
+    const firstAuthorization = await runWithActor(
+      authorizeShape("activity-events")
+    );
+    const secondAuthorization = await runWithActor(
+      authorizeShape("activity-events")
+    );
+
+    expect(readRequiredActivityRetainedAfter(firstAuthorization.params)).toBe(
+      readRequiredActivityRetainedAfter(secondAuthorization.params)
+    );
+  });
+
+  it("uses retained-until UTC-day bucket semantics so stale rows stay out of sync", async () => {
     const authorization = await runWithActor(authorizeShape("activity-events"));
     const retainedAfter = Date.parse(
       readRequiredActivityRetainedAfter(authorization.params)

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 
-import { ProductActivityEventSchema } from "./index.js";
+import {
+  ACTIVITY_EVENT_TYPES,
+  ACTIVITY_FEED_MAX_EVENTS_PER_ORG,
+  ACTIVITY_FEED_RETENTION_DAYS,
+  ProductActivityEventSchema,
+} from "./index.js";
 
 describe("activity core contracts", () => {
   it("decodes a product-safe global activity event", () => {
@@ -55,5 +60,34 @@ describe("activity core contracts", () => {
         targetType: "job",
       })
     ).toThrow();
+  });
+
+  it("documents the shipped v1 event taxonomy and bounded feed window", () => {
+    expect(ACTIVITY_EVENT_TYPES).toStrictEqual([
+      "agent.product_effect",
+      "comment.created",
+      "job.assignee_changed",
+      "job.blocked_reason_changed",
+      "job.contact_changed",
+      "job.coordinator_changed",
+      "job.created",
+      "job.label_added",
+      "job.label_removed",
+      "job.priority_changed",
+      "job.reopened",
+      "job.site_changed",
+      "job.status_changed",
+      "job.visit_logged",
+      "label.archived",
+      "label.created",
+      "label.updated",
+      "site.comment_created",
+      "site.created",
+      "site.label_added",
+      "site.label_removed",
+      "site.updated",
+    ]);
+    expect(ACTIVITY_FEED_RETENTION_DAYS).toBe(30);
+    expect(ACTIVITY_FEED_MAX_EVENTS_PER_ORG).toBe(5000);
   });
 });

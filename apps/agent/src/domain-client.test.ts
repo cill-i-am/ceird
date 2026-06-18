@@ -8,6 +8,7 @@ import {
 import type { DomainServiceBinding } from "@ceird/domain-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
+import * as Redacted from "effect/Redacted";
 
 import { DomainActionError } from "./domain-action-error.js";
 import {
@@ -62,6 +63,37 @@ describe("domain action client", () => {
       threadId: "11111111-1111-4111-8111-111111111111",
     });
     expect(response.result).toStrictEqual({ labels: [] });
+  });
+
+  it("unwraps redacted internal secrets before authorizing Domain requests", async () => {
+    const requests: Request[] = [];
+    const env = {
+      ...makeEnv((request) => {
+        requests.push(
+          request instanceof Request ? request : new Request(request)
+        );
+
+        return Promise.resolve(
+          Response.json({
+            actionRunId: "33333333-3333-4333-8333-333333333333",
+            replayed: false,
+            result: { labels: [] },
+          })
+        );
+      }),
+      AGENT_INTERNAL_SECRET: Redacted.make("agent-secret"),
+    } as unknown as AgentWorkerEnv;
+
+    await runDomainAction(env, {
+      input: {},
+      name: "ceird.labels.list",
+      operationId: decodeAgentActionOperationId("tool-call:1"),
+      threadId: decodeAgentThreadId("11111111-1111-4111-8111-111111111111"),
+    });
+
+    expect(requests[0]?.headers.get("authorization")).toBe(
+      "Bearer agent-secret"
+    );
   });
 
   it("surfaces non-2xx domain responses", async () => {
