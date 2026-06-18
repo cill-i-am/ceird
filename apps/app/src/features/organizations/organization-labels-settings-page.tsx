@@ -8,6 +8,7 @@ import type {
 import type {
   CreateLabelInput,
   Label,
+  LabelIdType,
   LabelWriteResponse,
 } from "@ceird/labels-core";
 import {
@@ -58,7 +59,10 @@ import { useHydratedCollectionItems } from "#/data-plane/hydrated-collection";
 import type { DataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 import { validateLabelName } from "#/features/labels/label-name-validation";
 import { searchSettingsLabels } from "#/features/labels/labels-search";
-import { createBrowserLabelWithConfirmation } from "#/features/labels/labels-state";
+import {
+  archiveBrowserLabelWithConfirmation,
+  createBrowserLabelWithConfirmation,
+} from "#/features/labels/labels-state";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
@@ -95,6 +99,9 @@ interface LabelsCollectionLike {
 }
 
 export interface OrganizationLabelsSettingsPageProps {
+  readonly archiveLabelWithConfirmation?:
+    | ((labelId: LabelIdType) => Promise<LabelWriteResponse>)
+    | undefined;
   readonly collectionState?:
     | {
         readonly collection: LabelsCollectionLike | null;
@@ -147,6 +154,7 @@ const DUPLICATE_LABEL_NAME_MESSAGE = "A label with that name already exists.";
 const decodeTemporaryLabelId = Schema.decodeUnknownSync(LabelId);
 
 export function OrganizationLabelsSettingsPage({
+  archiveLabelWithConfirmation = archiveDefaultLabelWithConfirmation,
   collectionState,
   createLabelWithConfirmation = createDefaultLabelWithConfirmation,
   createTemporaryLabelId = createDefaultTemporaryLabelId,
@@ -180,13 +188,15 @@ export function OrganizationLabelsSettingsPage({
     [labels, searchQuery]
   );
   const hasSearch = searchQuery.trim().length > 0;
-  const canWriteLabels =
-    canManageLabels &&
-    collection !== null &&
-    typeof collection.insert === "function" &&
-    typeof collection.update === "function" &&
-    typeof collection.delete === "function" &&
-    (shellState === "ready" || shellState === "empty");
+  const canWriteLabels = canWriteSettingsLabels({
+    canManageLabels,
+    collectionIsWritable:
+      collection !== null &&
+      typeof collection.insert === "function" &&
+      typeof collection.update === "function" &&
+      typeof collection.delete === "function",
+    shellState,
+  });
   const {
     cancelEditing,
     createName,
@@ -207,6 +217,7 @@ export function OrganizationLabelsSettingsPage({
     startEditingLabel,
   } = useLabelsMutationController({
     canWriteLabels,
+    archiveLabelWithConfirmation,
     collection,
     createLabelWithConfirmation,
     createTemporaryLabelId,
@@ -385,7 +396,24 @@ function useLabelsSettingsHotkeys({
   }, [editInputRef, editingLabelId]);
 }
 
+function canWriteSettingsLabels({
+  canManageLabels,
+  collectionIsWritable,
+  shellState,
+}: {
+  readonly canManageLabels: boolean;
+  readonly collectionIsWritable: boolean;
+  readonly shellState: LabelsSettingsShellState;
+}) {
+  return (
+    canManageLabels &&
+    collectionIsWritable &&
+    (shellState === "ready" || shellState === "empty")
+  );
+}
+
 function useLabelsMutationController({
+  archiveLabelWithConfirmation,
   canWriteLabels,
   collection,
   createLabelWithConfirmation,
@@ -394,6 +422,9 @@ function useLabelsMutationController({
   mutationJournal,
   now,
 }: {
+  readonly archiveLabelWithConfirmation: (
+    labelId: LabelIdType
+  ) => Promise<LabelWriteResponse>;
   readonly canWriteLabels: boolean;
   readonly collection: LabelsCollectionLike | null;
   readonly createLabelWithConfirmation: (
@@ -604,12 +635,28 @@ function useLabelsMutationController({
     setMutationStatus(null);
 
     try {
-      await persistLabelCollectionMutation({
-        commandName: "labels.archive",
-        input: { labelId: label.id },
-        journal: mutationJournal,
-        operation: () => collection.delete?.(label.id),
-      });
+      const awaitTxId = collection.utils?.awaitTxId;
+      await (awaitTxId === undefined
+        ? persistLabelCollectionMutation({
+            commandName: "labels.archive",
+            input: { labelId: label.id },
+            journal: mutationJournal,
+            operation: () => collection.delete?.(label.id),
+          })
+        : persistLabelCommandMutation({
+            commandName: "labels.archive",
+            input: { labelId: label.id },
+            journal: mutationJournal,
+            operation: async () => {
+              const response = await archiveLabelWithConfirmation(label.id);
+              await awaitTxId(
+                response.mutation.txid,
+                LABEL_ELECTRIC_MUTATION_CONFIRMATION_TIMEOUT_MS
+              );
+              collection.utils?.writeDelete?.(label.id);
+              return response;
+            },
+          }));
 
       if (editingLabelId === label.id) {
         cancelEditing();
@@ -1485,6 +1532,10 @@ function reconcileCreatedLabel({
 
 function createDefaultLabelWithConfirmation(input: CreateLabelInput) {
   return Effect.runPromise(createBrowserLabelWithConfirmation(input));
+}
+
+function archiveDefaultLabelWithConfirmation(labelId: LabelIdType) {
+  return Effect.runPromise(archiveBrowserLabelWithConfirmation(labelId));
 }
 
 function readLabelWriteResponse(output: unknown): LabelWriteResponse | null {

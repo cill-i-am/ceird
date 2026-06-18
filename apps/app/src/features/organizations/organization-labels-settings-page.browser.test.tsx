@@ -310,6 +310,83 @@ describe("organization labels settings page", () => {
     expect(screen.queryByText("Fire Safety")).not.toBeInTheDocument();
   });
 
+  it("archives labels through the authoritative command when Electric txid confirmation is available", async () => {
+    const user = userEvent.setup();
+    const serverLabel = makeLabel({
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Fire Safety",
+    });
+    const renamedLabel = { ...serverLabel, name: "Emergency" };
+    const createLabelWithConfirmation = vi.fn<
+      (input: CreateLabelInput) => Promise<LabelWriteResponse>
+    >((_input) => Promise.resolve(makeLabelWriteResponse(serverLabel, 456)));
+    const archiveLabelWithConfirmation = vi.fn<
+      (labelId: Label["id"]) => Promise<LabelWriteResponse>
+    >((_labelId) => Promise.resolve(makeLabelWriteResponse(renamedLabel, 789)));
+    const awaitTxId = vi.fn<
+      (txid: number, timeout?: number) => Promise<boolean>
+    >(() => Promise.resolve(true));
+
+    renderLabelsPage({
+      archiveLabelWithConfirmation,
+      collectionState: makeCollectionState({
+        awaitTxId,
+        labels: [],
+        status: "ready",
+      }),
+      createLabelWithConfirmation,
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: /new label name/i }),
+      "Fire Safety"
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open actions for fire safety/i,
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit label/i })
+    );
+    const editInput = screen.getByRole("textbox", {
+      name: /rename fire safety/i,
+    });
+    await user.clear(editInput);
+    await user.type(editInput, "Emergency");
+    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
+    await expect(screen.findByText("Emergency")).resolves.toBeVisible();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open actions for emergency/i,
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /archive label/i })
+    );
+    const archiveConfirmation = await screen.findByRole("group", {
+      name: /confirm archiving emergency/i,
+    });
+    await user.click(
+      within(archiveConfirmation).getByRole("button", {
+        name: /archive label/i,
+      })
+    );
+
+    await expect(
+      screen.findByText(
+        "Label archived and removed after realtime confirmation."
+      )
+    ).resolves.toBeVisible();
+    expect(archiveLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id);
+    expect(awaitTxId).toHaveBeenCalledWith(789, 10_000);
+    expect(screen.queryByText("Emergency")).not.toBeInTheDocument();
+  });
+
   it("disables mouse-driven row actions while another mutation is pending", async () => {
     const user = userEvent.setup();
     const createTransaction = Promise.withResolvers<unknown>();
@@ -634,12 +711,16 @@ describe("organization labels settings page", () => {
 });
 
 function renderLabelsPage({
+  archiveLabelWithConfirmation,
   collectionState,
   createLabelWithConfirmation,
   createTemporaryLabelId,
   mutationJournal,
   organizationRole = "owner",
 }: {
+  readonly archiveLabelWithConfirmation?:
+    | ((labelId: Label["id"]) => Promise<LabelWriteResponse>)
+    | undefined;
   readonly collectionState: ReturnType<typeof makeCollectionState>;
   readonly createLabelWithConfirmation?:
     | ((input: CreateLabelInput) => Promise<LabelWriteResponse>)
@@ -652,6 +733,7 @@ function renderLabelsPage({
 }) {
   return render(
     <LabelsPageHarness
+      archiveLabelWithConfirmation={archiveLabelWithConfirmation}
       collectionState={collectionState}
       createLabelWithConfirmation={createLabelWithConfirmation}
       createTemporaryLabelId={createTemporaryLabelId}
@@ -674,12 +756,16 @@ function getModShiftBackspaceKeyboardInput() {
 }
 
 function LabelsPageHarness({
+  archiveLabelWithConfirmation,
   collectionState,
   createLabelWithConfirmation,
   createTemporaryLabelId,
   mutationJournal,
   organizationRole = "owner",
 }: {
+  readonly archiveLabelWithConfirmation?:
+    | ((labelId: Label["id"]) => Promise<LabelWriteResponse>)
+    | undefined;
   readonly collectionState: ReturnType<typeof makeCollectionState>;
   readonly createLabelWithConfirmation?:
     | ((input: CreateLabelInput) => Promise<LabelWriteResponse>)
@@ -694,6 +780,7 @@ function LabelsPageHarness({
     <HotkeysProvider>
       <TooltipProvider>
         <OrganizationLabelsSettingsPage
+          archiveLabelWithConfirmation={archiveLabelWithConfirmation}
           collectionState={collectionState}
           createLabelWithConfirmation={createLabelWithConfirmation}
           createTemporaryLabelId={createTemporaryLabelId}
