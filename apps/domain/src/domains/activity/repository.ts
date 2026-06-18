@@ -34,6 +34,8 @@ import {
   generateProductActorId,
 } from "./id-generation.js";
 
+const AGENT_ACTIVITY_ACTOR_DISPLAY_DETAIL = "Agent product action";
+
 interface ProductActorRow {
   readonly display_detail: string | null;
   readonly display_name: string;
@@ -430,10 +432,6 @@ export class ProductActivityActorsRepository extends Context.Service<ProductActi
             `;
 
             const actorId = generateProductActorId();
-            const displayDetail = formatAgentThreadActorDetail(
-              input.threadTitle
-            );
-
             return yield* sql<AgentThreadSourceRow>`
               with source_thread as (
                 select
@@ -450,7 +448,7 @@ export class ProductActivityActorsRepository extends Context.Service<ProductActi
                 update product_activity_actors
                 set
                   display_name = 'Ceird agent',
-                  display_detail = ${displayDetail},
+                  display_detail = ${AGENT_ACTIVITY_ACTOR_DISPLAY_DETAIL},
                   route_href = null,
                   route_label = null,
                   updated_at = now()
@@ -483,7 +481,7 @@ export class ProductActivityActorsRepository extends Context.Service<ProductActi
                   ${input.organizationId},
                   'agent',
                   'Ceird agent',
-                  ${displayDetail}
+                  ${AGENT_ACTIVITY_ACTOR_DISPLAY_DETAIL}
                 from source_thread
                 where not exists (select 1 from existing_actor)
                 returning
@@ -664,16 +662,6 @@ function buildAgentThreadActorLockKey(
   input: ResolveAgentThreadActorInput
 ): string {
   return `product-activity-actor:agent:${input.organizationId}:${input.threadId}`;
-}
-
-function formatAgentThreadActorDetail(threadTitle: string): string {
-  const title = threadTitle.trim();
-
-  if (title.length === 0) {
-    return "Agent thread";
-  }
-
-  return title.length <= 160 ? title : `${title.slice(0, 157)}...`;
 }
 
 function getRequiredRow<Row>(

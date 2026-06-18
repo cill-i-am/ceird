@@ -432,18 +432,19 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
             begin.run.status
           );
           if (begin.inserted && actionKind !== "read") {
-            productActivityActorId = yield* resolveAgentProductActivityActorId({
-              productActivityActorsRepository,
-              threadActor,
-            }).pipe(Effect.catchTag("SqlError", failStorage("action.run")));
-            yield* recordAgentProductActivityEvent({
+            productActivityActorId =
+              yield* resolveAgentProductActivityActorIdBestEffort({
+                productActivityActorsRepository,
+                threadActor,
+              });
+            yield* recordAgentProductActivityEventBestEffort({
               actionName: input.name,
               actorId: productActivityActorId,
               activityEventsRepository,
               organizationId: threadActor.actor.organizationId,
               runId: begin.run.id,
               status: "pending",
-            }).pipe(Effect.catchTag("SqlError", failStorage("action.run")));
+            });
           }
 
           if (!begin.inserted) {
@@ -481,13 +482,11 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
                   actionKind !== "read"
                 ) {
                   productActivityActorId =
-                    yield* resolveAgentProductActivityActorId({
+                    yield* resolveAgentProductActivityActorIdBestEffort({
                       productActivityActorsRepository,
                       threadActor,
-                    }).pipe(
-                      Effect.catchTag("SqlError", failStorage("action.run"))
-                    );
-                  yield* recordAgentProductActivityEvent({
+                    });
+                  yield* recordAgentProductActivityEventBestEffort({
                     actionName: staleResult.completed.actionName,
                     actorId: productActivityActorId,
                     activityEventsRepository,
@@ -497,9 +496,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
                     organizationId: staleResult.completed.organizationId,
                     runId: staleResult.completed.id,
                     status: "failed",
-                  }).pipe(
-                    Effect.catchTag("SqlError", failStorage("action.run"))
-                  );
+                  });
                 }
 
                 return staleResult.outcome;
@@ -511,11 +508,11 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
             );
             if (replayedActivityStatus !== undefined && actionKind !== "read") {
               productActivityActorId =
-                yield* resolveAgentProductActivityActorId({
+                yield* resolveAgentProductActivityActorIdBestEffort({
                   productActivityActorsRepository,
                   threadActor,
-                }).pipe(Effect.catchTag("SqlError", failStorage("action.run")));
-              yield* recordAgentProductActivityEvent({
+                });
+              yield* recordAgentProductActivityEventBestEffort({
                 actionName: begin.run.actionName,
                 actorId: productActivityActorId,
                 activityEventsRepository,
@@ -526,7 +523,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
                 organizationId: threadActor.actor.organizationId,
                 runId: begin.run.id,
                 status: replayedActivityStatus,
-              }).pipe(Effect.catchTag("SqlError", failStorage("action.run")));
+              });
             }
 
             const replayed = yield* replayActionRun(begin.run.status, {
@@ -551,16 +548,14 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
                 storeResult: actionKind !== "read",
               })
               .pipe(Effect.catchTag("SqlError", failStorage("action.run")));
-            if (productActivityActorId !== undefined) {
-              yield* recordAgentProductActivityEvent({
-                actionName: completed.actionName,
-                actorId: productActivityActorId,
-                activityEventsRepository,
-                organizationId: completed.organizationId,
-                runId: completed.id,
-                status: "synced",
-              }).pipe(Effect.catchTag("SqlError", failStorage("action.run")));
-            }
+            yield* recordAgentProductActivityEventBestEffort({
+              actionName: completed.actionName,
+              actorId: productActivityActorId,
+              activityEventsRepository,
+              organizationId: completed.organizationId,
+              runId: completed.id,
+              status: "synced",
+            });
 
             return succeedActionRun({
               actionRunId: completed.id,
@@ -576,17 +571,15 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
               makeActionRunFailureLedgerValue(result.failure)
             )
             .pipe(Effect.catchTag("SqlError", failStorage("action.run")));
-          if (productActivityActorId !== undefined) {
-            yield* recordAgentProductActivityEvent({
-              actionName: completed.actionName,
-              actorId: productActivityActorId,
-              activityEventsRepository,
-              detail: completed.errorMessage ?? result.failure.message,
-              organizationId: completed.organizationId,
-              runId: completed.id,
-              status: "failed",
-            }).pipe(Effect.catchTag("SqlError", failStorage("action.run")));
-          }
+          yield* recordAgentProductActivityEventBestEffort({
+            actionName: completed.actionName,
+            actorId: productActivityActorId,
+            activityEventsRepository,
+            detail: completed.errorMessage ?? result.failure.message,
+            organizationId: completed.organizationId,
+            runId: completed.id,
+            status: "failed",
+          });
 
           return rejectActionRun(result.failure);
         });
@@ -892,7 +885,31 @@ function resolveAgentProductActivityActorId(input: {
     .pipe(Effect.map(({ actor }) => actor.id));
 }
 
-function recordAgentProductActivityEvent(input: {
+function resolveAgentProductActivityActorIdBestEffort(input: {
+  readonly productActivityActorsRepository: Context.Service.Shape<
+    typeof ProductActivityActorsRepository
+  >;
+  readonly threadActor: {
+    readonly actor: {
+      readonly organizationId: OrganizationId;
+      readonly userId: UserId;
+    };
+    readonly thread: {
+      readonly id: AgentThreadId;
+      readonly title: string;
+    };
+  };
+}) {
+  return Effect.gen(function* () {
+    const result = yield* Effect.result(
+      resolveAgentProductActivityActorId(input)
+    );
+
+    return Result.isSuccess(result) ? result.success : undefined;
+  });
+}
+
+interface AgentProductActivityEventInput {
   readonly actionName: AgentActionName;
   readonly activityEventsRepository: Context.Service.Shape<
     typeof ActivityEventsRepository
@@ -902,7 +919,11 @@ function recordAgentProductActivityEvent(input: {
   readonly organizationId: OrganizationId;
   readonly runId: AgentActionRunId;
   readonly status: "failed" | "pending" | "synced";
-}) {
+}
+
+function recordAgentProductActivityEvent(
+  input: AgentProductActivityEventInput
+) {
   const action = getAgentActionDefinition(input.actionName);
 
   return input.activityEventsRepository.recordEvent({
@@ -923,6 +944,27 @@ function recordAgentProductActivityEvent(input: {
     status: input.status,
     targetId: input.runId,
     targetType: "agent_action_run",
+  });
+}
+
+function recordAgentProductActivityEventBestEffort(
+  input: Omit<AgentProductActivityEventInput, "actorId"> & {
+    readonly actorId: ProductActorId | undefined;
+  }
+) {
+  if (input.actorId === undefined) {
+    return Effect.void;
+  }
+
+  const { actorId, ...rest } = input;
+
+  return Effect.gen(function* () {
+    yield* Effect.result(
+      recordAgentProductActivityEvent({
+        ...rest,
+        actorId,
+      })
+    );
   });
 }
 

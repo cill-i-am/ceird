@@ -6,6 +6,7 @@ import {
   OrganizationId,
   ProductActorId,
 } from "@ceird/activity-core";
+import { AgentThreadId } from "@ceird/agents-core";
 import { UserId } from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
@@ -28,6 +29,7 @@ import {
 } from "./repository.js";
 
 const decodeActivityEventId = Schema.decodeUnknownSync(ActivityEventId);
+const decodeAgentThreadId = Schema.decodeUnknownSync(AgentThreadId);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeProductActorId = Schema.decodeUnknownSync(ProductActorId);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
@@ -385,6 +387,68 @@ describe("activity events repository", () => {
     expect(updated.actor.id).toBe(created.actor.id);
     expect(updatedSummary).toStrictEqual({ display_name: "Taylor Updated" });
   });
+
+  it("does not expose private agent thread titles in synced actor projections", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createMigratedTestDatabase(context);
+    if (testDatabase === undefined) {
+      return;
+    }
+
+    const organizationId = decodeOrganizationId(randomUUID());
+    const userId = decodeUserId(`user_${randomUUID()}`);
+    const threadId = decodeAgentThreadId(randomUUID());
+    const privateThreadTitle = "Private acquisition cleanup plan";
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Agent Actor Privacy",
+      });
+      await seedMember(pool, {
+        email: "agent-owner@example.com",
+        name: "Agent Owner",
+        organizationId,
+        userId,
+      });
+      await seedAgentThread(pool, {
+        id: threadId,
+        organizationId,
+        title: privateThreadTitle,
+        userId,
+      });
+    });
+
+    const created = await runProductActivityActorsRepositoryEffect(
+      testDatabase.url,
+      ProductActivityActorsRepository.use((repository) =>
+        repository.ensureAgentThreadActor({
+          organizationId,
+          threadId,
+          threadTitle: privateThreadTitle,
+          userId,
+        })
+      )
+    );
+    const syncedActor = await runProductActivityActorsRepositoryEffect(
+      testDatabase.url,
+      ProductActivityActorsRepository.use((repository) =>
+        repository.getById(organizationId, created.actor.id)
+      )
+    );
+
+    expect(created.actor).toStrictEqual({
+      displayDetail: "Agent product action",
+      displayName: "Ceird agent",
+      id: created.actor.id,
+      kind: "agent",
+    });
+    expect(syncedActor).toStrictEqual(created.actor);
+    expect(JSON.stringify({ created, syncedActor })).not.toContain(
+      privateThreadTitle
+    );
+  });
 });
 
 async function createMigratedTestDatabase(context: {
@@ -504,6 +568,37 @@ async function seedMember(
     `insert into member (id, organization_id, user_id, role, created_at)
      values ($1, $2, $3, 'member', now())`,
     [randomUUID(), input.organizationId, input.userId]
+  );
+}
+
+async function seedAgentThread(
+  pool: Pool,
+  input: {
+    readonly id: string;
+    readonly organizationId: string;
+    readonly title: string;
+    readonly userId: string;
+  }
+) {
+  await pool.query(
+    `insert into agent_threads (
+       id,
+       organization_id,
+       user_id,
+       agent_instance_name,
+       title,
+       status,
+       created_at,
+       updated_at
+     )
+     values ($1, $2, $3, $4, $5, 'active', now(), now())`,
+    [
+      input.id,
+      input.organizationId,
+      input.userId,
+      `agent-${input.id}`,
+      input.title,
+    ]
   );
 }
 
