@@ -806,9 +806,9 @@ describe("jobs data plane", () => {
   it("rejects invalid member actor summary rows at the Electric boundary", () => {
     expect(() =>
       toProductMemberActorSummaryElectricRow({
-        updatedAt: "2026-06-17 08:58:07.194174+00",
+        updatedAt: "2026-06-17T08:58:07.194Z",
       })
-    ).toThrow(/id|displayName|organizationId|userId|[Uu]nexpected/);
+    ).toThrow(/actorId|displayName|organizationId|userId|[Uu]nexpected/);
   });
 
   it("derives visible Jobs workspace rows from local joins, filters, search, and sort", () => {
@@ -1013,6 +1013,7 @@ describe("jobs data plane", () => {
           organizationId: scope.organizationId,
           routeHref: "/members/user_taylor",
           routeLabel: "Taylor Member",
+          updatedAt: "2026-06-15T10:45:00.000Z",
           userId: "user_taylor",
         }),
         toProductMemberActorSummaryElectricRow({
@@ -1022,6 +1023,7 @@ describe("jobs data plane", () => {
           organizationId: scope.organizationId,
           routeHref: "/members/user_jordan",
           routeLabel: "Jordan Coordinator",
+          updatedAt: "2026-06-15T10:46:00.000Z",
           userId: "user_jordan",
         }),
       ],
@@ -1121,6 +1123,7 @@ describe("jobs data plane", () => {
           displayDetail: "Team member",
           displayName: "Never Activity Assignee",
           organizationId: scope.organizationId,
+          updatedAt: "2026-06-15T11:05:00.000Z",
           userId: "user_never_activity_assignee",
         }),
         toProductMemberActorSummaryElectricRow({
@@ -1128,6 +1131,7 @@ describe("jobs data plane", () => {
           displayDetail: "Team member",
           displayName: "Never Activity Coordinator",
           organizationId: scope.organizationId,
+          updatedAt: "2026-06-15T11:06:00.000Z",
           userId: "user_never_activity_coordinator",
         }),
       ],
@@ -1681,6 +1685,7 @@ describe("jobs data plane", () => {
         organizationId: scope.organizationId,
         routeHref: "/members/user_taylor",
         routeLabel: "Taylor Member",
+        updatedAt: "2026-06-15T10:45:00.000Z",
         userId,
       })
     ).toMatchObject({

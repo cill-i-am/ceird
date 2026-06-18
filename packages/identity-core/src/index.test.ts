@@ -183,6 +183,33 @@ describe("product-safe actor projection", () => {
         organizationId: "org_123",
         routeHref: "/members/user_123",
         routeLabel: "Ciara",
+        updatedAt: "2026-06-18T10:30:00.000Z",
+        userId: "user_123",
+      })
+    ).toStrictEqual({
+      displayDetail: "Team member",
+      displayName: "Ciara",
+      id: "77777777-7777-4777-8777-777777777777",
+      kind: "member",
+      organizationId: "org_123",
+      route: {
+        href: "/members/user_123",
+        label: "Ciara",
+      },
+      userId: "user_123",
+    });
+  });
+
+  it("decodes full product member actor summary Electric rows with DB-owned updatedAt", () => {
+    expect(
+      decodeProductMemberActorSummaryElectricRow({
+        actorId: "77777777-7777-4777-8777-777777777777",
+        displayDetail: "Team member",
+        displayName: "Ciara",
+        organizationId: "org_123",
+        routeHref: "/members/user_123",
+        routeLabel: "Ciara",
+        updatedAt: "2026-06-18T10:30:00.000Z",
         userId: "user_123",
       })
     ).toStrictEqual({
@@ -202,11 +229,9 @@ describe("product-safe actor projection", () => {
   it("rejects invalid product member actor summary Electric rows", () => {
     expect(() =>
       decodeMemberActorSummaryElectricRow({
-        actorId: "77777777-7777-4777-8777-777777777777",
-        displayName: "Ciara",
-        organizationId: "org_123",
+        updatedAt: "2026-06-18T10:30:00.000Z",
       })
-    ).toThrow(/userId/);
+    ).toThrow(/actorId/);
 
     expect(() =>
       decodeMemberActorSummaryElectricRow({
@@ -214,6 +239,7 @@ describe("product-safe actor projection", () => {
         displayName: "Ciara",
         email: "ciara@example.com",
         organizationId: "org_123",
+        updatedAt: "2026-06-18T10:30:00.000Z",
         userId: "user_123",
       })
     ).toThrow(/[Uu]nexpected/);
@@ -224,6 +250,7 @@ describe("product-safe actor projection", () => {
         displayName: "Ciara",
         organizationId: "org_123",
         routeHref: "/members/user_123",
+        updatedAt: "2026-06-18T10:30:00.000Z",
         userId: "user_123",
       })
     ).toThrow(/route/);

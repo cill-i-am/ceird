@@ -215,6 +215,7 @@ const ProductMemberActorSummaryElectricBaseFields = {
   displayDetail: Schema.optional(NullableProductActorDisplayDetail),
   displayName: ProductActorDisplayName,
   organizationId: OrganizationId,
+  updatedAt: IsoDateTimeString,
   userId: UserId,
 } as const;
 

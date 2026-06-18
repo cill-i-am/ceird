@@ -354,7 +354,9 @@ Auth-derived product projections, such as `product_member_actor_summaries`, are
 still external data once they reach the browser data plane. App feature
 transformers decode those rows through shared `@ceird/identity-core` schemas at
 ingestion rather than repairing missing identity fields or constructing partial
-fallback rows.
+fallback rows. The raw Electric boundary schema matches the shape-stream row,
+including DB-owned columns such as `updatedAt`, and then projects only the
+trusted product member actor summary inward.
 To reduce repeated session and membership checks on hot polling paths, the sync
 Worker keeps a v1 authorization cache in warm isolate memory only. Successful
 domain authorization payloads are cached for
