@@ -230,33 +230,33 @@ to validate the migration path when needed.
 
 High-signal runtime variables:
 
-| Variable                                   | Used by             | Purpose                                                                                              |
-| ------------------------------------------ | ------------------- | ---------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                             | domain              | App database connection string for package-local Node runs.                                          |
-| `API_TEST_DATABASE_URL`                    | domain tests        | Base Postgres URL for domain integration tests.                                                      |
-| `AUTH_TEST_DATABASE_URL`                   | domain auth tests   | Optional auth-specific base Postgres URL for auth integration tests.                                 |
-| `TEST_DATABASE_URL`                        | test helpers        | Shared fallback base Postgres URL for integration tests.                                             |
-| `CEIRD_REQUIRE_TEST_DATABASE`              | domain tests        | Forces database-backed integration tests to fail instead of skip when the database is unavailable.   |
-| `BETTER_AUTH_BASE_URL`                     | domain, app helpers | Absolute Better Auth base URL, usually ending in `/api/auth`.                                        |
-| `BETTER_AUTH_SECRET`                       | domain              | Better Auth signing secret.                                                                          |
-| `AUTH_APP_ORIGIN`                          | domain              | Browser-visible app origin for redirects and auth email links.                                       |
-| `AUTH_EMAIL_FROM`                          | domain, infra       | Sender email address for auth emails.                                                                |
-| `AUTH_EMAIL_FROM_NAME`                     | domain, infra       | Sender display name.                                                                                 |
-| `AUTH_RATE_LIMIT_ENABLED`                  | domain              | Enables or disables Better Auth database-backed rate limits.                                         |
-| `AGENT_ACTION_RUN_STALE_AFTER_SECONDS`     | domain              | Timeout before abandoned Agent action runs can be failed.                                            |
-| `AGENT_INTERNAL_SECRET`                    | domain, agent       | Internal shared secret for domain-owned Agent action calls.                                          |
-| `AGENT_MUTATION_TOOLS_ENABLED`             | agent               | Optional exact `true` opt-in for selected stages; omitted by default.                                |
-| `API_ORIGIN`                               | app                 | Server-side API origin.                                                                              |
-| `VITE_API_ORIGIN`                          | app                 | Browser-exposed API origin.                                                                          |
-| `PLAYWRIGHT_BASE_URL`                      | E2E                 | Existing Alchemy app stage URL for Playwright tests.                                                 |
-| `PLAYWRIGHT_API_URL`                       | E2E                 | Existing Alchemy API stage URL for Playwright API requests.                                          |
-| `PLAYWRIGHT_DATABASE_URL`                  | E2E                 | Direct stage database URL for auth token handoff tests.                                              |
-| `ALCHEMY_STACK_NAME`                       | app, API, agent     | Alchemy-injected runtime stack name for Worker metadata.                                             |
-| `ALCHEMY_STAGE`                            | app, API, agent     | Alchemy-injected runtime stage for health checks and app config.                                     |
-| `GOOGLE_MAPS_API_KEY`                      | domain, infra       | Optional locally for live geocoding; required by deployed domain.                                    |
-| `GOOGLE_MAPS_ROUTES_API_KEY`               | domain, infra       | Optional dedicated Google Routes key for route-aware proximity; falls back to `GOOGLE_MAPS_API_KEY`. |
-| `PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS`       | domain              | Optional local runtime TTL for typed-origin proof tokens; defaults to 15 minutes.                    |
-| `CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS` | infra               | Optional deployed override that maps to the domain Worker runtime TTL.                               |
+| Variable                                   | Used by             | Purpose                                                                                                          |
+| ------------------------------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                             | domain              | App database connection string for package-local Node runs.                                                      |
+| `API_TEST_DATABASE_URL`                    | domain tests        | Base Postgres URL for domain integration tests.                                                                  |
+| `AUTH_TEST_DATABASE_URL`                   | domain auth tests   | Optional auth-specific base Postgres URL for auth integration tests.                                             |
+| `TEST_DATABASE_URL`                        | test helpers        | Shared fallback base Postgres URL for integration tests.                                                         |
+| `CEIRD_REQUIRE_TEST_DATABASE`              | domain tests        | Forces database-backed integration tests to fail instead of skip when the database is unavailable.               |
+| `BETTER_AUTH_BASE_URL`                     | domain, app helpers | Absolute Better Auth base URL, usually ending in `/api/auth`.                                                    |
+| `BETTER_AUTH_SECRET`                       | domain              | Better Auth signing secret.                                                                                      |
+| `AUTH_APP_ORIGIN`                          | domain              | Browser-visible app origin for redirects and auth email links.                                                   |
+| `AUTH_EMAIL_FROM`                          | domain, infra       | Sender email address for auth emails.                                                                            |
+| `AUTH_EMAIL_FROM_NAME`                     | domain, infra       | Sender display name.                                                                                             |
+| `AUTH_RATE_LIMIT_ENABLED`                  | domain              | Enables or disables Better Auth database-backed rate limits.                                                     |
+| `AGENT_ACTION_RUN_STALE_AFTER_SECONDS`     | domain              | Timeout before abandoned Agent action runs can be failed.                                                        |
+| `AGENT_INTERNAL_SECRET`                    | domain, agent       | Internal shared secret for domain-owned Agent action calls.                                                      |
+| `AGENT_MUTATION_TOOLS_ENABLED`             | agent               | Exact `true` in all Alchemy environments; write/destructive execution is browser-approval and Domain-auth gated. |
+| `API_ORIGIN`                               | app                 | Server-side API origin.                                                                                          |
+| `VITE_API_ORIGIN`                          | app                 | Browser-exposed API origin.                                                                                      |
+| `PLAYWRIGHT_BASE_URL`                      | E2E                 | Existing Alchemy app stage URL for Playwright tests.                                                             |
+| `PLAYWRIGHT_API_URL`                       | E2E                 | Existing Alchemy API stage URL for Playwright API requests.                                                      |
+| `PLAYWRIGHT_DATABASE_URL`                  | E2E                 | Direct stage database URL for auth token handoff tests.                                                          |
+| `ALCHEMY_STACK_NAME`                       | app, API, agent     | Alchemy-injected runtime stack name for Worker metadata.                                                         |
+| `ALCHEMY_STAGE`                            | app, API, agent     | Alchemy-injected runtime stage for health checks and app config.                                                 |
+| `GOOGLE_MAPS_API_KEY`                      | domain, infra       | Optional locally for live geocoding; required by deployed domain.                                                |
+| `GOOGLE_MAPS_ROUTES_API_KEY`               | domain, infra       | Optional dedicated Google Routes key for route-aware proximity; falls back to `GOOGLE_MAPS_API_KEY`.             |
+| `PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS`       | domain              | Optional local runtime TTL for typed-origin proof tokens; defaults to 15 minutes.                                |
+| `CEIRD_PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS` | infra               | Optional deployed override that maps to the domain Worker runtime TTL.                                           |
 
 Infrastructure deployment variables are documented in
 [Local Development And Infrastructure](architecture/local-development-and-infra.md).
