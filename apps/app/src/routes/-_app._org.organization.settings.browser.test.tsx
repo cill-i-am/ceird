@@ -1,6 +1,5 @@
 import { decodeOrganizationId } from "@ceird/identity-core";
 import type { OrganizationRole } from "@ceird/identity-core";
-import type { LabelIdType, LabelsResponse } from "@ceird/labels-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
@@ -8,12 +7,7 @@ import { render, screen } from "@testing-library/react";
 const organizationId = decodeOrganizationId("org_123");
 const switchedOrganizationId = decodeOrganizationId("org_next");
 
-const {
-  mockedGetCurrentServerLabels,
-  mockedOrganizationRouteContext,
-  mockedPathname,
-} = vi.hoisted(() => ({
-  mockedGetCurrentServerLabels: vi.fn<() => Promise<LabelsResponse>>(),
+const { mockedOrganizationRouteContext, mockedPathname } = vi.hoisted(() => ({
   mockedOrganizationRouteContext: {
     value: {
       activeOrganization: {
@@ -58,26 +52,7 @@ vi.mock(import("@tanstack/react-router"), async (importOriginal) => {
   };
 });
 
-vi.mock(import("#/features/api/app-api-server"), () => ({
-  getCurrentServerLabels: mockedGetCurrentServerLabels,
-}));
-
-describe("settings route loader", () => {
-  beforeEach(() => {
-    const organizationLabels: LabelsResponse = {
-      labels: [
-        {
-          id: "11111111-1111-4111-8111-111111111111" as LabelIdType,
-          name: "Urgent",
-          createdAt: "2026-01-01T00:00:00.000Z",
-          updatedAt: "2026-01-01T00:00:00.000Z",
-        },
-      ],
-    };
-
-    mockedGetCurrentServerLabels.mockResolvedValue(organizationLabels);
-  });
-
+describe("settings route access", () => {
   afterEach(() => {
     mockedPathname.value = "/organization/settings";
     vi.clearAllMocks();
@@ -89,11 +64,8 @@ describe("settings route loader", () => {
       timeout: 10_000,
     },
     async (role) => {
-      const [{ loadSettingsRoute }, { assertSettingsRouteAccess }] =
-        await Promise.all([
-          import("#/features/organizations/organization-settings-route-loader"),
-          import("./_app._org.organization.settings"),
-        ]);
+      const { assertSettingsRouteAccess } =
+        await import("./_app._org.organization.settings");
       const context = {
         activeOrganizationId: organizationId,
         activeOrganizationSync: {
@@ -104,15 +76,6 @@ describe("settings route loader", () => {
       } as const;
 
       expect(() => assertSettingsRouteAccess(context)).not.toThrow();
-
-      await expect(loadSettingsRoute(context)).resolves.toStrictEqual({
-        organizationLabels: [
-          expect.objectContaining({
-            name: "Urgent",
-          }),
-        ],
-      });
-      expect(mockedGetCurrentServerLabels).toHaveBeenCalledOnce();
     }
   );
 
@@ -143,7 +106,6 @@ describe("settings route loader", () => {
         options: { to: "/" },
       });
       expect(result).toSatisfy(isRedirect);
-      expect(mockedGetCurrentServerLabels).not.toHaveBeenCalled();
     }
   );
 
@@ -174,7 +136,6 @@ describe("settings route loader", () => {
         options: { to: "/" },
       });
       expect(result).toSatisfy(isRedirect);
-      expect(mockedGetCurrentServerLabels).not.toHaveBeenCalled();
     }
   );
 
@@ -197,7 +158,6 @@ describe("settings route loader", () => {
           currentOrganizationRole: role,
         })
       ).not.toThrow();
-      expect(mockedGetCurrentServerLabels).not.toHaveBeenCalled();
     }
   );
 
@@ -207,11 +167,8 @@ describe("settings route loader", () => {
       timeout: 10_000,
     },
     async () => {
-      const [{ loadSettingsRoute }, { assertSettingsRouteAccess }] =
-        await Promise.all([
-          import("#/features/organizations/organization-settings-route-loader"),
-          import("./_app._org.organization.settings"),
-        ]);
+      const { assertSettingsRouteAccess } =
+        await import("./_app._org.organization.settings");
       const context = {
         activeOrganizationId: organizationId,
         activeOrganizationSync: {
@@ -222,10 +179,6 @@ describe("settings route loader", () => {
       } as const;
 
       expect(() => assertSettingsRouteAccess(context)).not.toThrow();
-      expect(loadSettingsRoute(context)).toStrictEqual({
-        organizationLabels: [],
-      });
-      expect(mockedGetCurrentServerLabels).not.toHaveBeenCalled();
     }
   );
 });
@@ -237,12 +190,7 @@ describe("settings route component", () => {
   });
 
   it("renders the existing organization settings page on the settings index route", async () => {
-    const { Route, SettingsRoute } =
-      await import("./_app._org.organization.settings");
-
-    vi.spyOn(Route, "useLoaderData").mockReturnValue({
-      organizationLabels: [],
-    });
+    const { SettingsRoute } = await import("./_app._org.organization.settings");
 
     render(<SettingsRoute />);
 
@@ -255,13 +203,9 @@ describe("settings route component", () => {
   });
 
   it("mounts the nested labels settings route through the parent outlet", async () => {
-    const { Route, SettingsRoute } =
-      await import("./_app._org.organization.settings");
+    const { SettingsRoute } = await import("./_app._org.organization.settings");
 
     mockedPathname.value = "/organization/settings/labels";
-    vi.spyOn(Route, "useLoaderData").mockReturnValue({
-      organizationLabels: [],
-    });
 
     render(<SettingsRoute />);
 

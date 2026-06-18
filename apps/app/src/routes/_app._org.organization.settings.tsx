@@ -9,7 +9,6 @@ import {
 import { assertOrganizationAdministrationRouteContext } from "#/features/organizations/organization-route-access";
 import type { ActiveOrganizationSync } from "#/features/organizations/organization-route-access";
 import { OrganizationSettingsPage } from "#/features/organizations/organization-settings-page";
-import { loadSettingsRoute } from "#/features/organizations/organization-settings-route-loader";
 
 export const Route = createFileRoute("/_app/_org/organization/settings")({
   staticData: {
@@ -18,11 +17,8 @@ export const Route = createFileRoute("/_app/_org/organization/settings")({
       to: "/organization/settings",
     },
   },
-  // Keep the loader out of the React component chunk so dev reloads never wrap
-  // the lazy loader module in React Refresh component state.
-  codeSplitGroupings: [["loader"], ["component"]],
+  codeSplitGroupings: [["component"]],
   beforeLoad: ({ context }) => assertSettingsRouteAccess(context),
-  loader: ({ context }) => loadSettingsRoute(context),
   component: SettingsRoute,
 });
 
@@ -42,7 +38,6 @@ export function assertSettingsRouteAccess(context: SettingsRouteContext) {
 
 export function SettingsRoute() {
   const { activeOrganization } = useRouteContext({ from: "/_app/_org" });
-  const { organizationLabels } = Route.useLoaderData();
   const isSettingsIndexRoute = useRouterState({
     select: (state) => state.location.pathname === "/organization/settings",
   });
@@ -55,10 +50,5 @@ export function SettingsRoute() {
     throw new Error("Organization settings require an active organization.");
   }
 
-  return (
-    <OrganizationSettingsPage
-      organizationLabels={organizationLabels}
-      organization={activeOrganization}
-    />
-  );
+  return <OrganizationSettingsPage organization={activeOrganization} />;
 }

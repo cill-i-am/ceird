@@ -255,6 +255,7 @@ describe("labels data plane", () => {
         },
       } as unknown as Parameters<typeof onInsert>[0])
     ).resolves.toStrictEqual({
+      responses: [makeLabelWriteResponse(label, 101)],
       timeout: 10_000,
       txid: 101,
     });
@@ -268,6 +269,7 @@ describe("labels data plane", () => {
         },
       } as unknown as Parameters<typeof onUpdate>[0])
     ).resolves.toStrictEqual({
+      responses: [makeLabelWriteResponse(updatedLabel, 102)],
       timeout: 10_000,
       txid: 102,
     });
@@ -283,6 +285,7 @@ describe("labels data plane", () => {
         },
       } as unknown as Parameters<typeof onDelete>[0])
     ).resolves.toStrictEqual({
+      responses: [makeLabelWriteResponse(label, 103)],
       timeout: 10_000,
       txid: 103,
     });

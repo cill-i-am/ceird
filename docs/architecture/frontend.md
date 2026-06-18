@@ -31,7 +31,7 @@ Current visible routes:
 | `/jobs-workspace`                  | `_app._org.jobs-workspace.tsx`               | Compatibility redirect to `/jobs`.                                           |
 | `/members`                         | `_app._org.members.tsx`                      | Organization members and invitations.                                        |
 | `/organization/security`           | `_app._org.organization.security.tsx`        | Owner/admin security activity review.                                        |
-| `/organization/settings`           | `_app._org.organization.settings.tsx`        | Organization settings and labels.                                            |
+| `/organization/settings`           | `_app._org.organization.settings.tsx`        | General organization settings with navigation to dedicated Labels settings.  |
 | `/organization/settings/labels`    | `_app._org.organization.settings.labels.tsx` | Dedicated Labels settings shell for the Electric-native replacement surface. |
 | `/sites`                           | `_app._org.sites.tsx`                        | Electric-native Sites list/detail workspace for internal members.            |
 | `/sites-workspace`                 | `_app._org.sites-workspace.tsx`              | Compatibility redirect to `/sites`.                                          |
@@ -492,9 +492,9 @@ an explicit SSR strategy. The current migrated slices are:
   locally for search, exposes connecting/ready/empty/unavailable/permission
   states, and runs create, rename, and archive mutations through the writable
   Settings Labels collection so the domain/API label commands stay
-  authoritative while the UI waits for Electric txid confirmation. The old
-  API-backed labels panel in
-  organization settings remains during rollout.
+  authoritative while the UI waits for Electric txid confirmation. General
+  organization settings links to this route instead of loading or rendering the
+  old API-backed labels panel.
 - `features/jobs-workspace/jobs-workspace-live-list.ts`, where the primary
   Jobs route subscribes to the Jobs read-model collections,
   derives visible live rows from jobs, label assignments, labels, site
