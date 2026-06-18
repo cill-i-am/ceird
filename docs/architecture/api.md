@@ -919,6 +919,21 @@ agent action-run ledger updates emit `agent.product_effect` rows keyed by the
 action run source so replays update the same feed item instead of adding noise.
 Browser clients read this domain-owned model; they do not infer activity meaning
 from local mutations.
+
+The shipped v1 global Activity taxonomy is:
+
+| Family                | Event types                                                                                                                                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent product effects | `agent.product_effect`                                                                                                                                                                                                                                              |
+| Comments              | `comment.created`, `site.comment_created`                                                                                                                                                                                                                           |
+| Jobs                  | `job.assignee_changed`, `job.blocked_reason_changed`, `job.contact_changed`, `job.coordinator_changed`, `job.created`, `job.label_added`, `job.label_removed`, `job.priority_changed`, `job.reopened`, `job.site_changed`, `job.status_changed`, `job.visit_logged` |
+| Labels                | `label.archived`, `label.created`, `label.updated`                                                                                                                                                                                                                  |
+| Sites                 | `site.created`, `site.label_added`, `site.label_removed`, `site.updated`                                                                                                                                                                                            |
+
+Auth-adjacent membership, invitation, session, and organization security/audit
+events are deferred from this product-facing v1 feed. They need their own
+domain authorization and actor projection decisions before becoming Electric
+activity rows.
 Route-aware proximity adds indexes for the hot ranking paths: active jobs can
 reuse the existing `work_items_organization_active_updated_at_idx`, site active
 job summaries use `work_items_organization_site_active_priority_idx`, and mapped
