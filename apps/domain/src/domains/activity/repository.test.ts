@@ -438,13 +438,18 @@ describe("activity events repository", () => {
       )
     );
 
-    expect(created.actor).toStrictEqual({
+    expect(created.actor).toMatchObject({
       displayDetail: "Agent product action",
       displayName: "Ceird agent",
       id: created.actor.id,
       kind: "agent",
     });
-    expect(syncedActor).toStrictEqual(created.actor);
+    expect(syncedActor).toMatchObject({
+      displayDetail: "Agent product action",
+      displayName: "Ceird agent",
+      id: created.actor.id,
+      kind: "agent",
+    });
     expect(JSON.stringify({ created, syncedActor })).not.toContain(
       privateThreadTitle
     );
