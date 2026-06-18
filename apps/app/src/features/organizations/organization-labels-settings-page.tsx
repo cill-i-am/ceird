@@ -10,6 +10,7 @@ import type {
   Label,
   LabelIdType,
   LabelWriteResponse,
+  UpdateLabelInput,
 } from "@ceird/labels-core";
 import {
   LabelId,
@@ -62,6 +63,7 @@ import { searchSettingsLabels } from "#/features/labels/labels-search";
 import {
   archiveBrowserLabelWithConfirmation,
   createBrowserLabelWithConfirmation,
+  updateBrowserLabelWithConfirmation,
 } from "#/features/labels/labels-state";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
@@ -117,6 +119,12 @@ export interface OrganizationLabelsSettingsPageProps {
   readonly organization: OrganizationSummary;
   readonly organizationRole?: OrganizationRole | undefined;
   readonly state?: LabelsSettingsShellState | undefined;
+  readonly updateLabelWithConfirmation?:
+    | ((
+        labelId: LabelIdType,
+        input: UpdateLabelInput
+      ) => Promise<LabelWriteResponse>)
+    | undefined;
 }
 
 interface LabelMutationTransaction {
@@ -163,6 +171,7 @@ export function OrganizationLabelsSettingsPage({
   organization,
   organizationRole,
   state,
+  updateLabelWithConfirmation = updateDefaultLabelWithConfirmation,
 }: OrganizationLabelsSettingsPageProps) {
   const canManageLabels =
     organizationRole !== undefined &&
@@ -224,6 +233,7 @@ export function OrganizationLabelsSettingsPage({
     labels,
     mutationJournal,
     now,
+    updateLabelWithConfirmation,
   });
 
   useLabelsSettingsHotkeys({
@@ -421,6 +431,7 @@ function useLabelsMutationController({
   labels,
   mutationJournal,
   now,
+  updateLabelWithConfirmation,
 }: {
   readonly archiveLabelWithConfirmation: (
     labelId: LabelIdType
@@ -434,6 +445,10 @@ function useLabelsMutationController({
   readonly labels: readonly Label[];
   readonly mutationJournal?: DataPlaneMutationJournal | undefined;
   readonly now: () => Date;
+  readonly updateLabelWithConfirmation: (
+    labelId: LabelIdType,
+    input: UpdateLabelInput
+  ) => Promise<LabelWriteResponse>;
 }) {
   const [createName, setCreateName] = React.useState("");
   const [editingLabelId, setEditingLabelId] = React.useState<
@@ -586,16 +601,34 @@ function useLabelsMutationController({
     setMutationStatus(null);
 
     try {
-      await persistLabelCollectionMutation({
-        commandName: "labels.update",
-        input: { labelId: label.id, name: decodedName.name },
-        journal: mutationJournal,
-        operation: () =>
-          collection.update?.(label.id, (draft) => {
-            draft.name = decodedName.name;
-            draft.updatedAt = now().toISOString();
-          }),
-      });
+      const awaitTxId = collection.utils?.awaitTxId;
+      await (awaitTxId === undefined
+        ? persistLabelCollectionMutation({
+            commandName: "labels.update",
+            input: { labelId: label.id, name: decodedName.name },
+            journal: mutationJournal,
+            operation: () =>
+              collection.update?.(label.id, (draft) => {
+                draft.name = decodedName.name;
+                draft.updatedAt = now().toISOString();
+              }),
+          })
+        : persistLabelCommandMutation({
+            commandName: "labels.update",
+            input: { labelId: label.id, name: decodedName.name },
+            journal: mutationJournal,
+            operation: async () => {
+              const response = await updateLabelWithConfirmation(label.id, {
+                name: decodedName.name,
+              });
+              await awaitTxId(
+                response.mutation.txid,
+                LABEL_ELECTRIC_MUTATION_CONFIRMATION_TIMEOUT_MS
+              );
+              collection.utils?.writeUpsert?.(response.label);
+              return response;
+            },
+          }));
       cancelEditing();
       setMutationStatus({
         kind: "success",
@@ -1532,6 +1565,13 @@ function reconcileCreatedLabel({
 
 function createDefaultLabelWithConfirmation(input: CreateLabelInput) {
   return Effect.runPromise(createBrowserLabelWithConfirmation(input));
+}
+
+function updateDefaultLabelWithConfirmation(
+  labelId: LabelIdType,
+  input: UpdateLabelInput
+) {
+  return Effect.runPromise(updateBrowserLabelWithConfirmation(labelId, input));
 }
 
 function archiveDefaultLabelWithConfirmation(labelId: LabelIdType) {

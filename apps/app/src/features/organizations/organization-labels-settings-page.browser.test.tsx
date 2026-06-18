@@ -3,6 +3,7 @@ import type {
   CreateLabelInput,
   Label,
   LabelWriteResponse,
+  UpdateLabelInput,
 } from "@ceird/labels-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -255,9 +256,18 @@ describe("organization labels settings page", () => {
       id: "55555555-5555-4555-8555-555555555555",
       name: "Fire Safety",
     });
+    const renamedLabel = { ...serverLabel, name: "Emergency" };
     const createLabelWithConfirmation = vi.fn<
       (input: CreateLabelInput) => Promise<LabelWriteResponse>
     >((_input) => Promise.resolve(makeLabelWriteResponse(serverLabel, 456)));
+    const updateLabelWithConfirmation = vi.fn<
+      (
+        labelId: Label["id"],
+        input: UpdateLabelInput
+      ) => Promise<LabelWriteResponse>
+    >((_labelId, _input) =>
+      Promise.resolve(makeLabelWriteResponse(renamedLabel, 789))
+    );
     const awaitTxId = vi.fn<
       (txid: number, timeout?: number) => Promise<boolean>
     >(() => Promise.resolve(true));
@@ -269,6 +279,7 @@ describe("organization labels settings page", () => {
         status: "ready",
       }),
       createLabelWithConfirmation,
+      updateLabelWithConfirmation,
     });
 
     await user.type(
@@ -304,6 +315,10 @@ describe("organization labels settings page", () => {
     await expect(
       screen.findByText("Label renamed and confirmed by realtime sync.")
     ).resolves.toBeVisible();
+    expect(updateLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id, {
+      name: "Emergency",
+    });
+    expect(awaitTxId).toHaveBeenCalledWith(789, 10_000);
     await waitFor(() => {
       expect(screen.getByText("Emergency")).toBeVisible();
     });
@@ -323,6 +338,14 @@ describe("organization labels settings page", () => {
     const archiveLabelWithConfirmation = vi.fn<
       (labelId: Label["id"]) => Promise<LabelWriteResponse>
     >((_labelId) => Promise.resolve(makeLabelWriteResponse(renamedLabel, 789)));
+    const updateLabelWithConfirmation = vi.fn<
+      (
+        labelId: Label["id"],
+        input: UpdateLabelInput
+      ) => Promise<LabelWriteResponse>
+    >((_labelId, _input) =>
+      Promise.resolve(makeLabelWriteResponse(renamedLabel, 678))
+    );
     const awaitTxId = vi.fn<
       (txid: number, timeout?: number) => Promise<boolean>
     >(() => Promise.resolve(true));
@@ -335,6 +358,7 @@ describe("organization labels settings page", () => {
         status: "ready",
       }),
       createLabelWithConfirmation,
+      updateLabelWithConfirmation,
     });
 
     await user.type(
@@ -717,6 +741,7 @@ function renderLabelsPage({
   createTemporaryLabelId,
   mutationJournal,
   organizationRole = "owner",
+  updateLabelWithConfirmation,
 }: {
   readonly archiveLabelWithConfirmation?:
     | ((labelId: Label["id"]) => Promise<LabelWriteResponse>)
@@ -730,6 +755,12 @@ function renderLabelsPage({
     | ReturnType<typeof createDataPlaneMutationJournal>
     | undefined;
   readonly organizationRole?: "admin" | "member" | "owner";
+  readonly updateLabelWithConfirmation?:
+    | ((
+        labelId: Label["id"],
+        input: UpdateLabelInput
+      ) => Promise<LabelWriteResponse>)
+    | undefined;
 }) {
   return render(
     <LabelsPageHarness
@@ -739,6 +770,7 @@ function renderLabelsPage({
       createTemporaryLabelId={createTemporaryLabelId}
       mutationJournal={mutationJournal}
       organizationRole={organizationRole}
+      updateLabelWithConfirmation={updateLabelWithConfirmation}
     />
   );
 }
@@ -762,6 +794,7 @@ function LabelsPageHarness({
   createTemporaryLabelId,
   mutationJournal,
   organizationRole = "owner",
+  updateLabelWithConfirmation,
 }: {
   readonly archiveLabelWithConfirmation?:
     | ((labelId: Label["id"]) => Promise<LabelWriteResponse>)
@@ -775,6 +808,12 @@ function LabelsPageHarness({
     | ReturnType<typeof createDataPlaneMutationJournal>
     | undefined;
   readonly organizationRole?: "admin" | "member" | "owner";
+  readonly updateLabelWithConfirmation?:
+    | ((
+        labelId: Label["id"],
+        input: UpdateLabelInput
+      ) => Promise<LabelWriteResponse>)
+    | undefined;
 }) {
   return (
     <HotkeysProvider>
@@ -787,6 +826,7 @@ function LabelsPageHarness({
           mutationJournal={mutationJournal}
           organization={TEST_ORGANIZATION}
           organizationRole={organizationRole}
+          updateLabelWithConfirmation={updateLabelWithConfirmation}
         />
       </TooltipProvider>
     </HotkeysProvider>
