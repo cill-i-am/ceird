@@ -2,11 +2,14 @@ import type {
   ActivityEventIdType,
   ProductActivityEvent,
 } from "@ceird/activity-core";
+import { ProductActivityEventSchema } from "@ceird/activity-core";
 import type {
   OrganizationId,
   ProductActor,
   ProductActorId,
 } from "@ceird/identity-core";
+import { ProductActorSchema } from "@ceird/identity-core";
+import { Schema } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
@@ -21,6 +24,8 @@ import {
   getOrCreateProductActivityActorsCollectionState,
   productActivityActorsCollectionId,
   productActivityActorsCollectionKey,
+  toProductActivityActorElectricRow,
+  toProductActivityEventElectricRow,
 } from "./activity-data-plane";
 
 describe("activity data plane", () => {
@@ -104,6 +109,68 @@ describe("activity data plane", () => {
         subscriptionName: "product-activity-actors",
       },
       shapeName: "product-activity-actors",
+    });
+  });
+
+  it("normalizes Postgres Electric rows for global activity events", () => {
+    const transformed = toProductActivityEventElectricRow({
+      actor_id: "019ed88e-a47d-77c9-8195-504c126e8402",
+      created_at: "2026-06-18 02:28:07.428+00",
+      display: JSON.stringify({
+        detail: 'Label "TSK229 Label 34afa68c" was created.',
+        route: {
+          href: "/organization/settings/labels",
+          label: "TSK229 Label 34afa68c",
+        },
+        summary: "Label created",
+      }),
+      event_type: "label.created",
+      id: "019ed88e-a484-73ca-8715-1823df6cdf83",
+      organization_id: "AUPMmj65MuRnk94UJExUIemBLhTq6HRY",
+      retained_until: "2026-07-18 02:28:07.428+00",
+      source_id: "label.created:019ed88e-a46d-7049-887b-dc7b163797be",
+      source_type: "label",
+      status: "synced",
+      target_id: "019ed88e-a46d-7049-887b-dc7b163797be",
+      target_type: "label",
+    });
+
+    expect(
+      Schema.decodeUnknownSync(ProductActivityEventSchema)(transformed)
+    ).toMatchObject({
+      createdAt: "2026-06-18T02:28:07.428Z",
+      display: {
+        summary: "Label created",
+      },
+      eventType: "label.created",
+      retainedUntil: "2026-07-18T02:28:07.428Z",
+    });
+  });
+
+  it("normalizes product-safe actor Electric rows", () => {
+    const transformed = toProductActivityActorElectricRow({
+      created_at: "2026-06-18 02:28:07.442397+00",
+      display_detail: "Team member",
+      display_name: "TSK229 Owner 34afa68c",
+      id: "019ed88e-a47d-77c9-8195-504c126e8402",
+      kind: "member",
+      organization_id: "AUPMmj65MuRnk94UJExUIemBLhTq6HRY",
+      route_href: "/members/owner",
+      route_label: "Owner",
+      updated_at: "2026-06-18 02:28:07.442397+00",
+    });
+
+    expect(
+      Schema.decodeUnknownSync(ProductActorSchema)(transformed)
+    ).toStrictEqual({
+      displayDetail: "Team member",
+      displayName: "TSK229 Owner 34afa68c",
+      id: "019ed88e-a47d-77c9-8195-504c126e8402",
+      kind: "member",
+      route: {
+        href: "/members/owner",
+        label: "Owner",
+      },
     });
   });
 

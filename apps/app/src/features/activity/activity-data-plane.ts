@@ -137,6 +137,9 @@ export function createActivityEventsElectricContract(
     id: `${activityEventsCollectionId(scope)}:electric`,
     schema: ProductActivityEventElectricStandardSchema,
     shapeName: "activity-events",
+    shapeOptions: {
+      transformer: toProductActivityEventElectricRow,
+    },
   });
 }
 
@@ -210,6 +213,9 @@ export function createProductActivityActorsElectricContract(
     id: `${productActivityActorsCollectionId(scope)}:electric`,
     schema: ProductActorElectricStandardSchema,
     shapeName: "product-activity-actors",
+    shapeOptions: {
+      transformer: toProductActivityActorElectricRow,
+    },
   });
 }
 
@@ -226,6 +232,95 @@ function createProductActivityActorsCollection(
       ProductActor["id"]
     >
   >;
+}
+
+export function toProductActivityEventElectricRow(
+  row: Record<string, unknown>
+): ActivityEventsElectricRow {
+  return {
+    actorId: stringElectricValue(row, "actorId"),
+    createdAt: normalizeActivityElectricDateTime(
+      electricValue(row, "createdAt")
+    ),
+    display: parseActivityDisplay(electricValue(row, "display")),
+    eventType: stringElectricValue(row, "eventType"),
+    id: stringElectricValue(row, "id"),
+    organizationId: stringElectricValue(row, "organizationId"),
+    retainedUntil: normalizeActivityElectricDateTime(
+      electricValue(row, "retainedUntil")
+    ),
+    sourceId: stringElectricValue(row, "sourceId"),
+    sourceType: stringElectricValue(row, "sourceType"),
+    status: stringElectricValue(row, "status"),
+    targetId: stringElectricValue(row, "targetId"),
+    targetType: stringElectricValue(row, "targetType"),
+  };
+}
+
+export function toProductActivityActorElectricRow(
+  row: Record<string, unknown>
+): ActivityEventsElectricRow {
+  const actor: ActivityEventsElectricRow = {
+    displayDetail: stringElectricValue(row, "displayDetail"),
+    displayName: stringElectricValue(row, "displayName"),
+    id: stringElectricValue(row, "id"),
+    kind: stringElectricValue(row, "kind"),
+  };
+  const routeHref = electricValue(row, "routeHref");
+  const routeLabel = electricValue(row, "routeLabel");
+
+  if (routeHref !== null && routeHref !== undefined) {
+    actor.route = {
+      href: String(routeHref),
+      label:
+        routeLabel === null || routeLabel === undefined
+          ? String(routeHref)
+          : String(routeLabel),
+    };
+  }
+
+  return actor;
+}
+
+function electricValue(row: Record<string, unknown>, key: string) {
+  if (key in row) {
+    return row[key];
+  }
+
+  return row[toSnakeCase(key)];
+}
+
+function stringElectricValue(row: Record<string, unknown>, key: string) {
+  return String(electricValue(row, key));
+}
+
+function toSnakeCase(key: string) {
+  return key.replaceAll(/[A-Z]/g, (match) => `_${match.toLowerCase()}`);
+}
+
+function parseActivityDisplay(value: unknown) {
+  if (typeof value !== "string") {
+    return value as ActivityEventsElectricRowValue;
+  }
+
+  try {
+    return JSON.parse(value) as ActivityEventsElectricRowValue;
+  } catch {
+    return value;
+  }
+}
+
+function normalizeActivityElectricDateTime(value: unknown) {
+  const raw = String(value);
+
+  if (raw.includes("T")) {
+    return raw;
+  }
+
+  const normalized = raw.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
+  const date = new Date(normalized);
+
+  return Number.isNaN(date.getTime()) ? raw : date.toISOString();
 }
 
 export function deriveActivityFeedRows({
