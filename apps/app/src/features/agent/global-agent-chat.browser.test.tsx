@@ -512,6 +512,7 @@ describe("global agent chat", () => {
     );
     const useAgentChatOptions = mockedUseAgentChat.mock.calls.at(-1)?.[0];
     expect(useAgentChatOptions?.getInitialMessages).toBeUndefined();
+    expect(useAgentChatOptions?.autoContinueAfterToolResult).toBeFalsy();
   });
 
   it("fills the composer from first-open prompt starters without sending", async () => {
@@ -538,9 +539,11 @@ describe("global agent chat", () => {
     await expect(
       within(drawer).findByText(/read workspace context now/i)
     ).resolves.toBeVisible();
-    expect(within(drawer).getByText(/approval-gated metadata/i)).toBeVisible();
+    expect(
+      within(drawer).getByText(/available after explicit approval/i)
+    ).toBeVisible();
     expect(within(drawer).getByText("Writes are gated")).toBeVisible();
-    expect(within(drawer).getByText("Metadata only")).toBeVisible();
+    expect(within(drawer).getByText("Approval required")).toBeVisible();
     expect(within(drawer).queryByText(/confirmed/i)).not.toBeInTheDocument();
 
     await user.click(
@@ -1385,6 +1388,7 @@ describe("global agent chat", () => {
               approval: { id: "approval-delete-label" },
               input: { labelId: "label_123" },
               state: "approval-requested",
+              toolCallId: "tool-delete-label-call",
               toolName: "deleteLabel",
               type: "tool-deleteLabel",
             },
@@ -1427,12 +1431,28 @@ describe("global agent chat", () => {
     );
 
     await user.click(within(drawer).getByRole("button", { name: /approve/i }));
+    expect(
+      JSON.parse(mockedAgentSend.mock.calls.at(-1)?.[0] ?? "{}")
+    ).toStrictEqual({
+      approved: true,
+      autoContinue: true,
+      toolCallId: "tool-delete-label-call",
+      type: "cf_agent_tool_approval",
+    });
     expect(mockedAddToolApprovalResponse).toHaveBeenCalledWith({
       approved: true,
       id: "approval-delete-label",
     });
 
     await user.click(within(drawer).getByRole("button", { name: /reject/i }));
+    expect(
+      JSON.parse(mockedAgentSend.mock.calls.at(-1)?.[0] ?? "{}")
+    ).toStrictEqual({
+      approved: false,
+      autoContinue: true,
+      toolCallId: "tool-delete-label-call",
+      type: "cf_agent_tool_approval",
+    });
     expect(mockedAddToolApprovalResponse).toHaveBeenCalledWith({
       approved: false,
       id: "approval-delete-label",
@@ -1464,6 +1484,7 @@ describe("global agent chat", () => {
                 requestId: "request_123",
               },
               state: "approval-requested",
+              toolCallId: "tool-update-work-item-call",
               toolName: "updateWorkItem",
               type: "tool-updateWorkItem",
             },
@@ -1532,6 +1553,7 @@ describe("global agent chat", () => {
                 ids: ["one", "two"],
               },
               state: "approval-requested",
+              toolCallId: "tool-unknown-call",
               toolName: "unknownTool",
               type: "tool-unknownTool",
             },
