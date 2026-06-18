@@ -12,9 +12,16 @@ const defaultScenarioDirectory = "evals/skills/scenarios";
 const defaultForwardPackDirectory = "evals/skills/forward/packs";
 
 const requiredWorkflowSkills = [
+  "ask-ceird",
+  "grill-with-docs",
+  "grilling",
+  "domain-modeling",
+  "codebase-design",
   "to-prd",
   "to-issues",
   "triage",
+  "prototype",
+  "handoff",
   "orchestrator",
   "worker",
   "subagent-execution",
@@ -22,19 +29,17 @@ const requiredWorkflowSkills = [
   "ci-watch",
   "systematic-debugging",
   "reconcile-project",
+  "resolving-merge-conflicts",
+  "writing-great-skills",
   "linear-setup",
   "backend-review",
   "frontend-review",
   "auth-context-review",
-];
-
-const upstreamLockedSkills = [
-  "grill-with-docs",
   "improve-codebase-architecture",
   "tdd",
-  "zoom-out",
-  "improve",
 ];
+
+const upstreamLockedSkills = ["improve"];
 
 const requiredAgentDocs = [
   "docs/agents/README.md",
