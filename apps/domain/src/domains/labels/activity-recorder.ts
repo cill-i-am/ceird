@@ -3,13 +3,14 @@ import type {
   ProductActivityEventDisplayPayload,
 } from "@ceird/activity-core";
 import type { Label } from "@ceird/labels-core";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Option } from "effect";
 
 import {
   ActivityEventsRepository,
   ProductActivityActorsRepository,
 } from "../activity/repository.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
+import { RouteInvocationContext } from "../proximity/service.js";
 
 const ACTIVITY_DETAIL_MAX_LENGTH = 280;
 const ACTIVITY_ROUTE_LABEL_MAX_LENGTH = 80;
@@ -99,19 +100,35 @@ function recordLabelActivity({
   >;
 }) {
   return Effect.gen(function* () {
-    const productActor =
-      yield* productActivityActorsRepository.ensureMemberActor({
-        organizationId: actor.organizationId,
-        userId: actor.userId,
-      });
+    const routeInvocation = yield* Effect.serviceOption(RouteInvocationContext);
+    const agentContext = Option.getOrUndefined(routeInvocation);
+    const productActor = agentContext?.agentThreadId
+      ? yield* productActivityActorsRepository.ensureAgentActor({
+          agentThreadId: agentContext.agentThreadId,
+          organizationId: actor.organizationId,
+          userId: actor.userId,
+        })
+      : yield* productActivityActorsRepository.ensureMemberActor({
+          organizationId: actor.organizationId,
+          userId: actor.userId,
+        });
+    const source = agentContext?.agentActionRunId
+      ? {
+          sourceId: agentContext.agentActionRunId,
+          sourceType: "agent_action_run" as const,
+        }
+      : {
+          sourceId: buildLabelActivitySourceId(eventType, label),
+          sourceType: "label" as const,
+        };
 
     yield* activityEventsRepository.recordEvent({
       actorId: productActor.actor.id,
       display: buildLabelActivityDisplay(eventType, label),
       eventType,
       organizationId: actor.organizationId,
-      sourceId: buildLabelActivitySourceId(eventType, label),
-      sourceType: "label",
+      sourceId: source.sourceId,
+      sourceType: source.sourceType,
       status: "synced",
       targetId: label.id,
       targetType: "label",

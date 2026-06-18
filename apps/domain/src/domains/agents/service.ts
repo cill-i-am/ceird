@@ -457,6 +457,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
             if (isReExecutableReadReplay(begin.run)) {
               const replayed = yield* actions
                 .execute(threadActor.actor, input.name, input.input, {
+                  actionRunId: begin.run.id,
                   threadId: input.threadId,
                 })
                 .pipe(Effect.result);
@@ -538,6 +539,7 @@ export class AgentThreadsService extends Context.Service<AgentThreadsService>()(
 
           const result = yield* actions
             .execute(threadActor.actor, input.name, input.input, {
+              actionRunId: begin.run.id,
               threadId: input.threadId,
             })
             .pipe(Effect.result);

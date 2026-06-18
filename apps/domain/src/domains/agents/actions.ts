@@ -4,7 +4,11 @@ import {
   AgentActionNameSchema,
   AgentStorageError,
 } from "@ceird/agents-core";
-import type { AgentActionName, AgentThreadId } from "@ceird/agents-core";
+import type {
+  AgentActionName,
+  AgentActionRunId,
+  AgentThreadId,
+} from "@ceird/agents-core";
 import {
   BLOCKED_REASON_REQUIRED_ERROR_TAG,
   CONTACT_NOT_FOUND_ERROR_TAG,
@@ -23,8 +27,10 @@ import {
 } from "@ceird/jobs-core";
 import type { WorkItemIdType } from "@ceird/jobs-core";
 import {
+  LABEL_ACCESS_DENIED_ERROR_TAG,
   LABEL_NAME_CONFLICT_ERROR_TAG,
   LABEL_NOT_FOUND_ERROR_TAG,
+  LABEL_STORAGE_ERROR_TAG,
 } from "@ceird/labels-core";
 import {
   PROXIMITY_ACCESS_DENIED_ERROR_TAG,
@@ -63,6 +69,7 @@ import {
 import { JobsService } from "../jobs/service.js";
 import { LabelActivityRecorder } from "../labels/activity-recorder.js";
 import { LabelsRepository } from "../labels/repositories.js";
+import { LabelsService } from "../labels/service.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
@@ -83,12 +90,14 @@ import { getDomainAgentActionHandler } from "./action-registry.js";
 const ACCESS_DENIED_ERROR_TAGS = [
   ORGANIZATION_AUTHORIZATION_DENIED_ERROR_TAG,
   JOB_ACCESS_DENIED_ERROR_TAG,
+  LABEL_ACCESS_DENIED_ERROR_TAG,
   PROXIMITY_ACCESS_DENIED_ERROR_TAG,
   SITE_ACCESS_DENIED_ERROR_TAG,
 ] as const;
 const STORAGE_ERROR_TAGS = [
   "EffectDrizzleQueryError",
   JOB_STORAGE_ERROR_TAG,
+  LABEL_STORAGE_ERROR_TAG,
   SITE_STORAGE_ERROR_TAG,
   SITE_LOCATION_PROVIDER_ERROR_TAG,
 ] as const;
@@ -272,13 +281,27 @@ interface JobsServiceLayerDependencies {
   >;
 }
 
+interface LabelsServiceLayerDependencies {
+  readonly domainDrizzle: DomainDrizzleService;
+  readonly labelActivityRecorder: Context.Service.Shape<
+    typeof LabelActivityRecorder
+  >;
+  readonly labelsRepository: Context.Service.Shape<typeof LabelsRepository>;
+  readonly organizationAuthorization: Context.Service.Shape<
+    typeof OrganizationAuthorization
+  >;
+  readonly sqlClient: SqlClient.SqlClient;
+}
+
 interface AgentActionExecutionContext {
+  readonly actionRunId?: AgentActionRunId;
   readonly threadId?: AgentThreadId;
 }
 
 type AgentActionRequirements =
   | LabelActivityRecorder
   | LabelsRepository
+  | LabelsService
   | OrganizationAuthorization
   | SitesRepository
   | JobsService
@@ -331,7 +354,10 @@ function provideRouteInvocationContext(
       RouteInvocationContext.of(
         context?.threadId === undefined
           ? {}
-          : { agentThreadId: context.threadId }
+          : {
+              agentActionRunId: context.actionRunId,
+              agentThreadId: context.threadId,
+            }
       )
     )
   );
@@ -346,6 +372,12 @@ function provideDerivedActionService(
   if (name.startsWith("ceird.jobs.")) {
     return action.pipe(
       Effect.provide(makeJobsServiceLayer(actor, dependencies))
+    ) as Effect.Effect<unknown, unknown, DirectAgentActionRequirements>;
+  }
+
+  if (name.startsWith("ceird.labels.") && name !== "ceird.labels.list") {
+    return action.pipe(
+      Effect.provide(makeLabelsServiceLayer(actor, dependencies))
     ) as Effect.Effect<unknown, unknown, DirectAgentActionRequirements>;
   }
 
@@ -394,6 +426,31 @@ function provideDirectActionServices(
       dependencies.siteLabelAssignmentsRepository
     ),
     Effect.provideService(SitesRepository, dependencies.sitesRepository)
+  );
+}
+
+function makeLabelsServiceLayer(
+  actor: OrganizationActor,
+  dependencies: LabelsServiceLayerDependencies
+) {
+  return Layer.provide(
+    LabelsService.DefaultWithoutDependencies,
+    Layer.mergeAll(
+      Layer.succeed(
+        CurrentOrganizationActor,
+        CurrentOrganizationActor.of({
+          get: () => Effect.succeed(actor),
+        })
+      ),
+      Layer.succeed(DomainDrizzle, dependencies.domainDrizzle),
+      Layer.succeed(SqlClient.SqlClient, dependencies.sqlClient),
+      Layer.succeed(LabelActivityRecorder, dependencies.labelActivityRecorder),
+      Layer.succeed(LabelsRepository, dependencies.labelsRepository),
+      Layer.succeed(
+        OrganizationAuthorization,
+        dependencies.organizationAuthorization
+      )
+    )
   );
 }
 

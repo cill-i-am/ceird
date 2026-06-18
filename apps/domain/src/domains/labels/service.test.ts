@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { OrganizationId, UserId } from "@ceird/identity-core";
+import { AgentActionRunId, AgentThreadId } from "@ceird/agents-core";
+import { OrganizationId, ProductActorId, UserId } from "@ceird/identity-core";
 import {
   LabelAccessDeniedError,
   LabelNotFoundError,
@@ -10,6 +11,7 @@ import type { Label } from "@ceird/labels-core";
 import { afterAll, describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql";
 import type { Pool } from "pg";
 
 import {
@@ -30,6 +32,7 @@ import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import { OrganizationAuthorizationDeniedError } from "../organizations/errors.js";
+import { RouteInvocationContext } from "../proximity/service.js";
 import { LabelActivityRecorder } from "./activity-recorder.js";
 import { LabelsRepository } from "./repositories.js";
 import { LabelsService } from "./service.js";
@@ -196,6 +199,107 @@ describe("LabelsService", () => {
     expect(activityCalls).toStrictEqual([]);
   });
 
+  it("records agent action source context for agent-triggered label activity", async () => {
+    const agentThreadId = Schema.decodeUnknownSync(AgentThreadId)(
+      "44444444-4444-4444-8444-444444444444"
+    );
+    const agentActionRunId = Schema.decodeUnknownSync(AgentActionRunId)(
+      "55555555-5555-4555-8555-555555555555"
+    );
+    const agentActorId = Schema.decodeUnknownSync(ProductActorId)(
+      "66666666-6666-4666-8666-666666666666"
+    );
+    const calls: unknown[] = [];
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const recorder = yield* LabelActivityRecorder;
+
+        yield* recorder.recordCreated(actor, label);
+      }).pipe(
+        Effect.provide(LabelActivityRecorder.DefaultWithoutDependencies),
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(
+              ActivityEventsRepository,
+              ActivityEventsRepository.of({
+                recordEvent: (
+                  event: Parameters<
+                    ContextService<
+                      typeof ActivityEventsRepository
+                    >["recordEvent"]
+                  >[0]
+                ) =>
+                  Effect.sync(() => {
+                    calls.push({ kind: "event", event });
+                  }),
+              } as unknown as ContextService<typeof ActivityEventsRepository>)
+            ),
+            Layer.succeed(
+              ProductActivityActorsRepository,
+              ProductActivityActorsRepository.of({
+                ensureAgentActor: (
+                  input: Parameters<
+                    ContextService<
+                      typeof ProductActivityActorsRepository
+                    >["ensureAgentActor"]
+                  >[0]
+                ) =>
+                  Effect.sync(() => {
+                    calls.push({ input, kind: "agentActor" });
+
+                    return {
+                      actor: {
+                        displayDetail: "Agent action",
+                        displayName: "Install planner",
+                        id: agentActorId,
+                        kind: "agent",
+                      },
+                      sourceAgentThreadId: input.agentThreadId,
+                      sourceUserId: input.userId,
+                    };
+                  }),
+                ensureMemberActor: () =>
+                  Effect.die("Expected agent actor resolution"),
+              } as unknown as ContextService<
+                typeof ProductActivityActorsRepository
+              >)
+            ),
+            Layer.succeed(
+              RouteInvocationContext,
+              RouteInvocationContext.of({
+                agentActionRunId,
+                agentThreadId,
+              })
+            )
+          )
+        )
+      )
+    );
+
+    expect(calls).toMatchObject([
+      {
+        input: {
+          agentThreadId,
+          organizationId: actor.organizationId,
+          userId: actor.userId,
+        },
+        kind: "agentActor",
+      },
+      {
+        event: {
+          actorId: agentActorId,
+          eventType: "label.created",
+          sourceId: agentActionRunId,
+          sourceType: "agent_action_run",
+          targetId: label.id,
+          targetType: "label",
+        },
+        kind: "event",
+      },
+    ]);
+  });
+
   it("returns txids from the same DomainDrizzle transaction as label write rows", async (context: {
     skip: (note?: string) => never;
   }) => {
@@ -269,6 +373,81 @@ describe("LabelsService", () => {
     expect(result.created.mutation.txid).toBe(result.createdXmin);
     expect(result.updated.mutation.txid).toBe(result.updatedXmin);
     expect(result.archived.mutation.txid).toBe(result.archivedXmin);
+  });
+
+  it("rolls back label rows when activity recording fails after the write", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "labels_service_activity_rollback",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Postgres integration database unavailable; skipping label activity rollback coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    const organizationId =
+      Schema.decodeUnknownSync(OrganizationId)(randomUUID());
+    const userId = Schema.decodeUnknownSync(UserId)(
+      `labels_rollback_${Date.now()}`
+    );
+    const integrationActor = {
+      organizationId,
+      role: "owner",
+      userId,
+    } satisfies OrganizationActor;
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Labels Rollback",
+      });
+      await seedMember(pool, {
+        email: "labels-rollback@example.com",
+        name: "Labels Rollback Owner",
+        organizationId,
+        userId,
+      });
+    });
+
+    await expect(
+      runLabelsServiceIntegrationEffect(
+        testDatabase.url,
+        integrationActor,
+        Effect.gen(function* () {
+          const labels = yield* LabelsService;
+
+          return yield* labels.create({ name: "Rollback Probe" });
+        }),
+        {
+          activityRecorder: {
+            recordCreated: () => Effect.fail(makeSqlError()),
+          },
+        }
+      )
+    ).rejects.toThrow("activity recorder unavailable");
+
+    await withPool(testDatabase.url, async (pool) => {
+      const rows = await pool.query<{ readonly count: string }>(
+        `select count(*)::text as count
+         from labels
+         where organization_id = $1
+           and name = $2`,
+        [organizationId, "Rollback Probe"]
+      );
+
+      expect(rows.rows[0]?.count).toBe("0");
+    });
   });
 
   it("persists product-safe activity rows for label create, rename, and archive", async (context: {
@@ -474,16 +653,45 @@ function makeFakeSqlClient(nextTxid: () => number): SqlClient.SqlClient {
   return sql as unknown as SqlClient.SqlClient;
 }
 
+function makeSqlError(): SqlError.SqlError {
+  return Object.assign(new Error("activity recorder unavailable"), {
+    _tag: "SqlError" as const,
+    cause: "activity recorder unavailable",
+    isRetryable: false,
+    reason: "Unknown",
+  }) as unknown as SqlError.SqlError;
+}
+
 async function runLabelsServiceIntegrationEffect<Value, Error, Requirements>(
   databaseUrl: string,
   integrationActor: OrganizationActor,
-  effect: Effect.Effect<Value, Error, Requirements>
+  effect: Effect.Effect<Value, Error, Requirements>,
+  options: {
+    readonly activityRecorder?: Partial<
+      ContextService<typeof LabelActivityRecorder>
+    >;
+  } = {}
 ): Promise<Value> {
+  const labelActivityRecorderLayer =
+    options.activityRecorder === undefined
+      ? LabelActivityRecorder.Default
+      : Layer.succeed(
+          LabelActivityRecorder,
+          LabelActivityRecorder.of({
+            recordArchived:
+              options.activityRecorder.recordArchived ?? (() => Effect.void),
+            recordCreated:
+              options.activityRecorder.recordCreated ?? (() => Effect.void),
+            recordUpdated:
+              options.activityRecorder.recordUpdated ?? (() => Effect.void),
+          } as unknown as ContextService<typeof LabelActivityRecorder>)
+        );
+
   return await Effect.runPromise(
     Effect.scoped(
       effect.pipe(
         Effect.provide(LabelsService.DefaultWithoutDependencies),
-        Effect.provide(LabelActivityRecorder.Default),
+        Effect.provide(labelActivityRecorderLayer),
         Effect.provide(ActivityEventsRepository.Default),
         Effect.provide(ProductActivityActorsRepository.Default),
         Effect.provide(LabelsRepository.Default),

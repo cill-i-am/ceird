@@ -7,14 +7,14 @@ import type {
   AgentActionName,
   ExecutableAgentActionName,
 } from "@ceird/agents-core";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type { HttpServerRequest } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 
 import type { DomainDrizzleService } from "../../platform/database/database.js";
 import { JobsService } from "../jobs/service.js";
-import { LabelActivityRecorder } from "../labels/activity-recorder.js";
 import { LabelsRepository } from "../labels/repositories.js";
+import { LabelsService } from "../labels/service.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import type { SitesRepository } from "../sites/repositories.js";
@@ -22,7 +22,7 @@ import { SitesService } from "../sites/service.js";
 
 type DomainAgentActionRequirements =
   | LabelsRepository
-  | LabelActivityRecorder
+  | LabelsService
   | OrganizationAuthorization
   | SitesRepository
   | JobsService
@@ -67,19 +67,10 @@ const domainAgentActions = [
     execute: (actor, input) =>
       Effect.gen(function* () {
         const payload = yield* decodeActionInput("ceird.labels.create", input);
-        const labelsRepository = yield* LabelsRepository;
-        const labelActivityRecorder = yield* LabelActivityRecorder;
-        const organizationAuthorization = yield* OrganizationAuthorization;
+        const labelsService = yield* LabelsService;
+        const response = yield* labelsService.create({ name: payload.name });
 
-        yield* organizationAuthorization.ensureCanManageLabels(actor);
-
-        const label = yield* labelsRepository.create({
-          name: payload.name,
-          organizationId: actor.organizationId,
-        });
-        yield* labelActivityRecorder.recordCreated(actor, label);
-
-        return label;
+        return response.label;
       }),
   }),
   defineDomainAgentAction({
@@ -87,30 +78,23 @@ const domainAgentActions = [
     execute: (actor, input) =>
       Effect.gen(function* () {
         const payload = yield* decodeActionInput("ceird.labels.update", input);
-        const labelsRepository = yield* LabelsRepository;
-        const labelActivityRecorder = yield* LabelActivityRecorder;
-        const organizationAuthorization = yield* OrganizationAuthorization;
-
-        yield* organizationAuthorization.ensureCanManageLabels(actor);
-
-        const label = yield* labelsRepository
-          .update(actor.organizationId, payload.labelId, {
+        const labelsService = yield* LabelsService;
+        const response = yield* labelsService
+          .update(payload.labelId, {
             name: payload.input.name,
           })
-          .pipe(Effect.map(Option.getOrUndefined));
-
-        if (label === undefined) {
-          return yield* Effect.fail(
-            new AgentActionRejectedError({
-              actionName: "ceird.labels.update",
-              message: "Label does not exist in the organization",
-            })
+          .pipe(
+            Effect.catchTag("@ceird/labels-core/LabelNotFoundError", () =>
+              Effect.fail(
+                new AgentActionRejectedError({
+                  actionName: "ceird.labels.update",
+                  message: "Label does not exist in the organization",
+                })
+              )
+            )
           );
-        }
 
-        yield* labelActivityRecorder.recordUpdated(actor, label);
-
-        return label;
+        return response.label;
       }),
   }),
   defineDomainAgentAction({
@@ -118,28 +102,19 @@ const domainAgentActions = [
     execute: (actor, input) =>
       Effect.gen(function* () {
         const payload = yield* decodeActionInput("ceird.labels.delete", input);
-        const labelsRepository = yield* LabelsRepository;
-        const labelActivityRecorder = yield* LabelActivityRecorder;
-        const organizationAuthorization = yield* OrganizationAuthorization;
+        const labelsService = yield* LabelsService;
+        const response = yield* labelsService.archive(payload.labelId).pipe(
+          Effect.catchTag("@ceird/labels-core/LabelNotFoundError", () =>
+            Effect.fail(
+              new AgentActionRejectedError({
+                actionName: "ceird.labels.delete",
+                message: "Label does not exist in the organization",
+              })
+            )
+          )
+        );
 
-        yield* organizationAuthorization.ensureCanManageLabels(actor);
-
-        const label = yield* labelsRepository
-          .archive(actor.organizationId, payload.labelId)
-          .pipe(Effect.map(Option.getOrUndefined));
-
-        if (label === undefined) {
-          return yield* Effect.fail(
-            new AgentActionRejectedError({
-              actionName: "ceird.labels.delete",
-              message: "Label does not exist in the organization",
-            })
-          );
-        }
-
-        yield* labelActivityRecorder.recordArchived(actor, label);
-
-        return label;
+        return response.label;
       }),
   }),
   defineDomainAgentAction({
