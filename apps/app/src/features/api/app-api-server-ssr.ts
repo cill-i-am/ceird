@@ -3,7 +3,7 @@ import type {
   JobListQuery,
   JobListResponse,
 } from "@ceird/jobs-core";
-import type { LabelsResponse } from "@ceird/labels-core";
+import type { LabelsResponse, ListLabelsQuery } from "@ceird/labels-core";
 import type {
   SiteListQuery,
   SiteListResponse,
@@ -58,11 +58,13 @@ export async function readServerAppApiRequestStrict(): Promise<ServerAppApiReque
   };
 }
 
-export async function getCurrentServerLabelsDirect(): Promise<LabelsResponse> {
+export async function getCurrentServerLabelsDirect(
+  query: ListLabelsQuery = {}
+): Promise<LabelsResponse> {
   const request = await readServerAppApiRequestStrict();
 
   return await runAppApiClient(request, "LabelsServer.listLabels", (client) =>
-    client.labels.listLabels()
+    client.labels.listLabels({ query })
   );
 }
 

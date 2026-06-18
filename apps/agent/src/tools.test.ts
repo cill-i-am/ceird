@@ -100,7 +100,8 @@ describe("Ceird Agent tools", () => {
       expect.arrayContaining([
         "createLabel",
         "updateLabel",
-        "deleteLabel",
+        "archiveLabel",
+        "restoreLabel",
         "createSite",
         "updateSite",
         "addSiteComment",
@@ -132,7 +133,8 @@ describe("Ceird Agent tools", () => {
       expect.arrayContaining([
         "createLabel",
         "updateLabel",
-        "deleteLabel",
+        "archiveLabel",
+        "restoreLabel",
         "createSite",
         "updateSite",
         "addSiteComment",

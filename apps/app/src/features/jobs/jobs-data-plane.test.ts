@@ -844,7 +844,10 @@ describe("jobs data plane", () => {
     ];
     const labels: readonly Label[] = [
       {
+        archivedAt: null,
+        color: "oklch(64% 0.19 28)",
         createdAt: "2026-06-15T10:00:00.000Z",
+        description: null,
         id: labelId,
         name: "Urgent",
         updatedAt: "2026-06-15T10:00:00.000Z",
@@ -999,7 +1002,10 @@ describe("jobs data plane", () => {
       ],
       labels: [
         {
+          archivedAt: null,
+          color: "oklch(64% 0.19 28)",
           createdAt: "2026-06-15T10:00:00.000Z",
+          description: null,
           id: labelId,
           name: "Urgent",
           updatedAt: "2026-06-15T10:00:00.000Z",

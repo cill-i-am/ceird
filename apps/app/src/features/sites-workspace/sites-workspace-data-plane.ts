@@ -963,12 +963,18 @@ export function toSiteRelatedJobElectricRow(
 }
 
 export function toLabelElectricRow(row: Record<string, unknown>) {
-  return {
+  return Schema.decodeUnknownSync(LabelSchema)({
+    archivedAt:
+      electricValue(row, "archivedAt") === null
+        ? null
+        : normalizeSitesElectricDateTime(electricValue(row, "archivedAt")),
+    color: electricValue(row, "color"),
     createdAt: normalizeSitesElectricDateTime(electricValue(row, "createdAt")),
-    id: String(electricValue(row, "id")),
-    name: String(electricValue(row, "name")),
+    description: electricValue(row, "description"),
+    id: electricValue(row, "id"),
+    name: electricValue(row, "name"),
     updatedAt: normalizeSitesElectricDateTime(electricValue(row, "updatedAt")),
-  };
+  });
 }
 
 export function toProductActivityActorElectricRow(

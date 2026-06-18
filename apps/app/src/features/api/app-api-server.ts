@@ -3,7 +3,7 @@ import type {
   JobListQuery,
   JobListResponse,
 } from "@ceird/jobs-core";
-import type { LabelsResponse } from "@ceird/labels-core";
+import type { LabelsResponse, ListLabelsQuery } from "@ceird/labels-core";
 import type {
   SiteListQuery,
   SiteListResponse,
@@ -23,11 +23,11 @@ import type { AppApiClient } from "#/features/api/app-api-client";
 const importAppApiServerSsr = () => import("./app-api-server-ssr");
 
 const getCurrentServerLabelsIsomorphic = createIsomorphicFn()
-  .server(async () => {
+  .server(async (query: ListLabelsQuery = {}) => {
     const { getCurrentServerLabelsDirect } = await importAppApiServerSsr();
-    return await getCurrentServerLabelsDirect();
+    return await getCurrentServerLabelsDirect(query);
   })
-  .client(() => getCurrentBrowserLabels());
+  .client((query: ListLabelsQuery = {}) => getCurrentBrowserLabels(query));
 
 const listCurrentServerSitesIsomorphic = createIsomorphicFn()
   .server(async (query: SiteListQuery = {}) => {
@@ -64,9 +64,11 @@ function runBrowserAppApiClient<Response>(
   return Effect.runPromise(runBrowserAppApiRequest(operation, execute));
 }
 
-async function getCurrentBrowserLabels(): Promise<LabelsResponse> {
+async function getCurrentBrowserLabels(
+  query: ListLabelsQuery = {}
+): Promise<LabelsResponse> {
   return await runBrowserAppApiClient("LabelsClient.listLabels", (client) =>
-    client.labels.listLabels()
+    client.labels.listLabels({ query })
   );
 }
 
@@ -153,8 +155,10 @@ export async function listAllCurrentBrowserJobs(
   }
 }
 
-export function getCurrentServerLabels(): Promise<LabelsResponse> {
-  return getCurrentServerLabelsIsomorphic();
+export function getCurrentServerLabels(
+  query: ListLabelsQuery = {}
+): Promise<LabelsResponse> {
+  return getCurrentServerLabelsIsomorphic(query);
 }
 
 export function listCurrentServerSites(

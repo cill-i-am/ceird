@@ -55,17 +55,23 @@ describe("sites workspace data plane", () => {
   });
 
   const urgentLabel = {
+    archivedAt: null,
+    color: "oklch(64% 0.19 28)",
     createdAt: "2026-05-30T00:00:00.000Z",
-    id: "33333333-3333-4333-8333-333333333333",
+    description: null,
+    id: "33333333-3333-4333-8333-333333333333" as Label["id"],
     name: "Urgent Access",
     updatedAt: "2026-05-30T00:00:00.000Z",
-  } as unknown as Label;
+  } satisfies Label;
   const maintenanceLabel = {
+    archivedAt: null,
+    color: "oklch(63% 0.18 255)",
     createdAt: "2026-05-30T00:00:00.000Z",
-    id: "88888888-8888-4888-8888-888888888888",
+    description: null,
+    id: "88888888-8888-4888-8888-888888888888" as Label["id"],
     name: "Maintenance",
     updatedAt: "2026-05-30T00:00:00.000Z",
-  } as unknown as Label;
+  } satisfies Label;
   const dublinSite = {
     displayLocation: "Dublin Port",
     formattedAddress: "Dublin Port, Dublin",
@@ -198,7 +204,10 @@ describe("sites workspace data plane", () => {
       updated_at: "2026-06-02 00:00:00+00",
     });
     const transformedLabel = toLabelElectricRow({
+      archived_at: null,
+      color: urgentLabel.color,
       created_at: "2026-05-30 00:00:00+00",
+      description: null,
       id: urgentLabel.id,
       name: urgentLabel.name,
       updated_at: "2026-05-30 00:00:00+00",

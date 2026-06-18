@@ -478,7 +478,10 @@ describe("JobsService contracts", () => {
         const recorder = yield* JobsActivityRecorder;
 
         yield* recorder.recordLabelAssigned(internalActor, existingJob, {
+          archivedAt: null,
+          color: "oklch(64% 0.19 28)",
           createdAt: "2026-05-20T09:00:00.000Z",
+          description: null,
           id: decodeLabelId("22222222-2222-4222-8222-222222222222"),
           name: "Fire safety",
           updatedAt: "2026-05-20T09:00:00.000Z",
@@ -634,7 +637,10 @@ describe("JobsService contracts", () => {
               ],
               labels: [
                 {
+                  archivedAt: null,
+                  color: "oklch(64% 0.19 28)",
                   createdAt: "2026-05-20T09:00:00.000Z",
+                  description: null,
                   id: "44444444-4444-4444-8444-444444444444",
                   name: "Urgent",
                   updatedAt: "2026-05-20T09:00:00.000Z",

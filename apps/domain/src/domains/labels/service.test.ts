@@ -3,8 +3,11 @@ import { randomUUID } from "node:crypto";
 import { AgentActionRunId, AgentThreadId } from "@ceird/agents-core";
 import { OrganizationId, ProductActorId, UserId } from "@ceird/identity-core";
 import {
+  DEFAULT_LABEL_COLOR,
   LabelAccessDeniedError,
+  LabelNameConflictError,
   LabelNotFoundError,
+  LabelRestoreConflictError,
   LabelSchema,
 } from "@ceird/labels-core";
 import type { Label } from "@ceird/labels-core";
@@ -49,13 +52,18 @@ const actor = {
   userId: "user_123" as UserId,
 } satisfies OrganizationActor;
 const label = decodeLabel({
+  archivedAt: null,
+  color: DEFAULT_LABEL_COLOR,
   createdAt: "2026-06-14T00:00:00.000Z",
+  description: null,
   id: "11111111-1111-4111-8111-111111111111",
   name: "Plumbing",
   updatedAt: "2026-06-14T00:00:00.000Z",
 });
 const updatedLabel = {
   ...label,
+  color: "oklch(63% 0.18 255)",
+  description: "Updated label description",
   name: "Electrical",
 } satisfies Label;
 
@@ -72,14 +80,19 @@ describe("LabelsService", () => {
         const labels = yield* LabelsService;
 
         return {
-          created: yield* labels.create({ name: label.name }),
-          updated: yield* labels.update(label.id, { name: updatedLabel.name }),
+          created: yield* labels.create(createLabelInput(label.name)),
+          updated: yield* labels.update(
+            label.id,
+            updateLabelInput(updatedLabel.name)
+          ),
           archived: yield* labels.archive(label.id),
+          restored: yield* labels.restore(label.id),
         };
       }),
       {
         archive: () => Effect.succeed(Option.some(label)),
         create: () => Effect.succeed(label),
+        restore: () => Effect.succeed(Option.some(label)),
         update: () => Effect.succeed(Option.some(updatedLabel)),
       }
     );
@@ -96,6 +109,10 @@ describe("LabelsService", () => {
       label,
       mutation: { txid: 703 },
     });
+    expect(result.restored).toStrictEqual({
+      label,
+      mutation: { txid: 704 },
+    });
   });
 
   it("keeps label not-found failures visible instead of returning confirmation", async () => {
@@ -106,7 +123,10 @@ describe("LabelsService", () => {
         Effect.gen(function* () {
           const labels = yield* LabelsService;
 
-          return yield* labels.update(label.id, { name: updatedLabel.name });
+          return yield* labels.update(
+            label.id,
+            updateLabelInput(updatedLabel.name)
+          );
         }),
         {
           update: () => Effect.succeed(Option.none()),
@@ -131,13 +151,15 @@ describe("LabelsService", () => {
       Effect.gen(function* () {
         const labels = yield* LabelsService;
 
-        yield* labels.create({ name: label.name });
-        yield* labels.update(label.id, { name: updatedLabel.name });
+        yield* labels.create(createLabelInput(label.name));
+        yield* labels.update(label.id, updateLabelInput(updatedLabel.name));
         yield* labels.archive(label.id);
+        yield* labels.restore(label.id);
       }),
       {
         archive: () => Effect.succeed(Option.some(label)),
         create: () => Effect.succeed(label),
+        restore: () => Effect.succeed(Option.some(label)),
         update: () => Effect.succeed(Option.some(updatedLabel)),
       },
       {
@@ -148,6 +170,10 @@ describe("LabelsService", () => {
           },
           recordCreated: (_actor, recordedLabel) => {
             activityCalls.push(`created:${recordedLabel.name}`);
+            return Effect.void;
+          },
+          recordRestored: (_actor, recordedLabel) => {
+            activityCalls.push(`restored:${recordedLabel.name}`);
             return Effect.void;
           },
           recordUpdated: (_actor, recordedLabel) => {
@@ -162,7 +188,56 @@ describe("LabelsService", () => {
       "created:Plumbing",
       "updated:Electrical",
       "archived:Plumbing",
+      "restored:Plumbing",
     ]);
+  });
+
+  it("keeps active organization-label reads available to internal members but gates archived management reads", async () => {
+    await runLabelsServiceEffect(
+      Effect.gen(function* () {
+        const labels = yield* LabelsService;
+
+        return yield* labels.list({ status: "active" });
+      }),
+      {
+        list: () => Effect.succeed([label]),
+      },
+      {
+        authorization: {
+          ensureCanManageLabels: () =>
+            Effect.fail(
+              new OrganizationAuthorizationDeniedError({
+                message: "Labels are owner-managed",
+              })
+            ),
+          ensureCanViewOrganizationData: () => Effect.void,
+        },
+      }
+    );
+
+    await expect(
+      runLabelsServiceEffect(
+        Effect.gen(function* () {
+          const labels = yield* LabelsService;
+
+          return yield* labels.list({ status: "archived" });
+        }),
+        {
+          list: () => Effect.succeed([label]),
+        },
+        {
+          authorization: {
+            ensureCanManageLabels: () =>
+              Effect.fail(
+                new OrganizationAuthorizationDeniedError({
+                  message: "Labels are owner-managed",
+                })
+              ),
+            ensureCanViewOrganizationData: () => Effect.void,
+          },
+        }
+      )
+    ).rejects.toBeInstanceOf(LabelAccessDeniedError);
   });
 
   it("does not record label activity when authorization rejects the write", async () => {
@@ -173,7 +248,7 @@ describe("LabelsService", () => {
         Effect.gen(function* () {
           const labels = yield* LabelsService;
 
-          return yield* labels.create({ name: label.name });
+          return yield* labels.create(createLabelInput(label.name));
         }),
         {
           create: () => Effect.succeed(label),
@@ -381,17 +456,19 @@ describe("LabelsService", () => {
           targetType: "agent_action_run",
         });
 
-        const created = yield* labels.create({ name: "Compliance" }).pipe(
-          Effect.provide(
-            Layer.succeed(
-              RouteInvocationContext,
-              RouteInvocationContext.of({
-                agentActionRunId,
-                agentThreadId,
-              })
+        const created = yield* labels
+          .create(createLabelInput("Compliance"))
+          .pipe(
+            Effect.provide(
+              Layer.succeed(
+                RouteInvocationContext,
+                RouteInvocationContext.of({
+                  agentActionRunId,
+                  agentThreadId,
+                })
+              )
             )
-          )
-        );
+          );
         const events = yield* activityEvents.listRecent(organizationId);
 
         return {
@@ -483,20 +560,26 @@ describe("LabelsService", () => {
       integrationActor,
       Effect.gen(function* () {
         const labels = yield* LabelsService;
-        const created = yield* labels.create({ name: "Install" });
+        const created = yield* labels.create(createLabelInput("Install"));
         const createdXmin = yield* loadLabelRowXmin(created.label.id);
         const updated = yield* labels.update(created.label.id, {
+          color: "oklch(63% 0.18 255)",
+          description: "Updated rough-in workflow",
           name: "Rough-In",
         });
         const updatedXmin = yield* loadLabelRowXmin(updated.label.id);
         const archived = yield* labels.archive(created.label.id);
         const archivedXmin = yield* loadLabelRowXmin(archived.label.id);
+        const restored = yield* labels.restore(created.label.id);
+        const restoredXmin = yield* loadLabelRowXmin(restored.label.id);
 
         return {
           archived,
           archivedXmin,
           created,
           createdXmin,
+          restored,
+          restoredXmin,
           updated,
           updatedXmin,
         };
@@ -506,6 +589,152 @@ describe("LabelsService", () => {
     expect(result.created.mutation.txid).toBe(result.createdXmin);
     expect(result.updated.mutation.txid).toBe(result.updatedXmin);
     expect(result.archived.mutation.txid).toBe(result.archivedXmin);
+    expect(result.restored.mutation.txid).toBe(result.restoredXmin);
+  });
+
+  it("persists color, description, archive, restore, active-name conflicts, archived-name reuse, and restore conflicts", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "labels_service_lifecycle",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Postgres integration database unavailable; skipping label lifecycle coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    const organizationId =
+      Schema.decodeUnknownSync(OrganizationId)(randomUUID());
+    const userId = Schema.decodeUnknownSync(UserId)(
+      `labels_lifecycle_${Date.now()}`
+    );
+    const integrationActor = {
+      organizationId,
+      role: "owner",
+      userId,
+    } satisfies OrganizationActor;
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Labels Lifecycle",
+      });
+      await seedMember(pool, {
+        email: "labels-lifecycle@example.com",
+        name: "Labels Lifecycle Owner",
+        organizationId,
+        userId,
+      });
+    });
+
+    const lifecycle = await runLabelsServiceIntegrationEffect(
+      testDatabase.url,
+      integrationActor,
+      Effect.gen(function* () {
+        const labels = yield* LabelsService;
+        const created = yield* labels.create({
+          color: "oklch(67% 0.15 196)",
+          description: "Needs owner review",
+          name: "  Permit   Hold  ",
+        });
+        const updated = yield* labels.update(created.label.id, {
+          color: "oklch(63% 0.18 255)",
+          description: null,
+          name: "Permit Hold",
+        });
+
+        yield* labels
+          .create({
+            color: "oklch(64% 0.19 28)",
+            description: null,
+            name: " permit hold ",
+          })
+          .pipe(
+            Effect.flip,
+            Effect.flatMap((error) =>
+              error instanceof LabelNameConflictError
+                ? Effect.succeed(error)
+                : Effect.fail(error)
+            )
+          );
+
+        const archived = yield* labels.archive(updated.label.id);
+        const archivedLabels = yield* labels.list({ status: "archived" });
+        const reused = yield* labels.create({
+          color: "oklch(72% 0.16 75)",
+          description: "Replacement active label",
+          name: "permit hold",
+        });
+
+        return {
+          archived,
+          archivedLabels,
+          created,
+          reused,
+          updated,
+        };
+      })
+    );
+
+    expect(lifecycle.created.label).toMatchObject({
+      archivedAt: null,
+      color: "oklch(67% 0.15 196)",
+      description: "Needs owner review",
+      name: "Permit   Hold",
+    });
+    expect(lifecycle.updated.label).toMatchObject({
+      archivedAt: null,
+      color: "oklch(63% 0.18 255)",
+      description: null,
+      name: "Permit Hold",
+    });
+    expect(lifecycle.archived.label.archivedAt).toEqual(expect.any(String));
+    expect(
+      lifecycle.archivedLabels.labels.map((item) => item.id)
+    ).toStrictEqual([lifecycle.archived.label.id]);
+    expect(lifecycle.reused.label.id).not.toBe(lifecycle.archived.label.id);
+
+    await expect(
+      runLabelsServiceIntegrationEffect(
+        testDatabase.url,
+        integrationActor,
+        Effect.gen(function* () {
+          const labels = yield* LabelsService;
+
+          return yield* labels.restore(lifecycle.archived.label.id);
+        })
+      )
+    ).rejects.toBeInstanceOf(LabelRestoreConflictError);
+
+    const restored = await runLabelsServiceIntegrationEffect(
+      testDatabase.url,
+      integrationActor,
+      Effect.gen(function* () {
+        const labels = yield* LabelsService;
+
+        yield* labels.archive(lifecycle.reused.label.id);
+
+        return yield* labels.restore(lifecycle.archived.label.id);
+      })
+    );
+
+    expect(restored.label).toMatchObject({
+      archivedAt: null,
+      color: "oklch(63% 0.18 255)",
+      description: null,
+      id: lifecycle.archived.label.id,
+      name: "Permit Hold",
+    });
   });
 
   it("rolls back label rows when activity recording fails after the write", async (context: {
@@ -560,7 +789,7 @@ describe("LabelsService", () => {
         Effect.gen(function* () {
           const labels = yield* LabelsService;
 
-          return yield* labels.create({ name: "Rollback Probe" });
+          return yield* labels.create(createLabelInput("Rollback Probe"));
         }),
         {
           activityRecorder: {
@@ -635,8 +864,10 @@ describe("LabelsService", () => {
         const labels = yield* LabelsService;
         const activityEvents = yield* ActivityEventsRepository;
 
-        const created = yield* labels.create({ name: "Planning" });
+        const created = yield* labels.create(createLabelInput("Planning"));
         const updated = yield* labels.update(created.label.id, {
+          color: "oklch(63% 0.18 255)",
+          description: "Procurement workflow",
           name: "Procurement",
         });
         const archived = yield* labels.archive(created.label.id);
@@ -719,6 +950,8 @@ async function runLabelsServiceEffect<Value, Error, Requirements>(
                 options.activityRecorder?.recordArchived ?? (() => Effect.void),
               recordCreated:
                 options.activityRecorder?.recordCreated ?? (() => Effect.void),
+              recordRestored:
+                options.activityRecorder?.recordRestored ?? (() => Effect.void),
               recordUpdated:
                 options.activityRecorder?.recordUpdated ?? (() => Effect.void),
             } as unknown as ContextService<typeof LabelActivityRecorder>)
@@ -756,7 +989,13 @@ async function runLabelsServiceEffect<Value, Error, Requirements>(
                 Effect.die(
                   "LabelsRepository.getActiveLabelOrFail was not expected"
                 ),
-              list: () => Effect.die("LabelsRepository.list was not expected"),
+              list:
+                repository.list ??
+                (() => Effect.die("LabelsRepository.list was not expected")),
+              read: () => Effect.die("LabelsRepository.read was not expected"),
+              restore:
+                repository.restore ??
+                (() => Effect.die("LabelsRepository.restore was not expected")),
               update:
                 repository.update ??
                 (() => Effect.die("LabelsRepository.update was not expected")),
@@ -815,6 +1054,8 @@ async function runLabelsServiceIntegrationEffect<Value, Error, Requirements>(
               options.activityRecorder.recordArchived ?? (() => Effect.void),
             recordCreated:
               options.activityRecorder.recordCreated ?? (() => Effect.void),
+            recordRestored:
+              options.activityRecorder.recordRestored ?? (() => Effect.void),
             recordUpdated:
               options.activityRecorder.recordUpdated ?? (() => Effect.void),
           } as unknown as ContextService<typeof LabelActivityRecorder>)
@@ -914,6 +1155,22 @@ function loadLabelRowXmin(labelId: string) {
 
     return Number.parseInt(xmin, 10);
   });
+}
+
+function createLabelInput(name: string) {
+  return {
+    color: DEFAULT_LABEL_COLOR,
+    description: null,
+    name,
+  } as const;
+}
+
+function updateLabelInput(name: string) {
+  return {
+    color: updatedLabel.color,
+    description: updatedLabel.description,
+    name,
+  } as const;
 }
 
 async function seedOrganization(

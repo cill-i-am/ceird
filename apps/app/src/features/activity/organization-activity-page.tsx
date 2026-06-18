@@ -114,6 +114,7 @@ const EVENT_TYPE_LABELS = {
   "job.visit_logged": "Job visit logged",
   "label.archived": "Label archived",
   "label.created": "Label created",
+  "label.restored": "Label restored",
   "label.updated": "Label updated",
   "site.comment_created": "Site comment created",
   "site.created": "Site created",

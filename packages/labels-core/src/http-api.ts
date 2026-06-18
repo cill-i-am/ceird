@@ -7,14 +7,17 @@ import {
 
 import {
   CreateLabelInputSchema,
+  LabelReadResponseSchema,
   LabelWriteResponseSchema,
   LabelsResponseSchema,
+  ListLabelsQuerySchema,
   UpdateLabelInputSchema,
 } from "./dto.js";
 import {
   LabelAccessDeniedError,
   LabelNameConflictError,
   LabelNotFoundError,
+  LabelRestoreConflictError,
   LabelStorageError,
 } from "./errors.js";
 import { LabelId } from "./ids.js";
@@ -22,8 +25,16 @@ import { LabelId } from "./ids.js";
 const labelsGroup = HttpApiGroup.make("labels")
   .add(
     HttpApiEndpoint.get("listLabels", "/labels", {
+      query: ListLabelsQuerySchema,
       success: LabelsResponseSchema,
       error: [LabelAccessDeniedError, LabelStorageError],
+    })
+  )
+  .add(
+    HttpApiEndpoint.get("readLabel", "/labels/:labelId", {
+      params: { labelId: LabelId },
+      success: LabelReadResponseSchema,
+      error: [LabelAccessDeniedError, LabelNotFoundError, LabelStorageError],
     })
   )
   .add(
@@ -51,10 +62,22 @@ const labelsGroup = HttpApiGroup.make("labels")
     })
   )
   .add(
-    HttpApiEndpoint.delete("deleteLabel", "/labels/:labelId", {
+    HttpApiEndpoint.delete("archiveLabel", "/labels/:labelId", {
       params: { labelId: LabelId },
       success: LabelWriteResponseSchema,
       error: [LabelAccessDeniedError, LabelNotFoundError, LabelStorageError],
+    })
+  )
+  .add(
+    HttpApiEndpoint.post("restoreLabel", "/labels/:labelId/restore", {
+      params: { labelId: LabelId },
+      success: LabelWriteResponseSchema,
+      error: [
+        LabelAccessDeniedError,
+        LabelNotFoundError,
+        LabelRestoreConflictError,
+        LabelStorageError,
+      ],
     })
   );
 

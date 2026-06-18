@@ -969,7 +969,10 @@ describe("SitesService contracts", () => {
     const siteId = decodeSiteId("11111111-1111-4111-8111-111111111117");
     const labelId = decodeLabelId("22222222-2222-4222-8222-222222222222");
     const label = {
+      archivedAt: null,
+      color: "oklch(64% 0.19 28)",
       createdAt: "2026-05-20T09:00:00.000Z",
+      description: null,
       id: labelId,
       name: "Fire safety",
       updatedAt: "2026-05-20T09:00:00.000Z",
@@ -1043,7 +1046,10 @@ describe("SitesService contracts", () => {
     const siteId = decodeSiteId("11111111-1111-4111-8111-111111111118");
     const labelId = decodeLabelId("33333333-3333-4333-8333-333333333333");
     const label = {
+      archivedAt: null,
+      color: "oklch(64% 0.19 28)",
       createdAt: "2026-05-20T09:00:00.000Z",
+      description: null,
       id: labelId,
       name: "Fire safety",
       updatedAt: "2026-05-20T09:00:00.000Z",

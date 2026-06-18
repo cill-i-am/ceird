@@ -352,7 +352,11 @@ export function createLabelElectricMutationHandlers(
         transaction.mutations.map((mutation) =>
           Effect.runPromise(
             dependencies.createLabel(
-              decodeCreateLabelInput({ name: mutation.modified.name })
+              decodeCreateLabelInput({
+                color: mutation.modified.color,
+                description: mutation.modified.description,
+                name: mutation.modified.name,
+              })
             )
           )
         )
@@ -367,6 +371,8 @@ export function createLabelElectricMutationHandlers(
             dependencies.updateLabel(
               decodeLabelId(mutation.original.id),
               decodeUpdateLabelInput({
+                color: mutation.modified.color,
+                description: mutation.modified.description,
                 name: mutation.modified.name,
               })
             )
@@ -396,13 +402,19 @@ function toElectricLabelMatchingStrategy(
   };
 }
 
-function toLabelElectricRow(row: Record<string, unknown>) {
-  return {
-    createdAt: String(row.createdAt),
-    id: String(row.id),
-    name: String(row.name),
-    updatedAt: String(row.updatedAt),
-  };
+export function toLabelElectricRow(row: Record<string, unknown>) {
+  const archivedAt = electricValue(row, "archivedAt");
+
+  return Schema.decodeUnknownSync(LabelSchema)({
+    archivedAt:
+      archivedAt === null ? null : normalizeLabelElectricDateTime(archivedAt),
+    color: electricValue(row, "color"),
+    createdAt: normalizeLabelElectricDateTime(electricValue(row, "createdAt")),
+    description: electricValue(row, "description"),
+    id: electricValue(row, "id"),
+    name: electricValue(row, "name"),
+    updatedAt: normalizeLabelElectricDateTime(electricValue(row, "updatedAt")),
+  });
 }
 
 function sortLabels(labels: readonly Label[]) {
@@ -415,4 +427,29 @@ function compareLabels(left: Label, right: Label) {
   return nameComparison === 0
     ? left.id.localeCompare(right.id)
     : nameComparison;
+}
+
+function electricValue(row: Record<string, unknown>, key: string) {
+  if (key in row) {
+    return row[key];
+  }
+
+  return row[toSnakeCase(key)];
+}
+
+function toSnakeCase(key: string) {
+  return key.replaceAll(/[A-Z]/g, (match) => `_${match.toLowerCase()}`);
+}
+
+function normalizeLabelElectricDateTime(value: unknown) {
+  const raw = String(value);
+
+  if (raw.includes("T")) {
+    return raw;
+  }
+
+  const normalized = raw.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
+  const date = new Date(normalized);
+
+  return Number.isNaN(date.getTime()) ? raw : date.toISOString();
 }

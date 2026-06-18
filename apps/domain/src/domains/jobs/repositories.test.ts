@@ -8,6 +8,7 @@ import {
   UserId,
   WorkItemId,
 } from "@ceird/jobs-core";
+import { DEFAULT_LABEL_COLOR } from "@ceird/labels-core";
 import { SiteId } from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
@@ -1436,16 +1437,18 @@ async function seedLabel(
     `insert into labels (
        id,
        organization_id,
+       color,
        name,
        normalized_name,
        created_at,
        updated_at,
        archived_at
      )
-     values ($1, $2, $3, $4, now(), now(), $5)`,
+     values ($1, $2, $3, $4, $5, now(), now(), $6)`,
     [
       input.id,
       input.organizationId,
+      DEFAULT_LABEL_COLOR,
       input.name,
       input.name.trim().toLowerCase(),
       input.archived === true ? new Date() : null,

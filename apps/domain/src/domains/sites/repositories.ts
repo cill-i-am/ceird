@@ -77,7 +77,9 @@ interface SiteCursorState {
 
 interface LabelRow {
   readonly archived_at: Date | null;
+  readonly color: string;
   readonly created_at: Date;
+  readonly description: string | null;
   readonly id: string;
   readonly name: string;
   readonly normalized_name: string;
@@ -936,7 +938,10 @@ function decodeSiteCursor(cursor: SiteListCursor): {
 
 function mapLabelRow(row: LabelRow): Label {
   return decodeLabel({
+    archivedAt: row.archived_at?.toISOString() ?? null,
+    color: row.color,
     createdAt: row.created_at.toISOString(),
+    description: row.description,
     id: decodeLabelId(row.id),
     name: row.name,
     updatedAt: row.updated_at.toISOString(),

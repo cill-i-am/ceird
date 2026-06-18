@@ -853,7 +853,10 @@ const typedOriginToken =
   "v1.typedOrigin.testSignature" as TypedOrigin["originToken"];
 
 const heatingLabel = {
+  archivedAt: null,
+  color: "oklch(64% 0.19 28)",
   createdAt: "2026-06-06T09:00:00.000Z",
+  description: null,
   id: labelId,
   name: "Heating",
   updatedAt: "2026-06-06T09:00:00.000Z",

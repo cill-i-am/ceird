@@ -142,6 +142,9 @@ Container. Auth-owned tables are intentionally excluded from the sync shape
 registry; identity and session behavior stay behind Better Auth and the domain
 Worker. The named `labels` shape is active labels only, using the
 domain-approved `organization_id = $1 AND archived_at IS NULL` predicate.
+Archived and all-label management reads intentionally go through the Labels HTTP
+contract with `status=archived` or `status=all`; browser management UI must not
+infer archived labels from the active-only Electric shape.
 
 ## Persistence Model
 
@@ -155,6 +158,9 @@ The domain Worker exports a combined Drizzle schema from
   system actor rows.
 - `commentsSchema` contains shared comment rows, target ownership rows for jobs
   and sites, and product-safe comment body projections for browser sync.
+- `labelsSchema` contains organization-owned label definitions, including
+  canonical OKLCH color, optional admin-facing description, normalized active
+  name uniqueness, and soft-archive lifecycle state.
 - `jobsSchema` contains contacts, work items, activity, visits, labels, and
   collaborators.
 - `sitesSchema` contains sites, site-label assignments, and the

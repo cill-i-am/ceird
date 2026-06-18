@@ -18,8 +18,13 @@ const LabelsHandlersLive = HttpApiBuilder.group(AppApi, "labels", (handlers) =>
     const labelsService = yield* LabelsService;
 
     return handlers
-      .handle("listLabels", () =>
-        labelsService.list().pipe(observeLabelsOperation("listLabels"))
+      .handle("listLabels", ({ query }) =>
+        labelsService.list(query).pipe(observeLabelsOperation("listLabels"))
+      )
+      .handle("readLabel", ({ params }) =>
+        labelsService
+          .read(params.labelId)
+          .pipe(observeLabelsOperation("readLabel"))
       )
       .handle("createLabel", ({ payload }) =>
         labelsService
@@ -31,10 +36,15 @@ const LabelsHandlersLive = HttpApiBuilder.group(AppApi, "labels", (handlers) =>
           .update(params.labelId, payload)
           .pipe(observeLabelsOperation("updateLabel"))
       )
-      .handle("deleteLabel", ({ params }) =>
+      .handle("archiveLabel", ({ params }) =>
         labelsService
           .archive(params.labelId)
-          .pipe(observeLabelsOperation("deleteLabel"))
+          .pipe(observeLabelsOperation("archiveLabel"))
+      )
+      .handle("restoreLabel", ({ params }) =>
+        labelsService
+          .restore(params.labelId)
+          .pipe(observeLabelsOperation("restoreLabel"))
       );
   })
 );

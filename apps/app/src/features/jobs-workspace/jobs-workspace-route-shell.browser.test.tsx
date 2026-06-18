@@ -264,7 +264,10 @@ describe("jobs workspace route shell", () => {
           },
           labels: [
             {
+              archivedAt: null,
+              color: "oklch(64% 0.19 28)",
               createdAt: "2026-06-15T10:00:00.000Z",
+              description: null,
               id: "22222222-2222-4222-8222-222222222222" as LabelIdType,
               name: "Urgent",
               updatedAt: "2026-06-15T10:00:00.000Z",
@@ -789,7 +792,10 @@ function makeWorkspaceRow(workItemId: WorkItemIdType): JobsWorkspaceVisibleRow {
     },
     labels: [
       {
+        archivedAt: null,
+        color: "oklch(64% 0.19 28)",
         createdAt: "2026-06-15T10:00:00.000Z",
+        description: null,
         id: "22222222-2222-4222-8222-222222222222" as LabelIdType,
         name: "Urgent",
         updatedAt: "2026-06-15T10:00:00.000Z",
@@ -895,7 +901,10 @@ function makeReadyDetailState(
       },
       labels: [
         {
+          archivedAt: null,
+          color: "oklch(64% 0.19 28)",
           createdAt: "2026-06-15T10:00:00.000Z",
+          description: null,
           id: "22222222-2222-4222-8222-222222222222" as LabelIdType,
           name: "Urgent",
           updatedAt: "2026-06-15T10:00:00.000Z",

@@ -534,11 +534,14 @@ function countInputRows(fixture: SitesWorkspacePerformanceFixture) {
 
 function createLabel(index: number) {
   return {
+    archivedAt: null,
+    color: "oklch(64% 0.19 28)",
     createdAt: timestamp(index),
-    id: uuid("10000000", index),
+    description: null,
+    id: uuid("10000000", index) as Label["id"],
     name: `Label ${index.toString().padStart(3, "0")}`,
     updatedAt: timestamp(index),
-  } as Label;
+  } satisfies Label;
 }
 
 function createSite(index: number) {

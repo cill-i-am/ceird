@@ -64,11 +64,14 @@ describe("sites data plane", () => {
     siteId: site.id,
   } as unknown as SiteComment;
   const urgentLabel = {
+    archivedAt: null,
+    color: "oklch(64% 0.19 28)",
     createdAt: "2026-05-30T00:00:00.000Z",
-    id: "33333333-3333-4333-8333-333333333333",
+    description: null,
+    id: "33333333-3333-4333-8333-333333333333" as Label["id"],
     name: "Urgent Access",
     updatedAt: "2026-05-30T00:00:00.000Z",
-  } as unknown as Label;
+  } satisfies Label;
 
   it("uses organization scoped sites collection identity", () => {
     expect(sitesCollectionKey(scope)).toStrictEqual([

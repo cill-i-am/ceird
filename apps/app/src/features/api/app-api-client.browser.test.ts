@@ -19,6 +19,7 @@ import type {
   WorkItemIdType,
 } from "@ceird/jobs-core";
 import {
+  DEFAULT_LABEL_COLOR,
   LABEL_NOT_FOUND_ERROR_TAG,
   LabelNotFoundError,
 } from "@ceird/labels-core";
@@ -129,7 +130,10 @@ const createSiteResponse: CreateSiteResponse = {
 const siteLabelId = "44444444-4444-4444-8444-444444444444" as LabelIdType;
 
 const siteLabel: Label = {
+  archivedAt: null,
+  color: DEFAULT_LABEL_COLOR,
   createdAt: "2026-04-27T10:00:00.000Z",
+  description: null,
   id: siteLabelId,
   name: "Urgent",
   updatedAt: "2026-04-27T10:00:00.000Z",

@@ -5,6 +5,7 @@ import type {
   LabelWriteResponse,
   UpdateLabelInput,
 } from "@ceird/labels-core";
+import { DEFAULT_LABEL_COLOR } from "@ceird/labels-core";
 import { QueryClient } from "@tanstack/react-query";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +17,7 @@ import {
   getOrCreateLabelsCollectionState,
   getOrCreateSettingsLabelsCollectionState,
   searchSettingsLabels,
+  toLabelElectricRow,
 } from "./labels-data-plane";
 
 type LabelWriteEffect = Effect.Effect<LabelWriteResponse, unknown>;
@@ -31,7 +33,10 @@ describe("labels data plane", () => {
     userId: "user_123",
   });
   const label = {
+    archivedAt: null,
+    color: DEFAULT_LABEL_COLOR,
     createdAt: "2026-06-14T00:00:00.000Z",
+    description: null,
     id: "11111111-1111-4111-8111-111111111111" as Label["id"],
     name: "Plumbing",
     updatedAt: "2026-06-14T00:00:00.000Z",
@@ -217,23 +222,35 @@ describe("labels data plane", () => {
     ).toStrictEqual([electricalLabel, label, urgentLabel]);
   });
 
-  it("returns txid matching strategies from label Electric mutation handlers", async () => {
+  it("normalizes deployed Electric label rows before decoding the label contract", () => {
+    expect(
+      toLabelElectricRow({
+        archived_at: null,
+        color: label.color,
+        created_at: "2026-06-14 00:00:00+00",
+        description: null,
+        id: label.id,
+        name: label.name,
+        updated_at: "2026-06-14 00:00:00+00",
+      })
+    ).toStrictEqual(label);
+  });
+
+  it("returns txid matching strategies for label Electric observation", async () => {
     const updatedLabel = {
       ...label,
+      color: "oklch(63% 0.18 255)",
+      description: "Updated description",
       name: "Electrical",
     } satisfies Label;
     const createLabel = vi.fn<(input: CreateLabelInput) => LabelWriteEffect>(
       (input) =>
-        Effect.succeed(
-          makeLabelWriteResponse({ ...label, name: input.name }, 101)
-        )
+        Effect.succeed(makeLabelWriteResponse({ ...label, ...input }, 101))
     );
     const updateLabel = vi.fn<
       (labelId: Label["id"], input: UpdateLabelInput) => LabelWriteEffect
     >((_labelId, input) =>
-      Effect.succeed(
-        makeLabelWriteResponse({ ...label, name: input.name }, 102)
-      )
+      Effect.succeed(makeLabelWriteResponse({ ...label, ...input }, 102))
     );
     const archiveLabel = vi.fn<(labelId: Label["id"]) => LabelWriteEffect>(
       (_labelId) => Effect.succeed(makeLabelWriteResponse(label, 103))
@@ -259,7 +276,11 @@ describe("labels data plane", () => {
       timeout: 10_000,
       txid: 101,
     });
-    expect(createLabel).toHaveBeenCalledExactlyOnceWith({ name: "Plumbing" });
+    expect(createLabel).toHaveBeenCalledExactlyOnceWith({
+      color: DEFAULT_LABEL_COLOR,
+      description: null,
+      name: "Plumbing",
+    });
 
     await expect(
       onUpdate({
@@ -274,6 +295,8 @@ describe("labels data plane", () => {
       txid: 102,
     });
     expect(updateLabel).toHaveBeenCalledExactlyOnceWith(label.id, {
+      color: "oklch(63% 0.18 255)",
+      description: "Updated description",
       name: "Electrical",
     });
 

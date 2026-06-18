@@ -2820,9 +2820,15 @@ export function toJobContactSummaryRow(
 
 export function toJobsWorkspaceLabelRow(row: Record<string, unknown>): Label {
   return Schema.decodeUnknownSync(LabelSchema)({
+    archivedAt:
+      row.archivedAt === null
+        ? null
+        : normalizeJobsElectricDateTime(row.archivedAt),
+    color: row.color,
     createdAt: normalizeJobsElectricDateTime(row.createdAt),
-    id: String(row.id),
-    name: String(row.name),
+    description: row.description,
+    id: row.id,
+    name: row.name,
     updatedAt: normalizeJobsElectricDateTime(row.updatedAt),
   });
 }
