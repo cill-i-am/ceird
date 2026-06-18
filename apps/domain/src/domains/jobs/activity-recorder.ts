@@ -14,7 +14,10 @@ import type {
 import type { Label } from "@ceird/labels-core";
 import { Context, Effect, Layer } from "effect";
 
-import { ActivityEventsRepository } from "../activity/repository.js";
+import {
+  ActivityEventsRepository,
+  ProductActivityActorsRepository,
+} from "../activity/repository.js";
 import type { OrganizationActor } from "../organizations/current-actor.js";
 import { JobsRepository } from "./repositories.js";
 
@@ -57,6 +60,7 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
   {
     make: Effect.gen(function* JobsActivityRecorderLive() {
       const activityEvents = yield* ActivityEventsRepository;
+      const activityActors = yield* ProductActivityActorsRepository;
       const repository = yield* JobsRepository;
 
       const recordCreated = Effect.fn("JobsActivityRecorder.recordCreated")(
@@ -73,7 +77,13 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
             workItemId: job.id,
           });
 
-          yield* recordJobActivityEvent(actor, job, activity, activityEvents);
+          yield* recordJobActivityEvent(
+            actor,
+            job,
+            activity,
+            activityEvents,
+            activityActors
+          );
         }
       );
 
@@ -114,7 +124,13 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
             })
             .pipe(
               Effect.flatMap((activity) =>
-                recordJobActivityEvent(actor, job, activity, activityEvents)
+                recordJobActivityEvent(
+                  actor,
+                  job,
+                  activity,
+                  activityEvents,
+                  activityActors
+                )
               )
             )
         );
@@ -131,7 +147,13 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
             workItemId: job.id,
           });
 
-          yield* recordJobActivityEvent(actor, job, activity, activityEvents);
+          yield* recordJobActivityEvent(
+            actor,
+            job,
+            activity,
+            activityEvents,
+            activityActors
+          );
         }
       );
 
@@ -149,7 +171,13 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
           workItemId: job.id,
         });
 
-        yield* recordJobActivityEvent(actor, job, activity, activityEvents);
+        yield* recordJobActivityEvent(
+          actor,
+          job,
+          activity,
+          activityEvents,
+          activityActors
+        );
       });
 
       const recordLabelRemoved = Effect.fn(
@@ -157,7 +185,13 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
       )(function* (actor: OrganizationActor, job: Job, label: Label) {
         const activity = yield* addLabelRemovedActivity(actor, job.id, label);
 
-        yield* recordJobActivityEvent(actor, job, activity, activityEvents);
+        yield* recordJobActivityEvent(
+          actor,
+          job,
+          activity,
+          activityEvents,
+          activityActors
+        );
       });
 
       const recordLabelRemovedFromWorkItem = Effect.fn(
@@ -177,7 +211,8 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
           actor,
           { id: workItemId, title: label.name },
           activity,
-          activityEvents
+          activityEvents,
+          activityActors
         );
       });
 
@@ -219,7 +254,8 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
           actor,
           input.job,
           activity,
-          activityEvents
+          activityEvents,
+          activityActors
         );
       });
 
@@ -274,7 +310,11 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
   static readonly Default =
     JobsActivityRecorder.DefaultWithoutDependencies.pipe(
       Layer.provide(
-        Layer.mergeAll(ActivityEventsRepository.Default, JobsRepository.Default)
+        Layer.mergeAll(
+          ActivityEventsRepository.Default,
+          JobsRepository.Default,
+          ProductActivityActorsRepository.Default
+        )
       )
     );
 }
@@ -294,23 +334,27 @@ function recordJobActivityEvent(
   actor: OrganizationActor,
   job: JobActivityTarget,
   activity: JobActivity,
-  activityEvents: Context.Service.Shape<typeof ActivityEventsRepository>
+  activityEvents: Context.Service.Shape<typeof ActivityEventsRepository>,
+  activityActors: Context.Service.Shape<typeof ProductActivityActorsRepository>
 ) {
-  if (activity.actor === undefined) {
-    return Effect.void;
-  }
+  return Effect.gen(function* () {
+    const { actor: productActor } = yield* activityActors.ensureMemberActor({
+      organizationId: actor.organizationId,
+      userId: actor.userId,
+    });
 
-  return activityEvents.recordEvent({
-    actorId: activity.actor.id,
-    createdAt: new Date(activity.createdAt),
-    display: buildJobActivityDisplay(job, activity.payload),
-    eventType: toActivityEventType(activity.payload.eventType),
-    organizationId: actor.organizationId,
-    sourceId: activity.id,
-    sourceType: "job_activity",
-    status: "synced",
-    targetId: job.id,
-    targetType: "job",
+    yield* activityEvents.recordEvent({
+      actorId: productActor.id,
+      createdAt: new Date(activity.createdAt),
+      display: buildJobActivityDisplay(job, activity.payload),
+      eventType: toActivityEventType(activity.payload.eventType),
+      organizationId: actor.organizationId,
+      sourceId: activity.id,
+      sourceType: "job_activity",
+      status: "synced",
+      targetId: job.id,
+      targetType: "job",
+    });
   });
 }
 
