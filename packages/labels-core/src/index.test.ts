@@ -6,6 +6,8 @@ import {
   CreateLabelInputSchema,
   DEFAULT_LABEL_COLOR,
   LabelColorSchema,
+  LABEL_COLOR_BANK,
+  LABEL_COLOR_OPTIONS,
   LabelDescriptionSchema,
   LabelAccessDeniedError,
   LabelWriteResponseSchema,
@@ -155,6 +157,28 @@ describe("labels-core", () => {
     expect(() =>
       Schema.decodeUnknownSync(LabelColorSchema)("oklch(64% 0.9 28)")
     ).toThrow(/canonical OKLCH/);
+  });
+
+  it("exposes a named curated color bank with a non-colorless default", () => {
+    expect(LABEL_COLOR_OPTIONS).toHaveLength(9);
+    expect(LABEL_COLOR_BANK).toStrictEqual(
+      LABEL_COLOR_OPTIONS.map((option) => option.color)
+    );
+    expect(DEFAULT_LABEL_COLOR).toBe(LABEL_COLOR_OPTIONS[0].color);
+
+    expect(
+      LABEL_COLOR_OPTIONS.map((option) => ({
+        color: Schema.decodeUnknownSync(LabelColorSchema)(option.color),
+        id: option.id,
+        name: option.name,
+        role: option.role,
+      }))
+    ).toContainEqual({
+      color: "oklch(69% 0.04 250)",
+      id: "slate",
+      name: "Slate",
+      role: "Neutral taxonomy and low-signal categories",
+    });
   });
 
   it("exports labels API group and typed errors", () => {

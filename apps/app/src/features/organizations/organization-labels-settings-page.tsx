@@ -8,12 +8,14 @@ import type {
 import type {
   CreateLabelInput,
   Label,
+  LabelColor,
   LabelIdType,
   LabelWriteResponse,
   UpdateLabelInput,
 } from "@ceird/labels-core";
 import {
   CreateLabelInputSchema,
+  DEFAULT_LABEL_COLOR,
   UpdateLabelInputSchema,
   normalizeLabelName,
 } from "@ceird/labels-core";
@@ -58,6 +60,7 @@ import type {
 } from "#/data-plane/collection-health";
 import { useHydratedCollectionItems } from "#/data-plane/hydrated-collection";
 import type { DataPlaneMutationJournal } from "#/data-plane/mutation-journal";
+import { LabelColorPicker } from "#/features/labels/label-color-picker";
 import { validateLabelName } from "#/features/labels/label-name-validation";
 import { searchSettingsLabels } from "#/features/labels/labels-search";
 import {
@@ -204,11 +207,13 @@ export function OrganizationLabelsSettingsPage({
   const {
     cancelEditing,
     createName,
+    createColor,
     cancelArchiveConfirmation,
     confirmingArchiveLabelId,
     editingLabel,
     editingLabelId,
     editingName,
+    editingColor,
     handleArchiveLabel,
     handleCreateLabel,
     handleRenameLabel,
@@ -217,7 +222,9 @@ export function OrganizationLabelsSettingsPage({
     pendingMutation,
     requestArchiveConfirmation,
     setCreateName,
+    setCreateColor,
     setEditingName,
+    setEditingColor,
     startEditingLabel,
   } = useLabelsMutationController({
     canWriteLabels,
@@ -273,8 +280,10 @@ export function OrganizationLabelsSettingsPage({
               <CreateLabelForm
                 canWriteLabels={canWriteLabels}
                 createName={createName}
+                createColor={createColor}
                 disabled={isMutating}
                 inputRef={createInputRef}
+                onCreateColorChange={setCreateColor}
                 onCreateNameChange={setCreateName}
                 onSubmit={() => void handleCreateLabel()}
                 pending={pendingMutation?.kind === "create"}
@@ -295,6 +304,7 @@ export function OrganizationLabelsSettingsPage({
               hasSearch={hasSearch}
               editingLabelId={editingLabelId}
               editingName={editingName}
+              editingColor={editingColor}
               labels={visibleLabels}
               hasCommandReflection={hasCommandReflection}
               pendingMutation={pendingMutation}
@@ -305,6 +315,7 @@ export function OrganizationLabelsSettingsPage({
               onRequestArchiveConfirmation={requestArchiveConfirmation}
               onCancelEdit={cancelEditing}
               onEditingNameChange={setEditingName}
+              onEditingColorChange={setEditingColor}
               onRenameLabel={(label) => void handleRenameLabel(label)}
               onStartEdit={startEditingLabel}
               editInputRef={editInputRef}
@@ -447,10 +458,14 @@ function useLabelsMutationController({
   ) => Promise<LabelWriteResponse>;
 }) {
   const [createName, setCreateName] = React.useState("");
+  const [createColor, setCreateColor] =
+    React.useState<LabelColor>(DEFAULT_LABEL_COLOR);
   const [editingLabelId, setEditingLabelId] = React.useState<
     Label["id"] | null
   >(null);
   const [editingName, setEditingName] = React.useState("");
+  const [editingColor, setEditingColor] =
+    React.useState<LabelColor>(DEFAULT_LABEL_COLOR);
   const [pendingMutation, setPendingMutation] =
     React.useState<PendingLabelMutation | null>(null);
   const [mutationStatus, setMutationStatus] =
@@ -466,6 +481,7 @@ function useLabelsMutationController({
   function cancelEditing() {
     setEditingLabelId(null);
     setEditingName("");
+    setEditingColor(DEFAULT_LABEL_COLOR);
   }
 
   function cancelArchiveConfirmation() {
@@ -506,15 +522,18 @@ function useLabelsMutationController({
     try {
       const response = await persistLabelCommandMutation({
         commandName: "labels.create",
-        input: createLabelInput(decodedName.name),
+        input: createLabelInput(decodedName.name, createColor),
         journal: mutationJournal,
         operation: () =>
-          createLabelWithConfirmation(createLabelInput(decodedName.name)),
+          createLabelWithConfirmation(
+            createLabelInput(decodedName.name, createColor)
+          ),
       });
 
       reflectLabelUpsert(response.label);
 
       setCreateName("");
+      setCreateColor(DEFAULT_LABEL_COLOR);
       setMutationStatus({
         kind: "success",
         message: LABEL_CREATED_LOCAL_STATUS,
@@ -548,7 +567,7 @@ function useLabelsMutationController({
       return;
     }
 
-    if (decodedName.name === label.name) {
+    if (decodedName.name === label.name && editingColor === label.color) {
       cancelEditing();
       return;
     }
@@ -564,7 +583,7 @@ function useLabelsMutationController({
     setMutationStatus(null);
 
     try {
-      const input = updateLabelInput(label, decodedName.name);
+      const input = updateLabelInput(label, decodedName.name, editingColor);
       const response = await persistLabelCommandMutation({
         commandName: "labels.update",
         input: {
@@ -649,17 +668,20 @@ function useLabelsMutationController({
   function startEditingLabel(label: Label) {
     setEditingLabelId(label.id);
     setEditingName(label.name);
+    setEditingColor(label.color);
     setMutationStatus(null);
   }
 
   return {
     cancelEditing,
     createName,
+    createColor,
     cancelArchiveConfirmation,
     confirmingArchiveLabelId,
     editingLabel,
     editingLabelId,
     editingName,
+    editingColor,
     handleArchiveLabel,
     handleCreateLabel,
     handleRenameLabel,
@@ -668,69 +690,84 @@ function useLabelsMutationController({
     pendingMutation,
     requestArchiveConfirmation,
     setCreateName,
+    setCreateColor,
     setEditingName,
+    setEditingColor,
     startEditingLabel,
   } as const;
 }
 
 function CreateLabelForm({
   canWriteLabels,
+  createColor,
   createName,
   disabled,
   inputRef,
+  onCreateColorChange,
   onCreateNameChange,
   onSubmit,
   pending,
 }: {
   readonly canWriteLabels: boolean;
+  readonly createColor: LabelColor;
   readonly createName: string;
   readonly disabled: boolean;
   readonly inputRef: React.RefObject<HTMLInputElement | null>;
+  readonly onCreateColorChange: (color: LabelColor) => void;
   readonly onCreateNameChange: (name: string) => void;
   readonly onSubmit: () => void;
   readonly pending: boolean;
 }) {
   return (
     <form
-      className="grid gap-2 rounded-lg border border-border/70 bg-background p-3 sm:grid-cols-[minmax(0,1fr)_auto]"
+      className="grid gap-3 rounded-lg border border-border/70 bg-background p-3"
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit();
       }}
     >
-      <div className="relative min-w-0">
-        <label className="sr-only" htmlFor="organization-labels-create">
-          New label name
-        </label>
-        <Input
-          id="organization-labels-create"
-          ref={inputRef}
-          disabled={!canWriteLabels || disabled}
-          placeholder="New label name"
-          value={createName}
-          onChange={(event) => onCreateNameChange(event.currentTarget.value)}
-        />
-        <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="relative min-w-0">
+          <label className="sr-only" htmlFor="organization-labels-create">
+            New label name
+          </label>
+          <Input
+            id="organization-labels-create"
+            ref={inputRef}
+            disabled={!canWriteLabels || disabled}
+            placeholder="New label name"
+            value={createName}
+            onChange={(event) => onCreateNameChange(event.currentTarget.value)}
+          />
+          <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2">
+            <ShortcutHint
+              decorative
+              hotkey={HOTKEYS.labelsSettingsCreate.hotkey}
+              label={HOTKEYS.labelsSettingsCreate.label}
+            />
+          </span>
+        </div>
+        <Button type="submit" disabled={!canWriteLabels || disabled}>
+          {pending ? (
+            <Loader2 className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Plus aria-hidden="true" />
+          )}
+          Create
           <ShortcutHint
             decorative
-            hotkey={HOTKEYS.labelsSettingsCreate.hotkey}
-            label={HOTKEYS.labelsSettingsCreate.label}
+            hotkey={HOTKEYS.labelsSettingsSubmit.hotkey}
+            label={HOTKEYS.labelsSettingsSubmit.label}
           />
-        </span>
+        </Button>
       </div>
-      <Button type="submit" disabled={!canWriteLabels || disabled}>
-        {pending ? (
-          <Loader2 className="animate-spin" aria-hidden="true" />
-        ) : (
-          <Plus aria-hidden="true" />
-        )}
-        Create
-        <ShortcutHint
-          decorative
-          hotkey={HOTKEYS.labelsSettingsSubmit.hotkey}
-          label={HOTKEYS.labelsSettingsSubmit.label}
-        />
-      </Button>
+      <LabelColorPicker
+        disabled={!canWriteLabels || disabled}
+        id="organization-labels-create-color"
+        label="New label color"
+        value={createColor}
+        onChange={onCreateColorChange}
+      />
     </form>
   );
 }
@@ -832,6 +869,7 @@ function LabelsStateView({
   confirmingArchiveLabelId,
   editInputRef,
   editingLabelId,
+  editingColor,
   editingName,
   hasSearch,
   hasCommandReflection,
@@ -839,6 +877,7 @@ function LabelsStateView({
   onArchiveLabel,
   onCancelArchiveConfirmation,
   onCancelEdit,
+  onEditingColorChange,
   onEditingNameChange,
   onRequestArchiveConfirmation,
   onRenameLabel,
@@ -850,6 +889,7 @@ function LabelsStateView({
   readonly confirmingArchiveLabelId: Label["id"] | null;
   readonly editInputRef: React.RefObject<HTMLInputElement | null>;
   readonly editingLabelId: Label["id"] | null;
+  readonly editingColor: LabelColor;
   readonly editingName: string;
   readonly hasSearch: boolean;
   readonly hasCommandReflection: boolean;
@@ -857,6 +897,7 @@ function LabelsStateView({
   readonly onArchiveLabel: (label: Label) => void;
   readonly onCancelArchiveConfirmation: () => void;
   readonly onCancelEdit: () => void;
+  readonly onEditingColorChange: (color: LabelColor) => void;
   readonly onEditingNameChange: (name: string) => void;
   readonly onRequestArchiveConfirmation: (label: Label) => void;
   readonly onRenameLabel: (label: Label) => void;
@@ -921,6 +962,7 @@ function LabelsStateView({
                 confirmingArchive={confirmingArchiveLabelId === label.id}
                 editInputRef={editInputRef}
                 editing={editingLabelId === label.id}
+                editingColor={editingColor}
                 editingName={editingName}
                 key={label.id}
                 label={label}
@@ -928,6 +970,7 @@ function LabelsStateView({
                 onArchiveLabel={onArchiveLabel}
                 onCancelArchiveConfirmation={onCancelArchiveConfirmation}
                 onCancelEdit={onCancelEdit}
+                onEditingColorChange={onEditingColorChange}
                 onEditingNameChange={onEditingNameChange}
                 onRenameLabel={onRenameLabel}
                 onRequestArchiveConfirmation={onRequestArchiveConfirmation}
@@ -959,11 +1002,13 @@ function LabelRow({
   confirmingArchive,
   editInputRef,
   editing,
+  editingColor,
   editingName,
   label,
   onArchiveLabel,
   onCancelArchiveConfirmation,
   onCancelEdit,
+  onEditingColorChange,
   onEditingNameChange,
   onRenameLabel,
   onRequestArchiveConfirmation,
@@ -973,11 +1018,13 @@ function LabelRow({
   readonly confirmingArchive: boolean;
   readonly editInputRef: React.RefObject<HTMLInputElement | null>;
   readonly editing: boolean;
+  readonly editingColor: LabelColor;
   readonly editingName: string;
   readonly label: Label;
   readonly onArchiveLabel: (label: Label) => void;
   readonly onCancelArchiveConfirmation: () => void;
   readonly onCancelEdit: () => void;
+  readonly onEditingColorChange: (color: LabelColor) => void;
   readonly onEditingNameChange: (name: string) => void;
   readonly onRenameLabel: (label: Label) => void;
   readonly onRequestArchiveConfirmation: (label: Label) => void;
@@ -1008,15 +1055,28 @@ function LabelRow({
                 onEditingNameChange(event.currentTarget.value)
               }
             />
+            <LabelColorPicker
+              disabled={actionsDisabled}
+              label={`Color for ${label.name}`}
+              value={editingColor}
+              onChange={onEditingColorChange}
+            />
             <p className="text-xs text-muted-foreground">
               <EditLabelShortcutHelp confirmingArchive={confirmingArchive} />
             </p>
           </div>
         ) : (
           <>
-            <p className="truncate text-sm font-medium text-foreground">
-              {label.name}
-            </p>
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                className="size-3 shrink-0 rounded-full border border-black/15"
+                style={{ backgroundColor: label.color }}
+                aria-hidden="true"
+              />
+              <p className="truncate text-sm font-medium text-foreground">
+                {label.name}
+              </p>
+            </div>
             <p className="text-xs text-muted-foreground">
               {rowPending
                 ? "Pending realtime confirmation"
@@ -1452,13 +1512,20 @@ function useCollectionHealthSnapshot(
   );
 }
 
-function createLabelInput(name: Label["name"]): CreateLabelInput {
-  return decodeCreateLabelInput({ name });
+function createLabelInput(
+  name: Label["name"],
+  color: LabelColor
+): CreateLabelInput {
+  return decodeCreateLabelInput({ color, name });
 }
 
-function updateLabelInput(label: Label, name: Label["name"]): UpdateLabelInput {
+function updateLabelInput(
+  label: Label,
+  name: Label["name"],
+  color: LabelColor
+): UpdateLabelInput {
   return decodeUpdateLabelInput({
-    color: label.color,
+    color,
     description: label.description,
     name,
   });

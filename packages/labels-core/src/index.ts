@@ -7,12 +7,14 @@ export {
   LabelColorSchema,
   LabelDescriptionSchema,
   LABEL_COLOR_BANK,
+  LABEL_COLOR_OPTIONS,
   LabelNameSchema,
   normalizeLabelDescription,
   normalizeLabelName,
 } from "./domain.js";
 export type {
   LabelColor,
+  LabelColorOption,
   LabelDescription,
   IsoDateTimeString as IsoDateTimeStringType,
   LabelName,

@@ -249,6 +249,48 @@ describe("organization labels settings page", () => {
     ]);
   });
 
+  it("creates labels with the chosen curated color", async () => {
+    const user = userEvent.setup();
+    const createLabelWithConfirmation = vi.fn<
+      (input: CreateLabelInput) => Promise<LabelWriteResponse>
+    >((input) =>
+      Promise.resolve(
+        makeLabelWriteResponse(
+          {
+            ...makeLabel({
+              id: "44444444-4444-4444-8444-444444444444",
+              name: input.name,
+            }),
+            color: input.color,
+          },
+          123
+        )
+      )
+    );
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [],
+        status: "ready",
+      }),
+      createLabelWithConfirmation,
+    });
+
+    await user.click(screen.getByRole("radio", { name: /blue/i }));
+    await user.type(
+      screen.getByRole("textbox", { name: /new label name/i }),
+      "Customer visit"
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await expect(screen.findByText("Customer visit")).resolves.toBeVisible();
+    expect(createLabelWithConfirmation).toHaveBeenCalledWith({
+      color: "oklch(63% 0.18 255)",
+      description: null,
+      name: "Customer visit",
+    });
+  });
+
   it("uses server create ids before immediate rename actions", async () => {
     const user = userEvent.setup();
     const serverLabel = makeLabel({
