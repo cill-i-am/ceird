@@ -33,6 +33,7 @@ import type {
   RemoveOrganizationMemberInput,
   UpdateOrganizationMemberRoleInput,
 } from "@ceird/identity-core";
+import { APIError } from "better-auth/api";
 import { Context, Effect, Layer, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
@@ -117,10 +118,14 @@ const CountRowSchema = Schema.Struct({
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
+const OrganizationInvitationPayloadDateSchema = Schema.Union([
+  IsoDateTimeString,
+  SqlDate,
+]);
 const OrganizationInvitationPayloadSchema = Schema.Struct({
-  createdAt: IsoDateTimeString,
+  createdAt: OrganizationInvitationPayloadDateSchema,
   email: Schema.NonEmptyString,
-  expiresAt: IsoDateTimeString,
+  expiresAt: OrganizationInvitationPayloadDateSchema,
   id: InvitationId,
   inviterId: UserId,
   organizationId: OrganizationId,
@@ -137,6 +142,21 @@ const AuthenticationFailureBodySchema = Schema.Struct({
 }).annotate({
   parseOptions: { onExcessProperty: "ignore" },
 });
+const SYNTHETIC_ORGANIZATION_AUTH_TRANSPORT_HEADER_NAMES = [
+  "accept-encoding",
+  "cdn-loop",
+  "cf-connecting-ip",
+  "cf-ew-via",
+  "cf-ipcountry",
+  "cf-ray",
+  "cf-visitor",
+  "connection",
+  "content-encoding",
+  "content-length",
+  "content-md5",
+  "host",
+  "transfer-encoding",
+] as const;
 type OrganizationMemberRow = Schema.Schema.Type<
   typeof OrganizationMemberRowSchema
 >;
@@ -366,9 +386,8 @@ export class OrganizationMembersService extends Context.Service<OrganizationMemb
         input: InviteOrganizationMemberInput
       ) {
         const actor = yield* getAdministrativeActor();
-        const response = yield* dispatchOrganizationAuthRequest(
-          auth.handler,
-          "/organization/invite-member",
+        const response = yield* createOrganizationInvitation(
+          auth.api.createInvitation,
           {
             email: input.email,
             organizationId: actor.organizationId,
@@ -521,13 +540,58 @@ export function mapOrganizationInvitationPayload(
   const decodedPayload = decodeOrganizationInvitationPayload(payload);
 
   return decodeOrganizationInvitation({
-    createdAt: decodedPayload.createdAt,
+    createdAt: formatOrganizationInvitationPayloadDate(
+      decodedPayload.createdAt
+    ),
     email: decodedPayload.email,
-    expiresAt: decodedPayload.expiresAt,
+    expiresAt: formatOrganizationInvitationPayloadDate(
+      decodedPayload.expiresAt
+    ),
     id: decodedPayload.id,
     organizationId: decodedPayload.organizationId,
     role: decodedPayload.role,
     status: decodedPayload.status,
+  });
+}
+
+function formatOrganizationInvitationPayloadDate(
+  value: Schema.Schema.Type<typeof OrganizationInvitationPayloadDateSchema>
+) {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+export function makeOrganizationAuthRequestHeaders(input: HeadersInit) {
+  const headers = new Headers(input);
+
+  for (const name of SYNTHETIC_ORGANIZATION_AUTH_TRANSPORT_HEADER_NAMES) {
+    headers.delete(name);
+  }
+
+  headers.set("accept", "application/json");
+  headers.set("content-type", "application/json");
+
+  return headers;
+}
+
+function createOrganizationInvitation(
+  createInvitation: Context.Service.Shape<
+    typeof Authentication
+  >["api"]["createInvitation"],
+  payload: Parameters<
+    Context.Service.Shape<typeof Authentication>["api"]["createInvitation"]
+  >[0]["body"]
+) {
+  return Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+
+    return yield* Effect.tryPromise({
+      catch: mapAuthenticationApiFailure,
+      try: () =>
+        createInvitation({
+          body: payload,
+          headers: makeOrganizationAuthRequestHeaders(request.headers),
+        }),
+    });
   });
 }
 
@@ -539,10 +603,7 @@ function dispatchOrganizationAuthRequest(
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = new URL(`/api/auth${path}`, request.url);
-    const headers = new Headers(request.headers);
-
-    headers.set("accept", "application/json");
-    headers.set("content-type", "application/json");
+    const headers = makeOrganizationAuthRequestHeaders(request.headers);
 
     const response = yield* Effect.tryPromise({
       catch: (cause) =>
@@ -588,6 +649,30 @@ function readResponseBody(response: Response) {
 
       return body;
     },
+  });
+}
+
+function mapAuthenticationApiFailure(cause: unknown) {
+  if (cause instanceof APIError) {
+    const statusText =
+      typeof cause.status === "string" ? cause.status : undefined;
+
+    return mapAuthenticationFailure(
+      new Response(null, {
+        status: cause.statusCode,
+        ...(statusText === undefined ? {} : { statusText }),
+      }),
+      {
+        code: cause.body?.code,
+        message: cause.message,
+        ...(statusText === undefined ? {} : { statusText }),
+      }
+    );
+  }
+
+  return new OrganizationIdentityStorageError({
+    cause: formatUnknownCause(cause),
+    message: "Organization identity mutation failed",
   });
 }
 

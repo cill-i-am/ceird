@@ -16,6 +16,8 @@ import {
 } from "@ceird/identity-core";
 import type {
   InvitationId,
+  InvitableOrganizationRole,
+  OrganizationId,
   OrganizationRole,
   PublicInvitationPreview,
   UserId,
@@ -143,6 +145,15 @@ interface AuthenticationPluginOption {
 
 export interface CeirdAuthentication {
   api: {
+    readonly createInvitation: (options: {
+      readonly body: {
+        readonly email: string;
+        readonly organizationId: OrganizationId;
+        readonly resend?: boolean | undefined;
+        readonly role: InvitableOrganizationRole;
+      };
+      readonly headers: Headers;
+    }) => Promise<unknown>;
     readonly getSession: (options: {
       readonly headers: Headers;
     }) => Promise<AuthenticationSessionResult | null>;
