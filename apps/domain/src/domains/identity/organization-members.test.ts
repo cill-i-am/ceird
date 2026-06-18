@@ -1,4 +1,5 @@
 import {
+  mapOrganizationInvitationPayload,
   mapOrganizationInvitationRow,
   mapOrganizationMemberRow,
 } from "./organization-members.js";
@@ -60,6 +61,47 @@ describe("organization member identity mapping", () => {
       role: "member",
       status: "pending",
     });
+  });
+
+  it("maps Better Auth invitation mutation payloads into a safe invitation DTO", () => {
+    expect(
+      mapOrganizationInvitationPayload({
+        createdAt: "2026-04-01T09:30:00.000Z",
+        email: "pending@example.com",
+        expiresAt: "2026-04-12T09:30:00.000Z",
+        id: "inv_123",
+        inviterId: "user_owner",
+        organizationId: "org_123",
+        role: "member",
+        status: "pending",
+        teamId: null,
+      })
+    ).toStrictEqual({
+      createdAt: "2026-04-01T09:30:00.000Z",
+      email: "pending@example.com",
+      expiresAt: "2026-04-12T09:30:00.000Z",
+      id: "inv_123",
+      organizationId: "org_123",
+      role: "member",
+      status: "pending",
+    });
+  });
+
+  it("rejects Better Auth invitation mutation payloads with unknown fields", () => {
+    expect(() =>
+      mapOrganizationInvitationPayload({
+        createdAt: "2026-04-01T09:30:00.000Z",
+        email: "pending@example.com",
+        expiresAt: "2026-04-12T09:30:00.000Z",
+        id: "inv_123",
+        inviterId: "user_owner",
+        organizationId: "org_123",
+        role: "member",
+        status: "pending",
+        teamId: null,
+        unmodeledBetterAuthField: true,
+      })
+    ).toThrow(/Unexpected key/);
   });
 
   it("rejects invitation rows with unsupported statuses", () => {

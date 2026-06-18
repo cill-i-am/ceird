@@ -122,9 +122,11 @@ const OrganizationInvitationPayloadSchema = Schema.Struct({
   email: Schema.NonEmptyString,
   expiresAt: IsoDateTimeString,
   id: InvitationId,
+  inviterId: UserId,
   organizationId: OrganizationId,
   role: InvitableOrganizationRole,
   status: OrganizationInvitationStatus,
+  teamId: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -513,12 +515,20 @@ export function mapOrganizationInvitationRow(
   });
 }
 
-function mapOrganizationInvitationPayload(
+export function mapOrganizationInvitationPayload(
   payload: unknown
 ): OrganizationInvitation {
   const decodedPayload = decodeOrganizationInvitationPayload(payload);
 
-  return decodeOrganizationInvitation(decodedPayload);
+  return decodeOrganizationInvitation({
+    createdAt: decodedPayload.createdAt,
+    email: decodedPayload.email,
+    expiresAt: decodedPayload.expiresAt,
+    id: decodedPayload.id,
+    organizationId: decodedPayload.organizationId,
+    role: decodedPayload.role,
+    status: decodedPayload.status,
+  });
 }
 
 function dispatchOrganizationAuthRequest(
