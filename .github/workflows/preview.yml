@@ -36,6 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: preview-deploy
     env:
+      AUTH_RATE_LIMIT_ENABLED: "false"
       PLAYWRIGHT_AGENT_URL: https://agent.pr-${{ github.event.pull_request.number }}.ceird.app
       PLAYWRIGHT_API_URL: https://api.pr-${{ github.event.pull_request.number }}.ceird.app
       PLAYWRIGHT_BASE_URL: https://app.pr-${{ github.event.pull_request.number }}.ceird.app
@@ -312,6 +313,7 @@ jobs:
           - 2/3
           - 3/3
     env:
+      AUTH_RATE_LIMIT_ENABLED: "false"
       PLAYWRIGHT_AGENT_URL: https://agent.pr-${{ github.event.pull_request.number }}.ceird.app
       PLAYWRIGHT_API_URL: https://api.pr-${{ github.event.pull_request.number }}.ceird.app
       PLAYWRIGHT_BASE_URL: https://app.pr-${{ github.event.pull_request.number }}.ceird.app
@@ -372,7 +374,7 @@ jobs:
           NEON_ORG_ID: ${{ vars.NEON_ORG_ID }}
 
       - name: Run E2E tests
-        run: pnpm --filter app e2e --shard=${{ matrix.shard }}
+        run: pnpm --filter app e2e --shard=${{ matrix.shard }} --workers=1
 
   cleanup:
     name: Destroy Preview

@@ -1219,6 +1219,8 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   assertCloudflareGlobalKeyCredentials(previewAuditStep);
   assertCloudflareGlobalKeyCredentials(previewDatabaseExportStep);
   assertCloudflareGlobalKeyCredentials(previewE2eDatabaseExportStep);
+  assert.match(previewDeployJob, /AUTH_RATE_LIMIT_ENABLED: "false"/);
+  assert.match(previewE2eJob, /AUTH_RATE_LIMIT_ENABLED: "false"/);
   assert.doesNotMatch(previewDeployJob, /pnpm --filter app e2e/);
   assert.match(previewE2eJob, /needs:\n {6}- deploy-preview/);
   assert.match(previewE2eJob, /strategy:\n {6}fail-fast: false/);
@@ -1235,7 +1237,7 @@ test("preview workflow deploys same-repository PR stages for E2E", () => {
   );
   assert.match(
     previewE2eJob,
-    /pnpm --filter app e2e --shard=\$\{\{ matrix\.shard \}\}/
+    /pnpm --filter app e2e --shard=\$\{\{ matrix\.shard \}\} --workers=1/
   );
   assert.doesNotMatch(previewE2eJob, /pnpm alchemy deploy/);
   assert.doesNotMatch(previewE2eJob, /pnpm alchemy destroy/);

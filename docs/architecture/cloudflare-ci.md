@@ -199,6 +199,11 @@ Preview stages named `pr-<number>` and ephemeral CI stages named
 health probes from locking themselves out while preserving auth rate limiting
 for `main` and ordinary non-PR stages by default.
 
+Pull-request preview E2E runs are sharded across the same `1/3`, `2/3`, `3/3`
+matrix as the main-branch cloud E2E job. Each preview shard uses one Playwright
+worker so the same shared preview stage gets shard parallelism without also
+multiplying browser workers inside every shard.
+
 `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS` is the JSON body from
 `~/.alchemy/credentials/default/cloudflare-state-store.json`, stored as a GitHub
 environment secret. Main, preview, and ephemeral CI jobs restore it through
