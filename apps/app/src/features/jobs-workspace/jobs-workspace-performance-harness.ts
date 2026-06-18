@@ -3,7 +3,8 @@ import { dirname } from "node:path";
 import { performance } from "node:perf_hooks";
 import process from "node:process";
 
-import type { OrganizationId, ProductActorId } from "@ceird/identity-core";
+import { decodeOrganizationId } from "@ceird/identity-core";
+import type { ProductActorId } from "@ceird/identity-core";
 import type {
   ActivityIdType,
   CommentIdType,
@@ -130,7 +131,7 @@ const DEFAULT_COUNTS = {
   memberActors: 75,
   sites: 1000,
 } as const satisfies JobsWorkspacePerformanceFixtureCounts;
-const PERFORMANCE_ORGANIZATION_ID = "org_jobs_perf" as OrganizationId;
+const PERFORMANCE_ORGANIZATION_ID = decodeOrganizationId("org_jobs_perf");
 
 const JOB_STATUSES = [
   "new",

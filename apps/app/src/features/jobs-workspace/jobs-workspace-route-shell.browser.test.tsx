@@ -1,8 +1,5 @@
-import type {
-  OrganizationId,
-  ProductActorId,
-  UserId,
-} from "@ceird/identity-core";
+import { decodeOrganizationId } from "@ceird/identity-core";
+import type { ProductActorId, UserId } from "@ceird/identity-core";
 import type {
   ActivityIdType,
   CommentIdType,
@@ -61,7 +58,7 @@ const liveListState = vi.hoisted<{ current: JobsWorkspaceLiveListState }>(
     } as JobsWorkspaceLiveListState,
   })
 );
-const organizationId = "org_123" as OrganizationId;
+const organizationId = decodeOrganizationId("org_123");
 const liveDetailState = vi.hoisted<{
   current: JobsWorkspaceLiveDetailState;
 }>(() => ({
