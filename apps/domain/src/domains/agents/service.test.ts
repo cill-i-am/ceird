@@ -21,6 +21,7 @@ import {
   UserPreferencesStorageError,
 } from "@ceird/identity-core";
 import type { Label } from "@ceird/labels-core";
+import { DEFAULT_LABEL_COLOR } from "@ceird/labels-core";
 import { SiteId, SiteOptionSchema } from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
 import { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
@@ -121,7 +122,7 @@ describe("agent threads service", () => {
           const service = yield* AgentThreadsService;
 
           return yield* service.runAction({
-            input: { name: "Plumbing" },
+            input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
             name: "ceird.labels.create",
             operationId,
             threadId,
@@ -330,7 +331,7 @@ describe("agent threads service", () => {
 
           return yield* service
             .runAction({
-              input: { name: "Plumbing" },
+              input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
               name: "ceird.labels.create",
               operationId,
               threadId,
@@ -391,7 +392,7 @@ describe("agent threads service", () => {
 
           return yield* service
             .runAction({
-              input: { name: "Plumbing" },
+              input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
               name: "ceird.labels.create",
               operationId,
               threadId,
@@ -442,7 +443,7 @@ describe("agent threads service", () => {
 
           return yield* service
             .runAction({
-              input: { name: "Plumbing" },
+              input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
               name: "ceird.labels.create",
               operationId,
               threadId,
@@ -520,7 +521,7 @@ describe("agent threads service", () => {
           const service = yield* AgentThreadsService;
 
           return yield* service.runAction({
-            input: { name: "Plumbing" },
+            input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
             name: "ceird.labels.create",
             operationId,
             threadId,
@@ -576,7 +577,7 @@ describe("agent threads service", () => {
           const service = yield* AgentThreadsService;
 
           return yield* service.runAction({
-            input: { name: "Plumbing" },
+            input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
             name: "ceird.labels.create",
             operationId,
             threadId,
@@ -634,7 +635,7 @@ describe("agent threads service", () => {
           const service = yield* AgentThreadsService;
 
           return yield* service.runAction({
-            input: { name: "Plumbing" },
+            input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
             name: "ceird.labels.create",
             operationId,
             threadId,
@@ -726,7 +727,10 @@ describe("agent threads service", () => {
 
   it("runs agent label creation through the real action bridge with the thread actor", async () => {
     const createdLabel = {
+      archivedAt: null,
+      color: DEFAULT_LABEL_COLOR,
       createdAt: "2026-05-20T10:00:00.000Z",
+      description: null,
       id: "33333333-3333-4333-8333-333333333333",
       name: "Plumbing",
       updatedAt: "2026-05-20T10:00:00.000Z",
@@ -734,6 +738,8 @@ describe("agent threads service", () => {
     const productActivityEvents: RecordActivityEventInput[] = [];
     const labelActivityCalls: string[] = [];
     const labelCreateCalls: {
+      readonly color: string;
+      readonly description?: string | null | undefined;
       readonly name: string;
       readonly organizationId: typeof organizationId;
     }[] = [];
@@ -745,7 +751,7 @@ describe("agent threads service", () => {
           const service = yield* AgentThreadsService;
 
           return yield* service.runAction({
-            input: { name: "Plumbing" },
+            input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
             name: "ceird.labels.create",
             operationId,
             threadId,
@@ -811,7 +817,12 @@ describe("agent threads service", () => {
       result: createdLabel,
     });
     expect(labelCreateCalls).toStrictEqual([
-      { name: "Plumbing", organizationId },
+      {
+        color: DEFAULT_LABEL_COLOR,
+        description: null,
+        name: "Plumbing",
+        organizationId,
+      },
     ]);
     expect(labelManageAuthorizationActors).toStrictEqual([actor]);
     expect(labelActivityCalls).toStrictEqual([
@@ -838,7 +849,7 @@ describe("agent threads service", () => {
           const service = yield* AgentThreadsService;
 
           return yield* service.runAction({
-            input: { name: "Plumbing" },
+            input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
             name: "ceird.labels.create",
             operationId,
             threadId,
@@ -903,7 +914,7 @@ describe("agent threads service", () => {
           const service = yield* AgentThreadsService;
 
           return yield* service.runAction({
-            input: { name: "Plumbing" },
+            input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
             name: "ceird.labels.create",
             operationId,
             threadId,
@@ -976,7 +987,7 @@ describe("agent threads service", () => {
           const service = yield* AgentThreadsService;
 
           return yield* service.runAction({
-            input: { name: "Plumbing" },
+            input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
             name: "ceird.labels.create",
             operationId,
             threadId,
@@ -1043,7 +1054,7 @@ describe("agent threads service", () => {
 
           return yield* service
             .runAction({
-              input: { name: "Plumbing" },
+              input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
               name: "ceird.labels.create",
               operationId,
               threadId,
@@ -1231,7 +1242,7 @@ describe("agent threads service", () => {
 
           return yield* service
             .runAction({
-              input: { name: "Plumbing" },
+              input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
               name: "ceird.labels.create",
               operationId,
               threadId,
@@ -1273,7 +1284,7 @@ describe("agent threads service", () => {
 
           return yield* service
             .runAction({
-              input: { name: "Plumbing" },
+              input: { color: DEFAULT_LABEL_COLOR, name: "Plumbing" },
               name: "ceird.labels.create",
               operationId,
               threadId,
@@ -1327,7 +1338,10 @@ describe("agent threads service", () => {
           const actions = yield* AgentActions;
 
           return yield* actions
-            .execute(actor, "ceird.labels.create", { name: "Plumbing" })
+            .execute(actor, "ceird.labels.create", {
+              color: DEFAULT_LABEL_COLOR,
+              name: "Plumbing",
+            })
             .pipe(Effect.flip);
         }),
         {
@@ -1469,7 +1483,10 @@ describe("agent threads service", () => {
 
   it("records label activity for agent-triggered label writes", async () => {
     const createdLabel = {
+      archivedAt: null,
+      color: DEFAULT_LABEL_COLOR,
       createdAt: "2026-05-20T10:00:00.000Z",
+      description: null,
       id: "33333333-3333-4333-8333-333333333333",
       name: "Plumbing",
       updatedAt: "2026-05-20T10:00:00.000Z",
@@ -1482,6 +1499,7 @@ describe("agent threads service", () => {
           const actions = yield* AgentActions;
 
           return yield* actions.execute(actor, "ceird.labels.create", {
+            color: DEFAULT_LABEL_COLOR,
             name: "Plumbing",
           });
         }),
@@ -1509,7 +1527,10 @@ describe("agent threads service", () => {
 
   it("does not commit agent label writes when activity recording fails", async () => {
     const createdLabel = {
+      archivedAt: null,
+      color: DEFAULT_LABEL_COLOR,
       createdAt: "2026-05-20T10:00:00.000Z",
+      description: null,
       id: "33333333-3333-4333-8333-333333333333",
       name: "Plumbing",
       updatedAt: "2026-05-20T10:00:00.000Z",
@@ -1539,7 +1560,10 @@ describe("agent threads service", () => {
           const actions = yield* AgentActions;
 
           return yield* actions
-            .execute(actor, "ceird.labels.create", { name: "Plumbing" })
+            .execute(actor, "ceird.labels.create", {
+              color: DEFAULT_LABEL_COLOR,
+              name: "Plumbing",
+            })
             .pipe(Effect.flip);
         }),
         {

@@ -1385,12 +1385,12 @@ describe("global agent chat", () => {
           id: "message-approval",
           parts: [
             {
-              approval: { id: "approval-delete-label" },
+              approval: { id: "approval-archive-label" },
               input: { labelId: "label_123" },
               state: "approval-requested",
-              toolCallId: "tool-delete-label-call",
-              toolName: "deleteLabel",
-              type: "tool-deleteLabel",
+              toolCallId: "tool-archive-label-call",
+              toolName: "archiveLabel",
+              type: "tool-archiveLabel",
             },
           ],
           role: "assistant",
@@ -1411,9 +1411,9 @@ describe("global agent chat", () => {
 
     const drawer = await screen.findByTestId("agent-chat-drawer");
     expect(within(drawer).getByText("Approval required")).toBeVisible();
-    expect(within(drawer).getByText("Delete label")).toBeVisible();
+    expect(within(drawer).getByText("Archive label")).toBeVisible();
     expect(
-      within(drawer).getByText("Delete an organization label.")
+      within(drawer).getByText("Archive an organization label.")
     ).toBeVisible();
     expect(
       within(drawer).getByText("Destructive action against label.")
@@ -1436,12 +1436,12 @@ describe("global agent chat", () => {
     ).toStrictEqual({
       approved: true,
       autoContinue: true,
-      toolCallId: "tool-delete-label-call",
+      toolCallId: "tool-archive-label-call",
       type: "cf_agent_tool_approval",
     });
     expect(mockedAddToolApprovalResponse).toHaveBeenCalledWith({
       approved: true,
-      id: "approval-delete-label",
+      id: "approval-archive-label",
     });
 
     await user.click(within(drawer).getByRole("button", { name: /reject/i }));
@@ -1450,12 +1450,12 @@ describe("global agent chat", () => {
     ).toStrictEqual({
       approved: false,
       autoContinue: true,
-      toolCallId: "tool-delete-label-call",
+      toolCallId: "tool-archive-label-call",
       type: "cf_agent_tool_approval",
     });
     expect(mockedAddToolApprovalResponse).toHaveBeenCalledWith({
       approved: false,
-      id: "approval-delete-label",
+      id: "approval-archive-label",
     });
   });
 
@@ -1596,8 +1596,8 @@ describe("global agent chat", () => {
             {
               input: { labelId: "label_123" },
               state: "approval-requested",
-              toolName: "deleteLabel",
-              type: "tool-deleteLabel",
+              toolName: "archiveLabel",
+              type: "tool-archiveLabel",
             },
           ],
           role: "assistant",

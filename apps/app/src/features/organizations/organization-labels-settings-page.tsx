@@ -13,8 +13,8 @@ import type {
   UpdateLabelInput,
 } from "@ceird/labels-core";
 import {
-  LabelId,
-  LabelWriteResponseSchema,
+  CreateLabelInputSchema,
+  UpdateLabelInputSchema,
   normalizeLabelName,
 } from "@ceird/labels-core";
 import { Effect, Schema } from "effect";
@@ -78,25 +78,11 @@ type LabelsSettingsShellState =
   | "unavailable";
 
 interface LabelsCollectionLike {
-  delete?: (key: Label["id"]) => LabelMutationTransaction;
   readonly status: string;
   entries: () => Iterable<[string | number, Label]>;
-  insert?: (data: Label) => LabelMutationTransaction;
   subscribeChanges: (callback: () => void) => {
     requestSnapshot?: (options?: { readonly optimizedOnly?: boolean }) => void;
     unsubscribe: () => void;
-  };
-  update?: (
-    key: Label["id"],
-    callback: (draft: WritableLabelDraft) => void
-  ) => LabelMutationTransaction;
-  readonly utils?: {
-    readonly awaitTxId?:
-      | ((txid: number, timeout?: number) => Promise<boolean>)
-      | undefined;
-    readonly writeBatch?: ((callback: () => void) => void) | undefined;
-    readonly writeDelete?: ((key: Label["id"]) => void) | undefined;
-    readonly writeUpsert?: ((data: Label) => void) | undefined;
   };
 }
 
@@ -113,9 +99,7 @@ export interface OrganizationLabelsSettingsPageProps {
   readonly createLabelWithConfirmation?:
     | ((input: CreateLabelInput) => Promise<LabelWriteResponse>)
     | undefined;
-  readonly createTemporaryLabelId?: (() => Label["id"]) | undefined;
   readonly mutationJournal?: DataPlaneMutationJournal | undefined;
-  readonly now?: (() => Date) | undefined;
   readonly organization: OrganizationSummary;
   readonly organizationRole?: OrganizationRole | undefined;
   readonly state?: LabelsSettingsShellState | undefined;
@@ -125,14 +109,6 @@ export interface OrganizationLabelsSettingsPageProps {
         input: UpdateLabelInput
       ) => Promise<LabelWriteResponse>)
     | undefined;
-}
-
-interface LabelMutationTransaction {
-  readonly error?: unknown;
-  readonly isPersisted: {
-    readonly promise: Promise<unknown>;
-  };
-  readonly state?: string;
 }
 
 type LabelMutationKind = "archive" | "create" | "rename";
@@ -148,26 +124,31 @@ interface LabelMutationStatus {
   readonly message: string;
 }
 
-type WritableLabelDraft = {
-  -readonly [Key in keyof Label]: Label[Key];
-};
+interface LabelCommandReflection {
+  readonly archivedIds: ReadonlySet<Label["id"]>;
+  readonly upserts: ReadonlyMap<Label["id"], Label>;
+}
 
 const LABEL_COMMAND_COLLECTIONS = ["labels"] as const;
-const LABEL_ELECTRIC_MUTATION_CONFIRMATION_TIMEOUT_MS = 10_000;
 const EMPTY_LABEL_NAME_MESSAGE = "Type a label name before saving it.";
 const INVALID_LABEL_NAME_MESSAGE =
   "Label names must be between 1 and 48 characters.";
 const DUPLICATE_LABEL_NAME_MESSAGE = "A label with that name already exists.";
+const LABEL_CREATED_LOCAL_STATUS =
+  "Label created and reflected locally while realtime sync catches up.";
+const LABEL_RENAMED_LOCAL_STATUS =
+  "Label renamed and reflected locally while realtime sync catches up.";
+const LABEL_ARCHIVED_LOCAL_STATUS =
+  "Label archived and reflected locally while realtime sync catches up.";
 
-const decodeTemporaryLabelId = Schema.decodeUnknownSync(LabelId);
+const decodeCreateLabelInput = Schema.decodeUnknownSync(CreateLabelInputSchema);
+const decodeUpdateLabelInput = Schema.decodeUnknownSync(UpdateLabelInputSchema);
 
 export function OrganizationLabelsSettingsPage({
   archiveLabelWithConfirmation = archiveDefaultLabelWithConfirmation,
   collectionState,
   createLabelWithConfirmation = createDefaultLabelWithConfirmation,
-  createTemporaryLabelId = createDefaultTemporaryLabelId,
   mutationJournal,
-  now = () => new Date(),
   organization,
   organizationRole,
   state,
@@ -179,7 +160,25 @@ export function OrganizationLabelsSettingsPage({
   const collection = canManageLabels
     ? (collectionState?.collection ?? null)
     : null;
-  const labels = useHydratedCollectionItems<Label>(collection ?? null, []);
+  const syncedLabels = useHydratedCollectionItems<Label>(
+    collection ?? null,
+    []
+  );
+  const [commandReflection, setCommandReflection] =
+    React.useState<LabelCommandReflection>(createEmptyLabelCommandReflection);
+  const labels = React.useMemo(
+    () => reflectLabelCommands(syncedLabels, commandReflection),
+    [commandReflection, syncedLabels]
+  );
+  const hasCommandReflection =
+    commandReflection.archivedIds.size > 0 ||
+    commandReflection.upserts.size > 0;
+  const reflectLabelUpsert = React.useCallback((label: Label) => {
+    setCommandReflection((current) => upsertReflectedLabel(current, label));
+  }, []);
+  const reflectLabelArchive = React.useCallback((labelId: Label["id"]) => {
+    setCommandReflection((current) => archiveReflectedLabel(current, labelId));
+  }, []);
   const health = useCollectionHealthSnapshot(collectionState?.health);
   const shellState =
     state ??
@@ -199,11 +198,7 @@ export function OrganizationLabelsSettingsPage({
   const hasSearch = searchQuery.trim().length > 0;
   const canWriteLabels = canWriteSettingsLabels({
     canManageLabels,
-    collectionIsWritable:
-      collection !== null &&
-      typeof collection.insert === "function" &&
-      typeof collection.update === "function" &&
-      typeof collection.delete === "function",
+    collectionIsAvailable: collection !== null,
     shellState,
   });
   const {
@@ -229,10 +224,10 @@ export function OrganizationLabelsSettingsPage({
     archiveLabelWithConfirmation,
     collection,
     createLabelWithConfirmation,
-    createTemporaryLabelId,
     labels,
     mutationJournal,
-    now,
+    reflectLabelArchive,
+    reflectLabelUpsert,
     updateLabelWithConfirmation,
   });
 
@@ -301,6 +296,7 @@ export function OrganizationLabelsSettingsPage({
               editingLabelId={editingLabelId}
               editingName={editingName}
               labels={visibleLabels}
+              hasCommandReflection={hasCommandReflection}
               pendingMutation={pendingMutation}
               searchQuery={searchQuery}
               state={shellState}
@@ -408,16 +404,16 @@ function useLabelsSettingsHotkeys({
 
 function canWriteSettingsLabels({
   canManageLabels,
-  collectionIsWritable,
+  collectionIsAvailable,
   shellState,
 }: {
   readonly canManageLabels: boolean;
-  readonly collectionIsWritable: boolean;
+  readonly collectionIsAvailable: boolean;
   readonly shellState: LabelsSettingsShellState;
 }) {
   return (
     canManageLabels &&
-    collectionIsWritable &&
+    collectionIsAvailable &&
     (shellState === "ready" || shellState === "empty")
   );
 }
@@ -427,10 +423,10 @@ function useLabelsMutationController({
   canWriteLabels,
   collection,
   createLabelWithConfirmation,
-  createTemporaryLabelId,
   labels,
   mutationJournal,
-  now,
+  reflectLabelArchive,
+  reflectLabelUpsert,
   updateLabelWithConfirmation,
 }: {
   readonly archiveLabelWithConfirmation: (
@@ -441,10 +437,10 @@ function useLabelsMutationController({
   readonly createLabelWithConfirmation: (
     input: CreateLabelInput
   ) => Promise<LabelWriteResponse>;
-  readonly createTemporaryLabelId: () => Label["id"];
   readonly labels: readonly Label[];
   readonly mutationJournal?: DataPlaneMutationJournal | undefined;
-  readonly now: () => Date;
+  readonly reflectLabelArchive: (labelId: Label["id"]) => void;
+  readonly reflectLabelUpsert: (label: Label) => void;
   readonly updateLabelWithConfirmation: (
     labelId: LabelIdType,
     input: UpdateLabelInput
@@ -498,7 +494,6 @@ function useLabelsMutationController({
     }
 
     const operationId = `labels.create:${decodedName.name}`;
-    const awaitTxId = collection.utils?.awaitTxId;
 
     setPendingMutation({
       id: operationId,
@@ -509,52 +504,20 @@ function useLabelsMutationController({
     setMutationStatus(null);
 
     try {
-      if (awaitTxId === undefined) {
-        const temporaryLabel = makeTemporaryLabel({
-          id: createTemporaryLabelId(),
-          name: decodedName.name,
-          now,
-        });
-        setPendingMutation((current) =>
-          current?.id === operationId
-            ? { ...current, labelId: temporaryLabel.id }
-            : current
-        );
+      const response = await persistLabelCommandMutation({
+        commandName: "labels.create",
+        input: createLabelInput(decodedName.name),
+        journal: mutationJournal,
+        operation: () =>
+          createLabelWithConfirmation(createLabelInput(decodedName.name)),
+      });
 
-        const output = await persistLabelCollectionMutation({
-          commandName: "labels.create",
-          input: { name: decodedName.name },
-          journal: mutationJournal,
-          operation: () => collection.insert?.(temporaryLabel),
-        });
-        reconcileCreatedLabel({
-          collection,
-          output,
-          temporaryLabel,
-        });
-      } else {
-        await persistLabelCommandMutation({
-          commandName: "labels.create",
-          input: { name: decodedName.name },
-          journal: mutationJournal,
-          operation: async () => {
-            const response = await createLabelWithConfirmation({
-              name: decodedName.name,
-            });
-            await awaitTxId(
-              response.mutation.txid,
-              LABEL_ELECTRIC_MUTATION_CONFIRMATION_TIMEOUT_MS
-            );
-            collection.utils?.writeUpsert?.(response.label);
-            return response;
-          },
-        });
-      }
+      reflectLabelUpsert(response.label);
 
       setCreateName("");
       setMutationStatus({
         kind: "success",
-        message: "Label created and confirmed by realtime sync.",
+        message: LABEL_CREATED_LOCAL_STATUS,
       });
     } catch (error) {
       setMutationStatus({
@@ -601,38 +564,22 @@ function useLabelsMutationController({
     setMutationStatus(null);
 
     try {
-      const awaitTxId = collection.utils?.awaitTxId;
-      await (awaitTxId === undefined
-        ? persistLabelCollectionMutation({
-            commandName: "labels.update",
-            input: { labelId: label.id, name: decodedName.name },
-            journal: mutationJournal,
-            operation: () =>
-              collection.update?.(label.id, (draft) => {
-                draft.name = decodedName.name;
-                draft.updatedAt = now().toISOString();
-              }),
-          })
-        : persistLabelCommandMutation({
-            commandName: "labels.update",
-            input: { labelId: label.id, name: decodedName.name },
-            journal: mutationJournal,
-            operation: async () => {
-              const response = await updateLabelWithConfirmation(label.id, {
-                name: decodedName.name,
-              });
-              await awaitTxId(
-                response.mutation.txid,
-                LABEL_ELECTRIC_MUTATION_CONFIRMATION_TIMEOUT_MS
-              );
-              collection.utils?.writeUpsert?.(response.label);
-              return response;
-            },
-          }));
+      const input = updateLabelInput(label, decodedName.name);
+      const response = await persistLabelCommandMutation({
+        commandName: "labels.update",
+        input: {
+          labelId: label.id,
+          ...input,
+        },
+        journal: mutationJournal,
+        operation: () => updateLabelWithConfirmation(label.id, input),
+      });
+
+      reflectLabelUpsert(response.label);
       cancelEditing();
       setMutationStatus({
         kind: "success",
-        message: "Label renamed and confirmed by realtime sync.",
+        message: LABEL_RENAMED_LOCAL_STATUS,
       });
     } catch (error) {
       cancelEditing();
@@ -668,28 +615,14 @@ function useLabelsMutationController({
     setMutationStatus(null);
 
     try {
-      const awaitTxId = collection.utils?.awaitTxId;
-      await (awaitTxId === undefined
-        ? persistLabelCollectionMutation({
-            commandName: "labels.archive",
-            input: { labelId: label.id },
-            journal: mutationJournal,
-            operation: () => collection.delete?.(label.id),
-          })
-        : persistLabelCommandMutation({
-            commandName: "labels.archive",
-            input: { labelId: label.id },
-            journal: mutationJournal,
-            operation: async () => {
-              const response = await archiveLabelWithConfirmation(label.id);
-              await awaitTxId(
-                response.mutation.txid,
-                LABEL_ELECTRIC_MUTATION_CONFIRMATION_TIMEOUT_MS
-              );
-              collection.utils?.writeDelete?.(label.id);
-              return response;
-            },
-          }));
+      await persistLabelCommandMutation({
+        commandName: "labels.archive",
+        input: { labelId: label.id },
+        journal: mutationJournal,
+        operation: () => archiveLabelWithConfirmation(label.id),
+      });
+
+      reflectLabelArchive(label.id);
 
       if (editingLabelId === label.id) {
         cancelEditing();
@@ -698,7 +631,7 @@ function useLabelsMutationController({
       cancelArchiveConfirmation();
       setMutationStatus({
         kind: "success",
-        message: "Label archived and removed after realtime confirmation.",
+        message: LABEL_ARCHIVED_LOCAL_STATUS,
       });
     } catch (error) {
       setMutationStatus({
@@ -901,6 +834,7 @@ function LabelsStateView({
   editingLabelId,
   editingName,
   hasSearch,
+  hasCommandReflection,
   labels,
   onArchiveLabel,
   onCancelArchiveConfirmation,
@@ -918,6 +852,7 @@ function LabelsStateView({
   readonly editingLabelId: Label["id"] | null;
   readonly editingName: string;
   readonly hasSearch: boolean;
+  readonly hasCommandReflection: boolean;
   readonly labels: readonly Label[];
   readonly onArchiveLabel: (label: Label) => void;
   readonly onCancelArchiveConfirmation: () => void;
@@ -930,18 +865,16 @@ function LabelsStateView({
   readonly searchQuery: string;
   readonly state: LabelsSettingsShellState;
 }) {
+  if (labels.length === 0 && !hasSearch && hasCommandReflection) {
+    return <LabelsEmptyNotice />;
+  }
+
   switch (state) {
     case "connecting": {
       return <LabelsLoadingSkeleton />;
     }
     case "empty": {
-      return (
-        <ShellNotice
-          icon={<CheckCircle2 aria-hidden="true" />}
-          title="No labels yet"
-          description="New labels created by admins will appear here after the Electric labels shape observes them."
-        />
-      );
+      return <LabelsEmptyNotice />;
     }
     case "unavailable": {
       return (
@@ -962,7 +895,11 @@ function LabelsStateView({
       );
     }
     case "ready": {
-      if (labels.length === 0 && hasSearch) {
+      if (labels.length === 0) {
+        if (!hasSearch) {
+          return <LabelsEmptyNotice />;
+        }
+
         return (
           <ShellNotice
             icon={<Slash aria-hidden="true" />}
@@ -1006,6 +943,16 @@ function LabelsStateView({
       return null;
     }
   }
+}
+
+function LabelsEmptyNotice() {
+  return (
+    <ShellNotice
+      icon={<CheckCircle2 aria-hidden="true" />}
+      title="No labels yet"
+      description="New labels created by admins will appear here after the Electric labels shape observes them."
+    />
+  );
 }
 
 function LabelRow({
@@ -1386,6 +1333,72 @@ function getLabelsSettingsState({
   return "unavailable";
 }
 
+function createEmptyLabelCommandReflection(): LabelCommandReflection {
+  return {
+    archivedIds: new Set<Label["id"]>(),
+    upserts: new Map<Label["id"], Label>(),
+  };
+}
+
+function reflectLabelCommands(
+  syncedLabels: readonly Label[],
+  reflection: LabelCommandReflection
+) {
+  const labelsById = new Map(
+    syncedLabels.map((label): [Label["id"], Label] => [label.id, label])
+  );
+
+  for (const archivedId of reflection.archivedIds) {
+    labelsById.delete(archivedId);
+  }
+
+  for (const label of reflection.upserts.values()) {
+    if (label.archivedAt === null && !reflection.archivedIds.has(label.id)) {
+      labelsById.set(label.id, label);
+    }
+  }
+
+  return sortLabelsByName([...labelsById.values()]);
+}
+
+function upsertReflectedLabel(
+  current: LabelCommandReflection,
+  label: Label
+): LabelCommandReflection {
+  const archivedIds = new Set(current.archivedIds);
+  const upserts = new Map(current.upserts);
+
+  archivedIds.delete(label.id);
+  upserts.set(label.id, label);
+
+  return { archivedIds, upserts };
+}
+
+function archiveReflectedLabel(
+  current: LabelCommandReflection,
+  labelId: Label["id"]
+): LabelCommandReflection {
+  const archivedIds = new Set(current.archivedIds);
+  const upserts = new Map(current.upserts);
+
+  archivedIds.add(labelId);
+  upserts.delete(labelId);
+
+  return { archivedIds, upserts };
+}
+
+function sortLabelsByName(labels: readonly Label[]) {
+  return labels.toSorted(compareLabelsByName);
+}
+
+function compareLabelsByName(left: Label, right: Label) {
+  const nameComparison = left.name.localeCompare(right.name);
+
+  return nameComparison === 0
+    ? left.id.localeCompare(right.id)
+    : nameComparison;
+}
+
 function getHealthCopy({
   health,
   state,
@@ -1439,60 +1452,16 @@ function useCollectionHealthSnapshot(
   );
 }
 
-function makeTemporaryLabel({
-  id,
-  name,
-  now,
-}: {
-  readonly id: Label["id"];
-  readonly name: Label["name"];
-  readonly now: () => Date;
-}): Label {
-  const timestamp = now().toISOString();
-
-  return {
-    createdAt: timestamp,
-    id,
-    name,
-    updatedAt: timestamp,
-  };
+function createLabelInput(name: Label["name"]): CreateLabelInput {
+  return decodeCreateLabelInput({ name });
 }
 
-async function persistLabelCollectionMutation({
-  commandName,
-  input,
-  journal,
-  operation,
-}: {
-  readonly commandName: string;
-  readonly input: unknown;
-  readonly journal?: DataPlaneMutationJournal | undefined;
-  readonly operation: () => LabelMutationTransaction | undefined;
-}): Promise<unknown> {
-  const journalEntry = journal?.recordPending({
-    affectedCollections: LABEL_COMMAND_COLLECTIONS,
-    commandName,
-    input,
+function updateLabelInput(label: Label, name: Label["name"]): UpdateLabelInput {
+  return decodeUpdateLabelInput({
+    color: label.color,
+    description: label.description,
+    name,
   });
-
-  try {
-    const transaction = operation();
-
-    if (transaction === undefined) {
-      throw new Error("Labels collection is not writable.");
-    }
-
-    const output = await transaction.isPersisted.promise;
-    if (journalEntry) {
-      journal?.recordSuccess(journalEntry.id, output);
-    }
-    return output;
-  } catch (error) {
-    if (journalEntry) {
-      journal?.recordFailure(journalEntry.id, error);
-    }
-    throw error;
-  }
 }
 
 async function persistLabelCommandMutation({
@@ -1504,8 +1473,8 @@ async function persistLabelCommandMutation({
   readonly commandName: string;
   readonly input: unknown;
   readonly journal?: DataPlaneMutationJournal | undefined;
-  readonly operation: () => Promise<unknown>;
-}): Promise<unknown> {
+  readonly operation: () => Promise<LabelWriteResponse>;
+}): Promise<LabelWriteResponse> {
   const journalEntry = journal?.recordPending({
     affectedCollections: LABEL_COMMAND_COLLECTIONS,
     commandName,
@@ -1526,43 +1495,6 @@ async function persistLabelCommandMutation({
   }
 }
 
-function reconcileCreatedLabel({
-  collection,
-  output,
-  temporaryLabel,
-}: {
-  readonly collection: LabelsCollectionLike;
-  readonly output: unknown;
-  readonly temporaryLabel: Label;
-}) {
-  const serverResponse = readLabelWriteResponse(output);
-  const serverLabel = serverResponse?.label;
-  const writeDelete = collection.utils?.writeDelete;
-  const writeUpsert = collection.utils?.writeUpsert;
-  const writeBatch = collection.utils?.writeBatch;
-
-  if (
-    serverLabel === undefined ||
-    serverLabel.id === temporaryLabel.id ||
-    writeDelete === undefined ||
-    writeUpsert === undefined
-  ) {
-    return;
-  }
-
-  const reconcile = () => {
-    writeDelete(temporaryLabel.id);
-    writeUpsert(serverLabel);
-  };
-
-  if (writeBatch === undefined) {
-    reconcile();
-    return;
-  }
-
-  writeBatch(reconcile);
-}
-
 function createDefaultLabelWithConfirmation(input: CreateLabelInput) {
   return Effect.runPromise(createBrowserLabelWithConfirmation(input));
 }
@@ -1576,40 +1508,6 @@ function updateDefaultLabelWithConfirmation(
 
 function archiveDefaultLabelWithConfirmation(labelId: LabelIdType) {
   return Effect.runPromise(archiveBrowserLabelWithConfirmation(labelId));
-}
-
-function readLabelWriteResponse(output: unknown): LabelWriteResponse | null {
-  const direct = decodeLabelWriteResponse(output);
-
-  if (direct !== null) {
-    return direct;
-  }
-
-  if (output === null || typeof output !== "object") {
-    return null;
-  }
-
-  const { responses } = output as { readonly responses?: unknown };
-  if (!Array.isArray(responses)) {
-    return null;
-  }
-
-  for (const response of responses) {
-    const decoded = decodeLabelWriteResponse(response);
-    if (decoded !== null) {
-      return decoded;
-    }
-  }
-
-  return null;
-}
-
-function decodeLabelWriteResponse(output: unknown): LabelWriteResponse | null {
-  try {
-    return Schema.decodeUnknownSync(LabelWriteResponseSchema)(output);
-  } catch {
-    return null;
-  }
 }
 
 function validateSettingsLabelName(
@@ -1692,8 +1590,4 @@ function getLabelMutationFailureMessage(
   }
 
   return "Could not create the label. The pending row was removed.";
-}
-
-function createDefaultTemporaryLabelId() {
-  return decodeTemporaryLabelId(crypto.randomUUID());
 }

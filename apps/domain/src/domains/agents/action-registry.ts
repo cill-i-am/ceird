@@ -75,6 +75,8 @@ const domainAgentActions = [
         const label = yield* withElectricMutationConfirmation(
           Effect.gen(function* () {
             const created = yield* labelsRepository.create({
+              color: payload.color,
+              description: payload.description,
               name: payload.name,
               organizationId: actor.organizationId,
             });
@@ -100,6 +102,8 @@ const domainAgentActions = [
           Effect.gen(function* () {
             const updated = yield* labelsRepository
               .update(actor.organizationId, payload.labelId, {
+                color: payload.input.color,
+                description: payload.input.description,
                 name: payload.input.name,
               })
               .pipe(Effect.map(Option.getOrUndefined));
@@ -123,10 +127,10 @@ const domainAgentActions = [
       }),
   }),
   defineDomainAgentAction({
-    name: "ceird.labels.delete",
+    name: "ceird.labels.archive",
     execute: (actor, input) =>
       Effect.gen(function* () {
-        const payload = yield* decodeActionInput("ceird.labels.delete", input);
+        const payload = yield* decodeActionInput("ceird.labels.archive", input);
         const labelActivityRecorder = yield* LabelActivityRecorder;
         const labelsRepository = yield* LabelsRepository;
         const organizationAuthorization = yield* OrganizationAuthorization;
@@ -140,7 +144,7 @@ const domainAgentActions = [
             if (archived === undefined) {
               return yield* Effect.fail(
                 new AgentActionRejectedError({
-                  actionName: "ceird.labels.delete",
+                  actionName: "ceird.labels.archive",
                   message: "Label does not exist in the organization",
                 })
               );
@@ -149,6 +153,39 @@ const domainAgentActions = [
             yield* labelActivityRecorder.recordArchived(actor, archived);
 
             return archived;
+          })
+        ).pipe(Effect.map(({ value }) => value));
+
+        return label;
+      }),
+  }),
+  defineDomainAgentAction({
+    name: "ceird.labels.restore",
+    execute: (actor, input) =>
+      Effect.gen(function* () {
+        const payload = yield* decodeActionInput("ceird.labels.restore", input);
+        const labelActivityRecorder = yield* LabelActivityRecorder;
+        const labelsRepository = yield* LabelsRepository;
+        const organizationAuthorization = yield* OrganizationAuthorization;
+        yield* organizationAuthorization.ensureCanManageLabels(actor);
+        const label = yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            const restored = yield* labelsRepository
+              .restore(actor.organizationId, payload.labelId)
+              .pipe(Effect.map(Option.getOrUndefined));
+
+            if (restored === undefined) {
+              return yield* Effect.fail(
+                new AgentActionRejectedError({
+                  actionName: "ceird.labels.restore",
+                  message: "Label does not exist in the organization",
+                })
+              );
+            }
+
+            yield* labelActivityRecorder.recordRestored(actor, restored);
+
+            return restored;
           })
         ).pipe(Effect.map(({ value }) => value));
 

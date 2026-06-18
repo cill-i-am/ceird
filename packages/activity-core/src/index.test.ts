@@ -80,6 +80,7 @@ describe("activity core contracts", () => {
       "job.visit_logged",
       "label.archived",
       "label.created",
+      "label.restored",
       "label.updated",
       "site.comment_created",
       "site.created",

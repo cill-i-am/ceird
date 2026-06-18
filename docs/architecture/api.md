@@ -220,7 +220,8 @@ Current domain actions exposed to the Agent runtime are:
 | `ceird.labels.list`               | read        |
 | `ceird.labels.create`             | write       |
 | `ceird.labels.update`             | write       |
-| `ceird.labels.delete`             | destructive |
+| `ceird.labels.archive`            | destructive |
+| `ceird.labels.restore`            | write       |
 | `ceird.sites.options`             | read        |
 | `ceird.sites.list`                | read        |
 | `ceird.sites.proximity`           | read        |
@@ -432,7 +433,10 @@ which starts the container on demand and forwards requests to port `3000`.
 The named `labels` shape is the active organization-label definition stream:
 the domain-approved predicate is
 `organization_id = $1 AND archived_at IS NULL`, matching the public labels list
-contract without letting browser callers provide `where` or `params` values.
+contract's default active view without letting browser callers provide `where`
+or `params` values. Archived and all-label management reads are intentionally
+not sync-shape reads; they use the Labels API `status` query and require label
+management authorization.
 The named `activity-events` shape is the global feed's bounded recent
 projection: the domain-approved predicate is
 `organization_id = $1 AND retained_until > $2`, with `$2` set to the domain
@@ -727,24 +731,29 @@ Labels live in `apps/domain/src/domains/labels` and are exposed through
 assign those labels through join tables and assignment behavior owned by the
 jobs and sites domains.
 
-`GET /labels` returns `LabelsResponse` unchanged. Label definition write
-endpoints (`POST /labels`, `PATCH /labels/:labelId`, and
-`DELETE /labels/:labelId`) return `LabelWriteResponse`:
+`GET /labels` defaults to active labels and accepts `status=active`,
+`status=archived`, or `status=all`; archived/all management reads require label
+management authorization. `GET /labels/:labelId` reads active label
+definitions. Label DTOs include canonical OKLCH `color`, optional admin-facing
+`description`, and `archivedAt`. Label definition write endpoints
+(`POST /labels`, `PATCH /labels/:labelId`, `DELETE /labels/:labelId`, and
+`POST /labels/:labelId/restore`) return `LabelWriteResponse`:
 `{ label, mutation: { txid } }`. The `label` field is the canonical
 server-confirmed row. The `mutation.txid` is PostgreSQL/Electric confirmation
 metadata for opt-in Electric collection mutation handlers; non-Electric browser
 commands map the response back to `Label` before reconciling local state.
-Create, rename, and archive writes also record `label.created`,
-`label.updated`, and `label.archived` rows through the domain-owned global
-activity read model inside the same command transaction. Normal member writes
-use the product-safe member actor projection. Supported agent-triggered label
-writes use the product-safe Ceird Agent actor projection and correlate through
-the `agent_action_run` activity source rather than private agent thread display
-metadata. Label activity route label targets remain
+Create, update, archive, and restore writes also record `label.created`,
+`label.updated`, `label.archived`, and `label.restored` rows through the
+domain-owned global activity read model inside the same command transaction.
+Normal member writes use the product-safe member actor projection. Supported
+agent-triggered label writes use the product-safe Ceird Agent actor projection
+and correlate through the `agent_action_run` activity source rather than private
+agent thread display metadata. Label activity route label targets remain
 `/organization/settings/labels`; browser code does not infer label activity from
 local mutations.
 The sync `labels` shape covers active labels only; archived labels are excluded
-by the domain-approved Electric predicate.
+by the domain-approved Electric predicate and must not be used as the archived
+management read model.
 
 Core files:
 
@@ -816,12 +825,14 @@ queries should trust `hasUsableCoordinates`, not latitude/longitude alone.
 Endpoint definitions live in `packages/labels-core/src/http-api.ts`; API
 handlers live in `apps/domain/src/domains/labels/http.ts`.
 
-| Method   | Path               | Handler name  |
-| -------- | ------------------ | ------------- |
-| `GET`    | `/labels`          | `listLabels`  |
-| `POST`   | `/labels`          | `createLabel` |
-| `PATCH`  | `/labels/:labelId` | `updateLabel` |
-| `DELETE` | `/labels/:labelId` | `deleteLabel` |
+| Method   | Path                       | Handler name   |
+| -------- | -------------------------- | -------------- |
+| `GET`    | `/labels`                  | `listLabels`   |
+| `GET`    | `/labels/:labelId`         | `readLabel`    |
+| `POST`   | `/labels`                  | `createLabel`  |
+| `PATCH`  | `/labels/:labelId`         | `updateLabel`  |
+| `DELETE` | `/labels/:labelId`         | `archiveLabel` |
+| `POST`   | `/labels/:labelId/restore` | `restoreLabel` |
 
 ## Sites API Endpoints
 

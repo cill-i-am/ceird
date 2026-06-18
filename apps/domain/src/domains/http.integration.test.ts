@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { JobOptionsResponseSchema } from "@ceird/jobs-core";
+import { DEFAULT_LABEL_COLOR } from "@ceird/labels-core";
 import { SiteOptionSchema } from "@ceird/sites-core";
 import { NodeHttpServer } from "@effect/platform-node";
 import { afterAll, describe, expect, it } from "@effect/vitest";
@@ -827,13 +828,14 @@ async function seedLabel(
     `insert into labels (
        id,
        organization_id,
+       color,
        name,
        normalized_name,
        created_at,
        updated_at
      )
-     values ($1, $2, $3, lower($3), now(), now())`,
-    [input.id, input.organizationId, input.name]
+     values ($1, $2, $3, $4, lower($4), now(), now())`,
+    [input.id, input.organizationId, DEFAULT_LABEL_COLOR, input.name]
   );
 }
 

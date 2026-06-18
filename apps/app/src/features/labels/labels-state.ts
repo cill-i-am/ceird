@@ -76,7 +76,7 @@ export function archiveBrowserLabel(labelId: LabelIdType) {
 
 export function archiveBrowserLabelWithConfirmation(labelId: LabelIdType) {
   return runBrowserAppApiRequest("LabelsBrowser.archiveLabel", (client) =>
-    client.labels.deleteLabel({
+    client.labels.archiveLabel({
       params: { labelId },
     })
   );

@@ -38,6 +38,9 @@ const nextCursor = Schema.decodeUnknownSync(JobListCursor)("cursor-one");
 const labelsResponse: LabelsResponse = {
   labels: [
     {
+      archivedAt: null,
+      color: "oklch(64% 0.19 28)",
+      description: null,
       id: "33333333-3333-4333-8333-333333333333" as LabelIdType,
       name: "Waiting on PO",
       createdAt: "2026-04-28T10:00:00.000Z",

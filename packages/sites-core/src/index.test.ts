@@ -172,7 +172,10 @@ describe("sites-core", () => {
       id: "550e8400-e29b-41d4-a716-446655440010",
       labels: [
         {
+          archivedAt: null,
+          color: "oklch(64% 0.19 28)",
           createdAt: "2026-05-16T10:00:00.000Z",
+          description: null,
           id: "11111111-1111-4111-8111-111111111111",
           name: "Fire safety",
           updatedAt: "2026-05-16T10:05:00.000Z",

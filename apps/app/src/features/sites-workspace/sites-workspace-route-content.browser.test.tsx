@@ -1220,11 +1220,14 @@ function makeCommentFailure(
 }
 
 const maintenanceLabel = {
+  archivedAt: null,
+  color: "oklch(64% 0.19 28)",
   createdAt: "2026-06-01T00:00:00.000Z",
-  id: "88888888-8888-4888-8888-888888888888",
+  description: null,
+  id: "88888888-8888-4888-8888-888888888888" as Label["id"],
   name: "Maintenance",
   updatedAt: "2026-06-01T00:00:00.000Z",
-} as unknown as Label;
+} satisfies Label;
 
 const dublinSite = makeSite({
   accessNotes: "Gate 4",

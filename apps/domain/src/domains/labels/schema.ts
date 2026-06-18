@@ -19,6 +19,7 @@ const archivedAtColumn = (name: string) =>
   timestamp(name, { withTimezone: true });
 
 const labelNameMaxLength = 48;
+const labelDescriptionMaxLength = 280;
 
 export const label = pgTable(
   "labels",
@@ -27,6 +28,8 @@ export const label = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    color: text("color").notNull(),
+    description: text("description"),
     name: text("name").notNull(),
     normalizedName: text("normalized_name").notNull(),
     createdAt: labelTimestamp("created_at"),
@@ -57,6 +60,14 @@ export const label = pgTable(
     check(
       "labels_normalized_name_max_length_chk",
       sql`length(trim(${table.normalizedName})) <= ${sql.raw(String(labelNameMaxLength))}`
+    ),
+    check(
+      "labels_color_oklch_chk",
+      sql`${table.color} ~ '^oklch\\([0-9]+(\\.[0-9]+)?% [0-9]+(\\.[0-9]+)? [0-9]+(\\.[0-9]+)?\\)$'`
+    ),
+    check(
+      "labels_description_max_length_chk",
+      sql`${table.description} is null OR length(trim(${table.description})) <= ${sql.raw(String(labelDescriptionMaxLength))}`
     ),
   ]
 );

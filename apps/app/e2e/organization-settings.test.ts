@@ -166,9 +166,9 @@ test("an organization admin can manage labels from the realtime settings tab", a
     waitForLabelMutation(page, "POST"),
     page.getByRole("button", { name: /create/i }).click(),
   ]);
-  await expect(page.getByRole("status")).toContainText(
-    "Label created and confirmed by realtime sync.",
-    { timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS }
+  await expectLabelCommandStatus(
+    page,
+    "Label created and reflected locally while realtime sync catches up."
   );
   await expect(page.getByText(labelName, { exact: true })).toBeVisible();
 
@@ -181,9 +181,9 @@ test("an organization admin can manage labels from the realtime settings tab", a
     waitForLabelMutation(page, "PATCH"),
     page.getByRole("button", { name: `Save ${labelName}` }).click(),
   ]);
-  await expect(page.getByRole("status")).toContainText(
-    "Label renamed and confirmed by realtime sync.",
-    { timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS }
+  await expectLabelCommandStatus(
+    page,
+    "Label renamed and reflected locally while realtime sync catches up."
   );
   await expect(page.getByText(updatedLabelName, { exact: true })).toBeVisible();
 
@@ -204,13 +204,19 @@ test("an organization admin can manage labels from the realtime settings tab", a
     waitForLabelMutation(page, "DELETE"),
     confirmArchiveButton.click(),
   ]);
-  await expect(page.getByRole("status")).toContainText(
-    "Label archived and removed after realtime confirmation.",
-    { timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS }
+  await expectLabelCommandStatus(
+    page,
+    "Label archived and reflected locally while realtime sync catches up."
   );
   await expect(page.getByText(updatedLabelName, { exact: true })).toBeHidden();
   await expect(page.getByText("No labels yet")).toBeVisible();
 });
+
+async function expectLabelCommandStatus(page: Page, message: string) {
+  await expect(page.getByRole("status")).toContainText(message, {
+    timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS,
+  });
+}
 
 async function waitForLabelMutation(
   page: Page,

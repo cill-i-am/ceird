@@ -7,6 +7,8 @@ import type {
   CreateLabelInput,
   Label,
   LabelIdType as LabelId,
+  LabelListStatus,
+  ListLabelsQuery,
   LabelWriteResponse,
   UpdateLabelInput,
 } from "@ceird/labels-core";
@@ -48,17 +50,49 @@ export class LabelsService extends Context.Service<LabelsService>()(
           );
       });
 
-      const list = Effect.fn("LabelsService.list")(function* () {
+      const list = Effect.fn("LabelsService.list")(function* (
+        query: ListLabelsQuery = {}
+      ) {
+        const currentActor = yield* loadActor();
+        const status: LabelListStatus = query.status ?? "active";
+        yield* (
+          status === "active"
+            ? authorization.ensureCanViewOrganizationData(currentActor)
+            : authorization.ensureCanManageLabels(currentActor)
+        ).pipe(Effect.mapError(mapAuthorizationDenied));
+
+        const labels = yield* labelsRepository
+          .list(currentActor.organizationId, status)
+          .pipe(Effect.catchTag("EffectDrizzleQueryError", failLabelStorage));
+
+        return { labels } as const;
+      });
+
+      const read = Effect.fn("LabelsService.read")(function* (
+        labelId: LabelId
+      ) {
         const currentActor = yield* loadActor();
         yield* authorization
           .ensureCanViewOrganizationData(currentActor)
           .pipe(Effect.mapError(mapAuthorizationDenied));
 
-        const labels = yield* labelsRepository
-          .list(currentActor.organizationId)
-          .pipe(Effect.catchTag("EffectDrizzleQueryError", failLabelStorage));
+        const foundLabel = yield* labelsRepository
+          .read(currentActor.organizationId, labelId, "active")
+          .pipe(
+            Effect.catchTag("EffectDrizzleQueryError", failLabelStorage),
+            Effect.map(Option.getOrUndefined)
+          );
 
-        return { labels } as const;
+        if (foundLabel === undefined) {
+          return yield* Effect.fail(
+            new LabelNotFoundError({
+              labelId,
+              message: "Label does not exist in the organization",
+            })
+          );
+        }
+
+        return { label: foundLabel } as const;
       });
 
       const create = Effect.fn("LabelsService.create")(function* (
@@ -72,6 +106,8 @@ export class LabelsService extends Context.Service<LabelsService>()(
         return yield* withElectricMutationConfirmation(
           Effect.gen(function* () {
             const label = yield* labelsRepository.create({
+              color: input.color,
+              description: input.description,
               name: input.name,
               organizationId: currentActor.organizationId,
             });
@@ -95,6 +131,8 @@ export class LabelsService extends Context.Service<LabelsService>()(
           Effect.gen(function* () {
             const label = yield* labelsRepository
               .update(currentActor.organizationId, labelId, {
+                color: input.color,
+                description: input.description,
                 name: input.name,
               })
               .pipe(Effect.map(Option.getOrUndefined));
@@ -149,10 +187,46 @@ export class LabelsService extends Context.Service<LabelsService>()(
         ).pipe(Effect.map(toLabelWriteResponse), catchLabelsStorageError());
       });
 
+      const restore = Effect.fn("LabelsService.restore")(function* (
+        labelId: LabelId
+      ) {
+        const currentActor = yield* loadActor();
+        yield* authorization
+          .ensureCanManageLabels(currentActor)
+          .pipe(Effect.mapError(mapAuthorizationDenied));
+
+        return yield* withElectricMutationConfirmation(
+          Effect.gen(function* () {
+            const restoredLabel = yield* labelsRepository.restore(
+              currentActor.organizationId,
+              labelId
+            );
+
+            if (Option.isSome(restoredLabel)) {
+              yield* activityRecorder.recordRestored(
+                currentActor,
+                restoredLabel.value
+              );
+
+              return restoredLabel.value;
+            }
+
+            return yield* Effect.fail(
+              new LabelNotFoundError({
+                labelId,
+                message: "Label does not exist in the organization",
+              })
+            );
+          })
+        ).pipe(Effect.map(toLabelWriteResponse), catchLabelsStorageError());
+      });
+
       return {
         archive,
         create,
         list,
+        read,
+        restore,
         update,
       };
     }),
@@ -161,6 +235,9 @@ export class LabelsService extends Context.Service<LabelsService>()(
   static readonly list = (
     ...args: Parameters<Context.Service.Shape<typeof LabelsService>["list"]>
   ) => LabelsService.use((service) => service.list(...args));
+  static readonly read = (
+    ...args: Parameters<Context.Service.Shape<typeof LabelsService>["read"]>
+  ) => LabelsService.use((service) => service.read(...args));
   static readonly DefaultWithoutDependencies = Layer.effect(
     LabelsService,
     LabelsService.make

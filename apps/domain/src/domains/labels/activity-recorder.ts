@@ -59,9 +59,22 @@ export class LabelActivityRecorder extends Context.Service<LabelActivityRecorder
         }
       );
 
+      const recordRestored = Effect.fn("LabelActivityRecorder.recordRestored")(
+        function* (actor: OrganizationActor, label: Label) {
+          yield* recordLabelActivity({
+            activityEventsRepository,
+            actor,
+            eventType: "label.restored",
+            label,
+            productActivityActorsRepository,
+          });
+        }
+      );
+
       return {
         recordArchived,
         recordCreated,
+        recordRestored,
         recordUpdated,
       };
     }),
@@ -182,6 +195,16 @@ function buildLabelActivityDisplay(
           label: routeLabel,
         },
         summary: "Label archived",
+      };
+    }
+    case "label.restored": {
+      return {
+        detail: `Label "${labelName}" was restored.`,
+        route: {
+          href: "/organization/settings/labels",
+          label: routeLabel,
+        },
+        summary: "Label restored",
       };
     }
     default: {

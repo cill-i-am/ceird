@@ -181,7 +181,10 @@ Labels is intentionally different: it requests the named
 `getOrCreateSettingsLabelsCollectionState(...)` and exposes disabled or
 unavailable collection health to the route instead of silently activating an API
 fallback. The route's label search derives from the hydrated local collection
-items rather than API requests per keystroke. The Electric-native Sites
+items rather than API requests per keystroke. That Electric shape is active-only;
+archived/all label management reads are modeled through the Labels API
+`status` query and remain owner/admin-only rather than being inferred from the
+synced active-label option index. The Electric-native Sites
 read-model contracts likewise do not introduce a legacy Query Collection
 fallback. The primary `/sites` route uses a browser-safe feature data-plane
 module under `features/sites-workspace` so the client route does not import the

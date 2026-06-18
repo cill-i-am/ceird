@@ -16,7 +16,10 @@ import { label } from "../labels/schema.js";
 import { site, siteLabel } from "./schema.js";
 
 interface SiteLabelRow {
+  readonly archived_at: Date | null;
+  readonly color: string;
   readonly created_at: Date;
+  readonly description: string | null;
   readonly label_id: string;
   readonly name: string;
   readonly site_id: string;
@@ -52,7 +55,10 @@ export const listSiteLabelsForSitesWithSql: (
     select
       site_labels.site_id,
       site_labels.label_id,
+      labels.archived_at,
+      labels.color,
       labels.created_at,
+      labels.description,
       labels.name,
       labels.updated_at
     from site_labels
@@ -86,7 +92,10 @@ export const listSiteLabelsForSitesWithDrizzle: (
 
   const rows = yield* db
     .select({
+      archived_at: label.archivedAt,
+      color: label.color,
       created_at: label.createdAt,
+      description: label.description,
       label_id: siteLabel.labelId,
       name: label.name,
       site_id: siteLabel.siteId,
@@ -129,7 +138,10 @@ export const listSiteLabelsForOrganizationWithDrizzle: (
 )(function* (db, organizationId) {
   const rows = yield* db
     .select({
+      archived_at: label.archivedAt,
+      color: label.color,
       created_at: label.createdAt,
+      description: label.description,
       label_id: siteLabel.labelId,
       name: label.name,
       site_id: siteLabel.siteId,
@@ -172,7 +184,10 @@ function groupSiteLabelsBySiteId(rows: readonly SiteLabelRow[]) {
     const labels = labelsBySiteId.get(siteId) ?? [];
     labels.push(
       decodeLabel({
+        archivedAt: row.archived_at?.toISOString() ?? null,
+        color: row.color,
         createdAt: row.created_at.toISOString(),
+        description: row.description,
         id: decodeLabelId(row.label_id),
         name: row.name,
         updatedAt: row.updated_at.toISOString(),

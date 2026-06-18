@@ -255,17 +255,23 @@ Path: `packages/labels-core`
 Exports the shared organization-label contract:
 
 - `LabelId`
-- label name schema and `normalizeLabelName`
-- label create/update/list DTOs
+- label name, optional description, canonical OKLCH color schemas, and
+  normalization helpers
+- label create/update/list/read DTOs, including active/archived/all list query
+  status
 - `LabelWriteResponse`, which wraps the canonical label row with
   `mutation.txid` confirmation metadata for Electric-backed label mutation
   handlers
-- typed label access-denied, storage, not-found, and name-conflict errors
+- typed label access-denied, storage, not-found, name-conflict, and
+  restore-conflict errors
 - `LabelsApi` and `LabelsApiGroup`
 
 Labels are organization-level labels. Jobs and sites may assign labels through
 their owning-domain assignment endpoints, but the label definitions themselves
-are not job- or site-owned.
+are not job- or site-owned. Active names are unique per organization after trim,
+whitespace collapse, and case-insensitive normalization; archived labels may
+retain names that active labels later reuse, and restore returns an explicit
+conflict when that active name is taken.
 
 ## Dependency Direction
 

@@ -48,8 +48,22 @@ export class LabelNameConflictError extends Schema.TaggedErrorClass<LabelNameCon
   { httpApiStatus: 409 }
 ) {}
 
+export const LABEL_RESTORE_CONFLICT_ERROR_TAG =
+  "@ceird/labels-core/LabelRestoreConflictError" as const;
+export class LabelRestoreConflictError extends Schema.TaggedErrorClass<LabelRestoreConflictError>()(
+  LABEL_RESTORE_CONFLICT_ERROR_TAG,
+  {
+    activeLabelId: Schema.optional(LabelId),
+    labelId: LabelId,
+    message: Schema.String,
+    name: LabelNameSchema,
+  },
+  { httpApiStatus: 409 }
+) {}
+
 export type LabelsError =
   | LabelAccessDeniedError
   | LabelStorageError
   | LabelNotFoundError
-  | LabelNameConflictError;
+  | LabelNameConflictError
+  | LabelRestoreConflictError;

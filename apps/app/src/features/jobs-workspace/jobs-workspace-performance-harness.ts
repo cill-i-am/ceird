@@ -173,7 +173,10 @@ export function createJobsWorkspacePerformanceFixture(
     const updatedAt = toIso(generatedAt - index * 60_000);
 
     return {
+      archivedAt: null,
+      color: "oklch(64% 0.19 28)",
       createdAt: updatedAt,
+      description: null,
       id: labelId(index),
       name: `Label ${String(index + 1).padStart(3, "0")}`,
       updatedAt,

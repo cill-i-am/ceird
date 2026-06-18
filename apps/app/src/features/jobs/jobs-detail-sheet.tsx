@@ -13,7 +13,7 @@ import type {
   JobStatus,
   UserIdType,
 } from "@ceird/jobs-core";
-import { normalizeLabelName } from "@ceird/labels-core";
+import { DEFAULT_LABEL_COLOR, normalizeLabelName } from "@ceird/labels-core";
 import type { Label, LabelIdType } from "@ceird/labels-core";
 import { SiteId } from "@ceird/sites-core";
 import type { SiteIdType, SiteOption } from "@ceird/sites-core";
@@ -680,7 +680,11 @@ function JobsDetailSheetContent({
     }
 
     setLabelError(null);
-    await createAndAssignJobLabel({ name: decodedName.name });
+    await createAndAssignJobLabel({
+      color: DEFAULT_LABEL_COLOR,
+      description: null,
+      name: decodedName.name,
+    });
   }
 
   async function handleRemoveLabel(labelId: LabelIdType) {

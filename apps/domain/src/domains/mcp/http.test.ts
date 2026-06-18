@@ -360,7 +360,9 @@ describe("mcp http handler", () => {
         return Effect.succeed([
           {
             archived_at: null,
+            color: "oklch(64% 0.19 28)",
             created_at: new Date("2026-01-01T00:00:00.000Z"),
+            description: null,
             id: "11111111-1111-4111-8111-111111111111",
             name: "Priority",
             normalized_name: "priority",
@@ -690,7 +692,9 @@ describe("mcp http handler", () => {
         return Effect.succeed([
           {
             archived_at: null,
+            color: "oklch(64% 0.19 28)",
             created_at: new Date("2026-01-01T00:00:00.000Z"),
+            description: null,
             id: "11111111-1111-4111-8111-111111111111",
             name: "Priority",
             normalized_name: "priority",
@@ -1123,7 +1127,9 @@ function makeSuccessfulLabelListSqlLayer() {
       return Effect.succeed([
         {
           archived_at: null,
+          color: "oklch(64% 0.19 28)",
           created_at: new Date("2026-01-01T00:00:00.000Z"),
+          description: null,
           id: "11111111-1111-4111-8111-111111111111",
           name: "Priority",
           normalized_name: "priority",
@@ -1223,7 +1229,9 @@ function resolveDomainDrizzleMockRows(
     return [
       {
         archivedAt: null,
+        color: "oklch(64% 0.19 28)",
         createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        description: null,
         id: "11111111-1111-4111-8111-111111111111",
         name: "Priority",
         normalizedName: "priority",
