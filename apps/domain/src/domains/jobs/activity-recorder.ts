@@ -13,6 +13,9 @@ import type { OrganizationActor } from "../organizations/current-actor.js";
 import { JobsRepository } from "./repositories.js";
 
 const ACTIVITY_DETAIL_MAX_LENGTH = 280;
+const ACTIVITY_ROUTE_LABEL_MAX_LENGTH = 80;
+const ACTIVITY_SUMMARY_MAX_LENGTH = 160;
+const JOB_COMMENT_ACTIVITY_SUMMARY_PREFIX = "Commented on ";
 
 export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>()(
   "@ceird/domains/jobs/JobsActivityRecorder",
@@ -160,9 +163,12 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
             detail: summarizeCommentActivityDetail(comment.body),
             route: {
               href: `/jobs-workspace?detailJobId=${job.id}`,
-              label: job.title,
+              label: formatActivityDisplayText(
+                job.title,
+                ACTIVITY_ROUTE_LABEL_MAX_LENGTH
+              ),
             },
-            summary: `Commented on ${job.title}`,
+            summary: formatJobCommentActivitySummary(job.title),
           },
           eventType: "comment.created",
           organizationId: actor.organizationId,
@@ -201,11 +207,22 @@ export class JobsActivityRecorder extends Context.Service<JobsActivityRecorder>(
 }
 
 function summarizeCommentActivityDetail(body: string): string {
-  if (body.length <= ACTIVITY_DETAIL_MAX_LENGTH) {
-    return body;
+  return formatActivityDisplayText(body, ACTIVITY_DETAIL_MAX_LENGTH);
+}
+
+function formatJobCommentActivitySummary(jobTitle: string): string {
+  return `${JOB_COMMENT_ACTIVITY_SUMMARY_PREFIX}${formatActivityDisplayText(
+    jobTitle,
+    ACTIVITY_SUMMARY_MAX_LENGTH - JOB_COMMENT_ACTIVITY_SUMMARY_PREFIX.length
+  )}`;
+}
+
+function formatActivityDisplayText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text;
   }
 
-  return `${body.slice(0, ACTIVITY_DETAIL_MAX_LENGTH - 3)}...`;
+  return `${text.slice(0, maxLength - 3)}...`;
 }
 
 function collectPatchEvents(

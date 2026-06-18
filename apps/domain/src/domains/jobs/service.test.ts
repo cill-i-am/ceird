@@ -17,6 +17,7 @@ import {
   JobSchema,
 } from "@ceird/jobs-core";
 import type {
+  Job,
   JobCollaborator,
   JobOptionsResponse,
   JobProximityFilters,
@@ -307,13 +308,14 @@ describe("JobsService contracts", () => {
     expect(calls.recordCommentCreated).toBe(1);
   });
 
-  it("allows long valid comments while emitting capped activity detail", async () => {
+  it("allows long valid comments and job titles while emitting capped activity display", async () => {
     const capturedEvents: RecordActivityEventInput[] = [];
     const calls = {
       addComment: 0,
       withTransaction: 0,
     };
     const longBody = "Long maintenance note. ".repeat(18);
+    const longTitle = "Long valid boiler inspection title ".repeat(8);
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const jobs = yield* JobsService;
@@ -327,6 +329,10 @@ describe("JobsService contracts", () => {
           makeJobsLongCommentActivityTestLayer({
             calls,
             capturedEvents,
+            job: {
+              ...existingJob,
+              title: longTitle,
+            },
           })
         )
       )
@@ -338,14 +344,17 @@ describe("JobsService contracts", () => {
     expect(capturedEvents).toHaveLength(1);
     expect(capturedEvents[0]?.display.detail).toHaveLength(280);
     expect(capturedEvents[0]?.display.detail?.endsWith("...")).toBe(true);
+    expect(capturedEvents[0]?.display.route?.label).toHaveLength(80);
+    expect(capturedEvents[0]?.display.route?.label?.endsWith("...")).toBe(true);
+    expect(capturedEvents[0]?.display.summary).toHaveLength(160);
+    expect(capturedEvents[0]?.display.summary).toMatch(/^Commented on /);
+    expect(capturedEvents[0]?.display.summary.endsWith("...")).toBe(true);
     expect(capturedEvents[0]).toMatchObject({
       actorId: "99999999-9999-4999-8999-999999999999",
       display: {
         route: {
           href: `/jobs-workspace?detailJobId=${workItemId}`,
-          label: "Inspect boiler",
         },
-        summary: "Commented on Inspect boiler",
       },
       eventType: "comment.created",
       organizationId: internalActor.organizationId,
@@ -1151,6 +1160,7 @@ function makeJobsLongCommentActivityTestLayer(options: {
     withTransaction: number;
   };
   readonly capturedEvents: RecordActivityEventInput[];
+  readonly job?: Job;
 }) {
   const activityEventsLayer = Layer.succeed(
     ActivityEventsRepository,
@@ -1183,7 +1193,8 @@ function makeJobsLongCommentActivityTestLayer(options: {
           })
         );
       },
-      findByIdForUpdate: () => Effect.succeed(Option.some(existingJob)),
+      findByIdForUpdate: () =>
+        Effect.succeed(Option.some(options.job ?? existingJob)),
       withTransaction: <Value, Error, Requirements>(
         effect: Effect.Effect<Value, Error, Requirements>
       ) => {
