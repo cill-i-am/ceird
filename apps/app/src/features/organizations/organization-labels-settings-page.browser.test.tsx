@@ -1,7 +1,7 @@
 import { decodeOrganizationSummary } from "@ceird/identity-core";
 import type { Label } from "@ceird/labels-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TooltipProvider } from "#/components/ui/tooltip";
@@ -389,6 +389,91 @@ describe("organization labels settings page", () => {
       )
     ).resolves.toBeVisible();
     expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
+  });
+
+  it("archives labels after temporary create id reconciliation and rename", async () => {
+    const user = userEvent.setup();
+    const createTransaction = Promise.withResolvers<unknown>();
+    const serverLabel = makeLabel({
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Fire Safety",
+    });
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [],
+        status: "ready",
+        transactions: {
+          insert: [createTransaction],
+        },
+      }),
+      createTemporaryLabelId: () =>
+        "44444444-4444-4444-8444-444444444444" as Label["id"],
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: /new label name/i }),
+      "Fire Safety"
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+
+    createTransaction.resolve({
+      responses: [makeLabelWriteResponse(serverLabel, 101)],
+      timeout: 10_000,
+      txid: 101,
+    });
+    await expect(
+      screen.findByText("Label created and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open actions for fire safety/i,
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit label/i })
+    );
+    const editInput = screen.getByRole("textbox", {
+      name: /rename fire safety/i,
+    });
+    await user.clear(editInput);
+    await user.type(editInput, "Emergency");
+    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
+    await expect(
+      screen.findByText("Label renamed and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+    await expect(screen.findByText("Emergency")).resolves.toBeVisible();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open actions for emergency/i,
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /archive label/i })
+    );
+    const archiveConfirmation = await screen.findByRole("group", {
+      name: /confirm archiving emergency/i,
+    });
+    const confirmArchiveButton = within(archiveConfirmation).getByRole(
+      "button",
+      {
+        name: /archive label/i,
+      }
+    );
+    await waitFor(() => {
+      expect(confirmArchiveButton).toBeEnabled();
+    });
+    await user.click(confirmArchiveButton);
+
+    await expect(
+      screen.findByText(
+        "Label archived and removed after realtime confirmation."
+      )
+    ).resolves.toBeVisible();
+    expect(screen.queryByText("Emergency")).not.toBeInTheDocument();
   });
 
   it("requires edit-mode archive icon confirmation and supports cancel", async () => {

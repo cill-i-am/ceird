@@ -189,9 +189,18 @@ test("an organization admin can manage labels from the realtime settings tab", a
     .getByRole("button", { name: `Open actions for ${updatedLabelName}` })
     .click();
   await page.getByRole("menuitem", { name: "Archive label" }).click();
+  const archiveConfirmation = page.getByRole("group", {
+    name: `Confirm archiving ${updatedLabelName}`,
+  });
+  await expect(archiveConfirmation).toBeVisible();
+  const confirmArchiveButton = archiveConfirmation.getByRole("button", {
+    exact: true,
+    name: "Archive label",
+  });
+  await expect(confirmArchiveButton).toBeEnabled();
   await Promise.all([
     waitForLabelMutation(page, "DELETE"),
-    page.getByRole("button", { name: "Archive label" }).click(),
+    confirmArchiveButton.click(),
   ]);
   await expect(page.getByRole("status")).toContainText(
     "Label archived and removed after realtime confirmation."
