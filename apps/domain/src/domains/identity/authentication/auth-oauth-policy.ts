@@ -15,6 +15,12 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Context, Effect, Option, Schema, SchemaGetter } from "effect";
 
 import {
+  OrganizationInvitationAcceptedAuditMetadataSchema,
+  OrganizationInvitationAuditMetadataSchema,
+  OrganizationMemberAuditMetadataSchema,
+  OrganizationUpdatedAuditMetadataSchema,
+} from "../persistence-schemas.js";
+import {
   OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES,
   AuthBoundaryRecordSchema,
   makeAuthBoundaryRequestEnvelope,
@@ -596,6 +602,17 @@ interface OrganizationSecurityAuditRequestContext {
 
 const organizationSecurityAuditRequestContext =
   new AsyncLocalStorage<OrganizationSecurityAuditRequestContext>();
+const decodeOrganizationInvitationAuditMetadata = Schema.decodeUnknownSync(
+  OrganizationInvitationAuditMetadataSchema
+);
+const decodeOrganizationInvitationAcceptedAuditMetadata =
+  Schema.decodeUnknownSync(OrganizationInvitationAcceptedAuditMetadataSchema);
+const decodeOrganizationMemberAuditMetadata = Schema.decodeUnknownSync(
+  OrganizationMemberAuditMetadataSchema
+);
+const decodeOrganizationUpdatedAuditMetadata = Schema.decodeUnknownSync(
+  OrganizationUpdatedAuditMetadataSchema
+);
 
 export async function recordOrganizationSecurityAuditEvent(
   options: AuthSecurityAuditEventWriterOptions,
@@ -629,15 +646,33 @@ export function makeOrganizationInvitationAuditMetadata(input: {
   readonly role?: string | null | undefined;
   readonly targetUserId?: string | null | undefined;
 }) {
-  const email = Option.getOrNull(
-    decodeOrganizationAuditEmailOption(input.email)
-  );
-
-  return {
-    invitationEmailMasked: email === null ? null : maskInvitationEmail(email),
+  return decodeOrganizationInvitationAuditMetadata({
+    invitationEmailMasked: input.email
+      ? maskInvitationEmail(input.email)
+      : null,
+    outcome: "succeeded",
     role: input.role ?? null,
+    source: "better_auth_organization_plugin",
     targetUserId: input.targetUserId ?? null,
-  };
+  });
+}
+
+export function makeOrganizationInvitationAcceptedAuditMetadata(input: {
+  readonly email?: string | null | undefined;
+  readonly memberId?: string | null | undefined;
+  readonly role?: string | null | undefined;
+  readonly targetUserId?: string | null | undefined;
+}) {
+  return decodeOrganizationInvitationAcceptedAuditMetadata({
+    invitationEmailMasked: input.email
+      ? maskInvitationEmail(input.email)
+      : null,
+    memberId: input.memberId ?? null,
+    outcome: "succeeded",
+    role: input.role ?? null,
+    source: "better_auth_organization_plugin",
+    targetUserId: input.targetUserId ?? null,
+  });
 }
 
 export function makeOrganizationMemberAuditMetadata(input: {
@@ -646,16 +681,24 @@ export function makeOrganizationMemberAuditMetadata(input: {
   readonly role?: string | null | undefined;
   readonly targetUserId?: string | null | undefined;
 }) {
-  const memberId = Option.getOrNull(
-    decodeOrganizationMemberIdOption(input.memberId)
-  );
-
-  return {
-    memberId,
+  return decodeOrganizationMemberAuditMetadata({
+    memberId: input.memberId ?? null,
+    outcome: "succeeded",
     previousRole: input.previousRole ?? null,
     role: input.role ?? null,
+    source: "better_auth_organization_plugin",
     targetUserId: input.targetUserId ?? null,
-  };
+  });
+}
+
+export function makeOrganizationUpdatedAuditMetadata(input: {
+  readonly updatedFields: readonly string[];
+}) {
+  return decodeOrganizationUpdatedAuditMetadata({
+    outcome: "succeeded",
+    source: "better_auth_organization_plugin",
+    updatedFields: [...input.updatedFields],
+  });
 }
 
 export function hashOAuthStoredToken(token: string, _type: string) {

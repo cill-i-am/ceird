@@ -68,7 +68,10 @@ import type {
 } from "./auth-email.js";
 import {
   hashOAuthStoredToken,
+  makeOrganizationInvitationAcceptedAuditMetadata,
   makeOrganizationInvitationAuditMetadata,
+  makeOrganizationMemberAuditMetadata,
+  makeOrganizationUpdatedAuditMetadata,
   recordOrganizationSecurityAuditEvent,
 } from "./auth-oauth-policy.js";
 import { measureAuthenticationPhase } from "./auth-observability.js";
@@ -877,13 +880,13 @@ export function createAuthentication(options: {
               {
                 actorUserId: user.id,
                 eventType: "organization_updated",
-                metadata: {
+                metadata: makeOrganizationUpdatedAuditMetadata({
                   updatedFields: updatedOrganization
                     ? Object.keys(updatedOrganization).filter(
                         (field) => field !== "id"
                       )
                     : [],
-                },
+                }),
                 organizationId: updatedOrganization?.id ?? null,
               }
             );
@@ -962,14 +965,12 @@ export function createAuthentication(options: {
               {
                 actorUserId: user.id,
                 eventType: "organization_invitation_accepted",
-                metadata: {
-                  ...makeOrganizationInvitationAuditMetadata({
-                    email: acceptedInvitation.email,
-                    role: acceptedInvitation.role,
-                    targetUserId: member.userId,
-                  }),
+                metadata: makeOrganizationInvitationAcceptedAuditMetadata({
+                  email: acceptedInvitation.email,
                   memberId: member.id,
-                },
+                  role: acceptedInvitation.role,
+                  targetUserId: member.userId,
+                }),
                 organizationId: acceptedInvitation.organizationId,
               }
             );

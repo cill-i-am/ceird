@@ -3,10 +3,15 @@ import {
   ConnectedAppGrantId,
   ConnectedAppScopeSchema,
   OAuthClientId,
+  ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES,
   OrganizationId,
+  OrganizationRole,
+  OrganizationSecurityActivityEventId,
   UserId,
 } from "@ceird/identity-core";
 import { Schema } from "effect";
+
+import { AUTH_SECURITY_AUDIT_EVENT_TYPES } from "./authentication/schema.js";
 
 const NullableNonEmptyString = Schema.NullOr(Schema.NonEmptyString);
 const NullableDate = Schema.NullOr(Schema.DateValid);
@@ -92,3 +97,229 @@ export const OAuthConsentRevokedAuditWriteSchema = Schema.Struct({
 export type OAuthConsentRevokedAuditWrite = Schema.Schema.Type<
   typeof OAuthConsentRevokedAuditWriteSchema
 >;
+
+export const AuthSecurityAuditEventTypeSchema = Schema.Literals(
+  AUTH_SECURITY_AUDIT_EVENT_TYPES
+);
+export type AuthSecurityAuditEventType = Schema.Schema.Type<
+  typeof AuthSecurityAuditEventTypeSchema
+>;
+
+export const OrganizationSecurityActivityCursorTimestampSchema =
+  Schema.String.pipe(
+    Schema.refine(
+      (value): value is string => isUtcMicrosecondTimestamp(value),
+      {
+        message: "Expected a UTC timestamp cursor",
+      }
+    ),
+    Schema.brand(
+      "@ceird/domains/identity/OrganizationSecurityActivityCursorTimestamp"
+    )
+  );
+export type OrganizationSecurityActivityCursorTimestamp = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityCursorTimestampSchema
+>;
+
+export const OrganizationSecurityActivityCursorStateSchema = Schema.Struct({
+  createdAt: OrganizationSecurityActivityCursorTimestampSchema,
+  id: OrganizationSecurityActivityEventId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationSecurityActivityCursorState = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityCursorStateSchema
+>;
+
+const AuthSecurityAuditMetadataSourceSchema = Schema.Literals([
+  "better_auth_organization_endpoint",
+  "better_auth_organization_plugin",
+] as const);
+
+const AuthSecurityAuditMetadataBaseFields = {
+  outcome: Schema.Literal("succeeded"),
+  source: AuthSecurityAuditMetadataSourceSchema,
+};
+
+export const OrganizationUpdatedAuditMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  updatedFields: Schema.Array(Schema.NonEmptyString),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationUpdatedAuditMetadata = Schema.Schema.Type<
+  typeof OrganizationUpdatedAuditMetadataSchema
+>;
+
+export const OrganizationInvitationAuditMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  invitationEmailMasked: Schema.NullOr(Schema.NonEmptyString),
+  role: Schema.NullOr(OrganizationRole),
+  targetUserId: Schema.NullOr(UserId),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationInvitationAuditMetadata = Schema.Schema.Type<
+  typeof OrganizationInvitationAuditMetadataSchema
+>;
+
+export const OrganizationInvitationAcceptedAuditMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  invitationEmailMasked: Schema.NullOr(Schema.NonEmptyString),
+  memberId: Schema.NullOr(Schema.NonEmptyString),
+  role: Schema.NullOr(OrganizationRole),
+  targetUserId: Schema.NullOr(UserId),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationInvitationAcceptedAuditMetadata = Schema.Schema.Type<
+  typeof OrganizationInvitationAcceptedAuditMetadataSchema
+>;
+
+export const OrganizationMemberAuditMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  memberId: Schema.NullOr(Schema.NonEmptyString),
+  previousRole: Schema.NullOr(OrganizationRole),
+  role: Schema.NullOr(OrganizationRole),
+  targetUserId: Schema.NullOr(UserId),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationMemberAuditMetadata = Schema.Schema.Type<
+  typeof OrganizationMemberAuditMetadataSchema
+>;
+
+const OrganizationSecurityActivityMemberTargetFields = {
+  target_email: NullableNonEmptyString,
+  target_member_id: Schema.NullOr(Schema.NonEmptyString),
+  target_name: NullableNonEmptyString,
+  target_user_id: Schema.NullOr(UserId),
+};
+
+const OrganizationSecurityActivityBaseRowFields = {
+  actor_email: NullableNonEmptyString,
+  actor_name: NullableNonEmptyString,
+  actor_user_id: Schema.NullOr(UserId),
+  created_at: Schema.DateValid,
+  created_at_cursor: OrganizationSecurityActivityCursorTimestampSchema,
+  id: OrganizationSecurityActivityEventId,
+  organization_id: OrganizationId,
+};
+
+const OrganizationSecurityActivityOrganizationCreatedRowSchema = Schema.Struct({
+  ...OrganizationSecurityActivityBaseRowFields,
+  event_type: Schema.Literal("organization_created"),
+  metadata: OrganizationMemberAuditMetadataSchema,
+  organization_name: Schema.NonEmptyString,
+  target_email: Schema.Null,
+  target_member_id: Schema.Null,
+  target_name: Schema.Null,
+  target_user_id: Schema.Null,
+});
+
+const OrganizationSecurityActivityOrganizationUpdatedRowSchema = Schema.Struct({
+  ...OrganizationSecurityActivityBaseRowFields,
+  event_type: Schema.Literal("organization_updated"),
+  metadata: OrganizationUpdatedAuditMetadataSchema,
+  organization_name: Schema.NonEmptyString,
+  target_email: Schema.Null,
+  target_member_id: Schema.Null,
+  target_name: Schema.Null,
+  target_user_id: Schema.Null,
+});
+
+const OrganizationSecurityActivityInvitationRowSchema = Schema.Struct({
+  ...OrganizationSecurityActivityBaseRowFields,
+  event_type: Schema.Literals([
+    "organization_invitation_created",
+    "organization_invitation_resent",
+    "organization_invitation_canceled",
+  ] as const),
+  metadata: OrganizationInvitationAuditMetadataSchema,
+  organization_name: Schema.NonEmptyString,
+  target_email: Schema.Null,
+  target_member_id: Schema.Null,
+  target_name: Schema.Null,
+  target_user_id: Schema.Null,
+});
+
+const OrganizationSecurityActivityInvitationAcceptedRowSchema = Schema.Struct({
+  ...OrganizationSecurityActivityBaseRowFields,
+  event_type: Schema.Literal("organization_invitation_accepted"),
+  metadata: OrganizationInvitationAcceptedAuditMetadataSchema,
+  organization_name: Schema.NonEmptyString,
+  ...OrganizationSecurityActivityMemberTargetFields,
+});
+
+const OrganizationSecurityActivityMemberRowSchema = Schema.Struct({
+  ...OrganizationSecurityActivityBaseRowFields,
+  event_type: Schema.Literals([
+    "organization_member_role_updated",
+    "organization_member_removed",
+  ] as const),
+  metadata: OrganizationMemberAuditMetadataSchema,
+  organization_name: Schema.NonEmptyString,
+  ...OrganizationSecurityActivityMemberTargetFields,
+});
+
+export const OrganizationSecurityActivityRowSchema = Schema.Union([
+  OrganizationSecurityActivityOrganizationCreatedRowSchema,
+  OrganizationSecurityActivityOrganizationUpdatedRowSchema,
+  OrganizationSecurityActivityInvitationRowSchema,
+  OrganizationSecurityActivityInvitationAcceptedRowSchema,
+  OrganizationSecurityActivityMemberRowSchema,
+]).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationSecurityActivityRow = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityRowSchema
+>;
+
+export const OrganizationSecurityActivityRowsSchema = Schema.Array(
+  OrganizationSecurityActivityRowSchema
+);
+export type OrganizationSecurityActivityRows = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityRowsSchema
+>;
+
+export const OrganizationSecurityActivityVisibleEventTypeSchema =
+  Schema.Literals(ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES);
+export type OrganizationSecurityActivityVisibleEventType = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityVisibleEventTypeSchema
+>;
+
+function isUtcMicrosecondTimestamp(value: string): boolean {
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?Z$/u.exec(
+      value
+    );
+
+  if (match === null) {
+    return false;
+  }
+
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText] =
+    match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+
+  if (hour > 23 || minute > 59 || second > 59) {
+    return false;
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() + 1 === month &&
+    date.getUTCDate() === day &&
+    date.getUTCHours() === hour &&
+    date.getUTCMinutes() === minute &&
+    date.getUTCSeconds() === second
+  );
+}

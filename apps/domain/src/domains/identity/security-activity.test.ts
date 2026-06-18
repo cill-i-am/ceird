@@ -1,36 +1,49 @@
 import type { OrganizationSecurityActivityCursor } from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
+import { Schema } from "effect";
 
+import { OrganizationSecurityActivityRowSchema } from "./persistence-schemas.js";
 import {
   decodeOrganizationSecurityActivityCursor,
   encodeOrganizationSecurityActivityCursor,
   mapOrganizationSecurityActivityRow,
 } from "./security-activity.js";
 
+const decodeActivityRow = Schema.decodeUnknownSync(
+  OrganizationSecurityActivityRowSchema
+);
+const auditMetadataSource = {
+  outcome: "succeeded",
+  source: "better_auth_organization_plugin",
+};
+
 describe("organization security activity mapping", () => {
   it("maps role-change audit rows into safe read-model items", () => {
     expect(
-      mapOrganizationSecurityActivityRow({
-        actor_email: "owner@example.com",
-        actor_name: "Owner User",
-        actor_user_id: "user_owner",
-        created_at: new Date("2026-06-07T10:30:00.000Z"),
-        created_at_cursor: "2026-06-07T10:30:00.000000Z",
-        event_type: "organization_member_role_updated",
-        id: "audit_123",
-        metadata: {
-          memberId: "member_123",
-          previousRole: "member",
-          role: "admin",
-          targetUserId: "user_member",
-        },
-        organization_id: "org_123",
-        organization_name: "Acme Field Ops",
-        target_email: "member@example.com",
-        target_member_id: "member_123",
-        target_name: "Taylor Member",
-        target_user_id: "user_member",
-      })
+      mapOrganizationSecurityActivityRow(
+        decodeActivityRow({
+          actor_email: "owner@example.com",
+          actor_name: "Owner User",
+          actor_user_id: "user_owner",
+          created_at: new Date("2026-06-07T10:30:00.000Z"),
+          created_at_cursor: "2026-06-07T10:30:00.000000Z",
+          event_type: "organization_member_role_updated",
+          id: "audit_123",
+          metadata: {
+            ...auditMetadataSource,
+            memberId: "member_123",
+            previousRole: "member",
+            role: "admin",
+            targetUserId: "user_member",
+          },
+          organization_id: "org_123",
+          organization_name: "Acme Field Ops",
+          target_email: "member@example.com",
+          target_member_id: "member_123",
+          target_name: "Taylor Member",
+          target_user_id: "user_member",
+        })
+      )
     ).toStrictEqual({
       actor: {
         email: "owner@example.com",
@@ -56,25 +69,29 @@ describe("organization security activity mapping", () => {
   });
 
   it("maps invitation rows without exposing raw invitation email provenance", () => {
-    const item = mapOrganizationSecurityActivityRow({
-      actor_email: "owner@example.com",
-      actor_name: "Owner User",
-      actor_user_id: "user_owner",
-      created_at: new Date("2026-06-07T11:00:00.000Z"),
-      created_at_cursor: "2026-06-07T11:00:00.000000Z",
-      event_type: "organization_invitation_created",
-      id: "audit_invite",
-      metadata: {
-        invitationEmailMasked: "m***@e***.com",
-        role: "member",
-      },
-      organization_id: "org_123",
-      organization_name: "Acme Field Ops",
-      target_email: null,
-      target_member_id: null,
-      target_name: null,
-      target_user_id: null,
-    });
+    const item = mapOrganizationSecurityActivityRow(
+      decodeActivityRow({
+        actor_email: "owner@example.com",
+        actor_name: "Owner User",
+        actor_user_id: "user_owner",
+        created_at: new Date("2026-06-07T11:00:00.000Z"),
+        created_at_cursor: "2026-06-07T11:00:00.000000Z",
+        event_type: "organization_invitation_created",
+        id: "audit_invite",
+        metadata: {
+          ...auditMetadataSource,
+          invitationEmailMasked: "m***@e***.com",
+          role: "member",
+          targetUserId: null,
+        },
+        organization_id: "org_123",
+        organization_name: "Acme Field Ops",
+        target_email: null,
+        target_member_id: null,
+        target_name: null,
+        target_user_id: null,
+      })
+    );
 
     expect(item).toMatchObject({
       summary: "Invited m***@e***.com.",
@@ -88,26 +105,30 @@ describe("organization security activity mapping", () => {
   });
 
   it("does not emit role-change badges for member removal role metadata", () => {
-    const item = mapOrganizationSecurityActivityRow({
-      actor_email: "owner@example.com",
-      actor_name: "Owner User",
-      actor_user_id: "user_owner",
-      created_at: new Date("2026-06-07T11:30:00.000Z"),
-      created_at_cursor: "2026-06-07T11:30:00.000000Z",
-      event_type: "organization_member_removed",
-      id: "audit_removed",
-      metadata: {
-        memberId: "member_123",
-        role: "admin",
-        targetUserId: "user_member",
-      },
-      organization_id: "org_123",
-      organization_name: "Acme Field Ops",
-      target_email: null,
-      target_member_id: null,
-      target_name: null,
-      target_user_id: null,
-    });
+    const item = mapOrganizationSecurityActivityRow(
+      decodeActivityRow({
+        actor_email: "owner@example.com",
+        actor_name: "Owner User",
+        actor_user_id: "user_owner",
+        created_at: new Date("2026-06-07T11:30:00.000Z"),
+        created_at_cursor: "2026-06-07T11:30:00.000000Z",
+        event_type: "organization_member_removed",
+        id: "audit_removed",
+        metadata: {
+          ...auditMetadataSource,
+          memberId: "member_123",
+          previousRole: null,
+          role: "admin",
+          targetUserId: "user_member",
+        },
+        organization_id: "org_123",
+        organization_name: "Acme Field Ops",
+        target_email: null,
+        target_member_id: null,
+        target_name: null,
+        target_user_id: null,
+      })
+    );
 
     expect(item.roleChange).toBeUndefined();
     expect(item.target).toStrictEqual({
@@ -119,27 +140,30 @@ describe("organization security activity mapping", () => {
   });
 
   it("does not trust unscoped target user metadata for member PII", () => {
-    const item = mapOrganizationSecurityActivityRow({
-      actor_email: "owner@example.com",
-      actor_name: "Owner User",
-      actor_user_id: "user_owner",
-      created_at: new Date("2026-06-07T11:45:00.000Z"),
-      created_at_cursor: "2026-06-07T11:45:00.000000Z",
-      event_type: "organization_member_role_updated",
-      id: "audit_malformed_target",
-      metadata: {
-        memberId: "member_123",
-        previousRole: "member",
-        role: "admin",
-        targetUserId: "user_from_other_org",
-      },
-      organization_id: "org_123",
-      organization_name: "Acme Field Ops",
-      target_email: "other@example.com",
-      target_member_id: null,
-      target_name: "Other Org User",
-      target_user_id: null,
-    });
+    const item = mapOrganizationSecurityActivityRow(
+      decodeActivityRow({
+        actor_email: "owner@example.com",
+        actor_name: "Owner User",
+        actor_user_id: "user_owner",
+        created_at: new Date("2026-06-07T11:45:00.000Z"),
+        created_at_cursor: "2026-06-07T11:45:00.000000Z",
+        event_type: "organization_member_role_updated",
+        id: "audit_malformed_target",
+        metadata: {
+          ...auditMetadataSource,
+          memberId: "member_123",
+          previousRole: "member",
+          role: "admin",
+          targetUserId: "user_from_other_org",
+        },
+        organization_id: "org_123",
+        organization_name: "Acme Field Ops",
+        target_email: "other@example.com",
+        target_member_id: null,
+        target_name: "Other Org User",
+        target_user_id: null,
+      })
+    );
 
     expect(item.target).toStrictEqual({
       label: "member_123",
@@ -152,18 +176,71 @@ describe("organization security activity mapping", () => {
     expect(JSON.stringify(item)).not.toContain("user_from_other_org");
   });
 
-  it("does not expose malformed metadata member IDs in member targets", () => {
-    const item = mapOrganizationSecurityActivityRow({
+  it("rejects organization-active-changed rows at the repository boundary", () => {
+    expect(() =>
+      decodeActivityRow({
+        actor_email: "owner@example.com",
+        actor_name: "Owner User",
+        actor_user_id: "user_owner",
+        created_at: new Date("2026-06-07T12:00:00.000Z"),
+        created_at_cursor: "2026-06-07T12:00:00.000000Z",
+        event_type: "organization_active_changed",
+        id: "audit_active",
+        metadata: auditMetadataSource,
+        organization_id: "org_123",
+        organization_name: "Acme Field Ops",
+        target_email: null,
+        target_member_id: null,
+        target_name: null,
+        target_user_id: null,
+      })
+    ).toThrow();
+  });
+
+  it("rejects malformed event metadata at the repository boundary", () => {
+    expect(() =>
+      decodeActivityRow({
+        actor_email: "owner@example.com",
+        actor_name: "Owner User",
+        actor_user_id: "user_owner",
+        created_at: new Date("2026-06-07T11:30:00.000Z"),
+        created_at_cursor: "2026-06-07T11:30:00.000000Z",
+        event_type: "organization_member_role_updated",
+        id: "audit_bad_metadata",
+        metadata: {
+          ...auditMetadataSource,
+          memberId: "member_123",
+          previousRole: "not-a-role",
+          role: "admin",
+          targetUserId: "user_member",
+        },
+        organization_id: "org_123",
+        organization_name: "Acme Field Ops",
+        target_email: null,
+        target_member_id: "member_123",
+        target_name: "Taylor Member",
+        target_user_id: "user_member",
+      })
+    ).toThrow(/previousRole/u);
+  });
+});
+
+describe("organization security activity cursors", () => {
+  it("preserves database timestamp precision in cursor state", () => {
+    const row = decodeActivityRow({
       actor_email: "owner@example.com",
       actor_name: "Owner User",
       actor_user_id: "user_owner",
-      created_at: new Date("2026-06-07T11:50:00.000Z"),
-      created_at_cursor: "2026-06-07T11:50:00.000000Z",
-      event_type: "organization_member_removed",
-      id: "audit_malformed_member",
+      created_at: new Date("2026-06-07T10:30:00.123Z"),
+      created_at_cursor: "2026-06-07T10:30:00.123456Z",
+      event_type: "organization_created",
+      id: "audit_123",
       metadata: {
-        memberId: "",
-        role: "member",
+        ...auditMetadataSource,
+        memberId: "member_owner",
+        previousRole: null,
+        role: "owner",
+        targetUserId: "user_owner",
       },
       organization_id: "org_123",
       organization_name: "Acme Field Ops",
@@ -172,43 +249,7 @@ describe("organization security activity mapping", () => {
       target_name: null,
       target_user_id: null,
     });
-
-    expect(item.target).toStrictEqual({
-      label: "Member",
-      memberId: undefined,
-      type: "member",
-      userId: undefined,
-    });
-  });
-
-  it("rejects organization-active-changed rows from the admin-facing view", () => {
-    expect(() =>
-      mapOrganizationSecurityActivityRow({
-        actor_email: "owner@example.com",
-        actor_name: "Owner User",
-        actor_user_id: "user_owner",
-        created_at: new Date("2026-06-07T12:00:00.000Z"),
-        created_at_cursor: "2026-06-07T12:00:00.000000Z",
-        event_type: "organization_active_changed",
-        id: "audit_active",
-        metadata: {},
-        organization_id: "org_123",
-        organization_name: "Acme Field Ops",
-        target_email: null,
-        target_member_id: null,
-        target_name: null,
-        target_user_id: null,
-      })
-    ).toThrow(/organization_active_changed/);
-  });
-});
-
-describe("organization security activity cursors", () => {
-  it("preserves database timestamp precision in cursor state", () => {
-    const cursor = encodeOrganizationSecurityActivityCursor({
-      created_at_cursor: "2026-06-07T10:30:00.123456Z",
-      id: "audit_123",
-    });
+    const cursor = encodeOrganizationSecurityActivityCursor(row);
 
     expect(decodeOrganizationSecurityActivityCursor(cursor)).toStrictEqual({
       createdAt: "2026-06-07T10:30:00.123456Z",

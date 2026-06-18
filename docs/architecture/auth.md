@@ -571,6 +571,10 @@ connected-app management plus the owner/admin organization member workspace:
 - response items include safe actor, target, role-change, summary, timestamp,
   organization id, and cursor fields; raw source IP and raw user-agent values
   are not part of the shared response schema
+- selected `auth_security_audit_event` rows, owner/admin-visible event types,
+  event-specific metadata, and microsecond cursor state decode through the
+  domain identity persistence schemas before the service maps them into shared
+  `@ceird/identity-core` response DTOs
 - member targets resolve display name/email only through a `member` row scoped to
   the active organization, so schemaless audit metadata cannot expose another
   user's profile details
