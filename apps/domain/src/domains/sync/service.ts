@@ -97,7 +97,7 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
           shapeName === "activity-events"
             ? {
                 "1": actor.organizationId,
-                "2": makeActivityEventsRetainedAfterNow(),
+                "2": makeActivityEventsRetainedAfterUtcDay(),
               }
             : {
                 "1": actor.organizationId,
@@ -127,8 +127,10 @@ export class SyncAuthorizationService extends Context.Service<SyncAuthorizationS
     );
 }
 
-function makeActivityEventsRetainedAfterNow(now: Date = new Date()) {
-  return now.toISOString();
+function makeActivityEventsRetainedAfterUtcDay(now: Date = new Date()) {
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  ).toISOString();
 }
 
 function decodeSyncShapeAuthorization(input: unknown) {
