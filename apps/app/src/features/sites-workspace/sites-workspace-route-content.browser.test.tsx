@@ -191,6 +191,48 @@ describe(SitesWorkspaceRouteContent, () => {
     });
   });
 
+  it("keeps route search controls usable when local convenience storage rejects writes", () => {
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("local storage unavailable");
+      });
+    const onWorkspaceSearchChange =
+      vi.fn<
+        React.ComponentProps<
+          typeof SitesWorkspaceRouteContent
+        >["onWorkspaceSearchChange"]
+      >();
+
+    try {
+      renderSitesWorkspace({
+        onWorkspaceSearchChange,
+        workspaceSearch: { query: "Dub" },
+      });
+
+      fireEvent.change(
+        screen.getByRole("searchbox", { name: /search sites/i }),
+        {
+          target: { value: "Cork" },
+        }
+      );
+      fireEvent.change(screen.getByLabelText("Sort"), {
+        target: { value: "updated" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Active jobs" }));
+
+      expect(onWorkspaceSearchChange).toHaveBeenCalledWith({ query: "Cork" });
+      expect(onWorkspaceSearchChange).toHaveBeenCalledWith({
+        sort: "updated",
+      });
+      expect(onWorkspaceSearchChange).toHaveBeenCalledWith({
+        filter: "with-active-jobs",
+      });
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
   it("hydrates saved view preferences and recent searches from local collections", async () => {
     const storageKey = getLocalConvenienceStorageKey({
       scope: createOrganizationDataScope({

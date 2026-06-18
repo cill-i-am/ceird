@@ -9,6 +9,7 @@ import {
   commitRecentSearch,
   getRecentSearchesForSurface,
   getWorkspacePreferencesForSurface,
+  normalizeRecentSearch,
   saveWorkspacePreferences,
   useLocalConvenienceRecords,
 } from "#/data-plane/local-convenience-collections";
@@ -103,17 +104,18 @@ function JobsRoute() {
         });
       }}
       onRecentSearchCommit={(nextRecentSearch: string | undefined) => {
-        const committedSearch = commitRecentSearch({
-          collection: localConvenience.collection,
-          query: nextRecentSearch,
-          surface: "jobs",
-        });
+        const committedSearch = normalizeRecentSearch(nextRecentSearch);
         navigate({
           replace: true,
           search: (current) => ({
             ...current,
             recentSearch: committedSearch,
           }),
+        });
+        commitRecentSearch({
+          collection: localConvenience.collection,
+          query: nextRecentSearch,
+          surface: "jobs",
         });
       }}
       onSortChange={(sort: JobsWorkspaceSort | undefined) => {
@@ -135,16 +137,16 @@ function JobsRoute() {
         });
       }}
       onViewChange={(nextView: JobsWorkspaceView) => {
-        saveWorkspacePreferences({
-          collection: localConvenience.collection,
-          surface: "jobs",
-          view: nextView,
-        });
         navigate({
           search: (current) => ({
             ...current,
             view: nextView === "list" ? undefined : nextView,
           }),
+        });
+        saveWorkspacePreferences({
+          collection: localConvenience.collection,
+          surface: "jobs",
+          view: nextView,
         });
       }}
       query={search.query}

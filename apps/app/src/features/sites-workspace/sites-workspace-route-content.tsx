@@ -940,53 +940,53 @@ function useSitesWorkspaceLocalConvenienceState({
 
   const setQuery = React.useCallback(
     (nextQuery: string) => {
+      onWorkspaceSearchChange({
+        query: nextQuery.trim().length === 0 ? undefined : nextQuery,
+      });
       commitRecentSearch({
         collection: localConvenience.collection,
         query: nextQuery,
         surface: "sites",
-      });
-      onWorkspaceSearchChange({
-        query: nextQuery.trim().length === 0 ? undefined : nextQuery,
       });
     },
     [localConvenience.collection, onWorkspaceSearchChange]
   );
   const setFilter = React.useCallback(
     (nextFilter: SitesWorkspaceFilter) => {
+      onWorkspaceSearchChange({
+        filter: nextFilter === "all" ? undefined : nextFilter,
+      });
       saveWorkspacePreferences({
         collection: localConvenience.collection,
         filter: nextFilter,
         sort,
         surface: "sites",
       });
-      onWorkspaceSearchChange({
-        filter: nextFilter === "all" ? undefined : nextFilter,
-      });
     },
     [localConvenience.collection, onWorkspaceSearchChange, sort]
   );
   const setSort = React.useCallback(
     (nextSort: SitesWorkspaceSort) => {
+      onWorkspaceSearchChange({
+        sort: nextSort === "name" ? undefined : nextSort,
+      });
       saveWorkspacePreferences({
         collection: localConvenience.collection,
         filter,
         sort: nextSort,
         surface: "sites",
       });
-      onWorkspaceSearchChange({
-        sort: nextSort === "name" ? undefined : nextSort,
-      });
     },
     [filter, localConvenience.collection, onWorkspaceSearchChange]
   );
   const setSelectedSiteId = React.useCallback(
     (siteId: string | undefined) => {
+      onWorkspaceSearchChange({ selectedSiteId: siteId });
       saveSelectedEntity({
         collection: localConvenience.collection,
         entityId: siteId,
         surface: "sites",
       });
-      onWorkspaceSearchChange({ selectedSiteId: siteId });
     },
     [localConvenience.collection, onWorkspaceSearchChange]
   );

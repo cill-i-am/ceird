@@ -239,7 +239,7 @@ export function commitRecentSearch({
       record.surface === surface &&
       !nextIds.has(record.id)
     ) {
-      collection.delete(record.id);
+      deleteLocalConvenienceRecord(collection, record.id);
     }
   }
 
@@ -297,9 +297,7 @@ export function saveSelectedEntity({
   const id = getSelectedEntityRecordId(surface);
 
   if (entityId === undefined) {
-    if (collection.state.has(id)) {
-      collection.delete(id);
-    }
+    deleteLocalConvenienceRecord(collection, id);
     return;
   }
 
@@ -322,14 +320,31 @@ function upsertLocalConvenienceRecord(
   collection: LocalConvenienceCollection,
   record: LocalConvenienceRecord
 ) {
-  if (collection.state.has(record.id)) {
-    collection.update(record.id, (draft) => {
-      Object.assign(draft, record);
-    });
-    return;
-  }
+  try {
+    if (collection.state.has(record.id)) {
+      collection.update(record.id, (draft) => {
+        Object.assign(draft, record);
+      });
+      return;
+    }
 
-  collection.insert(record);
+    collection.insert(record);
+  } catch {
+    // Local convenience state is best-effort and must never block route state.
+  }
+}
+
+function deleteLocalConvenienceRecord(
+  collection: LocalConvenienceCollection,
+  id: string
+) {
+  try {
+    if (collection.state.has(id)) {
+      collection.delete(id);
+    }
+  } catch {
+    // Local convenience state is best-effort and must never block route state.
+  }
 }
 
 function getRecentSearchRecordId(

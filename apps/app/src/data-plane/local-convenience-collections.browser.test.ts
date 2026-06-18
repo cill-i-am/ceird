@@ -7,8 +7,10 @@ import {
   getLocalConvenienceStorageKey,
   getRecentSearchesForSurface,
   getWorkspacePreferencesForSurface,
+  saveSelectedEntity,
   saveWorkspacePreferences,
 } from "./local-convenience-collections";
+import type { LocalConvenienceCollection } from "./local-convenience-collections";
 
 const noopStorageEventApi = {
   addEventListener:
@@ -101,4 +103,84 @@ describe("local convenience collections", () => {
 
     expect(collection.toArray).toStrictEqual([]);
   });
+
+  it("treats local write failures as non-fatal convenience misses", () => {
+    const insertFailureCollection = makeThrowingCollection({
+      hasRecord: false,
+      toArray: [],
+    });
+
+    expect(() =>
+      commitRecentSearch({
+        collection: insertFailureCollection,
+        nowMs: 10,
+        query: "pump",
+        surface: "jobs",
+      })
+    ).not.toThrow();
+    expect(
+      commitRecentSearch({
+        collection: insertFailureCollection,
+        nowMs: 10,
+        query: "pump",
+        surface: "jobs",
+      })
+    ).toBe("pump");
+    expect(() =>
+      saveWorkspacePreferences({
+        collection: insertFailureCollection,
+        nowMs: 20,
+        surface: "jobs",
+        view: "board",
+      })
+    ).not.toThrow();
+
+    const updateFailureCollection = makeThrowingCollection({
+      hasRecord: true,
+      toArray: [],
+    });
+
+    expect(() =>
+      saveWorkspacePreferences({
+        collection: updateFailureCollection,
+        nowMs: 20,
+        surface: "jobs",
+        view: "board",
+      })
+    ).not.toThrow();
+    expect(() =>
+      saveSelectedEntity({
+        collection: updateFailureCollection,
+        entityId: undefined,
+        nowMs: 30,
+        surface: "sites",
+      })
+    ).not.toThrow();
+  });
 });
+
+function makeThrowingCollection({
+  hasRecord,
+  toArray,
+}: {
+  readonly hasRecord: boolean;
+  readonly toArray: readonly unknown[];
+}) {
+  return {
+    delete: vi.fn<(id: string) => void>(() => {
+      throw new Error("local delete failed");
+    }),
+    insert: vi.fn<(record: unknown) => void>(() => {
+      throw new Error("local insert failed");
+    }),
+    state: {
+      has: vi.fn<(id: string) => boolean>(() => hasRecord),
+    },
+    toArray,
+    update: vi.fn<(id: string, updater: (draft: unknown) => void) => void>(
+      () => {
+        throw new Error("local update failed");
+      }
+    ),
+  } as unknown as LocalConvenienceCollection;
+}
