@@ -1,28 +1,25 @@
-import {
-  decodeUserPreferences,
-  UserPreferencesStorageError,
-} from "@ceird/identity-core";
+import { UserPreferencesStorageError } from "@ceird/identity-core";
 import type { UserId, UserPreferences } from "@ceird/identity-core";
 import { eq, sql } from "drizzle-orm";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
 
 import {
   describeDomainStorageFailure,
   DomainDrizzle,
 } from "../../../platform/database/database.js";
 import { userPreferences } from "../../../platform/database/schema.js";
-
-const DEFAULT_USER_PREFERENCES_UPDATED_AT = "1970-01-01T00:00:00.000Z";
-
-interface UserPreferencesRow {
-  readonly routeProximityLocationEnabled: boolean;
-  readonly updatedAt: Date;
-}
-
-export interface UpdateUserPreferencesRecordInput {
-  readonly routeProximityLocationEnabled: boolean;
-  readonly userId: UserId;
-}
+import {
+  InsertUserPreferencesRowSchema,
+  PatchUserPreferencesRowSchema,
+  PublicUserPreferencesReadSchema,
+  SelectedUserPreferencesRowSchema,
+  UserPreferencesRowSchema,
+} from "./schema.js";
+import type {
+  PatchUserPreferencesRow,
+  SelectedUserPreferencesRow,
+  UserPreferencesRow,
+} from "./schema.js";
 
 export class UserPreferencesRepository extends Context.Service<UserPreferencesRepository>()(
   "@ceird/domains/identity/preferences/UserPreferencesRepository",
@@ -33,36 +30,52 @@ export class UserPreferencesRepository extends Context.Service<UserPreferencesRe
       const get = Effect.fn("UserPreferencesRepository.get")(function* (
         userId: UserId
       ) {
-        const rows = yield* db
-          .select(userPreferencesSelection)
-          .from(userPreferences)
-          .where(eq(userPreferences.userId, userId))
-          .limit(1)
+        const existingRow = yield* selectUserPreferencesRow(userId);
+
+        if (existingRow !== undefined) {
+          return mapUserPreferencesRow(existingRow);
+        }
+
+        const insert = decodeInsertUserPreferencesRow({ userId });
+        const insertedRows = yield* db
+          .insert(userPreferences)
+          .values(insert)
+          .onConflictDoNothing({ target: userPreferences.userId })
+          .returning(userPreferencesSelection)
           .pipe(
             Effect.catchTag(
               "EffectDrizzleQueryError",
               failUserPreferencesStorage
             )
           );
+        const [insertedRow] = insertedRows;
 
-        return rows[0] === undefined
-          ? makeDefaultUserPreferences()
-          : mapUserPreferencesRow(rows[0]);
+        if (insertedRow !== undefined) {
+          return mapUserPreferencesRow(decodeUserPreferencesRow(insertedRow));
+        }
+
+        return mapUserPreferencesRow(
+          yield* getRequiredRow(
+            yield* selectUserPreferencesRows(userId),
+            "materialized user preferences"
+          )
+        );
       });
 
       const update = Effect.fn("UserPreferencesRepository.update")(function* (
-        input: UpdateUserPreferencesRecordInput
+        input: PatchUserPreferencesRow
       ) {
+        const patch = decodePatchUserPreferencesRow(input);
         const rows = yield* db
           .insert(userPreferences)
           .values({
-            routeProximityLocationEnabled: input.routeProximityLocationEnabled,
-            userId: input.userId,
+            routeProximityLocationEnabled: patch.routeProximityLocationEnabled,
+            userId: patch.userId,
           })
           .onConflictDoUpdate({
             set: {
               routeProximityLocationEnabled:
-                input.routeProximityLocationEnabled,
+                patch.routeProximityLocationEnabled,
               updatedAt: sql`now()`,
             },
             target: userPreferences.userId,
@@ -76,9 +89,32 @@ export class UserPreferencesRepository extends Context.Service<UserPreferencesRe
           );
 
         return mapUserPreferencesRow(
-          yield* getRequiredRow(rows, "updated user preferences")
+          decodeUserPreferencesRow(
+            yield* getRequiredRow(rows, "updated user preferences")
+          )
         );
       });
+
+      function selectUserPreferencesRows(userId: UserId) {
+        return db
+          .select(userPreferencesSelection)
+          .from(userPreferences)
+          .where(eq(userPreferences.userId, userId))
+          .limit(1)
+          .pipe(
+            Effect.catchTag(
+              "EffectDrizzleQueryError",
+              failUserPreferencesStorage
+            ),
+            Effect.map((rows) => rows.map(decodeUserPreferencesRow))
+          );
+      }
+
+      function selectUserPreferencesRow(userId: UserId) {
+        return selectUserPreferencesRows(userId).pipe(
+          Effect.map((rows) => rows[0])
+        );
+      }
 
       return { get, update };
     }),
@@ -102,24 +138,47 @@ export class UserPreferencesRepository extends Context.Service<UserPreferencesRe
     UserPreferencesRepository.DefaultWithoutDependencies;
 }
 
-function makeDefaultUserPreferences(): UserPreferences {
-  return decodeUserPreferences({
-    routeProximityLocationEnabled: false,
-    updatedAt: DEFAULT_USER_PREFERENCES_UPDATED_AT,
-  });
-}
-
 function mapUserPreferencesRow(row: UserPreferencesRow): UserPreferences {
-  return decodeUserPreferences({
+  return decodePublicUserPreferencesRead({
     routeProximityLocationEnabled: row.routeProximityLocationEnabled,
-    updatedAt: row.updatedAt.toISOString(),
+    updatedAt: row.updatedAt,
   });
 }
 
 const userPreferencesSelection = {
   routeProximityLocationEnabled: userPreferences.routeProximityLocationEnabled,
+  createdAt: userPreferences.createdAt,
   updatedAt: userPreferences.updatedAt,
-} satisfies Record<keyof UserPreferencesRow, unknown>;
+  userId: userPreferences.userId,
+};
+
+const decodeInsertUserPreferencesRow = Schema.decodeUnknownSync(
+  InsertUserPreferencesRowSchema
+);
+const decodePatchUserPreferencesRow = Schema.decodeUnknownSync(
+  PatchUserPreferencesRowSchema
+);
+const decodePublicUserPreferencesRead = Schema.decodeUnknownSync(
+  PublicUserPreferencesReadSchema
+);
+const decodeSelectedUserPreferencesRow = Schema.decodeUnknownSync(
+  SelectedUserPreferencesRowSchema
+);
+const decodeUserPreferencesRowSchema = Schema.decodeUnknownSync(
+  UserPreferencesRowSchema
+);
+
+function decodeUserPreferencesRow(input: unknown): UserPreferencesRow {
+  const row: SelectedUserPreferencesRow =
+    decodeSelectedUserPreferencesRow(input);
+
+  return decodeUserPreferencesRowSchema({
+    createdAt: row.createdAt.toISOString(),
+    routeProximityLocationEnabled: row.routeProximityLocationEnabled,
+    updatedAt: row.updatedAt.toISOString(),
+    userId: row.userId,
+  });
+}
 
 function getRequiredRow<Row>(
   rows: readonly Row[],

@@ -564,6 +564,13 @@ User preferences are exposed through `@ceird/identity-core` and implemented in
 | `/user/preferences` | `GET`   | Return the current authenticated user's global preferences. |
 | `/user/preferences` | `PATCH` | Update supported user preference fields.                    |
 
+`GET /user/preferences` returns a persisted row. When an authenticated user has
+no row yet, the domain repository inserts one with only the branded user id and
+lets Postgres fill `route_proximity_location_enabled`, `created_at`, and
+`updated_at` from table defaults before decoding and returning the row. Browser
+loaders that cannot reach this boundary use an explicit unavailable state
+instead of passing a synthetic preference DTO inward.
+
 The first preference is `routeProximityLocationEnabled`, a global opt-in that
 lets the app ask the current browser/device for live location when running
 route-aware Jobs, Sites, or Agent proximity flows. The preference table stores
@@ -962,6 +969,9 @@ location opt-in boolean, and no coordinate columns. Migration
 `apps/domain/drizzle/20260607043800_user_preferences/migration.sql` and the
 matching `drizzle-alchemy` migration add the table manually for the same
 generation-blocking reason described above.
+The preferences repository materializes missing rows through an idempotent
+insert/select path, decodes row, insert, patch, and public read shapes with
+Effect Schema, and returns only values that came from an actual persisted row.
 
 ## Errors And Runtime Schemas
 

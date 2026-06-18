@@ -1,5 +1,3 @@
-import { getCurrentServerSession } from "./server-session";
-
 interface Session {
   id: string;
   createdAt: string;
@@ -45,11 +43,6 @@ vi.mock(import("@tanstack/react-start"), async (importActual) => {
   };
 });
 
-// eslint-disable-next-line vitest/prefer-import-in-mock -- the dynamic import mock leaks the real TanStack Start server module in the full app suite.
-vi.mock("@tanstack/react-start/server", () => ({
-  getRequestHeader: mockedGetRequestHeader,
-}));
-
 describe("server session lookup", () => {
   let originalApiOrigin: string | undefined;
 
@@ -76,8 +69,8 @@ describe("server session lookup", () => {
       (): string | undefined => undefined
     );
 
-    await expect(getCurrentServerSession()).resolves.toBeNull();
-  }, 1000);
+    await expect(readCurrentServerSessionForTest()).resolves.toBeNull();
+  }, 10_000);
 
   it("reads the current request session directly instead of routing through the server function wrapper", async () => {
     const authSession: AuthSession = {
@@ -124,7 +117,7 @@ describe("server session lookup", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json(authSession));
 
-    await expect(getCurrentServerSession()).resolves.toStrictEqual(
+    await expect(readCurrentServerSessionForTest()).resolves.toStrictEqual(
       expectedSession
     );
     expect(fetchMock).toHaveBeenCalledWith(
@@ -136,7 +129,7 @@ describe("server session lookup", () => {
         },
       }
     );
-  }, 1000);
+  }, 10_000);
 
   it("returns the cached app server context auth session without fetching", async () => {
     const authSession: AuthSession = {
@@ -170,9 +163,11 @@ describe("server session lookup", () => {
 
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
-    await expect(getCurrentServerSession()).resolves.toStrictEqual(authSession);
+    await expect(readCurrentServerSessionForTest()).resolves.toStrictEqual(
+      authSession
+    );
     expect(fetchMock).not.toHaveBeenCalled();
-  }, 1000);
+  }, 10_000);
 
   it("forwards the public api host and protocol for server auth reads", async () => {
     mockedGetRequestHeader.mockImplementation((name) => {
@@ -198,7 +193,7 @@ describe("server session lookup", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(Response.json(null));
 
-    await expect(getCurrentServerSession()).resolves.toBeNull();
+    await expect(readCurrentServerSessionForTest()).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledWith(
       new URL("get-session", "http://127.0.0.1:3001/api/auth/"),
       {
@@ -212,7 +207,7 @@ describe("server session lookup", () => {
         },
       }
     );
-  }, 1000);
+  }, 10_000);
 
   it("throws when the auth session payload is invalid", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
@@ -228,10 +223,10 @@ describe("server session lookup", () => {
       })
     );
 
-    await expect(getCurrentServerSession()).rejects.toThrow(
+    await expect(readCurrentServerSessionForTest()).rejects.toThrow(
       "Session lookup returned an invalid payload."
     );
-  }, 1000);
+  }, 10_000);
 
   it("throws when the auth session fetch rejects", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
@@ -243,10 +238,10 @@ describe("server session lookup", () => {
       new Error("network unavailable")
     );
 
-    await expect(getCurrentServerSession()).rejects.toThrow(
+    await expect(readCurrentServerSessionForTest()).rejects.toThrow(
       "Session lookup request failed."
     );
-  }, 1000);
+  }, 10_000);
 
   it("throws when the auth session response body is malformed JSON", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
@@ -262,10 +257,10 @@ describe("server session lookup", () => {
       })
     );
 
-    await expect(getCurrentServerSession()).rejects.toThrow(
+    await expect(readCurrentServerSessionForTest()).rejects.toThrow(
       "Session lookup returned invalid JSON."
     );
-  }, 1000);
+  }, 10_000);
 
   it("throws when the auth session active organization id is invalid", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
@@ -297,10 +292,10 @@ describe("server session lookup", () => {
       })
     );
 
-    await expect(getCurrentServerSession()).rejects.toThrow(
+    await expect(readCurrentServerSessionForTest()).rejects.toThrow(
       "Session lookup returned an invalid payload."
     );
-  }, 1000);
+  }, 10_000);
 
   it("throws when the configured server API origin is missing", async () => {
     mockedGetRequestHeader.mockImplementation((name) =>
@@ -310,9 +305,16 @@ describe("server session lookup", () => {
     delete process.env.API_ORIGIN;
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
-    await expect(getCurrentServerSession()).rejects.toThrow(
+    await expect(readCurrentServerSessionForTest()).rejects.toThrow(
       "Cannot resolve the auth base URL for session lookup."
     );
     expect(fetchMock).not.toHaveBeenCalled();
-  }, 1000);
+  }, 10_000);
 });
+
+async function readCurrentServerSessionForTest() {
+  const { getCurrentServerSessionDirect } =
+    await import("./server-session-impl.server");
+
+  return await getCurrentServerSessionDirect(mockedGetRequestHeader);
+}

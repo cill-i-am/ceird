@@ -20,7 +20,7 @@ function SettingsRoute() {
   const { currentOrganizationRole, session } = useRouteContext({
     from: "/_app",
   });
-  const { preferences, preferencesUnavailable } = Route.useLoaderData();
+  const { preferences } = Route.useLoaderData();
   const { emailChange } = Route.useSearch();
 
   return (
@@ -29,7 +29,6 @@ function SettingsRoute() {
       currentOrganizationRole={currentOrganizationRole}
       emailChangeStatus={emailChange}
       preferences={preferences}
-      preferencesUnavailable={preferencesUnavailable}
     />
   );
 }

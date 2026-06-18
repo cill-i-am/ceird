@@ -95,7 +95,8 @@ Exports shared identity and organization primitives:
 - create/update organization input schemas
 - public invitation preview schema
 - user preference DTOs and `UserPreferencesApiGroup`, including the global
-  route-proximity location opt-in
+  route-proximity location opt-in; preference responses describe persisted
+  domain rows, while unavailable app loader states stay outside the DTO
 - `OAuthClientId`, connected-app scope, and active-token-count schemas shared by
   the public connected-app DTO and the domain identity persistence boundary
 - connected-app grant DTOs, scope-group schemas, disconnect input/response

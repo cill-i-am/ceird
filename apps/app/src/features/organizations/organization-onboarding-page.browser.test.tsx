@@ -107,10 +107,6 @@ vi.mock(import("sonner"), async (importActual) => {
 });
 
 vi.mock(import("../settings/user-preferences-api"), () => ({
-  DEFAULT_USER_PREFERENCES: {
-    routeProximityLocationEnabled: false,
-    updatedAt: "1970-01-01T00:00:00.000Z",
-  },
   updateCurrentUserPreferences: mockedUpdateUserPreferences,
 }));
 

@@ -69,10 +69,12 @@ describe("settings route", () => {
     });
     mockedUseLoaderData.mockReturnValue({
       preferences: {
-        routeProximityLocationEnabled: true,
-        updatedAt: "2026-06-07T10:00:00.000Z",
+        preferences: {
+          routeProximityLocationEnabled: true,
+          updatedAt: "2026-06-07T10:00:00.000Z",
+        },
+        status: "available",
       },
-      preferencesUnavailable: false,
     });
     mockedUseSearch.mockReturnValue({ emailChange: "complete" });
 
@@ -91,10 +93,12 @@ describe("settings route", () => {
         currentOrganizationRole: "owner",
         emailChangeStatus: "complete",
         preferences: {
-          routeProximityLocationEnabled: true,
-          updatedAt: "2026-06-07T10:00:00.000Z",
+          preferences: {
+            routeProximityLocationEnabled: true,
+            updatedAt: "2026-06-07T10:00:00.000Z",
+          },
+          status: "available",
         },
-        preferencesUnavailable: false,
         user,
       },
       undefined

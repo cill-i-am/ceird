@@ -161,14 +161,14 @@ function makeHttpServerRequestLayer() {
   );
 }
 
-function makeRepositoryLayer(
-  handlers: Partial<{
-    readonly get: Parameters<typeof UserPreferencesRepository.of>[0]["get"];
-    readonly update: Parameters<
-      typeof UserPreferencesRepository.of
-    >[0]["update"];
-  }>
-) {
+interface RepositoryLayerHandlers {
+  readonly get?: Parameters<typeof UserPreferencesRepository.of>[0]["get"];
+  readonly update?: Parameters<
+    typeof UserPreferencesRepository.of
+  >[0]["update"];
+}
+
+function makeRepositoryLayer(handlers: RepositoryLayerHandlers) {
   return Layer.succeed(
     UserPreferencesRepository,
     UserPreferencesRepository.of({

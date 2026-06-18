@@ -12,10 +12,14 @@ import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 const importUserPreferencesServerSsr = () =>
   import("./user-preferences-api.server");
 
-export const DEFAULT_USER_PREFERENCES: UserPreferences = {
-  routeProximityLocationEnabled: false,
-  updatedAt: "1970-01-01T00:00:00.000Z",
-};
+export type UserPreferencesLoadState =
+  | {
+      readonly preferences: UserPreferences;
+      readonly status: "available";
+    }
+  | {
+      readonly status: "unavailable";
+    };
 
 const getCurrentUserPreferencesIsomorphic = createIsomorphicFn()
   .server(async () => {
