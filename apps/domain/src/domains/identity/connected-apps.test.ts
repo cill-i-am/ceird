@@ -14,13 +14,14 @@ import type {
 } from "@ceird/identity-core";
 import { Effect, Layer } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
-import { SqlClient } from "effect/unstable/sql";
 
 import { effectEither } from "../../test/effect-test-helpers.js";
 import {
   ConnectedAppGrantsRepository,
   ConnectedAppGrantsService,
+  makeConnectedAppGrantsRepository,
 } from "./connected-apps.js";
+import type { ConnectedAppGrantStorage } from "./connected-apps.js";
 import { CurrentUser } from "./preferences/current-user.js";
 
 const userId = decodeUserId("user_123");
@@ -86,8 +87,8 @@ describe("connected app grants service", () => {
 });
 
 describe("connected app grants repository", () => {
-  it("lists schema-decoded connected-app grants from raw SQL projections", async () => {
-    const sql = makeConnectedAppsSqlClient({
+  it("lists schema-decoded connected-app grants from Drizzle projections", async () => {
+    const storage = makeConnectedAppsStorage({
       consentRows: [],
       listRows: [
         {
@@ -136,10 +137,7 @@ describe("connected app grants repository", () => {
         const repository = yield* ConnectedAppGrantsRepository;
 
         return yield* repository.list(userId);
-      }).pipe(
-        Effect.provide(ConnectedAppGrantsRepository.DefaultWithoutDependencies),
-        Effect.provide(sql.layer)
-      )
+      }).pipe(Effect.provide(storage.layer))
     );
 
     expect(result).toStrictEqual({
@@ -174,7 +172,7 @@ describe("connected app grants repository", () => {
   }, 10_000);
 
   it("fails at the repository boundary instead of repairing stale organization references", async () => {
-    const sql = makeConnectedAppsSqlClient({
+    const storage = makeConnectedAppsStorage({
       consentRows: [],
       listRows: [
         {
@@ -204,11 +202,7 @@ describe("connected app grants repository", () => {
         const repository = yield* ConnectedAppGrantsRepository;
 
         return yield* repository.list(userId);
-      }).pipe(
-        Effect.provide(ConnectedAppGrantsRepository.DefaultWithoutDependencies),
-        Effect.provide(sql.layer),
-        effectEither
-      )
+      }).pipe(Effect.provide(storage.layer), effectEither)
     );
 
     expect(result).toMatchObject({
@@ -221,7 +215,7 @@ describe("connected app grants repository", () => {
   }, 10_000);
 
   it("disconnects a grant by deleting consent, revoking tokens, deleting access tokens, and auditing", async () => {
-    const sql = makeConnectedAppsSqlClient({
+    const storage = makeConnectedAppsStorage({
       consentRows: [
         {
           client_id: clientId,
@@ -237,50 +231,48 @@ describe("connected app grants repository", () => {
         const repository = yield* ConnectedAppGrantsRepository;
 
         return yield* repository.disconnect({ grantId, userId });
-      }).pipe(
-        Effect.provide(ConnectedAppGrantsRepository.DefaultWithoutDependencies),
-        Effect.provide(sql.layer)
-      )
+      }).pipe(Effect.provide(storage.layer))
     );
 
     expect(result).toStrictEqual({ disconnectedGrantId: grantId });
-    expect(sql.statements.map((entry) => entry.statement)).toStrictEqual([
-      expect.stringContaining("select id, client_id, reference_id, scopes"),
-      expect.stringContaining("delete from oauth_consent"),
-      expect.stringContaining("update oauth_refresh_token"),
-      expect.stringContaining("delete from oauth_access_token"),
-      expect.stringContaining("insert into auth_security_audit_event"),
+    expect(storage.operations.map((entry) => entry.operation)).toStrictEqual([
+      "begin_transaction",
+      "select_disconnect_consent",
+      "delete_oauth_consent",
+      "update_oauth_refresh_token",
+      "delete_oauth_access_token",
+      "insert_auth_security_audit_event",
+      "commit_transaction",
     ]);
-    expect(sql.statements[4]?.values).toStrictEqual(
-      expect.arrayContaining([
-        userId,
-        "org_acme",
-        "client_external_mcp",
-        ["ceird:read", "offline_access"],
-      ])
-    );
+    expect(storage.operations[5]?.values).toMatchObject({
+      actorUserId: userId,
+      eventType: "oauth_consent_revoked",
+      oauthClientId: clientId,
+      organizationId: "org_acme",
+      scopes: ["ceird:read", "offline_access"],
+    });
   }, 10_000);
 
   it("does not mutate OAuth records when the grant is missing", async () => {
-    const sql = makeConnectedAppsSqlClient({ consentRows: [] });
+    const storage = makeConnectedAppsStorage({ consentRows: [] });
 
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const repository = yield* ConnectedAppGrantsRepository;
 
         return yield* repository.disconnect({ grantId, userId });
-      }).pipe(
-        Effect.provide(ConnectedAppGrantsRepository.DefaultWithoutDependencies),
-        Effect.provide(sql.layer),
-        effectEither
-      )
+      }).pipe(Effect.provide(storage.layer), effectEither)
     );
 
     expect(result).toMatchObject({
       _tag: "Left",
       left: expect.any(ConnectedAppGrantNotFoundError),
     });
-    expect(sql.statements).toHaveLength(1);
+    expect(storage.operations).toStrictEqual([
+      { operation: "begin_transaction" },
+      { operation: "select_disconnect_consent" },
+      { operation: "rollback_transaction" },
+    ]);
   }, 10_000);
 });
 
@@ -359,41 +351,78 @@ function makeRepositoryLayer(
   );
 }
 
-function makeConnectedAppsSqlClient(options: {
+function makeConnectedAppsStorage(options: {
   readonly consentRows: readonly unknown[];
   readonly listRows?: readonly unknown[];
 }) {
-  const statements: {
-    readonly statement: string;
-    readonly values: readonly unknown[];
+  const operations: {
+    readonly operation: string;
+    readonly values?: unknown;
   }[] = [];
-  const sql = ((
-    strings: TemplateStringsArray,
-    ...values: readonly unknown[]
-  ) => {
-    const statement = strings.join(" ");
-    statements.push({ statement, values });
+  const storage = {
+    deleteAccessTokens: (input) =>
+      recordOperation(operations, {
+        operation: "delete_oauth_access_token",
+        values: input,
+      }),
+    deleteConsent: (input) =>
+      recordOperation(operations, {
+        operation: "delete_oauth_consent",
+        values: input,
+      }),
+    findDisconnectConsent: () =>
+      recordOperation(operations, {
+        operation: "select_disconnect_consent",
+      }).pipe(Effect.as(options.consentRows)),
+    insertRevokedAuditEvent: (values) =>
+      recordOperation(operations, {
+        operation: "insert_auth_security_audit_event",
+        values,
+      }),
+    listRows: () =>
+      recordOperation(operations, {
+        operation: "select_connected_app_grants",
+      }).pipe(Effect.as(options.listRows ?? [])),
+    revokeRefreshTokens: (input) =>
+      recordOperation(operations, {
+        operation: "update_oauth_refresh_token",
+        values: input,
+      }),
+    withTransaction: (effect) =>
+      Effect.gen(function* () {
+        yield* recordOperation(operations, { operation: "begin_transaction" });
 
-    if (
-      statement.includes("from oauth_consent") &&
-      statement.includes("join oauth_client")
-    ) {
-      return Effect.succeed(options.listRows ?? []);
-    }
-
-    if (statement.includes("from oauth_consent")) {
-      return Effect.succeed(options.consentRows);
-    }
-
-    return Effect.succeed([]);
-  }) as unknown as SqlClient.SqlClient;
-
-  Object.assign(sql, {
-    withTransaction: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
-  });
+        return yield* effect.pipe(
+          Effect.tap(() =>
+            recordOperation(operations, { operation: "commit_transaction" })
+          ),
+          Effect.tapError(() =>
+            recordOperation(operations, { operation: "rollback_transaction" })
+          )
+        );
+      }),
+  } satisfies ConnectedAppGrantStorage;
 
   return {
-    layer: Layer.succeed(SqlClient.SqlClient, sql),
-    statements,
+    layer: Layer.succeed(
+      ConnectedAppGrantsRepository,
+      ConnectedAppGrantsRepository.of(makeConnectedAppGrantsRepository(storage))
+    ),
+    operations,
   };
+}
+
+function recordOperation(
+  operations: {
+    readonly operation: string;
+    readonly values?: unknown;
+  }[],
+  entry: {
+    readonly operation: string;
+    readonly values?: unknown;
+  }
+) {
+  return Effect.sync(() => {
+    operations.push(entry);
+  });
 }

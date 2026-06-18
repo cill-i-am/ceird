@@ -164,15 +164,17 @@ Current config decisions:
 - connected-app management uses Better Auth's `oauth_consent` rows as the grant
   source of truth. `GET /user/connected-apps` returns the current user's
   consented OAuth/MCP clients with account/workspace context, grouped scopes,
-  redirect hosts, grant timestamps, and active token counts. The raw SQL list
-  projection is decoded through the domain identity persistence schemas before
-  the service or HTTP handler sees it, so stale workspace references fail as
-  typed storage errors instead of being repaired into fallback display values.
-  `DELETE /user/connected-apps/:grantId` decodes the consent row and
-  `oauth_consent_revoked` audit write values at the repository boundary, then
-  deletes the consent, revokes matching active refresh tokens, deletes matching
-  DB-backed access tokens, and records `oauth_consent_revoked` without exposing
-  stored token material. Already issued JWT access tokens can remain valid
+  redirect hosts, grant timestamps, and active token counts. The repository uses
+  Drizzle for the list projection, with narrow Postgres SQL fragments only for
+  token-count/max-expiry aggregates and null-safe organization reference
+  matching. The projection is decoded through the domain identity persistence
+  schemas before the service or HTTP handler sees it, so stale workspace
+  references fail as typed storage errors instead of being repaired into fallback
+  display values. `DELETE /user/connected-apps/:grantId` decodes the consent row
+  and `oauth_consent_revoked` audit write values at the repository boundary,
+  then runs the Drizzle consent delete, refresh-token revoke, access-token
+  delete, and audit insert inside the same Effect SQL transaction. Stored token
+  material is not exposed. Already issued JWT access tokens can remain valid
   outside resources that perform live-consent checks until they expire.
 - refresh-token grants pre-check that the hashed Better Auth refresh-token row
   still has a matching `oauth_consent` row whose scopes cover the refresh-token
