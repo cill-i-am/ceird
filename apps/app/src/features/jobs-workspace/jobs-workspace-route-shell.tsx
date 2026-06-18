@@ -57,6 +57,7 @@ interface JobsWorkspaceRouteShellProps {
   readonly onViewChange: (view: JobsWorkspaceView) => void;
   readonly query?: string | undefined;
   readonly recentSearch?: string | undefined;
+  readonly recentSearches?: readonly string[] | undefined;
   readonly sort: JobsWorkspaceSort;
   readonly status?: JobsWorkspaceStatus;
   readonly view: JobsWorkspaceView;
@@ -194,6 +195,7 @@ function JobsWorkspaceLiveRouteShell({
   onViewChange,
   query,
   recentSearch,
+  recentSearches = [],
   sort,
   status,
   view,
@@ -759,8 +761,13 @@ function JobsWorkspaceLiveRouteShell({
               }
               onTitleChange={setCreateTitle}
               recentSearch={recentSearch}
+              recentSearches={recentSearches}
               selectedRow={selectedRow}
               visibleRowsCount={liveList.rows.length}
+              onRecentSearchSelect={(nextSearch) => {
+                onQueryChange(nextSearch);
+                onRecentSearchCommit(nextSearch);
+              }}
             />
           )}
         </aside>
@@ -1480,9 +1487,11 @@ function HealthPanel({
   onCreateJob,
   onPriorityChange,
   onRemoveLabel,
+  onRecentSearchSelect,
   onStatusChange,
   onTitleChange,
   recentSearch,
+  recentSearches,
   selectedRow,
   visibleRowsCount,
 }: {
@@ -1500,9 +1509,11 @@ function HealthPanel({
   readonly onCreateJob: () => void;
   readonly onPriorityChange: (priority: JobPriority) => void;
   readonly onRemoveLabel: (labelId: string) => void;
+  readonly onRecentSearchSelect: (query: string) => void;
   readonly onStatusChange: (status: JobStatus) => void;
   readonly onTitleChange: (title: string) => void;
   readonly recentSearch?: string | undefined;
+  readonly recentSearches: readonly string[];
   readonly selectedRow:
     | ReturnType<typeof useJobsWorkspaceLiveList>["rows"][number]
     | undefined;
@@ -1699,6 +1710,21 @@ function HealthPanel({
         <p className="mt-2 text-sm/6 text-muted-foreground">
           Recent search: {recentSearch ?? "None"}
         </p>
+        {recentSearches.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {recentSearches.map((search) => (
+              <Button
+                key={search}
+                onClick={() => onRecentSearchSelect(search)}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                {search}
+              </Button>
+            ))}
+          </div>
+        ) : null}
       </div>
       <div className="rounded-md border border-dashed border-border p-4 text-sm/6 text-muted-foreground">
         Use{" "}

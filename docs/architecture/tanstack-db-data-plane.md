@@ -7,6 +7,23 @@ data-plane seed envelopes. The active organization route installs one
 `DataPlaneProvider` for the current organization, viewer user, role, router
 `QueryClient`, collection registry, and mutation journal.
 
+## Local Convenience Collections
+
+Small local-only preferences live in
+`apps/app/src/data-plane/local-convenience-collections.ts`. That module is the
+only localStorage-backed TanStack DB collection factory for browser convenience
+state, and it scopes storage by browser environment, organization id, viewer
+user id, and role. The collection currently stores Jobs/Sites recent searches,
+safe saved-view preferences such as view/filter/sort, and the existing Sites
+selected-row restoration record.
+
+These rows are not product/domain data and must not be treated as authoritative
+account or workspace state. Route search params remain the visible shareable
+state for active filters, sorts, selected detail ids, and Jobs view mode; the
+local collection only hydrates missing route state after reload and remembers
+recent convenience choices. Corrupt or unavailable storage falls back to an
+empty local collection.
+
 ## Collection Contracts
 
 All product collections are created through `apps/app/src/data-plane`, not in

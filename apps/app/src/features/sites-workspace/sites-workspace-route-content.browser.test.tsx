@@ -17,6 +17,12 @@ import type { Exit } from "effect";
 import { Effect } from "effect";
 import * as React from "react";
 
+import {
+  commitRecentSearch,
+  createLocalConvenienceCollection,
+  getLocalConvenienceStorageKey,
+  saveWorkspacePreferences,
+} from "#/data-plane/local-convenience-collections";
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { DataPlaneProvider } from "#/data-plane/session";
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
@@ -182,6 +188,55 @@ describe(SitesWorkspaceRouteContent, () => {
 
     expect(onWorkspaceSearchChange).toHaveBeenLastCalledWith({
       query: "Cork",
+    });
+  });
+
+  it("hydrates saved view preferences and recent searches from local collections", async () => {
+    const storageKey = getLocalConvenienceStorageKey({
+      scope: createOrganizationDataScope({
+        organizationId: "org_123" as OrganizationId,
+        role: "owner",
+        userId: "user_123",
+      }),
+    });
+    const collection = createLocalConvenienceCollection({
+      storage: window.localStorage,
+      storageKey,
+    });
+    await collection.preload();
+    commitRecentSearch({
+      collection,
+      nowMs: 20,
+      query: "depot",
+      surface: "sites",
+    });
+    saveWorkspacePreferences({
+      collection,
+      filter: "with-active-jobs",
+      nowMs: 30,
+      sort: "updated",
+      surface: "sites",
+    });
+    await vi.waitFor(() => {
+      expect(window.localStorage.getItem(storageKey)).toContain("depot");
+    });
+
+    const onWorkspaceSearchChange =
+      vi.fn<
+        React.ComponentProps<
+          typeof SitesWorkspaceRouteContent
+        >["onWorkspaceSearchChange"]
+      >();
+    renderSitesWorkspace({ onWorkspaceSearchChange });
+
+    await expect(
+      screen.findByRole("button", { name: "depot" })
+    ).resolves.toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(onWorkspaceSearchChange).toHaveBeenCalledWith({
+        filter: "with-active-jobs",
+        sort: "updated",
+      });
     });
   });
 

@@ -1,0 +1,104 @@
+import type { OrganizationId } from "@ceird/identity-core";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  commitRecentSearch,
+  createLocalConvenienceCollection,
+  getLocalConvenienceStorageKey,
+  getRecentSearchesForSurface,
+  getWorkspacePreferencesForSurface,
+  saveWorkspacePreferences,
+} from "./local-convenience-collections";
+
+const noopStorageEventApi = {
+  addEventListener:
+    vi.fn<(type: "storage", listener: (event: StorageEvent) => void) => void>(),
+  removeEventListener:
+    vi.fn<(type: "storage", listener: (event: StorageEvent) => void) => void>(),
+};
+
+describe("local convenience collections", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    noopStorageEventApi.addEventListener.mockClear();
+    noopStorageEventApi.removeEventListener.mockClear();
+  });
+
+  it("scopes storage by environment, organization, user, and role", () => {
+    expect(
+      getLocalConvenienceStorageKey({
+        environmentKey: "app.codex-task.ceird.localhost",
+        scope: {
+          organizationId: "org_123" as OrganizationId,
+          role: "owner",
+          userId: "user_123",
+        },
+      })
+    ).toBe(
+      "ceird:local-convenience:v1:app.codex-task.ceird.localhost:org:org_123:user:user_123:role:owner"
+    );
+  });
+
+  it("serializes and restores recent searches and workspace preferences", async () => {
+    const storageKey = "ceird:test:local-convenience:restore";
+    const firstCollection = createLocalConvenienceCollection({
+      storage: window.localStorage,
+      storageEventApi: noopStorageEventApi,
+      storageKey,
+    });
+    await firstCollection.preload();
+
+    commitRecentSearch({
+      collection: firstCollection,
+      nowMs: 10,
+      query: "  boiler  ",
+      surface: "jobs",
+    });
+    commitRecentSearch({
+      collection: firstCollection,
+      nowMs: 20,
+      query: "pump",
+      surface: "jobs",
+    });
+    saveWorkspacePreferences({
+      collection: firstCollection,
+      nowMs: 30,
+      surface: "jobs",
+      view: "board",
+    });
+
+    await vi.waitFor(() => {
+      expect(window.localStorage.getItem(storageKey)).toContain("pump");
+    });
+
+    const restoredCollection = createLocalConvenienceCollection({
+      storage: window.localStorage,
+      storageEventApi: noopStorageEventApi,
+      storageKey,
+    });
+    await restoredCollection.preload();
+    const records = restoredCollection.toArray;
+
+    expect(getRecentSearchesForSurface(records, "jobs")).toStrictEqual([
+      "pump",
+      "boiler",
+    ]);
+    expect(getWorkspacePreferencesForSurface(records, "jobs")?.view).toBe(
+      "board"
+    );
+  });
+
+  it("ignores unavailable or corrupt local data", async () => {
+    const storageKey = "ceird:test:local-convenience:corrupt";
+    window.localStorage.setItem(storageKey, "{not-json");
+
+    const collection = createLocalConvenienceCollection({
+      storage: window.localStorage,
+      storageEventApi: noopStorageEventApi,
+      storageKey,
+    });
+    await collection.preload();
+
+    expect(collection.toArray).toStrictEqual([]);
+  });
+});
