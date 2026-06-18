@@ -150,9 +150,6 @@ describe("app global command actions", () => {
         screen.getByRole("option", { name: /^go to sites$/i })
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("option", { name: /^go to sites workspace$/i })
-      ).toBeInTheDocument();
-      expect(
         screen.getByRole("option", { name: /go to activity/i })
       ).toBeInTheDocument();
       expect(
@@ -167,7 +164,6 @@ describe("app global command actions", () => {
       expectCommandShortcut("Go to Home", ["G", "H"]);
       expectCommandShortcut("Go to Jobs", ["G", "J"]);
       expectCommandShortcut("Go to Sites", ["G", "S"]);
-      expectCommandShortcut("Go to Sites workspace", ["G", "X"]);
       expectCommandShortcut("Go to Activity", ["G", "A"]);
       expectCommandShortcut("Go to Security", ["G", "Y"]);
       expectCommandShortcut("Go to Members", ["G", "M"]);

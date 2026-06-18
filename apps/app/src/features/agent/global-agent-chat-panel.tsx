@@ -131,6 +131,7 @@ interface AgentChatSessionState {
 interface ToolApprovalResponse {
   readonly approved: boolean;
   readonly id: string;
+  readonly toolCallId: string;
 }
 
 type AgentComposerLocationNotice =
@@ -529,7 +530,11 @@ function AgentConversation({
     sendMessage,
     status,
     stop,
-  } = useAgentChat({ agent, prepareSendMessagesRequest });
+  } = useAgentChat({
+    agent,
+    autoContinueAfterToolResult: false,
+    prepareSendMessagesRequest,
+  });
   const turnActive =
     status === "submitted" || status === "streaming" || isStreaming;
   const busy = turnActive || isRecovering;
@@ -538,12 +543,26 @@ function AgentConversation({
     [actions]
   );
   const composerRef = React.useRef<AgentComposerHandle | null>(null);
+  const handleToolApprovalResponse = React.useCallback(
+    ({ approved, id, toolCallId }: ToolApprovalResponse) => {
+      agent.send(
+        JSON.stringify({
+          approved,
+          autoContinue: true,
+          toolCallId,
+          type: "cf_agent_tool_approval",
+        })
+      );
+      addToolApprovalResponse({ approved, id });
+    },
+    [addToolApprovalResponse, agent]
+  );
   const conversationContext = React.useMemo(
     () => ({
       actionLookup,
-      onToolApprovalResponse: addToolApprovalResponse,
+      onToolApprovalResponse: handleToolApprovalResponse,
     }),
-    [actionLookup, addToolApprovalResponse]
+    [actionLookup, handleToolApprovalResponse]
   );
   const sendMessageWithRouteContext = React.useCallback(
     async (
@@ -795,8 +814,8 @@ function AgentEmptyState({
         <EmptyTitle>Ready for the workspace</EmptyTitle>
         <EmptyDescription>
           {formatRoleLabel(role)} access is active. Ceird can read workspace
-          context now; write and destructive action entries are treated as
-          approval-gated metadata, not runtime-available tools.
+          context now; write and destructive actions are available after
+          explicit approval.
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="max-w-xl">
@@ -808,13 +827,13 @@ function AgentEmptyState({
           />
           <CapabilityTile
             icon={Task01Icon}
-            label="Approval-gated entries"
-            value={`${approvalGatedActions.length} listed`}
+            label="Approval-gated actions"
+            value={`${approvalGatedActions.length} tools`}
           />
           <CapabilityTile
             icon={CheckmarkCircle02Icon}
             label="Writes are gated"
-            value="Metadata only"
+            value="Approval required"
           />
         </div>
         {onSelectStarterPrompt ? (
@@ -1192,15 +1211,21 @@ function AgentMessagePart({ part }: { readonly part: ChatPart }) {
     const input = getToolInput(part);
     const output = getToolOutput(part);
     const toolName = getToolName(part);
+    const toolCallId = getToolCallId(part);
     const action = actionLookup.get(toolName);
 
-    if (state === "waiting-approval" && approval?.id !== undefined) {
+    if (
+      state === "waiting-approval" &&
+      approval?.id !== undefined &&
+      toolCallId !== null
+    ) {
       return (
         <AgentToolCard action={action} state={state} toolName={toolName}>
           <ApprovalReview
             action={action}
             approvalId={approval.id}
             input={input}
+            toolCallId={toolCallId}
             toolName={toolName}
             onToolApprovalResponse={onToolApprovalResponse}
           />
@@ -1269,12 +1294,14 @@ function ApprovalReview({
   action,
   approvalId,
   input,
+  toolCallId,
   toolName,
   onToolApprovalResponse,
 }: {
   readonly action: AgentActionManifestItem | undefined;
   readonly approvalId: string;
   readonly input: unknown;
+  readonly toolCallId: string;
   readonly toolName: string;
   readonly onToolApprovalResponse: (response: ToolApprovalResponse) => void;
 }) {
@@ -1334,7 +1361,11 @@ function ApprovalReview({
             size="sm"
             variant="outline"
             onClick={() => {
-              onToolApprovalResponse({ approved: false, id: approvalId });
+              onToolApprovalResponse({
+                approved: false,
+                id: approvalId,
+                toolCallId,
+              });
             }}
           >
             Reject
@@ -1343,7 +1374,11 @@ function ApprovalReview({
             type="button"
             size="sm"
             onClick={() => {
-              onToolApprovalResponse({ approved: true, id: approvalId });
+              onToolApprovalResponse({
+                approved: true,
+                id: approvalId,
+                toolCallId,
+              });
             }}
           >
             Approve
@@ -1732,6 +1767,14 @@ function formatRoleLabel(role: OrganizationRole) {
     .split("_")
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function getToolCallId(part: ChatPart) {
+  if ("toolCallId" in part && typeof part.toolCallId === "string") {
+    return part.toolCallId;
+  }
+
+  return null;
 }
 
 function getMessageKey(message: ChatMessage) {

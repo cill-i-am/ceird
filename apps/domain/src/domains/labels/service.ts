@@ -24,6 +24,7 @@ import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
 import { ORGANIZATION_ACTOR_STORAGE_ERROR_TAG } from "../organizations/errors.js";
 import type { OrganizationAuthorizationDeniedError } from "../organizations/errors.js";
+import { LabelActivityRecorder } from "./activity-recorder.js";
 import { LabelsRepository } from "./repositories.js";
 
 export class LabelsService extends Context.Service<LabelsService>()(
@@ -31,6 +32,7 @@ export class LabelsService extends Context.Service<LabelsService>()(
   {
     make: Effect.gen(function* LabelsServiceLive() {
       const actor = yield* CurrentOrganizationActor;
+      const activityRecorder = yield* LabelActivityRecorder;
       const authorization = yield* OrganizationAuthorization;
       const labelsRepository = yield* LabelsRepository;
 
@@ -68,9 +70,14 @@ export class LabelsService extends Context.Service<LabelsService>()(
           .pipe(Effect.mapError(mapAuthorizationDenied));
 
         return yield* withElectricMutationConfirmation(
-          labelsRepository.create({
-            name: input.name,
-            organizationId: currentActor.organizationId,
+          Effect.gen(function* () {
+            const label = yield* labelsRepository.create({
+              name: input.name,
+              organizationId: currentActor.organizationId,
+            });
+            yield* activityRecorder.recordCreated(currentActor, label);
+
+            return label;
           })
         ).pipe(Effect.map(toLabelWriteResponse), catchLabelsStorageError());
       });
@@ -93,6 +100,8 @@ export class LabelsService extends Context.Service<LabelsService>()(
               .pipe(Effect.map(Option.getOrUndefined));
 
             if (label !== undefined) {
+              yield* activityRecorder.recordUpdated(currentActor, label);
+
               return label;
             }
 
@@ -116,13 +125,18 @@ export class LabelsService extends Context.Service<LabelsService>()(
 
         return yield* withElectricMutationConfirmation(
           Effect.gen(function* () {
-            const result = yield* labelsRepository.archive(
+            const archivedLabel = yield* labelsRepository.archive(
               currentActor.organizationId,
               labelId
             );
 
-            if (Option.isSome(result)) {
-              return result.value;
+            if (Option.isSome(archivedLabel)) {
+              yield* activityRecorder.recordArchived(
+                currentActor,
+                archivedLabel.value
+              );
+
+              return archivedLabel.value;
             }
 
             return yield* Effect.fail(
@@ -155,6 +169,7 @@ export class LabelsService extends Context.Service<LabelsService>()(
     Layer.provide(
       Layer.mergeAll(
         CurrentOrganizationActor.Default,
+        LabelActivityRecorder.Default,
         LabelsRepository.Default,
         OrganizationAuthorization.Default
       )

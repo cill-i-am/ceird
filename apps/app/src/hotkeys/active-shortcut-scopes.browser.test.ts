@@ -24,13 +24,13 @@ describe("active shortcut scopes", () => {
           },
         ],
       })
-    ).toStrictEqual(["global", "sites", "jobs", "job-detail"]);
+    ).toStrictEqual(["global", "sites-workspace", "jobs", "job-detail"]);
   });
 
   it("activates jobs, sites, sites workspace, members, and settings shortcut scopes on matching routes", () => {
     expect(getActiveShortcutScopes("/sites")).toStrictEqual([
       "global",
-      "sites",
+      "sites-workspace",
     ]);
     expect(getActiveShortcutScopes("/sites-workspace")).toStrictEqual([
       "global",
@@ -45,7 +45,7 @@ describe("active shortcut scopes", () => {
           },
         ],
       })
-    ).toStrictEqual(["global", "sites"]);
+    ).toStrictEqual(["global", "sites-workspace", "sites"]);
     expect(getActiveShortcutScopes("/members")).toStrictEqual([
       "global",
       "members",

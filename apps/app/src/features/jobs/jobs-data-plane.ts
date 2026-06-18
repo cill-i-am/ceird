@@ -2740,7 +2740,11 @@ export function toJobLabelAssignmentRow(
 
 export function toJobSiteSummaryRow(
   row: Record<string, unknown>
-): JobSiteSummaryRow {
+): JobSiteSummaryRow | JobsElectricRow {
+  if (!hasEveryPresent(row, JOB_SITE_SUMMARY_REQUIRED_ELECTRIC_FIELDS)) {
+    return toPartialJobSiteSummaryElectricRow(row);
+  }
+
   const item: JobsElectricRow = {
     displayLocation: String(row.displayLocation),
     hasUsableCoordinates:
@@ -2761,6 +2765,41 @@ export function toJobSiteSummaryRow(
   addOptionalNumber(item, "longitude", row.longitude);
 
   return Schema.decodeUnknownSync(JobSiteSummaryRowSchema)(item);
+}
+
+const JOB_SITE_SUMMARY_REQUIRED_ELECTRIC_FIELDS = [
+  "displayLocation",
+  "id",
+  "locationStatus",
+  "name",
+  "updatedAt",
+] as const;
+
+function toPartialJobSiteSummaryElectricRow(row: Record<string, unknown>) {
+  const item: JobsElectricRow = {};
+
+  addOptionalString(item, "accessNotes", row.accessNotes);
+  addOptionalString(item, "displayLocation", row.displayLocation);
+  addOptionalString(item, "formattedAddress", row.formattedAddress);
+  addOptionalString(item, "id", row.id);
+  addOptionalNumber(item, "latitude", row.latitude);
+  addOptionalString(item, "locationProvider", row.locationProvider);
+  addOptionalString(item, "locationStatus", row.locationStatus);
+  addOptionalNumber(item, "longitude", row.longitude);
+  addOptionalString(item, "name", row.name);
+  addOptionalDateTime(item, "updatedAt", row.updatedAt);
+
+  if ("latitude" in item || "longitude" in item) {
+    item.hasUsableCoordinates =
+      "latitude" in item &&
+      item.latitude !== null &&
+      item.latitude !== undefined &&
+      "longitude" in item &&
+      item.longitude !== null &&
+      item.longitude !== undefined;
+  }
+
+  return item;
 }
 
 export function toJobContactSummaryRow(

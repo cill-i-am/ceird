@@ -15,6 +15,7 @@ import type {
 } from "@ceird/agents-core/runtime";
 import { makeDomainServiceClient } from "@ceird/domain-core";
 import { Schema } from "effect";
+import * as Redacted from "effect/Redacted";
 
 import { DomainActionError } from "./domain-action-error.js";
 import { DomainCurrentLocationAccessError } from "./domain-current-location-access-error.js";
@@ -31,6 +32,15 @@ const decodeAgentCurrentLocationAccessResponse = Schema.decodeUnknownSync(
   AgentCurrentLocationAccessResponseSchema
 );
 const AGENT_INTERNAL_ORIGIN = "https://agent.ceird.internal";
+
+type SerializedRedactedSecret =
+  | {
+      readonly _tag: "Redacted";
+      readonly value: string;
+    }
+  | {
+      readonly __redacted__: string;
+    };
 
 export interface RunDomainActionInput {
   readonly input: unknown;
@@ -52,7 +62,7 @@ export async function touchAgentThreadActivity(
       ).toString(),
       {
         headers: {
-          authorization: `Bearer ${env.AGENT_INTERNAL_SECRET}`,
+          authorization: makeAgentInternalAuthorization(env),
         },
         method: "POST",
       }
@@ -88,7 +98,7 @@ export async function validateAgentCurrentLocationAccess(
       ).toString(),
       {
         headers: {
-          authorization: `Bearer ${env.AGENT_INTERNAL_SECRET}`,
+          authorization: makeAgentInternalAuthorization(env),
         },
         method: "POST",
       }
@@ -122,7 +132,7 @@ export async function runDomainAction(
       {
         body: JSON.stringify(input),
         headers: {
-          authorization: `Bearer ${env.AGENT_INTERNAL_SECRET}`,
+          authorization: makeAgentInternalAuthorization(env),
           "content-type": "application/json",
         },
         method: "POST",
@@ -172,4 +182,38 @@ function formatDomainError(body: unknown, status: number): string {
   }
 
   return `Domain action failed with HTTP ${status}`;
+}
+
+function makeAgentInternalAuthorization(env: AgentWorkerEnv): string {
+  return `Bearer ${readAgentInternalSecret(env.AGENT_INTERNAL_SECRET)}`;
+}
+
+function readAgentInternalSecret(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Redacted.isRedacted(value)) {
+    return Redacted.value(value) as string;
+  }
+
+  if (isSerializedRedactedSecret(value)) {
+    return "__redacted__" in value ? value.__redacted__ : value.value;
+  }
+
+  throw new TypeError("Expected AGENT_INTERNAL_SECRET to be a string");
+}
+
+function isSerializedRedactedSecret(
+  value: unknown
+): value is SerializedRedactedSecret {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (("_tag" in value &&
+      value._tag === "Redacted" &&
+      "value" in value &&
+      typeof value.value === "string") ||
+      ("__redacted__" in value && typeof value.__redacted__ === "string"))
+  );
 }

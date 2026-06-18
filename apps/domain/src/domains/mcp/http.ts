@@ -10,6 +10,10 @@ import { SqlClient } from "effect/unstable/sql";
 import { DomainDrizzle } from "../../platform/database/database.js";
 import type { DomainDrizzleService } from "../../platform/database/database.js";
 import { oauthConsent } from "../../platform/database/schema.js";
+import {
+  ActivityEventsRepository,
+  ProductActivityActorsRepository,
+} from "../activity/repository.js";
 import { CommentsRepository } from "../comments/repository.js";
 import type { AuthenticationConfig } from "../identity/authentication/config.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
@@ -17,6 +21,7 @@ import { JobsActivityRecorder } from "../jobs/activity-recorder.js";
 import { JobsAuthorization } from "../jobs/authorization.js";
 import { JobsRepositoriesLive } from "../jobs/repositories.js";
 import { JobsService } from "../jobs/service.js";
+import { LabelActivityRecorder } from "../labels/activity-recorder.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { LabelsService } from "../labels/service.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
@@ -835,6 +840,9 @@ function makeMcpToolLayer<ERuntime>(
     Layer.provide(
       Layer.mergeAll(
         OrganizationAuthorization.Default,
+        ActivityEventsRepository.Default,
+        ProductActivityActorsRepository.Default,
+        LabelActivityRecorder.Default,
         LabelsRepository.Default,
         JobsAuthorization.Default,
         JobsActivityRecorder.Default,

@@ -1030,7 +1030,7 @@ test("main branch CI deploys an ephemeral Cloudflare stage before Playwright E2E
   );
   assert.match(
     cloudflareCiGuide,
-    /`pr-<number>` preview stages and `ci-<run-number>-<attempt>`\s+ephemeral CI stages as full-sync deployed coverage/
+    /treats `pr-<number>` preview stages and `ci-<run-number>-<attempt>` ephemeral\s+CI stages as full-sync deployed coverage/
   );
   assert.match(
     developmentGuide,
@@ -1263,7 +1263,7 @@ test("preview workflow destroys PR stages from the default branch on close", () 
   assert.doesNotMatch(previewWorkflow, /CEIRD_API_HOSTNAME: api\.ceird\.app/);
 });
 
-test("preview R2 credential posture separates deploy credentials from runtime credentials", () => {
+test("preview Electric credential posture keeps runtime secrets out of GitHub", () => {
   const previewWorkflow = readFileSync(
     path.join(repoRoot, ".github/workflows/preview.yml"),
     "utf8"
@@ -1292,7 +1292,7 @@ test("preview R2 credential posture separates deploy credentials from runtime cr
     assert.doesNotMatch(
       job,
       /ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID|ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY/,
-      `${name} should not receive generated Electric runtime object credentials from GitHub`
+      `${name} should not receive obsolete Electric object-storage credentials from GitHub`
     );
   }
 
@@ -1302,7 +1302,7 @@ test("preview R2 credential posture separates deploy credentials from runtime cr
   );
   assert.match(
     cloudflareCiGuide,
-    /Electric runtime object credentials are generated per full-sync stage, scoped\s+to that stage's R2 bucket/
+    /Electric container startup credentials are limited to the generated stage\s+database URL and Electric source secret/
   );
   assert.match(
     cloudflareCiGuide,
@@ -1310,7 +1310,7 @@ test("preview R2 credential posture separates deploy credentials from runtime cr
   );
   assert.match(
     cloudflareCiGuide,
-    /https:\/\/developers\.cloudflare\.com\/r2\/api\/tokens\//
+    /https:\/\/developers\.cloudflare\.com\/workers\/ci-cd\/external-cicd\/github-actions\//
   );
   assert.match(cloudflareCiGuide, /https:\/\/v2\.alchemy\.run\/guides\/ci\//);
 });

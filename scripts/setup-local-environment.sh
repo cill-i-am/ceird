@@ -7,55 +7,13 @@ cd "$repo_root"
 echo "Preparing local environment in $repo_root"
 
 env_target="$repo_root/.env.local"
-env_source=""
-primary_worktree=""
-
-git_common_dir="$(git rev-parse --git-common-dir)"
-if [[ "$git_common_dir" = /* ]]; then
-  absolute_git_common_dir="$git_common_dir"
-else
-  absolute_git_common_dir="$repo_root/$git_common_dir"
-fi
-
-if [[ "$(basename "$absolute_git_common_dir")" == ".git" ]]; then
-  primary_worktree="$(dirname "$absolute_git_common_dir")"
-fi
 
 if [[ -f "$env_target" ]]; then
-  echo "Preserving existing .env.local"
+  echo "Using existing .env.local"
 else
-  if [[ -n "${LOCAL_ENV_SOURCE:-}" ]]; then
-    if [[ -f "$LOCAL_ENV_SOURCE" ]]; then
-      env_source="$LOCAL_ENV_SOURCE"
-    elif [[ -d "$LOCAL_ENV_SOURCE" && -f "$LOCAL_ENV_SOURCE/.env.local" ]]; then
-      env_source="$LOCAL_ENV_SOURCE/.env.local"
-    else
-      echo "LOCAL_ENV_SOURCE did not point to an env file: $LOCAL_ENV_SOURCE" >&2
-    fi
-  fi
-
-  if [[ -z "$env_source" && -n "$primary_worktree" ]]; then
-    if [[ "$primary_worktree" != "$repo_root" && -f "$primary_worktree/.env.local" ]]; then
-      env_source="$primary_worktree/.env.local"
-    fi
-  fi
-
-  if [[ -z "$env_source" ]]; then
-    echo "Missing .env.local. Create one at the repo root or set LOCAL_ENV_SOURCE to an env file or directory containing .env.local." >&2
-    exit 1
-  fi
-
-  env_temp="$(mktemp "$repo_root/.env.local.tmp.XXXXXX")"
-  cleanup_env_temp() {
-    rm -f "$env_temp"
-  }
-  trap cleanup_env_temp EXIT
-
-  cp "$env_source" "$env_temp"
-  chmod 600 "$env_temp"
-  mv "$env_temp" "$env_target"
-  trap - EXIT
-  echo "Copied .env.local from $env_source"
+  echo "Missing .env.local. Codex-managed worktrees copy ignored env files listed in .worktreeinclude." >&2
+  echo "Create .env.local in the source checkout before creating the worktree." >&2
+  exit 1
 fi
 
 echo "Using opensrc global cache at ${OPENSRC_HOME:-$HOME/.opensrc}"

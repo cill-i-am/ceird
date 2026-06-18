@@ -256,11 +256,11 @@ normalizes the shortcut into `{ name, location: { kind: "manual", country:
 "IE", rawInput: eircode } }` and is the only caller that enables Google-first
 manual location resolution.
 
-Read tools are available to the model by default. Write and destructive tools
-are exposed only when `AGENT_MUTATION_TOOLS_ENABLED=true`, and those tools still
-require the confirmation-capable chat client to approve the action outside the
-model prompt. Alchemy stage configuration does not set that flag by default;
-absence of the flag is the normal production, preview, and local-dev posture.
+Read, write, and destructive tools are model-callable in every Alchemy
+environment. Write and destructive tools still require the confirmation-capable
+browser chat client to approve the action outside the model prompt before the
+Agent Worker can execute the Domain action. The model cannot bypass approval or
+directly call the Domain Worker.
 
 ### Agent Mutation Approval Readiness
 
@@ -270,48 +270,42 @@ risk treatment without exposing input schemas or private execution internals.
 The Agent Worker toolset is narrower than the manifest:
 
 - planned actions are never model-callable;
-- read executable actions are model-callable by default;
-- write and destructive executable actions are model-callable only when the
-  selected Agent Worker runtime has `AGENT_MUTATION_TOOLS_ENABLED=true`;
+- read, write, and destructive executable actions are model-callable in every
+  Alchemy environment;
 - every model-callable write or destructive tool must be created with
   `needsApproval: true`.
 
 Approval happens before domain action-run creation. The browser chat client
 records the approve or reject decision with the conversation through the AI chat
 approval response, and the Agent Worker only calls `POST /agent/internal/actions`
-after the approved tool execution begins. The domain action-run ledger therefore
-does not store an approval id. It stores the execution attempt itself:
-`thread_id`, `action_name`, `operation_id`, sanitized input hash/size, status,
-write-action result, and error category. Rejections before tool execution leave
-no domain action-run row.
+after the approved tool execution begins. The Domain Worker re-resolves the
+thread actor, enforces organization authorization for the requested action, and
+owns action-run ledgering. The domain action-run ledger therefore does not store
+an approval id. It stores the execution attempt itself: `thread_id`,
+`action_name`, `operation_id`, sanitized input hash/size, status, write-action
+result, and error category. Rejections before tool execution leave no domain
+action-run row.
 
-Enable mutation tools only for a named stage after an operator confirms the
-target stage, credentials, and rollback owner. The safe enablement path is:
+Stage verification should prove the approval and Domain boundaries:
 
-1. Keep the root/default Alchemy config unchanged.
-2. Add an explicit stage-scoped opt-in by passing `enableMutationTools: true` to
-   the Agent Worker resource for the selected stage, or apply an equivalent
-   temporary Agent Worker env override for that stage only.
-3. Run a non-mutating plan or inspect the Worker env diff first.
-4. Run provider-mutating Alchemy deploy/dev commands only after explicit human
-   confirmation of the target stage and credentials.
-
-Stage verification should prove both sides of the gate:
-
-1. With the flag absent, inspect Agent Worker configuration and verify only read
-   executable tools are available to model turns.
-2. With the flag set to exactly `true` in the chosen stage, verify a
-   write/destructive prompt renders the app approval card from manifest metadata
-   and cannot execute until the user approves.
+1. Inspect Agent Worker configuration and verify write/destructive executable
+   tools are present in model turns with `needsApproval: true`.
+2. Verify a write/destructive prompt renders the app approval card from manifest
+   metadata and cannot execute until the user approves.
 3. Approve one low-risk write in the test stage and confirm the domain
    `agent_action_runs` row appears only after approval. Reject a second pending
    approval and confirm no domain action-run row is created for that rejection.
 4. Confirm planned manifest actions still do not appear as Agent Worker tools.
+5. Confirm direct/public Domain requests without the internal Agent bearer and
+   thread actor context remain unauthorized.
 
-Rollback is removing the stage-specific flag or opt-in and reconciling only the
-chosen stage. New model turns then rebuild the toolset without write/destructive
-tools. Existing completed or failed action-run ledger rows are retained for
-audit and idempotent replay semantics; no database migration is required.
+Rollback for globally model-callable mutation tools is a code/config revert and
+redeploy of the affected environment. There is no active stage-scoped
+`enableMutationTools` switch in the current Alchemy stack. If operators want a
+runtime disable path again, add a new explicit flag and verify it through the
+same approval and Domain authorization checks above. Existing completed or
+failed action-run ledger rows are retained for audit and idempotent replay
+semantics; no database migration is required.
 
 Route-aware proximity is exposed as read-only POST computations because requests
 carry structured origin and filter payloads but do not mutate product state:
@@ -740,6 +734,15 @@ endpoints (`POST /labels`, `PATCH /labels/:labelId`, and
 server-confirmed row. The `mutation.txid` is PostgreSQL/Electric confirmation
 metadata for opt-in Electric collection mutation handlers; non-Electric browser
 commands map the response back to `Label` before reconciling local state.
+Create, rename, and archive writes also record `label.created`,
+`label.updated`, and `label.archived` rows through the domain-owned global
+activity read model inside the same command transaction. Normal member writes
+use the product-safe member actor projection. Supported agent-triggered label
+writes use the product-safe Ceird Agent actor projection and correlate through
+the `agent_action_run` activity source rather than private agent thread display
+metadata. Label activity route label targets remain
+`/organization/settings/labels`; browser code does not infer label activity from
+local mutations.
 The sync `labels` shape covers active labels only; archived labels are excluded
 by the domain-approved Electric predicate.
 
@@ -900,10 +903,31 @@ created time, and `retained_until`. The public Electric shape is bounded by a
 domain-owned `retained_until` cutoff predicate, while the repository prunes
 expired rows and keeps only the latest 5,000 events per organization. The
 latest-5,000 guardrail is enforced by retention cleanup because Electric shape
-predicates cannot express an ordered per-organization limit. Job comment writes
-emit `comment.created` rows into this model through the jobs activity recorder;
-additional product write paths adopt this projection through their owning
-activity issues rather than in the projection and shape slice.
+predicates cannot express an ordered per-organization limit. Jobs command writes
+emit create, patch, transition, reopen, and label events through the jobs
+activity recorder while preserving legacy `work_item_activity` rows. Sites
+command writes emit create, update, and label assignment/removal events from the
+Sites service in the same transaction as the site write. Job and site comment
+writes emit product-safe comment activity rows into this model, and mutating
+agent action-run ledger updates emit `agent.product_effect` rows keyed by the
+action run source so replays update the same feed item instead of adding noise.
+Browser clients read this domain-owned model; they do not infer activity meaning
+from local mutations.
+
+The shipped v1 global Activity taxonomy is:
+
+| Family                | Event types                                                                                                                                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent product effects | `agent.product_effect`                                                                                                                                                                                                                                              |
+| Comments              | `comment.created`, `site.comment_created`                                                                                                                                                                                                                           |
+| Jobs                  | `job.assignee_changed`, `job.blocked_reason_changed`, `job.contact_changed`, `job.coordinator_changed`, `job.created`, `job.label_added`, `job.label_removed`, `job.priority_changed`, `job.reopened`, `job.site_changed`, `job.status_changed`, `job.visit_logged` |
+| Labels                | `label.archived`, `label.created`, `label.updated`                                                                                                                                                                                                                  |
+| Sites                 | `site.created`, `site.label_added`, `site.label_removed`, `site.updated`                                                                                                                                                                                            |
+
+Auth-adjacent membership, invitation, session, and organization security/audit
+events are deferred from this product-facing v1 feed. They need their own
+domain authorization and actor projection decisions before becoming Electric
+activity rows.
 Route-aware proximity adds indexes for the hot ranking paths: active jobs can
 reuse the existing `work_items_organization_active_updated_at_idx`, site active
 job summaries use `work_items_organization_site_active_priority_idx`, and mapped

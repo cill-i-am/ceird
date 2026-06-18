@@ -6,6 +6,7 @@ import {
   OrganizationId,
   ProductActorId,
 } from "@ceird/activity-core";
+import { AgentThreadId } from "@ceird/agents-core";
 import { UserId } from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
@@ -28,6 +29,7 @@ import {
 } from "./repository.js";
 
 const decodeActivityEventId = Schema.decodeUnknownSync(ActivityEventId);
+const decodeAgentThreadId = Schema.decodeUnknownSync(AgentThreadId);
 const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
 const decodeProductActorId = Schema.decodeUnknownSync(ProductActorId);
 const decodeUserId = Schema.decodeUnknownSync(UserId);
@@ -385,6 +387,89 @@ describe("activity events repository", () => {
     expect(updated.actor.id).toBe(created.actor.id);
     expect(updatedSummary).toStrictEqual({ display_name: "Taylor Updated" });
   });
+
+  it("keeps private agent thread titles out of product activity actor projection", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createMigratedTestDatabase(context);
+    if (testDatabase === undefined) {
+      return;
+    }
+
+    const organizationId = decodeOrganizationId(randomUUID());
+    const userId = decodeUserId(`user_${randomUUID()}`);
+    const agentThreadId = decodeAgentThreadId(randomUUID());
+    const privateThreadTitle = "Private Acme acquisition prep";
+
+    await withPool(testDatabase.url, async (pool) => {
+      await seedOrganization(pool, {
+        id: organizationId,
+        name: "Agent Actor Privacy",
+      });
+      await seedMember(pool, {
+        email: "agent-actor-privacy@example.com",
+        name: "Private Thread Owner",
+        organizationId,
+        userId,
+      });
+      await seedAgentThread(pool, {
+        id: agentThreadId,
+        organizationId,
+        title: privateThreadTitle,
+        userId,
+      });
+    });
+
+    const created = await runProductActivityActorsRepositoryEffect(
+      testDatabase.url,
+      ProductActivityActorsRepository.use((repository) =>
+        repository.ensureAgentActor({
+          agentThreadId,
+          organizationId,
+          userId,
+        })
+      )
+    );
+    const projection = await withPool(testDatabase.url, async (pool) => {
+      const result = await pool.query<{
+        actor_display_detail: string | null;
+        actor_display_name: string;
+        source_agent_thread_id: string | null;
+        source_user_id: string | null;
+      }>(
+        `select
+           actors.display_name as actor_display_name,
+           actors.display_detail as actor_display_detail,
+           sources.agent_thread_id::text as source_agent_thread_id,
+           sources.user_id as source_user_id
+         from product_activity_actors actors
+         inner join product_activity_actor_sources sources
+           on sources.actor_id = actors.id
+          and sources.organization_id = actors.organization_id
+         where actors.organization_id = $1
+           and actors.id = $2
+           and sources.kind = 'agent'`,
+        [organizationId, created.actor.id]
+      );
+
+      return result.rows[0];
+    });
+
+    expect(created.actor).toMatchObject({
+      displayDetail: "Agent action",
+      displayName: "Ceird Agent",
+      kind: "agent",
+    });
+    expect(projection).toStrictEqual({
+      actor_display_detail: "Agent action",
+      actor_display_name: "Ceird Agent",
+      source_agent_thread_id: agentThreadId,
+      source_user_id: userId,
+    });
+    expect(JSON.stringify({ actor: created.actor, projection })).not.toContain(
+      privateThreadTitle
+    );
+  });
 });
 
 async function createMigratedTestDatabase(context: {
@@ -504,6 +589,37 @@ async function seedMember(
     `insert into member (id, organization_id, user_id, role, created_at)
      values ($1, $2, $3, 'member', now())`,
     [randomUUID(), input.organizationId, input.userId]
+  );
+}
+
+async function seedAgentThread(
+  pool: Pool,
+  input: {
+    readonly id: string;
+    readonly organizationId: string;
+    readonly title: string;
+    readonly userId: string;
+  }
+) {
+  await pool.query(
+    `insert into agent_threads (
+       id,
+       organization_id,
+       user_id,
+       agent_instance_name,
+       title,
+       status,
+       created_at,
+       updated_at
+     )
+     values ($1, $2, $3, $4, $5, 'active', now(), now())`,
+    [
+      input.id,
+      input.organizationId,
+      input.userId,
+      `agent-${input.organizationId}-${input.userId}-${input.id}`,
+      input.title,
+    ]
   );
 }
 

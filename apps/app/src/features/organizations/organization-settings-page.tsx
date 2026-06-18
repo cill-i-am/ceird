@@ -1,31 +1,13 @@
 import type { OrganizationSummary } from "@ceird/identity-core";
-import { normalizeLabelName } from "@ceird/labels-core";
-import type { Label, LabelIdType } from "@ceird/labels-core";
 import { useForm } from "@tanstack/react-form";
 import { useRouter } from "@tanstack/react-router";
-import { Effect, Schema } from "effect";
-import {
-  Archive,
-  ArrowRight,
-  Check,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  X,
-} from "lucide-react";
+import { Schema } from "effect";
+import { ArrowRight } from "lucide-react";
 import * as React from "react";
 
 import { AppPageHeader } from "#/components/app-page-header";
 import { AppUtilityPanel } from "#/components/app-utility-panel";
 import { Button, buttonVariants } from "#/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "#/components/ui/dropdown-menu";
 import { FieldError, FieldGroup } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
 import {
@@ -33,22 +15,11 @@ import {
   getFormErrorText,
 } from "#/features/auth/auth-form-errors";
 import { AuthFormField } from "#/features/auth/auth-form-field";
-import { validateLabelName } from "#/features/labels/label-name-validation";
-import {
-  archiveBrowserLabel,
-  createBrowserLabel,
-  getOrganizationLabelsKey,
-  removeOrganizationLabel,
-  sortOrganizationLabels,
-  updateBrowserLabel,
-  upsertOrganizationLabel,
-} from "#/features/labels/labels-state";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
 import { authClient } from "#/lib/auth-client";
 import { submitClientForm } from "#/lib/client-form-submit";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
-import { cn } from "#/lib/utils";
 
 import { clearOrganizationAccessClientCache } from "./organization-access-cache";
 import {
@@ -58,26 +29,14 @@ import {
 
 const UPDATE_ORGANIZATION_FAILURE_MESSAGE =
   "We couldn't update the organization. Please try again.";
-const SAVE_LABEL_FAILURE_MESSAGE =
-  "We couldn't save the label. Please try again.";
-const ARCHIVE_LABEL_FAILURE_MESSAGE =
-  "We couldn't archive the label. Please try again.";
-const EMPTY_LABEL_NAME_MESSAGE = "Type a label name before creating it.";
-const DUPLICATE_LABEL_NAME_MESSAGE = "A label with that name already exists.";
-const INVALID_LABEL_NAME_MESSAGE =
-  "Keep label names between 1 and 48 characters.";
-const EMPTY_ORGANIZATION_LABELS: readonly Label[] = [];
 
-// Organization settings owns the general form plus label management.
+// Organization settings owns the general form and routes label management to
+// the dedicated realtime Labels surface.
 // react-doctor-disable-next-line
 export function OrganizationSettingsPage({
-  organizationLabels = EMPTY_ORGANIZATION_LABELS,
   organization,
 }: {
-  readonly organizationLabels?: readonly Label[];
   readonly organization: OrganizationSummary;
-  // Label editing state and the organization form are intentionally independent.
-  // react-doctor-disable-next-line
 }) {
   const router = useRouter();
   const isHydrated = useIsHydrated();
@@ -89,21 +48,6 @@ export function OrganizationSettingsPage({
     React.useState(() => ({
       name: organization.name,
     }));
-  const [labels, setLabels] = React.useState(() =>
-    sortOrganizationLabels(organizationLabels)
-  );
-  const [newLabelName, setNewLabelName] = React.useState("");
-  const [editingLabelId, setEditingLabelId] =
-    React.useState<LabelIdType | null>(null);
-  const [editingLabelName, setEditingLabelName] = React.useState("");
-  const [labelError, setLabelError] = React.useState<string | null>(null);
-  const [labelErrorTarget, setLabelErrorTarget] = React.useState<
-    "create" | "edit" | "general" | null
-  >(null);
-  const [labelStatus, setLabelStatus] = React.useState<string | null>(null);
-  const [pendingLabelAction, setPendingLabelAction] = React.useState<
-    "archive" | "create" | "update" | null
-  >(null);
   const settingsRootRef = React.useRef<HTMLDivElement | null>(null);
   const formRef = React.useRef<HTMLFormElement | null>(null);
   const previousOrganizationRef = React.useRef({
@@ -112,11 +56,6 @@ export function OrganizationSettingsPage({
   });
   const latestOrganizationIdRef = React.useRef(organization.id);
   latestOrganizationIdRef.current = organization.id;
-  const organizationLabelsKey = React.useMemo(
-    () => getOrganizationLabelsKey(organizationLabels),
-    [organizationLabels]
-  );
-  const previousLabelsKeyRef = React.useRef(organizationLabelsKey);
 
   const form = useForm({
     defaultValues: organizationFormDefaults,
@@ -205,7 +144,7 @@ export function OrganizationSettingsPage({
     },
   });
 
-  // Refresh local label and form state when the active organization data changes.
+  // Refresh local form state when the active organization data changes.
   // react-doctor-disable-next-line
   React.useEffect(() => {
     const previousOrganization = previousOrganizationRef.current;
@@ -213,23 +152,11 @@ export function OrganizationSettingsPage({
     const isSameOrganizationRemoteNameChange =
       previousOrganization.id === organization.id &&
       previousOrganization.name !== organization.name;
-    const labelsChanged =
-      previousLabelsKeyRef.current !== organizationLabelsKey;
 
     previousOrganizationRef.current = {
       id: organization.id,
       name: organization.name,
     };
-    previousLabelsKeyRef.current = organizationLabelsKey;
-
-    if (labelsChanged || isNewOrganization) {
-      setLabels(sortOrganizationLabels(organizationLabels));
-      setEditingLabelId(null);
-      setEditingLabelName("");
-      setLabelError(null);
-      setLabelErrorTarget(null);
-      setLabelStatus(null);
-    }
 
     if (!isNewOrganization && !isSameOrganizationRemoteNameChange) {
       return;
@@ -249,13 +176,7 @@ export function OrganizationSettingsPage({
       setOrganizationFormDefaults(nextOrganizationValues);
       form.reset(nextOrganizationValues);
     }
-  }, [
-    form,
-    organizationLabels,
-    organizationLabelsKey,
-    organization.id,
-    organization.name,
-  ]);
+  }, [form, organization.id, organization.name]);
 
   useAppHotkey(
     "settingsSubmit",
@@ -287,177 +208,6 @@ export function OrganizationSettingsPage({
     },
     { enabled: isHydrated }
   );
-
-  async function refreshRouteData() {
-    try {
-      await router.invalidate();
-    } catch {
-      setLabelStatus("Label saved. Refresh the page if labels look stale.");
-    }
-  }
-
-  async function handleCreateLabel() {
-    const decodedName = validateLabelName(newLabelName);
-
-    setLabelError(null);
-    setLabelErrorTarget(null);
-    setLabelStatus(null);
-
-    if (decodedName.kind === "empty") {
-      setLabelError(EMPTY_LABEL_NAME_MESSAGE);
-      setLabelErrorTarget("create");
-      return;
-    }
-
-    if (decodedName.kind === "invalid") {
-      setLabelError(INVALID_LABEL_NAME_MESSAGE);
-      setLabelErrorTarget("create");
-      return;
-    }
-
-    if (hasDuplicateLabelName(labels, decodedName.name)) {
-      setLabelError(DUPLICATE_LABEL_NAME_MESSAGE);
-      setLabelErrorTarget("create");
-      return;
-    }
-
-    setPendingLabelAction("create");
-    const actionOrganizationId = organization.id;
-
-    try {
-      const mutationFeedback = beginMutationFeedback();
-      const label = await Effect.runPromise(
-        createBrowserLabel({ name: decodedName.name })
-      );
-
-      await mutationFeedback.waitForSuccess();
-
-      if (latestOrganizationIdRef.current !== actionOrganizationId) {
-        return;
-      }
-
-      setLabels((current) => upsertOrganizationLabel(current, label));
-      setNewLabelName("");
-      setLabelStatus("Label created.");
-      await refreshRouteData();
-    } catch {
-      if (latestOrganizationIdRef.current === actionOrganizationId) {
-        setLabelError(SAVE_LABEL_FAILURE_MESSAGE);
-        setLabelErrorTarget("create");
-      }
-    } finally {
-      if (latestOrganizationIdRef.current === actionOrganizationId) {
-        setPendingLabelAction(null);
-      }
-    }
-  }
-
-  async function handleUpdateLabel(labelId: LabelIdType) {
-    const decodedName = validateLabelName(editingLabelName);
-
-    setLabelError(null);
-    setLabelErrorTarget(null);
-    setLabelStatus(null);
-
-    if (decodedName.kind !== "valid") {
-      setLabelError(
-        decodedName.kind === "empty"
-          ? "Type a label name before saving it."
-          : INVALID_LABEL_NAME_MESSAGE
-      );
-      setLabelErrorTarget("edit");
-      return;
-    }
-
-    if (hasDuplicateLabelName(labels, decodedName.name, labelId)) {
-      setLabelError(DUPLICATE_LABEL_NAME_MESSAGE);
-      setLabelErrorTarget("edit");
-      return;
-    }
-
-    const currentLabel = labels.find((label) => label.id === labelId);
-
-    if (currentLabel?.name === decodedName.name) {
-      setEditingLabelId(null);
-      setEditingLabelName("");
-      return;
-    }
-
-    setPendingLabelAction("update");
-    const actionOrganizationId = organization.id;
-
-    try {
-      const mutationFeedback = beginMutationFeedback();
-      const label = await Effect.runPromise(
-        updateBrowserLabel(labelId, {
-          name: decodedName.name,
-        })
-      );
-
-      await mutationFeedback.waitForSuccess();
-
-      if (latestOrganizationIdRef.current !== actionOrganizationId) {
-        return;
-      }
-
-      setLabels((current) => upsertOrganizationLabel(current, label));
-      setEditingLabelId(null);
-      setEditingLabelName("");
-      setLabelStatus("Label updated.");
-      await refreshRouteData();
-    } catch {
-      if (latestOrganizationIdRef.current === actionOrganizationId) {
-        setLabelError(SAVE_LABEL_FAILURE_MESSAGE);
-        setLabelErrorTarget("edit");
-      }
-    } finally {
-      if (latestOrganizationIdRef.current === actionOrganizationId) {
-        setPendingLabelAction(null);
-      }
-    }
-  }
-
-  async function handleArchiveLabel(labelId: LabelIdType) {
-    setLabelError(null);
-    setLabelErrorTarget(null);
-    setLabelStatus(null);
-    setPendingLabelAction("archive");
-    const actionOrganizationId = organization.id;
-
-    try {
-      const mutationFeedback = beginMutationFeedback();
-      await Effect.runPromise(archiveBrowserLabel(labelId));
-      await mutationFeedback.waitForSuccess();
-
-      if (latestOrganizationIdRef.current !== actionOrganizationId) {
-        return;
-      }
-
-      setLabels((current) => removeOrganizationLabel(current, labelId));
-      setLabelStatus("Label archived.");
-
-      if (editingLabelId === labelId) {
-        setEditingLabelId(null);
-        setEditingLabelName("");
-      }
-
-      await refreshRouteData();
-    } catch {
-      if (latestOrganizationIdRef.current === actionOrganizationId) {
-        setLabelError(ARCHIVE_LABEL_FAILURE_MESSAGE);
-        setLabelErrorTarget("general");
-      }
-    } finally {
-      if (latestOrganizationIdRef.current === actionOrganizationId) {
-        setPendingLabelAction(null);
-      }
-    }
-  }
-
-  const labelErrorId = labelError ? "job-label-settings-error" : undefined;
-  const isCreateLabelError =
-    labelErrorTarget === "create" && Boolean(labelError);
-  const isEditLabelError = labelErrorTarget === "edit" && Boolean(labelError);
 
   return (
     <div
@@ -517,8 +267,8 @@ export function OrganizationSettingsPage({
 
             {successMessage ? (
               <output
-                aria-live="polite"
                 className="text-sm text-muted-foreground"
+                aria-live="polite"
               >
                 {successMessage}
               </output>
@@ -559,222 +309,7 @@ export function OrganizationSettingsPage({
             </a>
           }
         />
-
-        <AppUtilityPanel id="organization-labels" title="Labels">
-          <div className="flex max-w-3xl flex-col gap-5">
-            <form
-              className="flex flex-col gap-3 sm:flex-row sm:items-end"
-              onSubmit={(event) => submitClientForm(event, handleCreateLabel)}
-            >
-              <AuthFormField
-                label="New label name"
-                htmlFor="new-job-label-name"
-                validationState={isCreateLabelError ? "invalid" : undefined}
-                errorText={undefined}
-              >
-                <Input
-                  id="new-job-label-name"
-                  value={newLabelName}
-                  maxLength={48}
-                  aria-describedby={
-                    isCreateLabelError ? labelErrorId : undefined
-                  }
-                  aria-invalid={isCreateLabelError || undefined}
-                  onChange={(event) => {
-                    setNewLabelName(event.target.value);
-                    setLabelError(null);
-                    setLabelErrorTarget(null);
-                    setLabelStatus(null);
-                  }}
-                />
-              </AuthFormField>
-              <Button
-                type="submit"
-                size="lg"
-                className="max-sm:w-full"
-                loading={pendingLabelAction === "create"}
-                disabled={!isHydrated}
-              >
-                <Plus aria-hidden="true" />
-                Create label
-              </Button>
-            </form>
-
-            {labelError ? (
-              <FieldError id={labelErrorId}>{labelError}</FieldError>
-            ) : null}
-            {labelStatus ? (
-              <output
-                aria-live="polite"
-                className="text-sm text-muted-foreground"
-              >
-                {labelStatus}
-              </output>
-            ) : null}
-
-            <div className="overflow-hidden rounded-lg border border-border/60">
-              {labels.length === 0 ? (
-                <p className="px-4 py-6 text-sm text-muted-foreground">
-                  No labels yet.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border/60">
-                  {labels.map((label) => {
-                    const isEditing = editingLabelId === label.id;
-
-                    return (
-                      <li
-                        key={label.id}
-                        className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        {isEditing ? (
-                          <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-                            <label
-                              className="sr-only"
-                              htmlFor={`job-label-${label.id}`}
-                            >
-                              Label name
-                            </label>
-                            <Input
-                              id={`job-label-${label.id}`}
-                              value={editingLabelName}
-                              maxLength={48}
-                              aria-describedby={
-                                isEditLabelError ? labelErrorId : undefined
-                              }
-                              aria-invalid={isEditLabelError || undefined}
-                              onChange={(event) => {
-                                setEditingLabelName(event.target.value);
-                                setLabelError(null);
-                                setLabelErrorTarget(null);
-                              }}
-                            />
-                            <div className="flex gap-2">
-                              <IconButton
-                                label="Save label changes"
-                                disabled={pendingLabelAction !== null}
-                                onClick={() => {
-                                  void handleUpdateLabel(label.id);
-                                }}
-                              >
-                                <Check aria-hidden="true" />
-                              </IconButton>
-                              <IconButton
-                                label="Cancel label edit"
-                                disabled={pendingLabelAction !== null}
-                                onClick={() => {
-                                  setEditingLabelId(null);
-                                  setEditingLabelName("");
-                                  setLabelError(null);
-                                  setLabelErrorTarget(null);
-                                }}
-                              >
-                                <X aria-hidden="true" />
-                              </IconButton>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <span className="min-w-0 text-sm font-medium text-foreground">
-                              {label.name}
-                            </span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger
-                                render={
-                                  <Button
-                                    type="button"
-                                    size="icon-sm"
-                                    variant="outline"
-                                    disabled={pendingLabelAction !== null}
-                                    aria-label={`Label actions for ${label.name}`}
-                                  />
-                                }
-                              >
-                                <MoreHorizontal aria-hidden="true" />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuGroup>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setEditingLabelId(label.id);
-                                      setEditingLabelName(label.name);
-                                      setLabelError(null);
-                                      setLabelErrorTarget(null);
-                                      setLabelStatus(null);
-                                    }}
-                                  >
-                                    <Pencil
-                                      aria-hidden="true"
-                                      className="text-muted-foreground"
-                                    />
-                                    <span>Edit label</span>
-                                  </DropdownMenuItem>
-                                </DropdownMenuGroup>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuGroup>
-                                  <DropdownMenuItem
-                                    variant="destructive"
-                                    onClick={() => {
-                                      void handleArchiveLabel(label.id);
-                                    }}
-                                  >
-                                    <Archive
-                                      aria-hidden="true"
-                                      className="text-muted-foreground"
-                                    />
-                                    <span>Archive label</span>
-                                  </DropdownMenuItem>
-                                </DropdownMenuGroup>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </div>
-        </AppUtilityPanel>
       </div>
     </div>
-  );
-}
-
-function IconButton({
-  children,
-  className,
-  label,
-  ...props
-}: React.ComponentProps<typeof Button> & {
-  readonly label: string;
-}) {
-  return (
-    <Button
-      type="button"
-      size="icon-sm"
-      variant="ghost"
-      className={cn("text-muted-foreground hover:text-foreground", className)}
-      aria-label={label}
-      title={label}
-      {...props}
-    >
-      {children}
-    </Button>
-  );
-}
-
-function hasDuplicateLabelName(
-  labels: readonly Label[],
-  name: string,
-  ignoredLabelId?: LabelIdType
-) {
-  const normalizedName = normalizeLabelName(name);
-
-  return labels.some(
-    (label) =>
-      label.id !== ignoredLabelId &&
-      normalizeLabelName(label.name) === normalizedName
   );
 }

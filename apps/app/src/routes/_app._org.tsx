@@ -9,7 +9,6 @@ import {
   createFileRoute,
   redirect,
   useRouteContext,
-  useRouterState,
 } from "@tanstack/react-router";
 
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
@@ -114,9 +113,6 @@ function OrganizationRouteComponent() {
     from: "/_app/_org",
   });
   const stack = Route.useSearch().sheets ?? [];
-  const routeOwnsSheetStack = useRouterState({
-    select: (state) => state.location.pathname === "/sites",
-  });
 
   return (
     <OrganizationActiveSyncBoundary
@@ -136,7 +132,7 @@ function OrganizationRouteComponent() {
               currentOrganizationRole={currentOrganizationRole}
             />
             <Outlet />
-            {routeOwnsSheetStack ? null : <WorkspaceSheetStack stack={stack} />}
+            <WorkspaceSheetStack stack={stack} />
           </WorkspaceSheetNavigationProvider>
         </WorkspaceSheetEventsProvider>
       </DataPlaneProvider>

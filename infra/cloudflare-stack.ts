@@ -21,11 +21,6 @@ import {
   makeSyncWorker,
 } from "../apps/sync/infra/cloudflare-worker.ts";
 import type { ElectricContainerConfig } from "../apps/sync/infra/cloudflare-worker.ts";
-import { readCloudflareAccountId } from "./cloudflare-environment.ts";
-import {
-  makeElectricStorageR2TokenPolicy,
-  makeR2SecretAccessKey,
-} from "./cloudflare-r2.ts";
 import {
   TenantWildcardDnsRecord,
   TenantWorkerRoute,
@@ -187,10 +182,24 @@ const durableObjectLocationHintByNeonRegion = {
   "azure-westus3": "wnam",
 } satisfies Record<InfraStageConfig["neonRegion"], DurableObjectLocationHint>;
 
+const durableObjectJurisdictionByNeonRegion: Partial<
+  Record<InfraStageConfig["neonRegion"], DurableObjectJurisdiction>
+> = {
+  "aws-eu-central-1": "eu",
+  "aws-eu-west-2": "eu",
+  "azure-gwc": "eu",
+};
+
 export function makeDurableObjectLocationHintForNeonRegion(
   neonRegion: InfraStageConfig["neonRegion"]
 ): DurableObjectLocationHint {
   return durableObjectLocationHintByNeonRegion[neonRegion];
+}
+
+export function makeDurableObjectJurisdictionForNeonRegion(
+  neonRegion: InfraStageConfig["neonRegion"]
+): DurableObjectJurisdiction | undefined {
+  return durableObjectJurisdictionByNeonRegion[neonRegion];
 }
 
 export function makeTenantReservedHostBypassRoutePatterns(
@@ -230,7 +239,6 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     input.hyperdrive.hyperdriveId
   );
 
-  const cloudflareAccountId = yield* readCloudflareAccountId();
   const alchemyContext = yield* Alchemy.AlchemyContext;
   const localDev = alchemyContext.dev;
   const betterAuthSecret = yield* Alchemy.Random("BetterAuthSecret", {
@@ -242,49 +250,10 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
   const electricSourceSecret = yield* Alchemy.Random("ElectricSourceSecret", {
     bytes: 32,
   });
-  const electricStorageBucketName = resourceName(
-    input.config,
-    "electric-storage"
-  );
-  const electricStorageProvisioned = yield* shouldProvisionElectricStorage({
-    config: input.config,
-    localDev,
-  });
-  const electricStorageBucket =
-    electricStorageProvisioned === true
-      ? yield* Cloudflare.R2Bucket("ElectricStorageBucket", {
-          name: electricStorageBucketName,
-          jurisdiction: "default",
-          lifecycleRules: [
-            {
-              id: "abort-incomplete-multipart-uploads",
-              abortMultipartUploadsTransition: {
-                condition: {
-                  maxAge: 604_800,
-                  type: "Age",
-                },
-              },
-            },
-          ],
-        })
-      : undefined;
-  let electricStorageCredentials: ElectricStorageCredentialValues | undefined;
-
-  if (electricStorageProvisioned) {
-    electricStorageCredentials = yield* makeElectricStorageCredentials({
-      accountId: cloudflareAccountId,
-      bucketName: electricStorageBucketName,
-      config: input.config,
-    });
-  }
   const localOrigins = makeLocalWorkerOrigins({
     stage: input.config.stage,
   });
   yield* Effect.annotateCurrentSpan("alchemy.localDev", localDev);
-  yield* Effect.annotateCurrentSpan(
-    "electricStorageProvisioned",
-    electricStorageProvisioned
-  );
 
   const authEmailDeadLetterQueue = yield* Cloudflare.Queue(
     "AuthEmailDeadLetterQueue",
@@ -407,21 +376,13 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     )
   );
 
-  const electricContainerProvisioning = {
-    electricStorageCredentials,
-    localDev,
-  };
   const electricContainer =
-    shouldProvisionElectricContainer(electricContainerProvisioning) === false
+    shouldProvisionElectricContainer({ localDev }) === false
       ? undefined
       : yield* makeElectricContainerConfig({
-          accountId: cloudflareAccountId,
-          bucketName: electricStorageBucketName,
           databaseConnectionUri: input.database.branch.connectionUri,
           electricSourceSecret: electricSourceSecret.text,
           name: resourceName(input.config, "electric"),
-          storageCredentials:
-            electricContainerProvisioning.electricStorageCredentials,
         });
   yield* Effect.annotateCurrentSpan(
     "electricContainerProvisioned",
@@ -433,6 +394,9 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     config: input.config,
     domain,
     electricContainer,
+    electricSqlJurisdiction: makeDurableObjectJurisdictionForNeonRegion(
+      input.config.neonRegion
+    ),
     electricSqlLocationHint: makeDurableObjectLocationHintForNeonRegion(
       input.config.neonRegion
     ),
@@ -527,7 +491,6 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     authEmailQueue,
     database: input.hyperdrive,
     domain,
-    electricStorageBucket,
     mcp,
     mcpOrigin,
     sync,
@@ -540,11 +503,6 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     workerAnalyticsDataset: workerAnalytics.dataset,
   } as const;
 });
-
-export interface ElectricStorageCredentialValues {
-  readonly accessKeyId: SecretStringInput;
-  readonly secretAccessKey: SecretStringInput;
-}
 
 type SecretString = string | Redacted.Redacted<string>;
 type SecretStringInput = SecretString | Output.Output<SecretString>;
@@ -592,81 +550,21 @@ export function redactInput(
 }
 
 function makeElectricContainerConfig(input: {
-  readonly accountId: string;
-  readonly bucketName: string;
   readonly databaseConnectionUri: SecretStringInput;
   readonly electricSourceSecret: Input<Redacted.Redacted<string>>;
   readonly name: string;
-  readonly storageCredentials: ElectricStorageCredentialValues;
 }): Effect.Effect<ElectricContainerConfig, never, Cloudflare.Providers> {
-  return Effect.gen(function* () {
-    // Preserve the previously declared account store so Alchemy state reads keep working after deploy.
-    yield* Cloudflare.SecretsStore("ElectricContainerSecrets");
-
-    return {
-      env: makeElectricContainerEnv({
-        databaseUrl: redactInput(input.databaseConnectionUri),
-        electricSecret: input.electricSourceSecret,
-        storage: {
-          accessKeyId: redactInput(input.storageCredentials.accessKeyId),
-          accountId: input.accountId,
-          bucketName: input.bucketName,
-          awsSecretAccessKey: redactInput(
-            input.storageCredentials.secretAccessKey
-          ),
-        },
-      }),
-      name: input.name,
-    } satisfies ElectricContainerConfig;
-  });
-}
-
-function makeElectricStorageCredentials(input: {
-  readonly accountId: string;
-  readonly bucketName: string;
-  readonly config: InfraStageConfig;
-}) {
-  return Effect.gen(function* () {
-    const token = yield* Cloudflare.AccountApiToken("ElectricStorageR2Token", {
-      name: resourceName(input.config, "electric-storage-r2-token"),
-      accountId: input.accountId,
-      policies: [
-        makeElectricStorageR2TokenPolicy({
-          accountId: input.accountId,
-          bucketName: input.bucketName,
-          jurisdiction: "default",
-        }),
-      ],
-    });
-
-    return {
-      accessKeyId: token.tokenId,
-      secretAccessKey: token.value.pipe(Output.map(makeR2SecretAccessKey)),
-    } satisfies ElectricStorageCredentialValues;
-  });
-}
-
-export function shouldProvisionElectricStorage(input: {
-  readonly config: Pick<
-    InfraStageConfig,
-    "appName" | "neonParentStage" | "stage"
-  >;
-  readonly localDev: boolean;
-}) {
-  void input;
-  return Effect.succeed(true);
+  return Effect.succeed({
+    env: makeElectricContainerEnv({
+      databaseUrl: redactInput(input.databaseConnectionUri),
+      electricSecret: input.electricSourceSecret,
+    }),
+    name: input.name,
+  } satisfies ElectricContainerConfig);
 }
 
 export function shouldProvisionElectricContainer(input: {
-  readonly electricStorageCredentials:
-    | ElectricStorageCredentialValues
-    | undefined;
   readonly localDev: boolean;
-}): input is {
-  readonly electricStorageCredentials: ElectricStorageCredentialValues;
-  readonly localDev: false;
-} {
-  return (
-    input.localDev === false && input.electricStorageCredentials !== undefined
-  );
+}) {
+  return input.localDev === false;
 }

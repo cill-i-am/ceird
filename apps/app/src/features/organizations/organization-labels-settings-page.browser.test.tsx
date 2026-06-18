@@ -1,7 +1,12 @@
 import { decodeOrganizationSummary } from "@ceird/identity-core";
-import type { Label } from "@ceird/labels-core";
+import type {
+  CreateLabelInput,
+  Label,
+  LabelWriteResponse,
+  UpdateLabelInput,
+} from "@ceird/labels-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TooltipProvider } from "#/components/ui/tooltip";
@@ -185,6 +190,227 @@ describe("organization labels settings page", () => {
     ]);
   });
 
+  it("reconciles temporary create ids before immediate rename actions", async () => {
+    const user = userEvent.setup();
+    const createTransaction = Promise.withResolvers<unknown>();
+    const serverLabel = makeLabel({
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Fire Safety",
+    });
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [],
+        status: "ready",
+        transactions: {
+          insert: [createTransaction],
+        },
+      }),
+      createTemporaryLabelId: () =>
+        "44444444-4444-4444-8444-444444444444" as Label["id"],
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: /new label name/i }),
+      "Fire Safety"
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+    createTransaction.resolve({
+      responses: [makeLabelWriteResponse(serverLabel, 123)],
+      timeout: 10_000,
+      txid: 123,
+    });
+
+    await expect(
+      screen.findByText("Label created and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open actions for fire safety/i,
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit label/i })
+    );
+    const editInput = screen.getByRole("textbox", {
+      name: /rename fire safety/i,
+    });
+    await user.clear(editInput);
+    await user.type(editInput, "Emergency");
+    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
+
+    await expect(
+      screen.findByText("Label renamed and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+    await waitFor(() => {
+      expect(screen.getByText("Emergency")).toBeVisible();
+    });
+    expect(screen.queryByText("Fire Safety")).not.toBeInTheDocument();
+  });
+
+  it("creates labels through the authoritative command when Electric txid confirmation is available", async () => {
+    const user = userEvent.setup();
+    const serverLabel = makeLabel({
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Fire Safety",
+    });
+    const renamedLabel = { ...serverLabel, name: "Emergency" };
+    const createLabelWithConfirmation = vi.fn<
+      (input: CreateLabelInput) => Promise<LabelWriteResponse>
+    >((_input) => Promise.resolve(makeLabelWriteResponse(serverLabel, 456)));
+    const updateLabelWithConfirmation = vi.fn<
+      (
+        labelId: Label["id"],
+        input: UpdateLabelInput
+      ) => Promise<LabelWriteResponse>
+    >((_labelId, _input) =>
+      Promise.resolve(makeLabelWriteResponse(renamedLabel, 789))
+    );
+    const awaitTxId = vi.fn<
+      (txid: number, timeout?: number) => Promise<boolean>
+    >(() => Promise.resolve(true));
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        awaitTxId,
+        labels: [],
+        status: "ready",
+      }),
+      createLabelWithConfirmation,
+      updateLabelWithConfirmation,
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: /new label name/i }),
+      "Fire Safety"
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await expect(
+      screen.findByText("Label created and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+    expect(createLabelWithConfirmation).toHaveBeenCalledWith({
+      name: "Fire Safety",
+    });
+    expect(awaitTxId).toHaveBeenCalledWith(456, 10_000);
+    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open actions for fire safety/i,
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit label/i })
+    );
+    const editInput = screen.getByRole("textbox", {
+      name: /rename fire safety/i,
+    });
+    await user.clear(editInput);
+    await user.type(editInput, "Emergency");
+    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
+
+    await expect(
+      screen.findByText("Label renamed and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+    expect(updateLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id, {
+      name: "Emergency",
+    });
+    expect(awaitTxId).toHaveBeenCalledWith(789, 10_000);
+    await waitFor(() => {
+      expect(screen.getByText("Emergency")).toBeVisible();
+    });
+    expect(screen.queryByText("Fire Safety")).not.toBeInTheDocument();
+  });
+
+  it("archives labels through the authoritative command when Electric txid confirmation is available", async () => {
+    const user = userEvent.setup();
+    const serverLabel = makeLabel({
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Fire Safety",
+    });
+    const renamedLabel = { ...serverLabel, name: "Emergency" };
+    const createLabelWithConfirmation = vi.fn<
+      (input: CreateLabelInput) => Promise<LabelWriteResponse>
+    >((_input) => Promise.resolve(makeLabelWriteResponse(serverLabel, 456)));
+    const archiveLabelWithConfirmation = vi.fn<
+      (labelId: Label["id"]) => Promise<LabelWriteResponse>
+    >((_labelId) => Promise.resolve(makeLabelWriteResponse(renamedLabel, 789)));
+    const updateLabelWithConfirmation = vi.fn<
+      (
+        labelId: Label["id"],
+        input: UpdateLabelInput
+      ) => Promise<LabelWriteResponse>
+    >((_labelId, _input) =>
+      Promise.resolve(makeLabelWriteResponse(renamedLabel, 678))
+    );
+    const awaitTxId = vi.fn<
+      (txid: number, timeout?: number) => Promise<boolean>
+    >(() => Promise.resolve(true));
+
+    renderLabelsPage({
+      archiveLabelWithConfirmation,
+      collectionState: makeCollectionState({
+        awaitTxId,
+        labels: [],
+        status: "ready",
+      }),
+      createLabelWithConfirmation,
+      updateLabelWithConfirmation,
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: /new label name/i }),
+      "Fire Safety"
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open actions for fire safety/i,
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit label/i })
+    );
+    const editInput = screen.getByRole("textbox", {
+      name: /rename fire safety/i,
+    });
+    await user.clear(editInput);
+    await user.type(editInput, "Emergency");
+    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
+    await expect(screen.findByText("Emergency")).resolves.toBeVisible();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open actions for emergency/i,
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /archive label/i })
+    );
+    const archiveConfirmation = await screen.findByRole("group", {
+      name: /confirm archiving emergency/i,
+    });
+    await user.click(
+      within(archiveConfirmation).getByRole("button", {
+        name: /archive label/i,
+      })
+    );
+
+    await expect(
+      screen.findByText(
+        "Label archived and removed after realtime confirmation."
+      )
+    ).resolves.toBeVisible();
+    expect(archiveLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id);
+    expect(awaitTxId).toHaveBeenCalledWith(789, 10_000);
+    expect(screen.queryByText("Emergency")).not.toBeInTheDocument();
+  });
+
   it("disables mouse-driven row actions while another mutation is pending", async () => {
     const user = userEvent.setup();
     const createTransaction = Promise.withResolvers<unknown>();
@@ -331,6 +557,91 @@ describe("organization labels settings page", () => {
     expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
   });
 
+  it("archives labels after temporary create id reconciliation and rename", async () => {
+    const user = userEvent.setup();
+    const createTransaction = Promise.withResolvers<unknown>();
+    const serverLabel = makeLabel({
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Fire Safety",
+    });
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [],
+        status: "ready",
+        transactions: {
+          insert: [createTransaction],
+        },
+      }),
+      createTemporaryLabelId: () =>
+        "44444444-4444-4444-8444-444444444444" as Label["id"],
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: /new label name/i }),
+      "Fire Safety"
+    );
+    await user.click(screen.getByRole("button", { name: /create/i }));
+    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+
+    createTransaction.resolve({
+      responses: [makeLabelWriteResponse(serverLabel, 101)],
+      timeout: 10_000,
+      txid: 101,
+    });
+    await expect(
+      screen.findByText("Label created and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open actions for fire safety/i,
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /edit label/i })
+    );
+    const editInput = screen.getByRole("textbox", {
+      name: /rename fire safety/i,
+    });
+    await user.clear(editInput);
+    await user.type(editInput, "Emergency");
+    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
+    await expect(
+      screen.findByText("Label renamed and confirmed by realtime sync.")
+    ).resolves.toBeVisible();
+    await expect(screen.findByText("Emergency")).resolves.toBeVisible();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /open actions for emergency/i,
+      })
+    );
+    await user.click(
+      await screen.findByRole("menuitem", { name: /archive label/i })
+    );
+    const archiveConfirmation = await screen.findByRole("group", {
+      name: /confirm archiving emergency/i,
+    });
+    const confirmArchiveButton = within(archiveConfirmation).getByRole(
+      "button",
+      {
+        name: /archive label/i,
+      }
+    );
+    await waitFor(() => {
+      expect(confirmArchiveButton).toBeEnabled();
+    });
+    await user.click(confirmArchiveButton);
+
+    await expect(
+      screen.findByText(
+        "Label archived and removed after realtime confirmation."
+      )
+    ).resolves.toBeVisible();
+    expect(screen.queryByText("Emergency")).not.toBeInTheDocument();
+  });
+
   it("requires edit-mode archive icon confirmation and supports cancel", async () => {
     const user = userEvent.setup();
 
@@ -424,24 +735,42 @@ describe("organization labels settings page", () => {
 });
 
 function renderLabelsPage({
+  archiveLabelWithConfirmation,
   collectionState,
+  createLabelWithConfirmation,
   createTemporaryLabelId,
   mutationJournal,
   organizationRole = "owner",
+  updateLabelWithConfirmation,
 }: {
+  readonly archiveLabelWithConfirmation?:
+    | ((labelId: Label["id"]) => Promise<LabelWriteResponse>)
+    | undefined;
   readonly collectionState: ReturnType<typeof makeCollectionState>;
+  readonly createLabelWithConfirmation?:
+    | ((input: CreateLabelInput) => Promise<LabelWriteResponse>)
+    | undefined;
   readonly createTemporaryLabelId?: (() => Label["id"]) | undefined;
   readonly mutationJournal?:
     | ReturnType<typeof createDataPlaneMutationJournal>
     | undefined;
   readonly organizationRole?: "admin" | "member" | "owner";
+  readonly updateLabelWithConfirmation?:
+    | ((
+        labelId: Label["id"],
+        input: UpdateLabelInput
+      ) => Promise<LabelWriteResponse>)
+    | undefined;
 }) {
   return render(
     <LabelsPageHarness
+      archiveLabelWithConfirmation={archiveLabelWithConfirmation}
       collectionState={collectionState}
+      createLabelWithConfirmation={createLabelWithConfirmation}
       createTemporaryLabelId={createTemporaryLabelId}
       mutationJournal={mutationJournal}
       organizationRole={organizationRole}
+      updateLabelWithConfirmation={updateLabelWithConfirmation}
     />
   );
 }
@@ -459,27 +788,45 @@ function getModShiftBackspaceKeyboardInput() {
 }
 
 function LabelsPageHarness({
+  archiveLabelWithConfirmation,
   collectionState,
+  createLabelWithConfirmation,
   createTemporaryLabelId,
   mutationJournal,
   organizationRole = "owner",
+  updateLabelWithConfirmation,
 }: {
+  readonly archiveLabelWithConfirmation?:
+    | ((labelId: Label["id"]) => Promise<LabelWriteResponse>)
+    | undefined;
   readonly collectionState: ReturnType<typeof makeCollectionState>;
+  readonly createLabelWithConfirmation?:
+    | ((input: CreateLabelInput) => Promise<LabelWriteResponse>)
+    | undefined;
   readonly createTemporaryLabelId?: (() => Label["id"]) | undefined;
   readonly mutationJournal?:
     | ReturnType<typeof createDataPlaneMutationJournal>
     | undefined;
   readonly organizationRole?: "admin" | "member" | "owner";
+  readonly updateLabelWithConfirmation?:
+    | ((
+        labelId: Label["id"],
+        input: UpdateLabelInput
+      ) => Promise<LabelWriteResponse>)
+    | undefined;
 }) {
   return (
     <HotkeysProvider>
       <TooltipProvider>
         <OrganizationLabelsSettingsPage
+          archiveLabelWithConfirmation={archiveLabelWithConfirmation}
           collectionState={collectionState}
+          createLabelWithConfirmation={createLabelWithConfirmation}
           createTemporaryLabelId={createTemporaryLabelId}
           mutationJournal={mutationJournal}
           organization={TEST_ORGANIZATION}
           organizationRole={organizationRole}
+          updateLabelWithConfirmation={updateLabelWithConfirmation}
         />
       </TooltipProvider>
     </HotkeysProvider>
@@ -487,11 +834,15 @@ function LabelsPageHarness({
 }
 
 function makeCollectionState({
+  awaitTxId,
   failures,
   labels,
   status,
   transactions,
 }: {
+  readonly awaitTxId?:
+    | ((txid: number, timeout?: number) => Promise<boolean>)
+    | undefined;
   readonly failures?: Partial<
     Record<"delete" | "insert" | "update", readonly Error[]>
   >;
@@ -526,7 +877,7 @@ function makeCollectionState({
     collection:
       status === "disabled" || status === "unavailable"
         ? null
-        : makeCollection(labels, status, failures, transactions),
+        : makeCollection(labels, status, failures, transactions, awaitTxId),
     health: health as DataPlaneCollectionHealth,
   };
 }
@@ -537,7 +888,8 @@ function makeCollection(
   failures?: Partial<Record<"delete" | "insert" | "update", readonly Error[]>>,
   transactions?: Partial<
     Record<"delete" | "insert" | "update", readonly ManualTransaction[]>
-  >
+  >,
+  awaitTxId?: (txid: number, timeout?: number) => Promise<boolean>
 ) {
   let currentLabels = [...labels].toSorted(compareLabels);
   const listeners = new Set<() => void>();
@@ -552,10 +904,17 @@ function makeCollection(
     update: [...(transactions?.update ?? [])],
   };
   const notify = () => {
+    if (batchDepth > 0) {
+      shouldNotifyAfterBatch = true;
+      return;
+    }
+
     for (const listener of listeners) {
       listener();
     }
   };
+  let batchDepth = 0;
+  let shouldNotifyAfterBatch = false;
 
   return {
     entries: () =>
@@ -632,6 +991,35 @@ function makeCollection(
         },
       });
     },
+    utils: {
+      awaitTxId,
+      writeBatch: (callback: () => void) => {
+        batchDepth += 1;
+        try {
+          callback();
+        } finally {
+          batchDepth -= 1;
+        }
+
+        if (batchDepth === 0 && shouldNotifyAfterBatch) {
+          shouldNotifyAfterBatch = false;
+          notify();
+        }
+      },
+      writeDelete: (key: Label["id"]) => {
+        currentLabels = currentLabels.filter((label) => label.id !== key);
+        notify();
+      },
+      writeUpsert: (label: Label) => {
+        currentLabels = [
+          label,
+          ...currentLabels.filter(
+            (currentLabel) => currentLabel.id !== label.id
+          ),
+        ].toSorted(compareLabels);
+        notify();
+      },
+    },
   };
 }
 
@@ -689,6 +1077,13 @@ function makeLabel({
     id: id as Label["id"],
     name,
     updatedAt: "2026-06-14T00:00:00.000Z",
+  };
+}
+
+function makeLabelWriteResponse(label: Label, txid: number) {
+  return {
+    label,
+    mutation: { txid },
   };
 }
 

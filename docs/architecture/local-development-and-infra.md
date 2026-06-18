@@ -19,14 +19,15 @@ pnpm alchemy login
 
 CI uses `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_KEY`, and `CLOUDFLARE_EMAIL`
 from GitHub environment secrets for non-interactive provider auth. The app
-stack owns stage-scoped Electric R2 account tokens, so CI must not provide
-`CLOUDFLARE_API_TOKEN`; Alchemy's environment auth prefers the token when both
-token and key credentials are present. CI also stores the existing Cloudflare
-state-store credentials JSON as `ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS`
-and writes it to Alchemy's expected credentials path before deploy or destroy.
-Local operators should leave Cloudflare provider auth and state-store
-credentials in the Alchemy profile instead of exporting those variables for
-normal Alchemy runs.
+stack uses key/email credentials so it can reconcile the Cloudflare state store
+and deployed resources consistently; CI must not provide
+`CLOUDFLARE_API_TOKEN` because Alchemy's environment auth prefers the token when
+both token and key credentials are present. CI also stores the existing
+Cloudflare state-store credentials JSON as
+`ALCHEMY_CLOUDFLARE_STATE_STORE_CREDENTIALS` and writes it to Alchemy's
+expected credentials path before deploy or destroy. Local operators should
+leave Cloudflare provider auth and state-store credentials in the Alchemy
+profile instead of exporting those variables for normal Alchemy runs.
 
 Before starting a provider-backed worktree for the first time, run:
 
@@ -102,17 +103,17 @@ selected stage.
 
 ## Local Environment
 
-Fresh linked worktrees usually do not contain gitignored env files. The local
-environment setup script copies `.env.local` from an explicit
-`LOCAL_ENV_SOURCE` first, then from the primary Git worktree associated with the
-linked worktree. It prepares the env file before dependency installation so
-Codex and other non-interactive setup runs fail quickly when credentials are
-missing. Dependency source uses `opensrc`'s global cache at
-`${OPENSRC_HOME:-~/.opensrc}`. Setup does not link worktree-local `opensrc/`
-directories; it runs normal dependency installation and lets the root
-`postinstall` refresh the shared cache, which is reused by all worktrees. The
-script does not generate fallback secrets; if no source env file exists, setup
-stops with a clear error.
+Fresh linked worktrees usually do not contain gitignored env files.
+Codex-managed worktrees copy ignored local env files listed in
+`.worktreeinclude`, including `.env`, `.env.local`, and `.env.*.local`, before
+setup starts. The local environment setup script then checks that `.env.local`
+is present before dependency installation so Codex and other non-interactive
+setup runs fail quickly when credentials are missing. Dependency source uses
+`opensrc`'s global cache at `${OPENSRC_HOME:-~/.opensrc}`. Setup does not link
+worktree-local `opensrc/` directories; it runs normal dependency installation
+and lets the root `postinstall` refresh the shared cache, which is reused by
+all worktrees. The script does not generate fallback secrets; if `.env.local`
+was not included into the worktree, setup stops with a clear error.
 
 Prefer direct dependency upgrades for dependency audit remediations. When a
 direct upgrade cannot make a vulnerable transitive edge resolve to a patched
@@ -122,48 +123,48 @@ when the owning direct dependency can safely supply the audited version itself.
 
 Common local and Alchemy variables include:
 
-| Variable                                            | Purpose                                                                                                              |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `ALCHEMY_STACK_NAME`                                | Alchemy-injected runtime stack name for Worker metadata.                                                             |
-| `ALCHEMY_STAGE`                                     | Alchemy-injected runtime stage for Worker health checks.                                                             |
-| `AUTH_APP_ORIGIN`                                   | Browser app origin used by auth redirects and emails.                                                                |
-| `AUTH_COOKIE_DOMAIN`                                | Optional parent domain for sharing auth cookies across system and tenant hosts.                                      |
-| `AUTH_COOKIE_PREFIX`                                | Optional Better Auth cookie prefix, usually stage-derived in Alchemy.                                                |
-| `AUTH_CAPTCHA_ENABLED`                              | Enables Cloudflare Turnstile for selected Better Auth public auth endpoints.                                         |
-| `AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE`             | Optional strict loopback or `.localhost` Turnstile verify endpoint override for tests or local stubs.                |
-| `AUTH_CAPTCHA_TURNSTILE_SECRET_KEY`                 | Domain-only Turnstile secret key used by Better Auth's captcha plugin.                                               |
-| `AUTH_EMAIL_FROM`                                   | Sender address for auth emails.                                                                                      |
-| `AUTH_EMAIL_FROM_NAME`                              | Sender display name.                                                                                                 |
-| `AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED`            | Optional password compromise check override; local Alchemy Workers default it to `false`.                            |
-| `AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE` | Optional strict loopback or `.localhost` HIBP range API override for deterministic local verification.               |
-| `AUTH_RATE_LIMIT_ENABLED`                           | Disables auth rate limiting for local, PR-preview, and ephemeral CI E2E.                                             |
-| `AUTH_TRUSTED_ORIGINS`                              | Optional comma-delimited auth CORS/trusted-origin additions, including tenant hosts.                                 |
-| `BETTER_AUTH_BASE_URL`                              | API auth URL.                                                                                                        |
-| `BETTER_AUTH_SECRET`                                | Stable local auth secret for package-local domain runs.                                                              |
-| `BETTER_AUTH_SECRETS`                               | Optional versioned Better Auth rotation secrets as comma-delimited `<version>:<secret>` entries.                     |
-| `DATABASE_URL`                                      | Package-local domain database URL.                                                                                   |
-| `GOOGLE_MAPS_API_KEY`                               | Optional local Google Places key for site autocomplete/place details and fallback key for route-aware proximity.     |
-| `GOOGLE_MAPS_ROUTES_API_KEY`                        | Optional dedicated Google Routes key for route-aware proximity; falls back to `GOOGLE_MAPS_API_KEY` when absent.     |
-| `CEIRD_ROUTE_PROVIDER`                              | Optional route provider selector. Defaults to `google_routes`; set `test` for deterministic local route ranking.     |
-| `PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS`                | Optional TTL for server-signed typed-origin proofs; defaults to 15 minutes.                                          |
-| `AGENT_ACTION_RUN_STALE_AFTER_SECONDS`              | Agent action ledger stale-running recovery window.                                                                   |
-| `AGENT_INTERNAL_SECRET`                             | Internal domain/Agent shared secret for package-local runs.                                                          |
-| `AGENT_AI_GATEWAY_ID`                               | Alchemy-managed Cloudflare AI Gateway ID used by the Agent Worker model provider.                                    |
-| `AGENT_ORIGIN`                                      | Server-side app Agent Worker origin.                                                                                 |
-| `VITE_AGENT_ORIGIN`                                 | Browser-exposed Agent Worker origin used by the global chat client.                                                  |
-| `AGENT_MUTATION_TOOLS_ENABLED`                      | Optional exact `true` opt-in for selected stages; omitted by default.                                                |
-| `SYNC_ORIGIN`                                       | Server-side app sync Worker origin.                                                                                  |
-| `VITE_SYNC_ORIGIN`                                  | Browser-exposed sync Worker origin reserved for Electric/TanStack DB clients.                                        |
-| `VITE_AUTH_CAPTCHA_ENABLED`                         | Browser flag mirroring `AUTH_CAPTCHA_ENABLED` for selected auth forms.                                               |
-| `VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY`              | Public Turnstile site key exposed only to the app Worker/browser.                                                    |
-| `ELECTRIC_SQL_LOCATION_HINT`                        | Cloudflare Durable Object placement hint derived from the stage Neon region.                                         |
-| `ELECTRIC_SOURCE_SECRET`                            | Sync Worker and Electric shared source secret, generated by Alchemy for deployed stages.                             |
-| `SYNC_AUTHORIZATION_CACHE_TTL_SECONDS`              | Warm-isolate sync authorization cache TTL. Defaults to `10`; valid range is `0` to `60`, where `0` disables caching. |
-| `CEIRD_ELECTRIC_STORAGE_BACKEND`                    | Container storage backend selector; deployed Alchemy stages set this to `r2`.                                        |
-| `CEIRD_ELECTRIC_STORAGE_MOUNT`                      | Electric container mount path for R2-backed shape storage; defaults to `/var/lib/electric`.                          |
-| `CEIRD_SYNC_HOSTNAME`                               | Optional stage sync hostname override.                                                                               |
-| `CEIRD_ELECTRIC_CONTAINER_INSTANCE_TYPE`            | Cloudflare Container size; defaults to `dev` outside production and `basic` for the parent stage.                    |
-| `CEIRD_WORKER_ANALYTICS_SAMPLE_RATE`                | Analytics Engine sample rate shared by app-owned Workers; defaults to `0.1`.                                         |
+| Variable                                            | Purpose                                                                                                                                  |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `ALCHEMY_STACK_NAME`                                | Alchemy-injected runtime stack name for Worker metadata.                                                                                 |
+| `ALCHEMY_STAGE`                                     | Alchemy-injected runtime stage for Worker health checks.                                                                                 |
+| `AUTH_APP_ORIGIN`                                   | Browser app origin used by auth redirects and emails.                                                                                    |
+| `AUTH_COOKIE_DOMAIN`                                | Optional parent domain for sharing auth cookies across system and tenant hosts.                                                          |
+| `AUTH_COOKIE_PREFIX`                                | Optional Better Auth cookie prefix, usually stage-derived in Alchemy.                                                                    |
+| `AUTH_CAPTCHA_ENABLED`                              | Enables Cloudflare Turnstile for selected Better Auth public auth endpoints.                                                             |
+| `AUTH_CAPTCHA_SITE_VERIFY_URL_OVERRIDE`             | Optional strict loopback or `.localhost` Turnstile verify endpoint override for tests or local stubs.                                    |
+| `AUTH_CAPTCHA_TURNSTILE_SECRET_KEY`                 | Domain-only Turnstile secret key used by Better Auth's captcha plugin.                                                                   |
+| `AUTH_EMAIL_FROM`                                   | Sender address for auth emails.                                                                                                          |
+| `AUTH_EMAIL_FROM_NAME`                              | Sender display name.                                                                                                                     |
+| `AUTH_PASSWORD_COMPROMISE_CHECK_ENABLED`            | Optional password compromise check override; local Alchemy Workers default it to `false`.                                                |
+| `AUTH_PASSWORD_COMPROMISE_CHECK_RANGE_URL_OVERRIDE` | Optional strict loopback or `.localhost` HIBP range API override for deterministic local verification.                                   |
+| `AUTH_RATE_LIMIT_ENABLED`                           | Disables auth rate limiting for local, PR-preview, and ephemeral CI E2E.                                                                 |
+| `AUTH_TRUSTED_ORIGINS`                              | Optional comma-delimited auth CORS/trusted-origin additions, including tenant hosts.                                                     |
+| `BETTER_AUTH_BASE_URL`                              | API auth URL.                                                                                                                            |
+| `BETTER_AUTH_SECRET`                                | Stable local auth secret for package-local domain runs.                                                                                  |
+| `BETTER_AUTH_SECRETS`                               | Optional versioned Better Auth rotation secrets as comma-delimited `<version>:<secret>` entries.                                         |
+| `DATABASE_URL`                                      | Package-local domain database URL.                                                                                                       |
+| `GOOGLE_MAPS_API_KEY`                               | Optional local Google Places key for site autocomplete/place details and fallback key for route-aware proximity.                         |
+| `GOOGLE_MAPS_ROUTES_API_KEY`                        | Optional dedicated Google Routes key for route-aware proximity; falls back to `GOOGLE_MAPS_API_KEY` when absent.                         |
+| `CEIRD_ROUTE_PROVIDER`                              | Optional route provider selector. Defaults to `google_routes`; set `test` for deterministic local route ranking.                         |
+| `PROXIMITY_ORIGIN_TOKEN_TTL_SECONDS`                | Optional TTL for server-signed typed-origin proofs; defaults to 15 minutes.                                                              |
+| `AGENT_ACTION_RUN_STALE_AFTER_SECONDS`              | Agent action ledger stale-running recovery window.                                                                                       |
+| `AGENT_INTERNAL_SECRET`                             | Internal domain/Agent shared secret for package-local runs.                                                                              |
+| `AGENT_AI_GATEWAY_ID`                               | Alchemy-managed Cloudflare AI Gateway ID used by the Agent Worker model provider.                                                        |
+| `AGENT_ORIGIN`                                      | Server-side app Agent Worker origin.                                                                                                     |
+| `VITE_AGENT_ORIGIN`                                 | Browser-exposed Agent Worker origin used by the global chat client.                                                                      |
+| `AGENT_MUTATION_TOOLS_ENABLED`                      | Alchemy Agent Workers set exact `true` in all environments; write/destructive execution is still browser-approval and Domain-auth gated. |
+| `SYNC_ORIGIN`                                       | Server-side app sync Worker origin.                                                                                                      |
+| `VITE_SYNC_ORIGIN`                                  | Browser-exposed sync Worker origin reserved for Electric/TanStack DB clients.                                                            |
+| `VITE_AUTH_CAPTCHA_ENABLED`                         | Browser flag mirroring `AUTH_CAPTCHA_ENABLED` for selected auth forms.                                                                   |
+| `VITE_AUTH_CAPTCHA_TURNSTILE_SITE_KEY`              | Public Turnstile site key exposed only to the app Worker/browser.                                                                        |
+| `ELECTRIC_SQL_LOCATION_HINT`                        | Cloudflare Durable Object placement hint derived from the stage Neon region.                                                             |
+| `ELECTRIC_SOURCE_SECRET`                            | Sync Worker and Electric shared source secret, generated by Alchemy for deployed stages.                                                 |
+| `ELECTRIC_SQL_JURISDICTION`                         | Optional Cloudflare Durable Object jurisdiction derived from the stage Neon region; European Neon regions use `eu`.                      |
+| `SYNC_AUTHORIZATION_CACHE_TTL_SECONDS`              | Warm-isolate sync authorization cache TTL. Defaults to `10`; valid range is `0` to `60`, where `0` disables caching.                     |
+| `CEIRD_ELECTRIC_STORAGE_BACKEND`                    | Container storage backend selector; deployed Alchemy stages set this to `local`.                                                         |
+| `CEIRD_SYNC_HOSTNAME`                               | Optional stage sync hostname override.                                                                                                   |
+| `CEIRD_ELECTRIC_CONTAINER_INSTANCE_TYPE`            | Cloudflare Container size; defaults to `dev` outside production and `basic` for the parent stage.                                        |
+| `CEIRD_WORKER_ANALYTICS_SAMPLE_RATE`                | Analytics Engine sample rate shared by app-owned Workers; defaults to `0.1`.                                                             |
 
 Package-local domain runs use deterministic development auth email delivery. That
 local transport is separate from deployed Worker email delivery, which uses the
@@ -194,29 +195,22 @@ Electric SQL local development follows the Alchemy-native path for the app and
 sync Worker, but not for the Cloudflare Container application. Running
 `pnpm dev -- --stage <stage>` starts the local sync Worker, injects
 `VITE_SYNC_ORIGIN` into the app, points local Workers at the stage Neon branch,
-and provisions the stage R2 bucket used by deployed Electric stages. Local
-Alchemy dev stages also create a stage-scoped R2 API token so the storage path
-is ready when container-backed local parity becomes available. The stack does
-not create or attach the Cloudflare Container application in local Alchemy dev:
-the Containers API validates against a cloud Durable Object namespace, while
-Alchemy local Workers expose workerd-only Durable Object namespaces. If local
-code calls the Electric endpoints without a deployed sync origin, the
-`ElectricSql` Durable Object returns an explicit unavailable response instead
-of pretending sync is active. Deployed stages, including pull-request previews
-and push-to-main cloud E2E stages, create a stage-scoped, bucket-scoped
-Cloudflare account API token for Electric R2 storage inside the app Alchemy
-stack. Alchemy derives the R2 S3 access key from the token id and the S3 secret
-key from the SHA-256 hash of the token value, then passes those values, the Neon
-branch URL, and the generated Electric source secret into the Sync Worker as
-secrets. The `ElectricSql` Durable Object supplies them to the Cloudflare
-Container as startup environment variables when it starts Electric. Production,
-preview, ephemeral CI, and ordinary deployed stages require the Cloudflare
-credential running the app stack to be able to create and delete account API
-tokens for the stage Electric R2 bucket.
+and skips the Cloudflare Container application. The Containers API validates
+against a cloud Durable Object namespace, while Alchemy local Workers expose
+workerd-only Durable Object namespaces. If local code calls the Electric
+endpoints without a deployed sync origin, the `ElectricSql` Durable Object
+returns an explicit unavailable response instead of pretending sync is active.
+Deployed stages, including pull-request previews and push-to-main cloud E2E
+stages, pass the Neon branch URL and generated Electric source secret into the
+Sync Worker as secrets. The `ElectricSql` Durable Object supplies those values
+to the Cloudflare Container as startup environment variables when it starts
+Electric. Electric writes shape state to the container's local
+`/var/lib/electric` directory; Cloudflare may recreate that disk, so restarts
+can require shape warmup from Postgres.
 
 There is no separate local Docker service in the default workflow. Local
-cloud-backed stages exercise the app, API, domain, Agent, MCP, sync Worker, R2,
-and Neon resources with stage-scoped names, but Electric container execution is
+cloud-backed stages exercise the app, API, domain, Agent, MCP, sync Worker, and
+Neon resources with stage-scoped names, but Electric container execution is
 deploy-only for now.
 Package-local sync tests inject fake domain authorization and Electric
 forwarding boundaries, while end-to-end sync testing should target an explicit
@@ -240,13 +234,11 @@ The stack provisions:
 
 - native Alchemy Neon project and per-stage branch
 - native Alchemy Cloudflare Hyperdrive for Postgres connectivity
-- native Alchemy Cloudflare R2 bucket for Electric shape storage; local dev
-  stages mint their own bucket-scoped token but skip the Cloudflare Container
-  application because the cloud Containers API cannot attach to local workerd
-  Durable Object namespaces, while deployed stages mint their own
-  stage-scoped, bucket-scoped Electric R2 token during stack reconciliation; the
-  Sync Worker injects runtime container secrets through Durable Object
-  container startup environment variables in deployed stages
+- native Alchemy Cloudflare Container for Electric in deployed stages; local dev
+  stages skip the Cloudflare Container application because the cloud Containers
+  API cannot attach to local workerd Durable Object namespaces; the Sync Worker
+  injects the generated database URL and Electric source secret through Durable
+  Object container startup environment variables in deployed stages
 - private Cloudflare domain Worker declared in
   `apps/domain/infra/cloudflare-worker.ts` and executed from
   `apps/domain/src/worker.ts`
@@ -331,14 +323,16 @@ present locally because beta.52's local provider now supports native
 Hyperdrive bindings.
 The public sync Worker declares `DOMAIN` plus the `ElectricSql` Durable Object
 namespace, and its Alchemy module declares the Cloudflare Container that runs
-Electric SQL for deployed stages. The root stack declares the stage R2 bucket
-that the container mounts at `/var/lib/electric` before Electric starts. Local
-dev stages mint a bucket-scoped token in the app stack but deliberately skip
-the Container application because Cloudflare can only attach Containers to a
-cloud Durable Object namespace. Non-preview deployed stages mint a
-bucket-scoped Electric R2 token in the app stack and pass the derived S3
-credentials to the sync Worker as secrets. The root stack also derives the
-`ElectricSql` Durable Object placement hint from the Neon region. The
+Electric SQL for deployed stages. Local dev stages deliberately skip the
+Container application because Cloudflare can only attach Containers to a cloud
+Durable Object namespace. Deployed stages pass only the generated database URL
+and Electric source secret to the sync Worker as container startup secrets.
+Electric writes shape state to `/var/lib/electric` on the container filesystem.
+The root stack also derives the `ElectricSql` Durable Object jurisdiction and
+placement hint from the Neon region. European Neon regions use Cloudflare's
+`eu` Durable Object jurisdiction plus the Western Europe placement hint, which
+creates a jurisdiction-scoped `primary` object instead of reusing any earlier
+default-jurisdiction object that may have been created elsewhere. The
 `ElectricSql` runtime export must stay a `cloudflare:workers` `DurableObject`
 subclass with the same class name as the container binding, because Cloudflare
 Containers validates the Durable Object class before attaching the application.
@@ -538,7 +532,7 @@ domain Worker, then runs `scripts/run-deployed-sync-canary.mjs` against
 throwaway user, verifies that user in the stage database, creates and activates
 a stage-local organization, and requests the authenticated `jobs` Electric
 shape. This avoids transient route, domain, TLS, service binding, container
-startup, R2 mount, or Electric shape-serving failures on freshly created preview
+startup, or Electric shape-serving failures on freshly created preview
 hostnames. The domain Worker disables auth rate limiting by default only for
 `pr-<number>` stages so repeated E2E runs against the persistent preview
 database do not accumulate lockout counters; set `AUTH_RATE_LIMIT_ENABLED=true`

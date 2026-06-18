@@ -42,6 +42,7 @@ const baseEnv = {
     },
     fetch: () => Promise.resolve(Response.json({ error: "unused" })),
   },
+  ELECTRIC_SQL_JURISDICTION: "eu",
   ELECTRIC_SQL_LOCATION_HINT: "weur",
   ELECTRIC_SOURCE_SECRET: "electric-secret",
   ElectricSql: {} as DurableObjectNamespace,
@@ -127,26 +128,32 @@ describe("Sync Worker runtime", () => {
         },
       },
       ElectricSql: {
-        getByName: (
-          name: string,
-          options?: DurableObjectNamespaceGetDurableObjectOptions
-        ) => {
-          expect(name).toBe("primary");
-          expect(options).toStrictEqual({ locationHint: "weur" });
+        jurisdiction: (jurisdiction: DurableObjectJurisdiction) => {
+          expect(jurisdiction).toBe("eu");
 
           return {
-            fetch: (request: Request) => {
-              electricRequests.push(request);
+            getByName: (
+              name: string,
+              options?: DurableObjectNamespaceGetDurableObjectOptions
+            ) => {
+              expect(name).toBe("primary");
+              expect(options).toStrictEqual({ locationHint: "weur" });
 
-              return Promise.resolve(
-                Response.json([{ headers: { control: "up-to-date" } }], {
-                  headers: {
-                    "electric-handle": "shape-handle",
-                  },
-                })
-              );
+              return {
+                fetch: (request: Request) => {
+                  electricRequests.push(request);
+
+                  return Promise.resolve(
+                    Response.json([{ headers: { control: "up-to-date" } }], {
+                      headers: {
+                        "electric-handle": "shape-handle",
+                      },
+                    })
+                  );
+                },
+              };
             },
-          };
+          } as unknown as DurableObjectNamespace;
         },
       } as unknown as DurableObjectNamespace,
     } satisfies SyncWorkerEnv;

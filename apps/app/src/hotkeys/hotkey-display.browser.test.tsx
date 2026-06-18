@@ -241,7 +241,6 @@ describe("hotkey registry", () => {
 
   it("keeps the Jobs Near me sequence clear of active map single-key shortcuts", () => {
     const [jobsNearMeFirstChord] = HOTKEYS.jobsNearMe.hotkey.split(/\s+/);
-    const [sitesNearMeFirstChord] = HOTKEYS.sitesNearMe.hotkey.split(/\s+/);
     const mapSingleKeyHotkeys: string[] = [];
     for (const definition of Object.values(HOTKEYS)) {
       if (
@@ -253,6 +252,5 @@ describe("hotkey registry", () => {
     }
 
     expect(mapSingleKeyHotkeys).not.toContain(jobsNearMeFirstChord);
-    expect(mapSingleKeyHotkeys).not.toContain(sitesNearMeFirstChord);
   });
 });

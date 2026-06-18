@@ -1,4 +1,8 @@
-import type { LabelIdType as LabelId } from "@ceird/labels-core";
+import type {
+  ActivityEventType,
+  ProductActivityEventDisplayPayload,
+} from "@ceird/activity-core";
+import type { Label, LabelIdType as LabelId } from "@ceird/labels-core";
 import { ProximityRouteUnavailableError } from "@ceird/proximity-core";
 import type {
   AddSiteCommentInput,
@@ -32,7 +36,11 @@ import {
 import type { DomainDrizzleStorageFailure } from "../../platform/database/database.js";
 import { withElectricMutationConfirmation } from "../../platform/database/electric-mutation-confirmation.js";
 import type { ElectricMutationConfirmed } from "../../platform/database/electric-mutation-confirmation.js";
-import { ActivityEventsRepository } from "../activity/repository.js";
+import { generateActivityEventId } from "../activity/id-generation.js";
+import {
+  ActivityEventsRepository,
+  ProductActivityActorsRepository,
+} from "../activity/repository.js";
 import { CommentsRepository } from "../comments/repository.js";
 import { UserPreferencesRepository } from "../identity/preferences/repository.js";
 import { mapOrganizationActorResolutionErrors } from "../organizations/actor-access.js";
@@ -66,16 +74,38 @@ type OrganizationAuthorizationService = Context.Service.Shape<
   typeof OrganizationAuthorization
 >;
 type SitesRepositoryService = Context.Service.Shape<typeof SitesRepository>;
+type SiteUpdateLocationRecord = NonNullable<
+  Parameters<SitesRepositoryService["update"]>[2]["location"]
+>;
+type ProductActivityActorsRepositoryService = Context.Service.Shape<
+  typeof ProductActivityActorsRepository
+>;
 const ACTIVITY_DETAIL_MAX_LENGTH = 280;
 const ACTIVITY_ROUTE_LABEL_MAX_LENGTH = 80;
 const ACTIVITY_SUMMARY_MAX_LENGTH = 160;
 const SITE_COMMENT_ACTIVITY_SUMMARY_PREFIX = "Commented on ";
+type SiteActivityEventType = Extract<
+  ActivityEventType,
+  "site.created" | "site.label_added" | "site.label_removed" | "site.updated"
+>;
+type SiteActivitySourceAction =
+  | "created"
+  | "label_added"
+  | "label_removed"
+  | "updated";
+const SITE_ACTIVITY_SUMMARY_PREFIXES = {
+  "site.created": "Created",
+  "site.label_added": "Added label to",
+  "site.label_removed": "Removed label from",
+  "site.updated": "Updated",
+} satisfies Record<SiteActivityEventType, string>;
 
 export class SitesService extends Context.Service<SitesService>()(
   "@ceird/domains/sites/SitesService",
   {
     make: Effect.gen(function* SitesServiceLive() {
       const authorization = yield* OrganizationAuthorization;
+      const activityActorsRepository = yield* ProductActivityActorsRepository;
       const activityEventsRepository = yield* ActivityEventsRepository;
       const commentsRepository = yield* CommentsRepository;
       const currentOrganizationActor = yield* CurrentOrganizationActor;
@@ -125,7 +155,7 @@ export class SitesService extends Context.Service<SitesService>()(
           options
         );
 
-        return yield* withElectricMutationConfirmation(
+        const site = yield* withElectricMutationConfirmation(
           Effect.gen(function* () {
             const siteId = yield* sitesRepository.create({
               ...location,
@@ -135,7 +165,7 @@ export class SitesService extends Context.Service<SitesService>()(
             });
             yield* Effect.annotateCurrentSpan("siteId", siteId);
 
-            const site = yield* sitesRepository
+            const createdSite = yield* sitesRepository
               .getOptionById(actor.organizationId, siteId)
               .pipe(
                 Effect.flatMap(
@@ -151,9 +181,20 @@ export class SitesService extends Context.Service<SitesService>()(
                 )
               );
 
-            return site;
+            yield* recordSiteActivityEvent({
+              activityActorsRepository,
+              activityEventsRepository,
+              actor,
+              eventType: "site.created",
+              site: createdSite,
+              sourceAction: "created",
+            });
+
+            return createdSite;
           })
-        ).pipe(Effect.map(toSiteWriteResponse), catchSitesStorageError());
+        ).pipe(catchSitesStorageError());
+
+        return toSiteWriteResponse(site);
       });
 
       const update = Effect.fn("SitesService.update")(function* (
@@ -199,15 +240,36 @@ export class SitesService extends Context.Service<SitesService>()(
                 input.location,
                 siteLocationProvider
               );
+        const shouldRecordUpdateActivity = siteUpdateChangesSemanticFields(
+          existingSite,
+          input,
+          location
+        );
 
         const site = yield* withElectricMutationConfirmation(
-          sitesRepository
-            .update(actor.organizationId, siteId, {
-              accessNotes: input.accessNotes,
-              ...(location === undefined ? {} : { location }),
-              name: input.name,
-            })
-            .pipe(Effect.map(Option.getOrUndefined))
+          Effect.gen(function* () {
+            const updatedSite = yield* sitesRepository
+              .update(actor.organizationId, siteId, {
+                accessNotes: input.accessNotes,
+                ...(location === undefined ? {} : { location }),
+                name: input.name,
+              })
+              .pipe(Effect.map(Option.getOrUndefined));
+
+            if (updatedSite !== undefined && shouldRecordUpdateActivity) {
+              yield* recordSiteActivityEvent({
+                activityActorsRepository,
+                activityEventsRepository,
+                actor,
+                eventType: "site.updated",
+                site: updatedSite,
+                sourceAction: "updated",
+                sourceId: buildSiteUpdateActivitySourceId(updatedSite),
+              });
+            }
+
+            return updatedSite;
+          })
         ).pipe(catchSitesStorageError());
 
         if (site.value !== undefined) {
@@ -545,23 +607,41 @@ export class SitesService extends Context.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        const site = yield* withElectricMutationConfirmation(
+        const result = yield* withElectricMutationConfirmation(
           Effect.gen(function* () {
-            yield* siteLabelAssignmentsRepository.assignToSite({
-              labelId: input.labelId,
-              organizationId: actor.organizationId,
-              siteId,
-            });
+            const assignment =
+              yield* siteLabelAssignmentsRepository.assignToSite({
+                labelId: input.labelId,
+                organizationId: actor.organizationId,
+                siteId,
+              });
 
-            return yield* loadSiteDetailOrFail(
+            const site = yield* loadSiteDetailOrFail(
               actor.organizationId,
               siteId,
               sitesRepository
             );
+
+            if (assignment.changed) {
+              yield* recordSiteActivityEvent({
+                activityActorsRepository,
+                activityEventsRepository,
+                actor,
+                eventType: "site.label_added",
+                label: assignment.label,
+                site,
+                sourceAction: "label_added",
+              });
+            }
+
+            return { assignment, site };
           })
         ).pipe(catchSitesStorageError({ siteId }));
 
-        return toSiteWriteResponse(site);
+        return toSiteWriteResponse({
+          mutation: result.mutation,
+          value: result.value.site,
+        });
       });
 
       const removeLabel = Effect.fn("SitesService.removeLabel")(function* (
@@ -587,23 +667,41 @@ export class SitesService extends Context.Service<SitesService>()(
         yield* Effect.annotateCurrentSpan("actorUserId", actor.userId);
         yield* Effect.annotateCurrentSpan("actorRole", actor.role);
 
-        const site = yield* withElectricMutationConfirmation(
+        const result = yield* withElectricMutationConfirmation(
           Effect.gen(function* () {
-            yield* siteLabelAssignmentsRepository.removeFromSite({
-              labelId,
-              organizationId: actor.organizationId,
-              siteId,
-            });
+            const assignment =
+              yield* siteLabelAssignmentsRepository.removeFromSite({
+                labelId,
+                organizationId: actor.organizationId,
+                siteId,
+              });
 
-            return yield* loadSiteDetailOrFail(
+            const site = yield* loadSiteDetailOrFail(
               actor.organizationId,
               siteId,
               sitesRepository
             );
+
+            if (assignment.changed) {
+              yield* recordSiteActivityEvent({
+                activityActorsRepository,
+                activityEventsRepository,
+                actor,
+                eventType: "site.label_removed",
+                label: assignment.label,
+                site,
+                sourceAction: "label_removed",
+              });
+            }
+
+            return { assignment, site };
           })
         ).pipe(catchSitesStorageError({ siteId }));
 
-        return toSiteWriteResponse(site);
+        return toSiteWriteResponse({
+          mutation: result.mutation,
+          value: result.value.site,
+        });
       });
 
       return {
@@ -644,6 +742,7 @@ export class SitesService extends Context.Service<SitesService>()(
         CommentsRepository.Default,
         CurrentOrganizationActor.Default,
         OrganizationAuthorization.Default,
+        ProductActivityActorsRepository.Default,
         RouteProximityService.Default,
         SiteLabelAssignmentsRepository.Default,
         SitesRepository.Default,
@@ -675,7 +774,7 @@ function recordSiteCommentCreated({
     display: {
       detail: summarizeCommentActivityDetail(comment.body),
       route: {
-        href: `/sites-workspace?selectedSiteId=${site.id}`,
+        href: `/sites?selectedSiteId=${site.id}`,
         label: formatActivityDisplayText(
           site.name,
           ACTIVITY_ROUTE_LABEL_MAX_LENGTH
@@ -691,6 +790,174 @@ function recordSiteCommentCreated({
     targetId: comment.id,
     targetType: "comment",
   });
+}
+
+function recordSiteActivityEvent({
+  activityActorsRepository,
+  activityEventsRepository,
+  actor,
+  eventType,
+  label,
+  site,
+  sourceAction,
+  sourceId,
+}: {
+  readonly activityActorsRepository: ProductActivityActorsRepositoryService;
+  readonly activityEventsRepository: Context.Service.Shape<
+    typeof ActivityEventsRepository
+  >;
+  readonly actor: OrganizationActor;
+  readonly eventType: SiteActivityEventType;
+  readonly label?: Label;
+  readonly site: SiteOption;
+  readonly sourceAction: SiteActivitySourceAction;
+  readonly sourceId?: string;
+}) {
+  return Effect.gen(function* () {
+    const { actor: productActor } =
+      yield* activityActorsRepository.ensureMemberActor({
+        organizationId: actor.organizationId,
+        userId: actor.userId,
+      });
+    const eventId = generateActivityEventId();
+
+    yield* activityEventsRepository.recordEvent({
+      actorId: productActor.id,
+      display: buildSiteActivityDisplay(eventType, site, label),
+      eventType,
+      id: eventId,
+      organizationId: actor.organizationId,
+      sourceId:
+        sourceId ??
+        buildSiteActivitySourceId({
+          action: sourceAction,
+          eventId,
+          labelId: label?.id,
+          siteId: site.id,
+        }),
+      sourceType: "site",
+      status: "synced",
+      targetId: site.id,
+      targetType: "site",
+    });
+  }).pipe(Effect.catchTag("SqlError", failSitesStorageError));
+}
+
+function buildSiteActivityDisplay(
+  eventType: SiteActivityEventType,
+  site: SiteOption,
+  label?: Label
+): ProductActivityEventDisplayPayload {
+  const route = {
+    href: `/sites?selectedSiteId=${site.id}`,
+    label: formatActivityDisplayText(
+      site.name,
+      ACTIVITY_ROUTE_LABEL_MAX_LENGTH
+    ),
+  };
+  const detail = buildSiteActivityDetail(eventType, site, label);
+  const display = {
+    route,
+    summary: formatSiteActivitySummary(
+      SITE_ACTIVITY_SUMMARY_PREFIXES[eventType],
+      site.name
+    ),
+  };
+
+  if (detail === undefined) {
+    return display;
+  }
+
+  return { ...display, detail };
+}
+
+function buildSiteActivityDetail(
+  eventType: SiteActivityEventType,
+  site: SiteOption,
+  label?: Label
+): string | undefined {
+  if (eventType === "site.created" || eventType === "site.updated") {
+    return formatSiteActivityDetail(site);
+  }
+
+  if (eventType === "site.label_added") {
+    return formatActivityDisplayText(
+      `Added label ${label?.name ?? "label"}`,
+      ACTIVITY_DETAIL_MAX_LENGTH
+    );
+  }
+
+  if (eventType === "site.label_removed") {
+    return formatActivityDisplayText(
+      `Removed label ${label?.name ?? "label"}`,
+      ACTIVITY_DETAIL_MAX_LENGTH
+    );
+  }
+
+  return undefined;
+}
+
+function formatSiteActivityDetail(site: SiteOption): string {
+  const parts = [site.displayLocation, site.accessNotes]
+    .map((part) => part?.trim())
+    .filter((part): part is string => part !== undefined && part.length > 0);
+
+  return formatActivityDisplayText(
+    parts.length === 0 ? "Site details updated." : parts.join(" · "),
+    ACTIVITY_DETAIL_MAX_LENGTH
+  );
+}
+
+function formatSiteActivitySummary(prefix: string, siteName: string): string {
+  return `${prefix} ${formatActivityDisplayText(
+    siteName,
+    ACTIVITY_SUMMARY_MAX_LENGTH - prefix.length - 1
+  )}`;
+}
+
+function buildSiteActivitySourceId(input: {
+  readonly action: SiteActivitySourceAction;
+  readonly eventId: string;
+  readonly labelId?: Label["id"];
+  readonly siteId: SiteId;
+}): string {
+  return ["site", input.siteId, input.action, input.labelId, input.eventId]
+    .filter((part): part is string => part !== undefined)
+    .join(":");
+}
+
+function buildSiteUpdateActivitySourceId(site: SiteOption): string {
+  return `site:${site.id}:updated:${hashActivitySource(
+    JSON.stringify({
+      accessNotes: site.accessNotes ?? null,
+      addressComponents: site.addressComponents ?? [],
+      addressLine1: site.addressLine1 ?? null,
+      addressLine2: site.addressLine2 ?? null,
+      country: site.country ?? null,
+      county: site.county ?? null,
+      displayLocation: site.displayLocation,
+      eircode: site.eircode ?? null,
+      formattedAddress: site.formattedAddress ?? null,
+      googlePlaceId: site.googlePlaceId ?? null,
+      latitude: site.latitude ?? null,
+      locationProvider: site.locationProvider ?? null,
+      locationStatus: site.locationStatus,
+      longitude: site.longitude ?? null,
+      name: site.name,
+      rawLocationInput: site.rawLocationInput ?? null,
+      town: site.town ?? null,
+    })
+  )}`;
+}
+
+function hashActivitySource(value: string): string {
+  let hash = 5381;
+
+  for (const char of value) {
+    hash = (hash * 33 + (char.codePointAt(0) ?? 0)) % 2_147_483_647;
+  }
+
+  return hash.toString(36);
 }
 
 function summarizeCommentActivityDetail(body: string): string {
@@ -770,6 +1037,48 @@ function siteLocationInputMatchesExistingSite(
     site.displayLocation === input.displayText &&
     site.rawLocationInput === input.rawInput
   );
+}
+
+function siteUpdateChangesSemanticFields(
+  site: SiteOption,
+  input: UpdateSiteInput,
+  location: SiteUpdateLocationRecord | undefined
+) {
+  return (
+    site.name !== input.name ||
+    site.accessNotes !== input.accessNotes ||
+    (location !== undefined && !siteLocationRecordMatchesSite(location, site))
+  );
+}
+
+function siteLocationRecordMatchesSite(
+  location: SiteUpdateLocationRecord,
+  site: SiteOption
+) {
+  return (
+    arrayValuesMatch(location.addressComponents, site.addressComponents) &&
+    location.addressLine1 === site.addressLine1 &&
+    location.addressLine2 === site.addressLine2 &&
+    location.country === site.country &&
+    location.county === site.county &&
+    location.displayLocation === site.displayLocation &&
+    location.eircode === site.eircode &&
+    location.formattedAddress === site.formattedAddress &&
+    location.googlePlaceId === site.googlePlaceId &&
+    location.latitude === site.latitude &&
+    location.locationProvider === site.locationProvider &&
+    location.locationStatus === site.locationStatus &&
+    location.longitude === site.longitude &&
+    location.rawLocationInput === site.rawLocationInput &&
+    location.town === site.town
+  );
+}
+
+function arrayValuesMatch<Value>(
+  left: readonly Value[] | undefined,
+  right: readonly Value[] | undefined
+) {
+  return JSON.stringify(left ?? []) === JSON.stringify(right ?? []);
 }
 
 function failSitesStorageError(

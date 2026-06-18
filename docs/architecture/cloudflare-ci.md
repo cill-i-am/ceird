@@ -190,8 +190,8 @@ a throwaway user through the deployed API, marks that canary user verified in
 the stage database, creates and activates a stage-local organization, and
 requests the `jobs` shape through `PLAYWRIGHT_SYNC_URL`. A successful canary
 therefore proves the deployed sync Worker can authorize the active organization
-session, start the Electric Container, mount R2-backed storage, and serve an
-Electric shape.
+session, start the Electric Container with local writable shape storage, and
+serve an Electric shape.
 
 Preview stages named `pr-<number>` and ephemeral CI stages named
 `ci-<run-number>-<attempt>` deploy the domain Worker with
@@ -220,45 +220,26 @@ The audit reads state only. It blocks missing `PostgresBranch.origin`, missing
 `AgentAiGateway`, disabled AI Gateway authentication, prompt-log collection,
 missing Worker Analytics Engine bindings, missing Worker analytics sample-rate
 env, missing Sync Worker domain/analytics/Durable Object bindings, missing sync
-source configuration, missing Electric container or R2 storage, missing Sync
-Worker Electric container startup env, missing Domain Worker Smart Placement,
-and stage tenant-route or wildcard-DNS drift while allowing the known legacy
-Drizzle tombstone until it has been inspected and intentionally removed. The
-audit treats `pr-<number>` preview stages and `ci-<run-number>-<attempt>`
-ephemeral CI stages as full-sync deployed coverage: they must provision the
-full stage-scoped bucket, a bucket-scoped Cloudflare account API token, the
-Electric Container, and the Sync Worker env needed to start the container.
-During full Electric deploys, Alchemy passes the R2 credentials plus the stage
-database URL and Electric source secret into the Sync Worker as secrets, and
-the `ElectricSql` Durable Object supplies them to the container when it starts.
-Plain
+source configuration, missing Electric container, missing Sync Worker Electric
+container startup env, missing Domain Worker Smart Placement, and stage
+tenant-route or wildcard-DNS drift while allowing the known legacy Drizzle
+tombstone until it has been inspected and intentionally removed. The audit
+treats `pr-<number>` preview stages and `ci-<run-number>-<attempt>` ephemeral
+CI stages as full-sync deployed coverage: they must provision the Electric
+Container and the Sync Worker env needed to start the container. During full
+Electric deploys, Alchemy passes the stage database URL and Electric source
+secret into the Sync Worker as secrets, and the `ElectricSql` Durable Object
+supplies them to the container when it starts. Plain
 `PostgresBranch.connectionUri` state is reported as a low-severity finding, not
 a CI blocker, because Alchemy may still expose that value for some provider
 shapes.
 
 All deploy and cleanup environments use `CLOUDFLARE_API_KEY` plus
-`CLOUDFLARE_EMAIL`, not `CLOUDFLARE_API_TOKEN`, because the app stack owns
-account API-token lifecycle for the stage-scoped Electric R2 token. Alchemy's
-environment auth prefers `CLOUDFLARE_API_TOKEN` when both token and key
-credentials are present, so do not store `CLOUDFLARE_API_TOKEN` in GitHub
-environments. The key credentials must be able to read and update the
-Cloudflare state store, reconcile AI Gateway, deploy Workers, manage custom
-domains, queues, Hyperdrive, and bind Cloudflare Email Service to the domain
-Worker.
-
-Cloudflare's R2 token model separates bucket object access from account-level
-bucket administration. Object Read & Write tokens can be scoped to selected
-buckets, and Cloudflare represents an individual bucket as
-`com.cloudflare.edge.r2.bucket.<ACCOUNT_ID>_<JURISDICTION>_<BUCKET_NAME>`.
-Those bucket-scoped permissions are the correct shape for Electric runtime S3
-credentials, and Ceird creates exactly that token from the app stack for
-full-sync stages. Cloudflare's Admin Read & Write R2 permission is the account
-permission that can create, list, and delete buckets and edit bucket
-configuration, so it is not a replacement for the runtime object token when the
-stack itself must reconcile bucket resources. Alchemy's CI guide also calls out
-that credentials which mint scoped Cloudflare tokens need API Tokens Write, and
-that an ordinary Edit Cloudflare Workers token cannot mint other tokens.
-Alchemy's state-store docs describe `Cloudflare.state()` as a Worker-backed
+`CLOUDFLARE_EMAIL`, not `CLOUDFLARE_API_TOKEN`, so the same environment
+credential shape can read and update the Cloudflare state store, reconcile AI
+Gateway, deploy Workers and Containers, manage custom domains, queues, and
+Hyperdrive, and bind Cloudflare Email Service to the domain Worker. Alchemy's
+state-store docs describe `Cloudflare.state()` as a Worker-backed
 remote store with its auth token and encryption key in Cloudflare Secrets Store;
 the Alchemy CLI bootstrap docs note that adoption/repair re-fetches the state
 auth token via an edge-preview probe because that is the available way to read a
@@ -269,12 +250,12 @@ The resulting boundary is:
 - deployment credentials are broad, environment-scoped Cloudflare provider
   credentials used only by reviewed workflow code to reconcile the stack and
   state store
-- Electric runtime object credentials are generated per full-sync stage, scoped
-  to that stage's R2 bucket, and passed only into the sync Worker/Container
-  startup path as secrets
+- Electric container startup credentials are limited to the generated stage
+  database URL and Electric source secret passed through the sync
+  Worker/Container startup path
 - pull-request previews and ephemeral CI do not receive GitHub-provided Electric
-  storage access-key or secret-key values; their runtime object credentials are
-  generated during stage reconciliation for that stage's bucket
+  storage access-key or secret-key values because Electric no longer mounts
+  object storage in the Cloudflare Container
 - preview cleanup uses the repository default branch, validates `pr-<number>`,
   and restores only the deploy/state-store credentials needed to destroy the
   preview stage; it does not execute closed pull-request code with provider
@@ -282,7 +263,8 @@ The resulting boundary is:
 
 Official references checked for this decision:
 
-- Cloudflare R2 authentication: `https://developers.cloudflare.com/r2/api/tokens/`
+- Cloudflare Workers CI/CD:
+  `https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/`
 - Cloudflare API token permissions:
   `https://developers.cloudflare.com/fundamentals/api/reference/permissions/`
 - Alchemy CI guide: `https://v2.alchemy.run/guides/ci/`

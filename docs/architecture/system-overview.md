@@ -24,7 +24,7 @@ browser sync clients
   -> apps/sync Electric SQL adapter at sync.<stage>.ceird.app
   -> apps/domain private sync authorization through DOMAIN service binding
   -> Electric SQL in a Cloudflare Container
-  -> R2-backed FUSE storage for Electric shape logs
+  -> local container storage for Electric shape logs
   -> Neon Postgres
 
 apps/app server-side helpers
@@ -54,10 +54,10 @@ apps/api, apps/mcp, apps/agent, and apps/sync Cloudflare Workers
 ```
 
 Local development and production deployment both use the root Alchemy stack.
-Alchemy provisions Cloudflare Workers/Vite, Cloudflare Containers, R2,
-Hyperdrive, queues, routes, and stage-scoped Neon branches. The app and API health
-endpoints expose the resolved Alchemy stack and stage identity so a running
-Worker can be tied back to the stage that produced it.
+Alchemy provisions Cloudflare Workers/Vite, the Electric Cloudflare Container,
+Hyperdrive, queues, routes, and stage-scoped Neon branches. The app and API
+health endpoints expose the resolved Alchemy stack and stage identity so a
+running Worker can be tied back to the stage that produced it.
 
 ## Monorepo Ownership
 
@@ -123,12 +123,14 @@ touches thread activity in the domain Worker for each chat turn, and executes
 Ceird tools by calling the domain Worker's internal action API. Read tools are
 model-available by default; mutating tools are gated until a client
 confirmation flow can approve them outside the model prompt. Mutating actions
-use the domain action-run ledger for
-idempotent replay protection and reuse the same authorization and
-activity-recording paths as the HTTP API. The ledger is a small begin/complete
-record, not an outer transaction around the whole action; domain services keep
-their own transaction boundaries, and abandoned running rows time out to a
-terminal failed state on replay.
+use the domain action-run ledger for idempotent replay protection and reuse the
+same authorization and activity-recording paths as the HTTP API. Mutating action
+runs also publish noise-controlled `agent.product_effect` activity through the
+product-safe agent-thread actor projection; read-only tools stay out of the
+global feed. The ledger is a small begin/complete record, not an outer
+transaction around the whole action; domain services keep their own transaction
+boundaries, and abandoned running rows time out to a terminal failed state on
+replay.
 
 Electric SQL sync traffic is handled by `apps/sync`, not by the public API
 adapter. Browser clients request a named shape such as `jobs` from
@@ -196,6 +198,10 @@ retained_until > $2`, where `$2` is the domain Worker's current time.
 stale rows even if cleanup lags. Repository retention also prunes expired rows
 and keeps only the latest 5,000 events per organization, which is the guardrail
 that cannot be represented as an Electric predicate.
+Jobs and Sites domain command paths create feed rows for product writes instead
+of relying on browser interpretation: Jobs writes source events from
+`work_item_activity`, while Sites writes source create/update/label events from
+the same transaction as the site write.
 The browser Activity route subscribes to both `activity-events` and
 `product-activity-actors`, joins product-safe actor display locally, and applies
 event/entity/status filters over synced rows.

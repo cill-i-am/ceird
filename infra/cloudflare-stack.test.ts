@@ -77,14 +77,10 @@ import type {
   SyncWorkerBindingRuntimeEnv,
   SyncWorkerConfigEnv,
 } from "../apps/sync/src/platform/cloudflare/env.ts";
-import {
-  makeElectricStorageR2TokenPolicy,
-  makeCloudflareR2BucketResourceKey,
-  makeR2SecretAccessKey,
-} from "./cloudflare-r2.ts";
 import type { makeCloudflareStack } from "./cloudflare-stack.ts";
 import {
   makeCloudflareHyperdriveProps,
+  makeDurableObjectJurisdictionForNeonRegion,
   makeDurableObjectLocationHintForNeonRegion,
   makeLocalWorkerOrigins,
   makePortlessLocalWorkerOrigin,
@@ -93,7 +89,6 @@ import {
   redactInput,
   shouldProvisionElectricContainer,
   shouldReconcileTenantRouting,
-  shouldProvisionElectricStorage,
 } from "./cloudflare-stack.ts";
 import {
   ceirdDomainWorkerPlacement,
@@ -382,6 +377,7 @@ type SyncWorkerStackRuntimeConfigEnv = Required<
     | "AUTH_APP_ORIGIN"
     | "AUTH_TRUSTED_ORIGINS"
     | "CEIRD_WORKER_ANALYTICS_SAMPLE_RATE"
+    | "ELECTRIC_SQL_JURISDICTION"
     | "ELECTRIC_SQL_LOCATION_HINT"
     | "ELECTRIC_SOURCE_SECRET"
     | "NODE_ENV"
@@ -390,12 +386,7 @@ type SyncWorkerStackRuntimeConfigEnv = Required<
 > &
   Pick<
     SyncWorkerConfigEnv,
-    | "ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID"
-    | "ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY"
-    | "ELECTRIC_CONTAINER_DATABASE_URL"
-    | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
-    | "ELECTRIC_CONTAINER_R2_ACCOUNT_ID"
-    | "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+    "ELECTRIC_CONTAINER_DATABASE_URL" | "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
   >;
 type ApiWorkerStackEnv = ApiWorkerConfiguredEnv & AlchemyInjectedWorkerEnv;
 type DomainWorkerStackEnv = DomainWorkerConfiguredEnv &
@@ -494,13 +485,6 @@ const cloudflareStackOutputsIncludeCanonicalOrigins: AssertTrue<
     ? true
     : false
 > = true;
-const cloudflareStackOutputsIncludeElectricStorage: AssertTrue<
-  CloudflareStackResources extends {
-    readonly electricStorageBucket: Cloudflare.R2Bucket | undefined;
-  }
-    ? true
-    : false
-> = true;
 const cloudflareStackOutputsIncludeTenantRouting: AssertTrue<
   CloudflareStackResources extends {
     readonly tenantReservedHostBypassRoutePatterns: readonly Input<string>[];
@@ -577,6 +561,7 @@ describe("Cloudflare stack", () => {
     });
     const syncEnv = makeSyncWorkerConfiguredEnv({
       config: configWithoutCloudflareBootstrapSecrets,
+      electricSqlJurisdiction: "eu",
       electricSqlLocationHint: "weur",
       electricSourceSecret: Redacted.make("electric-secret"),
     });
@@ -627,21 +612,13 @@ describe("Cloudflare stack", () => {
     expect(agentEnv).toStrictEqual({
       AGENT_AI_GATEWAY_ID: "ceird-main-agent-ai",
       AGENT_INTERNAL_SECRET: agentInternalSecret,
+      AGENT_MUTATION_TOOLS_ENABLED: "true",
       AUTH_APP_ORIGIN: "https://app.example.com",
       AUTH_TRUSTED_ORIGINS:
         "https://app.example.com,https://*--main.example.com",
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
       NODE_ENV: "production",
     });
-    expect(agentEnv).not.toHaveProperty("AGENT_MUTATION_TOOLS_ENABLED");
-    expect(
-      makeAgentWorkerConfiguredEnv({
-        aiGatewayId: "ceird-main-agent-ai",
-        agentInternalSecret,
-        config: configWithoutCloudflareBootstrapSecrets,
-        enableMutationTools: true,
-      }).AGENT_MUTATION_TOOLS_ENABLED
-    ).toBe("true");
     expect(appEnv).toStrictEqual({
       AGENT_ORIGIN: "https://agent.example.com",
       API_ORIGIN: "https://api.example.com",
@@ -668,6 +645,7 @@ describe("Cloudflare stack", () => {
       AUTH_TRUSTED_ORIGINS:
         "https://app.example.com,https://*--main.example.com",
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+      ELECTRIC_SQL_JURISDICTION: "eu",
       ELECTRIC_SQL_LOCATION_HINT: "weur",
       NODE_ENV: "production",
       SYNC_AUTHORIZATION_CACHE_TTL_SECONDS: "10",
@@ -772,7 +750,7 @@ describe("Cloudflare stack", () => {
       "https://app.pr-123.example.com",
       "https://*--pr-123.example.com",
     ]);
-    expect(agentEnv).not.toHaveProperty("AGENT_MUTATION_TOOLS_ENABLED");
+    expect(agentEnv.AGENT_MUTATION_TOOLS_ENABLED).toBe("true");
   });
 
   it("creates no-script bypass routes for preview system hosts", () => {
@@ -817,79 +795,17 @@ describe("Cloudflare stack", () => {
     ).toBe(false);
   });
 
-  it("provisions Electric storage for local, preview, ephemeral CI, and ordinary stages", () => {
-    expect(
-      Effect.runSync(
-        shouldProvisionElectricStorage({
-          config: configWithoutCloudflareBootstrapSecrets,
-          localDev: true,
-        })
-      )
-    ).toBe(true);
-    expect(
-      Effect.runSync(
-        shouldProvisionElectricStorage({
-          config: configWithoutCloudflareBootstrapSecrets,
-          localDev: false,
-        })
-      )
-    ).toBe(true);
-    expect(
-      Effect.runSync(
-        shouldProvisionElectricStorage({
-          config: previewTenantConfig,
-          localDev: false,
-        })
-      )
-    ).toBe(true);
-    expect(
-      Effect.runSync(
-        shouldProvisionElectricStorage({
-          config: {
-            ...configWithoutCloudflareBootstrapSecrets,
-            stage: "ci-123-1",
-          },
-          localDev: false,
-        })
-      )
-    ).toBe(true);
-    expect(
-      Effect.runSync(
-        shouldProvisionElectricStorage({
-          config: {
-            ...configWithoutCloudflareBootstrapSecrets,
-            stage: "codex-electric-storage",
-          },
-          localDev: false,
-        })
-      )
-    ).toBe(true);
-  });
-
   it("creates the Electric container only outside local Alchemy dev", () => {
-    const electricStorageCredentials = {
-      accessKeyId: "electric-access-key-id",
-      secretAccessKey: "electric-secret-access-key",
-    };
-
     expect(
       shouldProvisionElectricContainer({
-        electricStorageCredentials,
         localDev: true,
       })
     ).toBe(false);
     expect(
       shouldProvisionElectricContainer({
-        electricStorageCredentials,
         localDev: false,
       })
     ).toBe(true);
-    expect(
-      shouldProvisionElectricContainer({
-        electricStorageCredentials: undefined,
-        localDev: false,
-      })
-    ).toBe(false);
   });
 
   it("sets cross-subdomain auth cookies from the configured tenant base domain", () => {
@@ -1222,12 +1138,6 @@ describe("Cloudflare stack", () => {
     const electricContainerEnv = makeElectricContainerEnv({
       databaseUrl: Redacted.make("postgres://electric.example/db"),
       electricSecret: electricSourceSecret,
-      storage: {
-        accessKeyId: Redacted.make("r2-access-key-id"),
-        accountId: "cloudflare-account-id",
-        bucketName: "ceird-main-electric-storage",
-        awsSecretAccessKey: Redacted.make("r2-secret-access-key"),
-      },
     });
     const syncWorkerProps = makeSyncWorkerProps({
       analytics: workerAnalytics,
@@ -1237,6 +1147,7 @@ describe("Cloudflare stack", () => {
         env: electricContainerEnv,
         name: "ceird-main-electric",
       },
+      electricSqlJurisdiction: "eu",
       electricSqlLocationHint: "weur",
       electricSourceSecret,
       hostname: "sync.example.com",
@@ -1338,15 +1249,10 @@ describe("Cloudflare stack", () => {
           "https://app.example.com,https://*--main.example.com",
         CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
         DOMAIN: domain,
-        ELECTRIC_CONTAINER_AWS_ACCESS_KEY_ID:
-          electricContainerEnv.AWS_ACCESS_KEY_ID,
-        ELECTRIC_CONTAINER_AWS_SECRET_ACCESS_KEY:
-          electricContainerEnv.AWS_SECRET_ACCESS_KEY,
         ELECTRIC_CONTAINER_DATABASE_URL: electricContainerEnv.DATABASE_URL,
         ELECTRIC_CONTAINER_ELECTRIC_SECRET:
           electricContainerEnv.ELECTRIC_SECRET,
-        ELECTRIC_CONTAINER_R2_ACCOUNT_ID: "cloudflare-account-id",
-        ELECTRIC_CONTAINER_R2_BUCKET_NAME: "ceird-main-electric-storage",
+        ELECTRIC_SQL_JURISDICTION: "eu",
         ELECTRIC_SQL_LOCATION_HINT: "weur",
         ELECTRIC_SOURCE_SECRET: electricSourceSecret,
         NODE_ENV: "production",
@@ -1360,8 +1266,7 @@ describe("Cloudflare stack", () => {
       className: "ElectricSql",
     });
     expect(electricContainerEnv).toMatchObject({
-      CEIRD_ELECTRIC_STORAGE_BACKEND: "r2",
-      CEIRD_ELECTRIC_STORAGE_MOUNT: "/var/lib/electric",
+      CEIRD_ELECTRIC_STORAGE_BACKEND: "local",
       ELECTRIC_INSECURE: "false",
       ELECTRIC_LOG_LEVEL: "info",
       ELECTRIC_PERSISTENT_STATE: "file",
@@ -1369,19 +1274,7 @@ describe("Cloudflare stack", () => {
       ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true",
       ELECTRIC_STORAGE: "fast_file",
       ELECTRIC_STORAGE_DIR: "/var/lib/electric",
-      R2_ACCOUNT_ID: "cloudflare-account-id",
-      R2_BUCKET_NAME: "ceird-main-electric-storage",
     });
-    expect(
-      Redacted.value(
-        electricContainerEnv.AWS_ACCESS_KEY_ID as Redacted.Redacted<string>
-      )
-    ).toBe("r2-access-key-id");
-    expect(
-      Redacted.value(
-        electricContainerEnv.AWS_SECRET_ACCESS_KEY as Redacted.Redacted<string>
-      )
-    ).toBe("r2-secret-access-key");
     expect(
       Redacted.value(
         electricContainerEnv.DATABASE_URL as Redacted.Redacted<string>
@@ -1392,35 +1285,6 @@ describe("Cloudflare stack", () => {
         electricContainerEnv.ELECTRIC_SECRET as Redacted.Redacted<string>
       )
     ).toBe("electric-secret");
-    expect(
-      makeCloudflareR2BucketResourceKey({
-        accountId: "cloudflare-account-id",
-        bucketName: "ceird-main-electric-storage",
-        jurisdiction: "default",
-      })
-    ).toBe(
-      "com.cloudflare.edge.r2.bucket.cloudflare-account-id_default_ceird-main-electric-storage"
-    );
-    expect(makeR2SecretAccessKey(Redacted.make("r2-api-token"))).toBe(
-      "aa5f2214de84af13e0c69fa550e9c92fa4a5ca10d115fdd708acf64f9b4ff0ac"
-    );
-    expect(
-      makeElectricStorageR2TokenPolicy({
-        accountId: "cloudflare-account-id",
-        bucketName: "ceird-main-electric-storage",
-        jurisdiction: "default",
-      })
-    ).toStrictEqual({
-      effect: "allow",
-      permissionGroups: [
-        "Workers R2 Storage Bucket Item Read",
-        "Workers R2 Storage Bucket Item Write",
-      ],
-      resources: {
-        "com.cloudflare.edge.r2.bucket.cloudflare-account-id_default_ceird-main-electric-storage":
-          "*",
-      },
-    });
     expect(makeDurableObjectLocationHintForNeonRegion("aws-eu-west-2")).toBe(
       "weur"
     );
@@ -1433,6 +1297,12 @@ describe("Cloudflare stack", () => {
     expect(makeDurableObjectLocationHintForNeonRegion("aws-sa-east-1")).toBe(
       "sam"
     );
+    expect(makeDurableObjectJurisdictionForNeonRegion("aws-eu-west-2")).toBe(
+      "eu"
+    );
+    expect(
+      makeDurableObjectJurisdictionForNeonRegion("aws-us-east-1")
+    ).toBeUndefined();
     expect(
       makeDurableObjectLocationHintForNeonRegion("aws-ap-southeast-1")
     ).toBe("apac");
@@ -1451,19 +1321,16 @@ describe("Cloudflare stack", () => {
     );
     expect(electricContainerProps).not.toHaveProperty("checks");
     expect(electricContainerDockerfile).toContain(
-      "FROM --platform=linux/amd64 golang:1.25-bookworm AS tigrisfs-build"
-    );
-    const tigrisfsVersionReference = `$${"{TIGRISFS_VERSION}"}`;
-    expect(electricContainerDockerfile).toContain(
-      `git clone --depth=1 --branch v${tigrisfsVersionReference} https://github.com/tigrisdata/tigrisfs.git`
+      "FROM --platform=linux/amd64 electricsql/electric:subqueries-beta-7"
     );
     expect(electricContainerDockerfile).toContain(
-      "GOBIN=/out /usr/local/go/bin/go install ."
+      "apt-get install -y --no-install-recommends ca-certificates nodejs"
     );
-    expect(electricContainerDockerfile).toContain("TIGRISFS_VERSION");
     expect(electricContainerDockerfile).toContain(
-      "ln -sf /proc/mounts /etc/mtab"
+      "mkdir -p /home/electric /var/lib/electric"
     );
+    expect(electricContainerDockerfile).not.toContain("fuse3");
+    expect(electricContainerDockerfile).not.toContain("tigrisfs");
     expect(electricContainerDockerfile).toContain(
       "echo 'electric:x:65532:' >> /etc/group"
     );
@@ -1471,9 +1338,6 @@ describe("Cloudflare stack", () => {
       "echo 'electric:x:65532:65532:Electric Runtime:/home/electric:/usr/sbin/nologin' >> /etc/passwd"
     );
     expect(electricContainerDockerfile).not.toContain("curl");
-    expect(electricContainerDockerfile).not.toContain(
-      "github.com/tigrisdata/tigrisfs/releases/download"
-    );
     expect(electricContainerProps).not.toHaveProperty("environmentVariables");
     expect(electricContainerProps).not.toHaveProperty("secrets");
     expect(Cloudflare.isSendEmail(authEmail)).toBeTruthy();
@@ -1557,6 +1421,7 @@ describe("Cloudflare stack", () => {
       analytics: workerAnalytics,
       config: configWithoutCloudflareBootstrapSecrets,
       domain,
+      electricSqlJurisdiction: "eu",
       electricSqlLocationHint: "weur",
       electricSourceSecret: Redacted.make("electric-secret"),
       hostname: "sync.example.com",
@@ -1588,7 +1453,7 @@ describe("Cloudflare stack", () => {
       "ELECTRIC_CONTAINER_DATABASE_URL"
     );
     expect(syncWorkerProps.env).not.toHaveProperty(
-      "ELECTRIC_CONTAINER_R2_BUCKET_NAME"
+      "ELECTRIC_CONTAINER_ELECTRIC_SECRET"
     );
     expect(domainWorkerProps.env.CEIRD_LOCAL_DEV).toBe("true");
     expect(domainWorkerProps.env.AUTH_RATE_LIMIT_CLEANUP_ENABLED).toBe("false");
@@ -1619,6 +1484,7 @@ describe("Cloudflare stack", () => {
     expect(agentWorkerProps.env).toMatchObject({
       AGENT_AI_GATEWAY_ID: aiGateway.gatewayId,
       AGENT_INTERNAL_SECRET: expect.any(Object),
+      AGENT_MUTATION_TOOLS_ENABLED: "true",
       AUTH_APP_ORIGIN:
         "https://app.codex-portless-local-origins.ceird.localhost",
       AUTH_TRUSTED_ORIGINS:
@@ -1627,9 +1493,6 @@ describe("Cloudflare stack", () => {
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
       NODE_ENV: "production",
     });
-    expect(agentWorkerProps.env).not.toHaveProperty(
-      "AGENT_MUTATION_TOOLS_ENABLED"
-    );
     expect(agentWorkerProps.env.AI).toBe(aiGateway);
     expect(agentWorkerProps.env.DOMAIN).toBe(domain);
     expect(agentWorkerProps.env.CeirdAgent).toMatchObject({
@@ -1746,6 +1609,7 @@ describe("Cloudflare stack", () => {
       env: {
         AGENT_AI_GATEWAY_ID: aiGateway.gatewayId,
         AGENT_INTERNAL_SECRET: agentInternalSecret,
+        AGENT_MUTATION_TOOLS_ENABLED: "true",
         AUTH_APP_ORIGIN: "https://app.example.com",
         AUTH_TRUSTED_ORIGINS:
           "https://app.example.com,https://*--main.example.com",
@@ -1755,9 +1619,6 @@ describe("Cloudflare stack", () => {
       name: "ceird-main-agent",
       url: false,
     });
-    expect(agentWorkerProps.env).not.toHaveProperty(
-      "AGENT_MUTATION_TOOLS_ENABLED"
-    );
     expect(agentWorkerProps.compatibility).toBe(ceirdWorkerCompatibility);
     expect(agentWorkerProps.observability).toMatchObject({
       enabled: true,
@@ -1865,7 +1726,6 @@ describe("Cloudflare stack", () => {
     expect(appContractSatisfiesStackEnv).toBeTruthy();
     expect(appWorkerConfiguredValuesSatisfyAlchemyWorkerEnv).toBeTruthy();
     expect(cloudflareStackOutputsIncludeCanonicalOrigins).toBeTruthy();
-    expect(cloudflareStackOutputsIncludeElectricStorage).toBeTruthy();
     expect(cloudflareStackOutputsIncludeTenantRouting).toBeTruthy();
   });
 });
