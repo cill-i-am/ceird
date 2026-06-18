@@ -7,6 +7,7 @@ import {
   decodeCreateOrganizationNameInput,
   decodeCreateOrganizationInput,
   decodeInvitationId,
+  decodeProductMemberActorSummaryElectricRow,
   decodeOrganizationSummary,
   decodeOrganizationSecurityActivityListResponse,
   decodeOrganizationRole,
@@ -37,6 +38,8 @@ import {
   decodeConnectedAppGrantListResponse,
   decodeDisconnectConnectedAppGrantInput,
   IdentityApi,
+  ProductMemberActorSummaryElectricRowSchema,
+  ProductMemberActorSummarySchema,
   ProductActorSchema,
 } from "./index.js";
 
@@ -76,6 +79,12 @@ describe("createOrganizationInputSchema", () => {
 
 describe("product-safe actor projection", () => {
   const decodeActor = Schema.decodeUnknownSync(ProductActorSchema);
+  const decodeMemberActorSummary = Schema.decodeUnknownSync(
+    ProductMemberActorSummarySchema
+  );
+  const decodeMemberActorSummaryElectricRow = Schema.decodeUnknownSync(
+    ProductMemberActorSummaryElectricRowSchema
+  );
 
   it("decodes member, agent, and system display actors without auth fields", () => {
     expect(
@@ -124,6 +133,100 @@ describe("product-safe actor projection", () => {
         userId: "user_123",
       })
     ).toThrow(/[Uu]nexpected/);
+  });
+
+  it("decodes product member actor summaries with branded identity fields", () => {
+    expect(
+      decodeMemberActorSummary({
+        displayDetail: "Team member",
+        displayName: "Ciara",
+        id: "77777777-7777-4777-8777-777777777777",
+        kind: "member",
+        organizationId: "org_123",
+        route: {
+          href: "/members/user_123",
+          label: "Ciara",
+        },
+        userId: "user_123",
+      })
+    ).toStrictEqual({
+      displayDetail: "Team member",
+      displayName: "Ciara",
+      id: "77777777-7777-4777-8777-777777777777",
+      kind: "member",
+      organizationId: "org_123",
+      route: {
+        href: "/members/user_123",
+        label: "Ciara",
+      },
+      userId: "user_123",
+    });
+  });
+
+  it("rejects partial product member actor summaries", () => {
+    expect(() =>
+      decodeMemberActorSummary({
+        displayName: "Ciara",
+        id: "77777777-7777-4777-8777-777777777777",
+        kind: "member",
+        userId: "user_123",
+      })
+    ).toThrow(/organizationId/);
+  });
+
+  it("decodes product member actor summary Electric rows to product rows", () => {
+    expect(
+      decodeProductMemberActorSummaryElectricRow({
+        actorId: "77777777-7777-4777-8777-777777777777",
+        displayDetail: "Team member",
+        displayName: "Ciara",
+        organizationId: "org_123",
+        routeHref: "/members/user_123",
+        routeLabel: "Ciara",
+        userId: "user_123",
+      })
+    ).toStrictEqual({
+      displayDetail: "Team member",
+      displayName: "Ciara",
+      id: "77777777-7777-4777-8777-777777777777",
+      kind: "member",
+      organizationId: "org_123",
+      route: {
+        href: "/members/user_123",
+        label: "Ciara",
+      },
+      userId: "user_123",
+    });
+  });
+
+  it("rejects invalid product member actor summary Electric rows", () => {
+    expect(() =>
+      decodeMemberActorSummaryElectricRow({
+        actorId: "77777777-7777-4777-8777-777777777777",
+        displayName: "Ciara",
+        organizationId: "org_123",
+      })
+    ).toThrow(/userId/);
+
+    expect(() =>
+      decodeMemberActorSummaryElectricRow({
+        actorId: "77777777-7777-4777-8777-777777777777",
+        displayName: "Ciara",
+        email: "ciara@example.com",
+        organizationId: "org_123",
+        userId: "user_123",
+      })
+    ).toThrow(/[Uu]nexpected/);
+
+    expect(() =>
+      decodeMemberActorSummaryElectricRow({
+        actorId: "77777777-7777-4777-8777-777777777777",
+        displayName: "Ciara",
+        organizationId: "org_123",
+        routeHref: "/members/user_123",
+        userId: "user_123",
+      })
+    ).toThrow(/route/);
   });
 });
 

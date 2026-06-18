@@ -803,12 +803,12 @@ describe("jobs data plane", () => {
     ).toStrictEqual({});
   });
 
-  it("allows Electric update old values to be partial member actor summaries", () => {
-    expect(
+  it("rejects invalid member actor summary rows at the Electric boundary", () => {
+    expect(() =>
       toProductMemberActorSummaryElectricRow({
         updatedAt: "2026-06-17 08:58:07.194174+00",
       })
-    ).toStrictEqual({});
+    ).toThrow(/id|displayName|organizationId|userId|[Uu]nexpected/);
   });
 
   it("derives visible Jobs workspace rows from local joins, filters, search, and sort", () => {
@@ -1010,6 +1010,7 @@ describe("jobs data plane", () => {
           actorId,
           displayDetail: "Dispatch",
           displayName: "Taylor Member",
+          organizationId: scope.organizationId,
           routeHref: "/members/user_taylor",
           routeLabel: "Taylor Member",
           userId: "user_taylor",
@@ -1018,6 +1019,7 @@ describe("jobs data plane", () => {
           actorId: coordinatorActorId,
           displayDetail: "Scheduling",
           displayName: "Jordan Coordinator",
+          organizationId: scope.organizationId,
           routeHref: "/members/user_jordan",
           routeLabel: "Jordan Coordinator",
           userId: "user_jordan",
@@ -1118,12 +1120,14 @@ describe("jobs data plane", () => {
           actorId: "66666666-6666-4666-8666-666666666666",
           displayDetail: "Team member",
           displayName: "Never Activity Assignee",
+          organizationId: scope.organizationId,
           userId: "user_never_activity_assignee",
         }),
         toProductMemberActorSummaryElectricRow({
           actorId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           displayDetail: "Team member",
           displayName: "Never Activity Coordinator",
+          organizationId: scope.organizationId,
           userId: "user_never_activity_coordinator",
         }),
       ],
@@ -1674,6 +1678,7 @@ describe("jobs data plane", () => {
         actorId: "66666666-6666-4666-8666-666666666666",
         displayDetail: "Dispatch",
         displayName: "Taylor Member",
+        organizationId: scope.organizationId,
         routeHref: "/members/user_taylor",
         routeLabel: "Taylor Member",
         userId,
@@ -1682,6 +1687,7 @@ describe("jobs data plane", () => {
       displayName: "Taylor Member",
       id: "66666666-6666-4666-8666-666666666666",
       kind: "member",
+      organizationId: scope.organizationId,
       route: { href: "/members/user_taylor", label: "Taylor Member" },
       userId,
     });

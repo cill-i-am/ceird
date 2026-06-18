@@ -150,6 +150,7 @@ export type InvitableOrganizationRole = Schema.Schema.Type<
 >;
 
 export const PRODUCT_ACTOR_KINDS = ["member", "agent", "system"] as const;
+const PRODUCT_MEMBER_ACTOR_SUMMARY_KIND = "member";
 export const ProductActorKind = Schema.Literals(PRODUCT_ACTOR_KINDS);
 export type ProductActorKind = Schema.Schema.Type<typeof ProductActorKind>;
 
@@ -189,6 +190,78 @@ export const ProductActorSchema = Schema.Struct({
   parseOptions: { onExcessProperty: "error" },
 });
 export type ProductActor = Schema.Schema.Type<typeof ProductActorSchema>;
+
+export const ProductMemberActorSummarySchema = Schema.Struct({
+  displayDetail: Schema.optional(ProductActorDisplayDetail),
+  displayName: ProductActorDisplayName,
+  id: ProductActorId,
+  kind: Schema.Literal("member"),
+  organizationId: OrganizationId,
+  route: Schema.optional(ProductActorRoute),
+  userId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type ProductMemberActorSummary = Schema.Schema.Type<
+  typeof ProductMemberActorSummarySchema
+>;
+
+const NullableProductActorDisplayDetail = Schema.NullOr(
+  ProductActorDisplayDetail
+);
+
+const ProductMemberActorSummaryElectricBaseFields = {
+  actorId: ProductActorId,
+  displayDetail: Schema.optional(NullableProductActorDisplayDetail),
+  displayName: ProductActorDisplayName,
+  organizationId: OrganizationId,
+  userId: UserId,
+} as const;
+
+export const ProductMemberActorSummaryElectricRowSchema = Schema.Union([
+  Schema.Struct({
+    ...ProductMemberActorSummaryElectricBaseFields,
+    routeHref: Schema.String,
+    routeLabel: Schema.String,
+  }),
+  Schema.Struct({
+    ...ProductMemberActorSummaryElectricBaseFields,
+    routeHref: Schema.optional(Schema.Null),
+    routeLabel: Schema.optional(Schema.Null),
+  }),
+]).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type ProductMemberActorSummaryElectricRow = Schema.Schema.Type<
+  typeof ProductMemberActorSummaryElectricRowSchema
+>;
+
+export function decodeProductMemberActorSummaryElectricRow(
+  input: unknown
+): ProductMemberActorSummary {
+  const row = Schema.decodeUnknownSync(
+    ProductMemberActorSummaryElectricRowSchema
+  )(input);
+
+  return Schema.decodeUnknownSync(ProductMemberActorSummarySchema)({
+    displayName: row.displayName,
+    id: row.actorId,
+    kind: PRODUCT_MEMBER_ACTOR_SUMMARY_KIND,
+    organizationId: row.organizationId,
+    userId: row.userId,
+    ...(row.displayDetail === null || row.displayDetail === undefined
+      ? {}
+      : { displayDetail: row.displayDetail }),
+    ...(typeof row.routeHref === "string" && typeof row.routeLabel === "string"
+      ? {
+          route: {
+            href: row.routeHref,
+            label: row.routeLabel,
+          },
+        }
+      : {}),
+  });
+}
 
 export const OrganizationMemberRoleResponseSchema = Schema.Struct({
   role: OrganizationRole,

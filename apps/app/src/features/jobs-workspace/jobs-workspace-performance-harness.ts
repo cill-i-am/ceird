@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { performance } from "node:perf_hooks";
 import process from "node:process";
 
-import type { ProductActorId } from "@ceird/identity-core";
+import type { OrganizationId, ProductActorId } from "@ceird/identity-core";
 import type {
   ActivityIdType,
   CommentIdType,
@@ -130,6 +130,7 @@ const DEFAULT_COUNTS = {
   memberActors: 75,
   sites: 1000,
 } as const satisfies JobsWorkspacePerformanceFixtureCounts;
+const PERFORMANCE_ORGANIZATION_ID = "org_jobs_perf" as OrganizationId;
 
 const JOB_STATUSES = [
   "new",
@@ -208,6 +209,7 @@ export function createJobsWorkspacePerformanceFixture(
       displayName: `Member ${String(index + 1).padStart(3, "0")}`,
       id: actorId(index),
       kind: "member",
+      organizationId: PERFORMANCE_ORGANIZATION_ID,
       userId: userId(index),
     })
   ) satisfies readonly JobsWorkspaceMemberActorSummaryRow[];

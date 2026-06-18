@@ -1,4 +1,8 @@
-import type { ProductActorId, UserId } from "@ceird/identity-core";
+import type {
+  OrganizationId,
+  ProductActorId,
+  UserId,
+} from "@ceird/identity-core";
 import type {
   ActivityIdType,
   CommentIdType,
@@ -57,6 +61,7 @@ const liveListState = vi.hoisted<{ current: JobsWorkspaceLiveListState }>(
     } as JobsWorkspaceLiveListState,
   })
 );
+const organizationId = "org_123" as OrganizationId;
 const liveDetailState = vi.hoisted<{
   current: JobsWorkspaceLiveDetailState;
 }>(() => ({
@@ -842,6 +847,7 @@ function makeReadyDetailState(
         displayName: "Taylor Member",
         id: "99999999-9999-4999-8999-999999999999" as ProductActorId,
         kind: "member",
+        organizationId,
         userId: "user_taylor" as UserId,
       },
       collaborators: [],
@@ -891,6 +897,7 @@ function makeReadyDetailState(
         displayName: "Jordan Coordinator",
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as ProductActorId,
         kind: "member",
+        organizationId,
         userId: "user_jordan" as UserId,
       },
       labels: [
