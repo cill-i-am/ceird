@@ -89,4 +89,111 @@ describe("user preferences repository", () => {
       expect(rows.rows[0]?.updated_at.toISOString()).toBe(firstRead.updatedAt);
     });
   }, 30_000);
+
+  it("maps invalid patch decodes to storage errors", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "preferences_repository_invalid_patch",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Preferences repository integration database unavailable; skipping patch decode coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    const live = UserPreferencesRepository.Default.pipe(
+      Layer.provide(
+        makeAppDatabaseRuntimeLive(makeAppDatabaseLive(testDatabase.url))
+      )
+    );
+    const userId = decodeUserId("user_preferences_repository_invalid_patch");
+    const invalidPatch: unknown = structuredClone({
+      routeProximityLocationEnabled: "yes",
+      userId,
+    });
+
+    // Simulates an untyped caller crossing into the repository boundary.
+    const result = await Effect.runPromiseExit(
+      Reflect.apply(UserPreferencesRepository.update, undefined, [
+        invalidPatch,
+      ]).pipe(Effect.provide(live))
+    );
+
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      const error = result.cause.toJSON();
+
+      expect(JSON.stringify(error)).toContain(
+        "User preferences patch row decode failed"
+      );
+    }
+  }, 30_000);
+
+  it("maps persisted row decode failures to storage errors", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "preferences_repository_invalid_row",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Preferences repository integration database unavailable; skipping decode failure coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    await withPool(testDatabase.url, async (pool) => {
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ($1, $2, $3)`,
+        ["", "Invalid Preference Owner", "invalid-preferences@example.com"]
+      );
+      await pool.query(
+        `insert into user_preferences (user_id)
+         values ($1)`,
+        [""]
+      );
+    });
+
+    const live = UserPreferencesRepository.Default.pipe(
+      Layer.provide(
+        makeAppDatabaseRuntimeLive(makeAppDatabaseLive(testDatabase.url))
+      )
+    );
+
+    const invalidUserId: unknown = structuredClone("");
+    // Simulates an untyped caller crossing into the repository boundary.
+    const result = await Effect.runPromiseExit(
+      Reflect.apply(UserPreferencesRepository.get, undefined, [
+        invalidUserId,
+      ]).pipe(Effect.provide(live))
+    );
+
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      const error = result.cause.toJSON();
+
+      expect(JSON.stringify(error)).toContain(
+        "User preferences selected row decode failed"
+      );
+    }
+  }, 30_000);
 });

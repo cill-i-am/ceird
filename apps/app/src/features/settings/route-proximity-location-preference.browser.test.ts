@@ -28,17 +28,12 @@ describe("route proximity location preference helpers", () => {
       },
     });
 
-    const {
-      loadRouteProximityLocationPreferenceEnabled,
-      loadRouteProximityLocationPreferenceStatus,
-    } = await import("./route-proximity-location-preference");
+    const { loadRouteProximityLocationPreferenceStatus } =
+      await import("./route-proximity-location-preference");
 
     await expect(loadRouteProximityLocationPreferenceStatus()).resolves.toBe(
       "enabled"
     );
-    await expect(
-      loadRouteProximityLocationPreferenceEnabled()
-    ).resolves.toBeTruthy();
   });
 
   it("loads disabled preference status", async () => {
@@ -49,32 +44,22 @@ describe("route proximity location preference helpers", () => {
       },
     });
 
-    const {
-      loadRouteProximityLocationPreferenceEnabled,
-      loadRouteProximityLocationPreferenceStatus,
-    } = await import("./route-proximity-location-preference");
+    const { loadRouteProximityLocationPreferenceStatus } =
+      await import("./route-proximity-location-preference");
 
     await expect(loadRouteProximityLocationPreferenceStatus()).resolves.toBe(
       "disabled"
     );
-    await expect(
-      loadRouteProximityLocationPreferenceEnabled()
-    ).resolves.toBeFalsy();
   });
 
-  it("fails closed when preference loading is unavailable", async () => {
+  it("keeps unavailable preference loading explicit", async () => {
     mockedGetCurrentUserPreferences.mockRejectedValue(new Error("offline"));
 
-    const {
-      loadRouteProximityLocationPreferenceEnabled,
-      loadRouteProximityLocationPreferenceStatus,
-    } = await import("./route-proximity-location-preference");
+    const { loadRouteProximityLocationPreferenceStatus } =
+      await import("./route-proximity-location-preference");
 
     await expect(loadRouteProximityLocationPreferenceStatus()).resolves.toBe(
       "unavailable"
     );
-    await expect(
-      loadRouteProximityLocationPreferenceEnabled()
-    ).resolves.toBeFalsy();
   });
 });

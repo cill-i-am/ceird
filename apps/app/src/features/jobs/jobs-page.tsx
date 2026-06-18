@@ -79,6 +79,7 @@ import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
 import type { CommandAction } from "#/features/command-bar/command-bar";
 import { ProximityLimitSelect } from "#/features/proximity/proximity-limit-select";
 import type { ProximityResultLimitOption } from "#/features/proximity/proximity-state";
+import type { RouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
 import { openWorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
 import { useIsMobile } from "#/hooks/use-mobile";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
@@ -245,7 +246,7 @@ export function JobsPage({
   onRouteLimitChange,
   onViewModeChange,
   routeLimit: controlledRouteLimit,
-  routeProximityLocationEnabled = false,
+  routeProximityLocationPreferenceStatus = "unavailable",
   viewMode: controlledViewMode,
   viewer,
 }: {
@@ -257,7 +258,9 @@ export function JobsPage({
   readonly onRouteLimitChange?: (value: ProximityLimit) => void;
   readonly onViewModeChange?: (value: JobsViewMode) => void;
   readonly routeLimit?: ProximityLimit | undefined;
-  readonly routeProximityLocationEnabled?: boolean | undefined;
+  readonly routeProximityLocationPreferenceStatus?:
+    | RouteProximityLocationPreferenceStatus
+    | undefined;
   readonly viewMode?: JobsViewMode;
   readonly viewer: JobsViewer;
 }) {
@@ -565,7 +568,9 @@ export function JobsPage({
           currentLocationRequestKey={currentLocationRequestKey}
           filters={visibleFilters}
           limit={routeLimit}
-          routeProximityLocationEnabled={routeProximityLocationEnabled}
+          routeProximityLocationPreferenceStatus={
+            routeProximityLocationPreferenceStatus
+          }
           showToolbar={false}
           viewMode={visibleViewMode}
           onActiveChange={setNearMeEnabled}

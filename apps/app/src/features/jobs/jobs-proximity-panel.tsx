@@ -44,6 +44,7 @@ import {
 } from "#/features/proximity/proximity-run-controller";
 import type { ProximityResultLimitOption } from "#/features/proximity/proximity-state";
 import { ProximityStatusPanel } from "#/features/proximity/proximity-status-panel";
+import type { RouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
 import { cn } from "#/lib/utils";
 
 import { JobsProximityRow } from "./jobs-proximity-row";
@@ -68,7 +69,7 @@ export interface JobsProximityPanelProps {
   readonly onActiveChange: (active: boolean) => void;
   readonly onClearFilters: () => void;
   readonly onLimitChange: (limit: ProximityResultLimitOption) => void;
-  readonly routeProximityLocationEnabled: boolean;
+  readonly routeProximityLocationPreferenceStatus: RouteProximityLocationPreferenceStatus;
   readonly showToolbar?: boolean;
   readonly viewMode: JobsViewMode;
 }
@@ -82,7 +83,7 @@ export function JobsProximityPanel({
   onActiveChange,
   onClearFilters,
   onLimitChange,
-  routeProximityLocationEnabled,
+  routeProximityLocationPreferenceStatus,
   showToolbar = true,
   viewMode,
 }: JobsProximityPanelProps) {
@@ -112,7 +113,7 @@ export function JobsProximityPanel({
     filters,
     limit,
     onActiveChange,
-    routeProximityLocationEnabled,
+    routeProximityLocationPreferenceStatus,
     viewMode,
   });
   const hasCurrentRouteResults = hasCurrentJobsProximityRouteResults({
@@ -157,7 +158,9 @@ export function JobsProximityPanel({
               requestCurrentOrigin={requestCurrentOrigin}
               requestState={request}
               retryRanking={retryRanking}
-              routeProximityLocationEnabled={routeProximityLocationEnabled}
+              routeProximityLocationPreferenceStatus={
+                routeProximityLocationPreferenceStatus
+              }
               selectedJobId={selectedJobId}
               onOriginDialogOpen={handleOriginDialogOpen}
               onSelectedJobIdChange={handleSelectedJobIdChange}
@@ -190,7 +193,7 @@ function useJobsProximityPanelController({
   filters,
   limit,
   onActiveChange,
-  routeProximityLocationEnabled,
+  routeProximityLocationPreferenceStatus,
   viewMode,
 }: {
   readonly active: boolean;
@@ -198,7 +201,7 @@ function useJobsProximityPanelController({
   readonly filters: JobsListFilters;
   readonly limit: ProximityLimit;
   readonly onActiveChange: (active: boolean) => void;
-  readonly routeProximityLocationEnabled: boolean;
+  readonly routeProximityLocationPreferenceStatus: RouteProximityLocationPreferenceStatus;
   readonly viewMode: JobsViewMode;
 }) {
   const buildInput = React.useCallback(
@@ -237,7 +240,8 @@ function useJobsProximityPanelController({
     isInputEligible,
     makeInputKey: makeJobProximityInputKey,
     rank: rankNearbyJobs,
-    routeProximityLocationEnabled,
+    routeProximityLocationEnabled:
+      routeProximityLocationPreferenceStatus === "enabled",
     onActiveChange,
   });
 
@@ -367,7 +371,7 @@ function JobsProximityContent({
   requestCurrentOrigin,
   requestState,
   retryRanking,
-  routeProximityLocationEnabled,
+  routeProximityLocationPreferenceStatus,
   selectedJobId,
   onOriginDialogOpen,
   onSelectedJobIdChange,
@@ -379,21 +383,32 @@ function JobsProximityContent({
   readonly requestCurrentOrigin: () => void;
   readonly requestState: JobsProximityRequestState;
   readonly retryRanking: () => void;
-  readonly routeProximityLocationEnabled: boolean;
+  readonly routeProximityLocationPreferenceStatus: RouteProximityLocationPreferenceStatus;
   readonly selectedJobId: string | null;
   readonly onOriginDialogOpen: (open: boolean) => void;
   readonly onSelectedJobIdChange: (jobId: string) => void;
   readonly viewMode: JobsViewMode;
 }) {
   if (originState.status === "idle") {
-    const currentLocationDisabled = !routeProximityLocationEnabled;
+    const currentLocationUnavailable =
+      routeProximityLocationPreferenceStatus === "unavailable";
+    const currentLocationDisabled =
+      routeProximityLocationPreferenceStatus !== "enabled";
+    let description =
+      "Use current location or choose an origin before calculating traffic-aware driving routes.";
+
+    if (currentLocationUnavailable) {
+      description =
+        "Current location preference could not be loaded. Choose an origin before calculating traffic-aware driving routes.";
+    } else if (currentLocationDisabled) {
+      description =
+        "Current location access is off. Choose an origin before calculating traffic-aware driving routes.";
+    }
 
     return (
       <ProximityStatusPanel
         state={{
-          description: currentLocationDisabled
-            ? "Current location access is off. Choose an origin before calculating traffic-aware driving routes."
-            : "Use current location or choose an origin before calculating traffic-aware driving routes.",
+          description,
           kind: "origin_required",
           title: "Choose where routes start",
         }}

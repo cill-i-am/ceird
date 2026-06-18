@@ -13,6 +13,7 @@ import { JobsPage } from "#/features/jobs/jobs-page";
 import type { JobsListFilters } from "#/features/jobs/jobs-state";
 import { JobsStateProvider } from "#/features/jobs/jobs-state";
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
+import type { RouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
 import type { WorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet-search";
 import { WorkspaceSheetStack } from "#/features/workspace-sheets/workspace-sheet-stack";
 
@@ -34,7 +35,7 @@ export function JobsRouteContent({
   listScope,
   queryClient,
   routeLimit,
-  routeProximityLocationEnabled,
+  routeProximityLocationPreferenceStatus,
   stack = EMPTY_WORKSPACE_SHEET_STACK,
   sync,
   viewMode,
@@ -62,9 +63,7 @@ export function JobsRouteContent({
   readonly listScope?: JobsListScope | undefined;
   readonly queryClient?: QueryClient | undefined;
   readonly routeLimit?: ComponentProps<typeof JobsPage>["routeLimit"];
-  readonly routeProximityLocationEnabled?: ComponentProps<
-    typeof JobsPage
-  >["routeProximityLocationEnabled"];
+  readonly routeProximityLocationPreferenceStatus?: RouteProximityLocationPreferenceStatus;
   readonly stack?: readonly WorkspaceSheet[] | undefined;
   readonly sync?: JobsCollectionSyncOptions | undefined;
   readonly viewMode?: ComponentProps<typeof JobsPage>["viewMode"];
@@ -93,7 +92,9 @@ export function JobsRouteContent({
         onRouteLimitChange={onRouteLimitChange}
         onViewModeChange={onViewModeChange}
         routeLimit={routeLimit}
-        routeProximityLocationEnabled={routeProximityLocationEnabled}
+        routeProximityLocationPreferenceStatus={
+          routeProximityLocationPreferenceStatus
+        }
         viewMode={viewMode}
         viewer={viewer}
       />

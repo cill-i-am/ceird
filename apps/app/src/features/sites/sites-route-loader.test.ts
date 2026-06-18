@@ -67,7 +67,7 @@ describe("sites route loader", () => {
         },
       ],
       options: { sites: [] },
-      routeProximityLocationEnabled: false,
+      routeProximityLocationPreferenceStatus: "unavailable",
     });
     expect(mockedListCurrentServerSites).toHaveBeenCalledWith({ limit: 50 });
   });

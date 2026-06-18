@@ -33,10 +33,10 @@ export class UserPreferencesRepository extends Context.Service<UserPreferencesRe
         const existingRow = yield* selectUserPreferencesRow(userId);
 
         if (existingRow !== undefined) {
-          return mapUserPreferencesRow(existingRow);
+          return yield* mapUserPreferencesRow(existingRow);
         }
 
-        const insert = decodeInsertUserPreferencesRow({ userId });
+        const insert = yield* decodeInsertUserPreferencesRow({ userId });
         const insertedRows = yield* db
           .insert(userPreferences)
           .values(insert)
@@ -51,10 +51,12 @@ export class UserPreferencesRepository extends Context.Service<UserPreferencesRe
         const [insertedRow] = insertedRows;
 
         if (insertedRow !== undefined) {
-          return mapUserPreferencesRow(decodeUserPreferencesRow(insertedRow));
+          return yield* mapUserPreferencesRow(
+            yield* decodeUserPreferencesRow(insertedRow)
+          );
         }
 
-        return mapUserPreferencesRow(
+        return yield* mapUserPreferencesRow(
           yield* getRequiredRow(
             yield* selectUserPreferencesRows(userId),
             "materialized user preferences"
@@ -65,7 +67,7 @@ export class UserPreferencesRepository extends Context.Service<UserPreferencesRe
       const update = Effect.fn("UserPreferencesRepository.update")(function* (
         input: PatchUserPreferencesRow
       ) {
-        const patch = decodePatchUserPreferencesRow(input);
+        const patch = yield* decodePatchUserPreferencesRow(input);
         const rows = yield* db
           .insert(userPreferences)
           .values({
@@ -88,8 +90,8 @@ export class UserPreferencesRepository extends Context.Service<UserPreferencesRe
             )
           );
 
-        return mapUserPreferencesRow(
-          decodeUserPreferencesRow(
+        return yield* mapUserPreferencesRow(
+          yield* decodeUserPreferencesRow(
             yield* getRequiredRow(rows, "updated user preferences")
           )
         );
@@ -106,7 +108,9 @@ export class UserPreferencesRepository extends Context.Service<UserPreferencesRe
               "EffectDrizzleQueryError",
               failUserPreferencesStorage
             ),
-            Effect.map((rows) => rows.map(decodeUserPreferencesRow))
+            Effect.flatMap((rows) =>
+              Effect.all(rows.map((row) => decodeUserPreferencesRow(row)))
+            )
           );
       }
 
@@ -138,7 +142,9 @@ export class UserPreferencesRepository extends Context.Service<UserPreferencesRe
     UserPreferencesRepository.DefaultWithoutDependencies;
 }
 
-function mapUserPreferencesRow(row: UserPreferencesRow): UserPreferences {
+function mapUserPreferencesRow(
+  row: UserPreferencesRow
+): Effect.Effect<UserPreferences, UserPreferencesStorageError> {
   return decodePublicUserPreferencesRead({
     routeProximityLocationEnabled: row.routeProximityLocationEnabled,
     updatedAt: row.updatedAt,
@@ -152,32 +158,57 @@ const userPreferencesSelection = {
   userId: userPreferences.userId,
 };
 
-const decodeInsertUserPreferencesRow = Schema.decodeUnknownSync(
+const decodeInsertUserPreferencesRow = decodePreferenceBoundary(
+  "insert row",
   InsertUserPreferencesRowSchema
 );
-const decodePatchUserPreferencesRow = Schema.decodeUnknownSync(
+const decodePatchUserPreferencesRow = decodePreferenceBoundary(
+  "patch row",
   PatchUserPreferencesRowSchema
 );
-const decodePublicUserPreferencesRead = Schema.decodeUnknownSync(
+const decodePublicUserPreferencesRead = decodePreferenceBoundary(
+  "public read",
   PublicUserPreferencesReadSchema
 );
-const decodeSelectedUserPreferencesRow = Schema.decodeUnknownSync(
+const decodeSelectedUserPreferencesRow = decodePreferenceBoundary(
+  "selected row",
   SelectedUserPreferencesRowSchema
 );
-const decodeUserPreferencesRowSchema = Schema.decodeUnknownSync(
+const decodeUserPreferencesRowSchema = decodePreferenceBoundary(
+  "persisted row",
   UserPreferencesRowSchema
 );
 
-function decodeUserPreferencesRow(input: unknown): UserPreferencesRow {
-  const row: SelectedUserPreferencesRow =
-    decodeSelectedUserPreferencesRow(input);
+function decodeUserPreferencesRow(
+  input: unknown
+): Effect.Effect<UserPreferencesRow, UserPreferencesStorageError> {
+  return Effect.gen(function* () {
+    const row: SelectedUserPreferencesRow =
+      yield* decodeSelectedUserPreferencesRow(input);
 
-  return decodeUserPreferencesRowSchema({
-    createdAt: row.createdAt.toISOString(),
-    routeProximityLocationEnabled: row.routeProximityLocationEnabled,
-    updatedAt: row.updatedAt.toISOString(),
-    userId: row.userId,
+    return yield* decodeUserPreferencesRowSchema({
+      createdAt: row.createdAt.toISOString(),
+      routeProximityLocationEnabled: row.routeProximityLocationEnabled,
+      updatedAt: row.updatedAt.toISOString(),
+      userId: row.userId,
+    });
   });
+}
+
+function decodePreferenceBoundary<SchemaType extends Schema.Top>(
+  description: string,
+  schema: SchemaType
+) {
+  return (input: unknown) =>
+    Schema.decodeUnknownEffect(schema)(input).pipe(
+      Effect.mapError(
+        (error) =>
+          new UserPreferencesStorageError({
+            cause: error.message,
+            message: `User preferences ${description} decode failed`,
+          })
+      )
+    );
 }
 
 function getRequiredRow<Row>(

@@ -16,7 +16,3 @@ export async function loadRouteProximityLocationPreferenceStatus(): Promise<Rout
     return "unavailable";
   }
 }
-
-export async function loadRouteProximityLocationPreferenceEnabled(): Promise<boolean> {
-  return (await loadRouteProximityLocationPreferenceStatus()) === "enabled";
-}
