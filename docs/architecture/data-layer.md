@@ -87,16 +87,25 @@ Use raw `SqlClient` / Effect SQL when:
 - moving the query would require broader product, API, auth, organization, or
   migration-history changes
 
+Drizzle rows should still become trustworthy at the repository boundary. The
+connected-app grants repository is the current auth proof slice: it uses Drizzle
+for the connected-app list projection and audited disconnect mutations, keeps
+only tiny Postgres SQL fragments for null-safe reference matching, `now()`, and
+token-count/max-expiry scalar aggregates, and decodes list rows, disconnect
+consent rows, and `oauth_consent_revoked` audit write values through Effect
+Schema before returning values to services.
+
 Current `DomainDrizzle` migrations include organization label CRUD and
 active-label reads, user preference get/upsert paths, current organization actor
 membership lookup, MCP actor session/membership lookup, straightforward agent
 thread create/list/find/archive/touch/actor-resolution reads, ordinary
-connected-app consent checks for MCP request validation, site CRUD/options/list
-reads, site label read helpers, and jobs safe-read paths such as scoped external
-options, member/contact/collaborator reads, accessible-work-item ids, selected
-job detail projections, and work-item label reads. These paths keep explicit
-column projections and continue to map Drizzle query failures into the same
-domain storage-error surfaces as their previous raw SQL implementations.
+connected-app grant list/disconnect operations, connected-app consent checks for
+MCP request validation, site CRUD/options/list reads, site label read helpers,
+and jobs safe-read paths such as scoped external options,
+member/contact/collaborator reads, accessible-work-item ids, selected job detail
+projections, and work-item label reads. These paths keep explicit column
+projections and continue to map Drizzle query failures into the same domain
+storage-error surfaces as their previous raw SQL implementations.
 
 After the TSK-164 final pass, production domain repositories retain 58
 `yield* sql` raw Effect SQL call sites across eight files. The unused
@@ -110,7 +119,6 @@ migration. The retained raw inventory is:
 | Agent current-thread prepare           | transaction-scoped advisory lock plus current active-thread lookup                                                                                            | `pg_advisory_xact_lock` protects idempotent prepare; the lock and lookup should remain one reviewed raw transaction slice.                                                                                                                                                            |
 | Agent action-run ledger                | insert-or-replay, terminal success/failure updates, stale recovery, and terminal-race lookup                                                                  | Idempotency, replay, and abandoned-running-row recovery are ledger semantics. Keeping the whole ledger raw avoids splitting race behavior across query boundaries.                                                                                                                    |
 | Auth rate-limit cleanup                | batched delete using `for update skip locked`                                                                                                                 | Concurrent cleanup workers must claim bounded victim rows without blocking request writes. The SQL shape is the concurrency control.                                                                                                                                                  |
-| Connected-app listing and disconnect   | lateral token-count projections, transactional consent delete, refresh-token revoke, access-token delete, and JSONB audit insert                              | The path is Better Auth adjacent and security-sensitive. The list query depends on lateral aggregates, and disconnect must keep revocation plus audit as one transaction.                                                                                                             |
 | Comments repository                    | comment list reads plus CTE ownership writes for work-item and site comments                                                                                  | Comment ownership rows and inserted comments are coupled through CTE projections, site comment creation locks the active site, and Jobs/Sites comments maintain product-safe Electric body projections. Migrate only as a whole comments repository slice with focused comment tests. |
 | Jobs repository write and lock helpers | linked-reference validation, collaborator writes, job create/patch/transition/reopen, comments, activity, visits, contact creation, and `for update` variants | These methods participate in service-level transaction workflows or write-side invariants. Partial Drizzle rewrites would make lock and rollback semantics harder to review.                                                                                                          |
 | Job and site label assignments         | active-label CTEs, `for share`, insert/delete projections, changed-count results, and jobs detail/proximity site-label reads                                  | Assignment endpoints need atomic existence checks and changed-count projections. Jobs detail/proximity keeps the related site-label read raw until the whole post-write detail refresh path can move safely.                                                                          |

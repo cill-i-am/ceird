@@ -96,6 +96,8 @@ Exports shared identity and organization primitives:
 - public invitation preview schema
 - user preference DTOs and `UserPreferencesApiGroup`, including the global
   route-proximity location opt-in
+- `OAuthClientId`, connected-app scope, and active-token-count schemas shared by
+  the public connected-app DTO and the domain identity persistence boundary
 - connected-app grant DTOs, scope-group schemas, disconnect input/response
   schemas, and typed connected-app errors used by app settings, domain identity
   handlers, and MCP consent enforcement

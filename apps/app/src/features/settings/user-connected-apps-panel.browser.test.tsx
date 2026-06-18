@@ -1,5 +1,6 @@
 import {
   decodeDisconnectConnectedAppGrantInput,
+  decodeOAuthClientId,
   decodeOrganizationId,
 } from "@ceird/identity-core";
 import type {
@@ -136,7 +137,7 @@ function makeConnectedAppGrant(): ConnectedAppGrant {
   return {
     activeAccessTokenCount: 1,
     activeRefreshTokenCount: 1,
-    clientId: "client_external_mcp",
+    clientId: decodeOAuthClientId("client_external_mcp"),
     clientName: "External MCP",
     clientUri: "https://mcp.example.com",
     context: {

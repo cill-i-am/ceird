@@ -93,6 +93,11 @@ export type ConnectedAppGrantId = Schema.Schema.Type<
   typeof ConnectedAppGrantId
 >;
 
+export const OAuthClientId = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/identity-core/OAuthClientId")
+);
+export type OAuthClientId = Schema.Schema.Type<typeof OAuthClientId>;
+
 export const InvitationId = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/identity-core/InvitationId")
 );
@@ -521,10 +526,20 @@ const NonNegativeInteger = Schema.Number.pipe(
   Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
 );
 
+export const ConnectedAppGrantActiveTokenCountSchema = NonNegativeInteger;
+export type ConnectedAppGrantActiveTokenCount = Schema.Schema.Type<
+  typeof ConnectedAppGrantActiveTokenCountSchema
+>;
+
+export const ConnectedAppScopeSchema = Schema.NonEmptyString;
+export type ConnectedAppScope = Schema.Schema.Type<
+  typeof ConnectedAppScopeSchema
+>;
+
 export const ConnectedAppGrantSchema = Schema.Struct({
-  activeAccessTokenCount: NonNegativeInteger,
-  activeRefreshTokenCount: NonNegativeInteger,
-  clientId: Schema.NonEmptyString,
+  activeAccessTokenCount: ConnectedAppGrantActiveTokenCountSchema,
+  activeRefreshTokenCount: ConnectedAppGrantActiveTokenCountSchema,
+  clientId: OAuthClientId,
   clientName: Schema.optional(Schema.String),
   clientUri: Schema.optional(Schema.String),
   context: ConnectedAppGrantContextSchema,
@@ -535,7 +550,7 @@ export const ConnectedAppGrantSchema = Schema.Struct({
   offlineAccess: Schema.Boolean,
   policyUri: Schema.optional(Schema.String),
   redirectHosts: Schema.Array(Schema.NonEmptyString),
-  scopes: Schema.Array(Schema.NonEmptyString),
+  scopes: Schema.Array(ConnectedAppScopeSchema),
   scopeGroups: Schema.Array(ConnectedAppScopeGroupSchema),
   tosUri: Schema.optional(Schema.String),
   updatedAt: IsoDateTimeString,
@@ -886,6 +901,10 @@ export function decodeUserId(input: unknown): UserId {
 
 export function decodeSessionId(input: unknown): SessionId {
   return Schema.decodeUnknownSync(SessionId)(input);
+}
+
+export function decodeOAuthClientId(input: unknown): OAuthClientId {
+  return Schema.decodeUnknownSync(OAuthClientId)(input);
 }
 
 export function decodeConnectedAppGrantListResponse(
