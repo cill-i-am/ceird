@@ -178,12 +178,13 @@ describe("product-safe actor projection", () => {
     expect(
       decodeProductMemberActorSummaryElectricRow({
         actorId: "77777777-7777-4777-8777-777777777777",
+        createdAt: "2026-06-17 08:58:07.194174+00",
         displayDetail: "Team member",
         displayName: "Ciara",
         organizationId: "org_123",
         routeHref: "/members/user_123",
         routeLabel: "Ciara",
-        updatedAt: "2026-06-18T10:30:00.000Z",
+        updatedAt: "2026-06-17 08:58:07.194174+00",
         userId: "user_123",
       })
     ).toStrictEqual({
@@ -200,16 +201,17 @@ describe("product-safe actor projection", () => {
     });
   });
 
-  it("decodes full product member actor summary Electric rows with DB-owned updatedAt", () => {
+  it("decodes full product member actor summary Electric rows with DB-owned timestamps", () => {
     expect(
       decodeProductMemberActorSummaryElectricRow({
         actorId: "77777777-7777-4777-8777-777777777777",
+        createdAt: "2026-06-17 08:58:07.194174+00",
         displayDetail: "Team member",
         displayName: "Ciara",
         organizationId: "org_123",
         routeHref: "/members/user_123",
         routeLabel: "Ciara",
-        updatedAt: "2026-06-18T10:30:00.000Z",
+        updatedAt: "2026-06-17 08:58:07.194174+00",
         userId: "user_123",
       })
     ).toStrictEqual({
@@ -229,17 +231,19 @@ describe("product-safe actor projection", () => {
   it("rejects invalid product member actor summary Electric rows", () => {
     expect(() =>
       decodeMemberActorSummaryElectricRow({
-        updatedAt: "2026-06-18T10:30:00.000Z",
+        createdAt: "2026-06-17 08:58:07.194174+00",
+        updatedAt: "2026-06-17 08:58:07.194174+00",
       })
     ).toThrow(/actorId/);
 
     expect(() =>
       decodeMemberActorSummaryElectricRow({
         actorId: "77777777-7777-4777-8777-777777777777",
+        createdAt: "2026-06-17 08:58:07.194174+00",
         displayName: "Ciara",
         email: "ciara@example.com",
         organizationId: "org_123",
-        updatedAt: "2026-06-18T10:30:00.000Z",
+        updatedAt: "2026-06-17 08:58:07.194174+00",
         userId: "user_123",
       })
     ).toThrow(/[Uu]nexpected/);
@@ -247,10 +251,11 @@ describe("product-safe actor projection", () => {
     expect(() =>
       decodeMemberActorSummaryElectricRow({
         actorId: "77777777-7777-4777-8777-777777777777",
+        createdAt: "2026-06-17 08:58:07.194174+00",
         displayName: "Ciara",
         organizationId: "org_123",
         routeHref: "/members/user_123",
-        updatedAt: "2026-06-18T10:30:00.000Z",
+        updatedAt: "2026-06-17 08:58:07.194174+00",
         userId: "user_123",
       })
     ).toThrow(/route/);

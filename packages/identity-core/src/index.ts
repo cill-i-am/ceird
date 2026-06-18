@@ -1,5 +1,5 @@
 /* oxlint-disable eslint/max-classes-per-file */
-import { Schema } from "effect";
+import { Schema, SchemaTransformation } from "effect";
 import {
   HttpApi,
   HttpApiEndpoint,
@@ -25,6 +25,17 @@ function isIsoDateTimeString(value: string): boolean {
   return (
     ISO_DATE_TIME_UTC_PATTERN.test(value) && !Number.isNaN(Date.parse(value))
   );
+}
+
+function normalizeElectricPostgresDateTimeString(value: string): string {
+  if (value.includes("T")) {
+    return value;
+  }
+
+  const normalized = value.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
+  const date = new Date(normalized);
+
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
 function isIsoDateString(value: string): boolean {
@@ -96,6 +107,16 @@ export const IsoDateTimeString = Schema.String.pipe(
   })
 );
 export type IsoDateTimeString = Schema.Schema.Type<typeof IsoDateTimeString>;
+
+const ElectricPostgresDateTimeString = Schema.String.pipe(
+  Schema.decodeTo(
+    IsoDateTimeString,
+    SchemaTransformation.transform({
+      decode: normalizeElectricPostgresDateTimeString,
+      encode: (value) => value,
+    })
+  )
+);
 
 export const IsoDateString = Schema.String.pipe(
   Schema.refine((value): value is string => isIsoDateString(value), {
@@ -212,10 +233,11 @@ const NullableProductActorDisplayDetail = Schema.NullOr(
 
 const ProductMemberActorSummaryElectricBaseFields = {
   actorId: ProductActorId,
+  createdAt: ElectricPostgresDateTimeString,
   displayDetail: Schema.optional(NullableProductActorDisplayDetail),
   displayName: ProductActorDisplayName,
   organizationId: OrganizationId,
-  updatedAt: IsoDateTimeString,
+  updatedAt: ElectricPostgresDateTimeString,
   userId: UserId,
 } as const;
 

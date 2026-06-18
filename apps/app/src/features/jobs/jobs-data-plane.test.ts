@@ -806,7 +806,8 @@ describe("jobs data plane", () => {
   it("rejects invalid member actor summary rows at the Electric boundary", () => {
     expect(() =>
       toProductMemberActorSummaryElectricRow({
-        updatedAt: "2026-06-17T08:58:07.194Z",
+        createdAt: "2026-06-17 08:58:07.194174+00",
+        updatedAt: "2026-06-17 08:58:07.194174+00",
       })
     ).toThrow(/actorId|displayName|organizationId|userId|[Uu]nexpected/);
   });
@@ -1008,6 +1009,7 @@ describe("jobs data plane", () => {
       memberActorSummaries: [
         toProductMemberActorSummaryElectricRow({
           actorId,
+          createdAt: "2026-06-15T10:45:00.000Z",
           displayDetail: "Dispatch",
           displayName: "Taylor Member",
           organizationId: scope.organizationId,
@@ -1018,6 +1020,7 @@ describe("jobs data plane", () => {
         }),
         toProductMemberActorSummaryElectricRow({
           actorId: coordinatorActorId,
+          createdAt: "2026-06-15T10:46:00.000Z",
           displayDetail: "Scheduling",
           displayName: "Jordan Coordinator",
           organizationId: scope.organizationId,
@@ -1120,6 +1123,7 @@ describe("jobs data plane", () => {
       memberActorSummaries: [
         toProductMemberActorSummaryElectricRow({
           actorId: "66666666-6666-4666-8666-666666666666",
+          createdAt: "2026-06-15T11:05:00.000Z",
           displayDetail: "Team member",
           displayName: "Never Activity Assignee",
           organizationId: scope.organizationId,
@@ -1128,6 +1132,7 @@ describe("jobs data plane", () => {
         }),
         toProductMemberActorSummaryElectricRow({
           actorId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          createdAt: "2026-06-15T11:06:00.000Z",
           displayDetail: "Team member",
           displayName: "Never Activity Coordinator",
           organizationId: scope.organizationId,
@@ -1680,12 +1685,13 @@ describe("jobs data plane", () => {
     expect(
       toProductMemberActorSummaryElectricRow({
         actorId: "66666666-6666-4666-8666-666666666666",
+        createdAt: "2026-06-15 10:45:00.123456+00",
         displayDetail: "Dispatch",
         displayName: "Taylor Member",
         organizationId: scope.organizationId,
         routeHref: "/members/user_taylor",
         routeLabel: "Taylor Member",
-        updatedAt: "2026-06-15T10:45:00.000Z",
+        updatedAt: "2026-06-15 10:45:00.123456+00",
         userId,
       })
     ).toMatchObject({

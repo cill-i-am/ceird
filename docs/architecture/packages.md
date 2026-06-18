@@ -87,7 +87,8 @@ Exports shared identity and organization primitives:
   `product_member_actor_summaries` Electric rows, preserving organization, user,
   and product actor ids before app data-plane consumers join assignment display
   rows; the paired Electric row schema decodes the raw shape row, including
-  DB-owned `updatedAt`, before omitting it from this product read model
+  DB-owned `createdAt` and `updatedAt` with Postgres timestamp normalization,
+  before omitting them from this product read model
 - role helpers such as `isAdministrativeOrganizationRole`,
   `isInternalOrganizationRole`, and `isExternalOrganizationRole`
 - organization summary schemas

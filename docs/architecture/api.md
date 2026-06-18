@@ -894,8 +894,9 @@ member `organization_id`, `user_id`, product actor id, and product-safe actor
 display/routing fields for Electric joins, plus DB-owned `updated_at` shape
 metadata. Browser data-plane ingestion decodes the full raw projection row
 through the shared `@ceird/identity-core` member actor summary Electric schema
-before Jobs detail code can consume assignment/coordinator rows; `updatedAt`
-does not move into the product read model. Job create/patch writes also
+before Jobs detail code can consume assignment/coordinator rows; Postgres
+timestamp payloads are normalized at that boundary, and `createdAt`/`updatedAt`
+do not move into the product read model. Job create/patch writes also
 materialize that projection for assignee/coordinator users, and the migration
 backfills existing job member references. The private
 `product_activity_actor_sources` table keeps
