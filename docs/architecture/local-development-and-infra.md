@@ -103,17 +103,17 @@ selected stage.
 
 ## Local Environment
 
-Fresh linked worktrees usually do not contain gitignored env files. The local
-environment setup script copies `.env.local` from an explicit
-`LOCAL_ENV_SOURCE` first, then from the primary Git worktree associated with the
-linked worktree. It prepares the env file before dependency installation so
-Codex and other non-interactive setup runs fail quickly when credentials are
-missing. Dependency source uses `opensrc`'s global cache at
-`${OPENSRC_HOME:-~/.opensrc}`. Setup does not link worktree-local `opensrc/`
-directories; it runs normal dependency installation and lets the root
-`postinstall` refresh the shared cache, which is reused by all worktrees. The
-script does not generate fallback secrets; if no source env file exists, setup
-stops with a clear error.
+Fresh linked worktrees usually do not contain gitignored env files.
+Codex-managed worktrees copy ignored local env files listed in
+`.worktreeinclude`, including `.env`, `.env.local`, and `.env.*.local`, before
+setup starts. The local environment setup script then checks that `.env.local`
+is present before dependency installation so Codex and other non-interactive
+setup runs fail quickly when credentials are missing. Dependency source uses
+`opensrc`'s global cache at `${OPENSRC_HOME:-~/.opensrc}`. Setup does not link
+worktree-local `opensrc/` directories; it runs normal dependency installation
+and lets the root `postinstall` refresh the shared cache, which is reused by
+all worktrees. The script does not generate fallback secrets; if `.env.local`
+was not included into the worktree, setup stops with a clear error.
 
 Prefer direct dependency upgrades for dependency audit remediations. When a
 direct upgrade cannot make a vulnerable transitive edge resolve to a patched

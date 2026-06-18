@@ -79,15 +79,14 @@ CEIRD_CLOUDFLARE=1 pnpm alchemy destroy --profile ceird-env --env-file .env.loca
 Destroy is intentionally explicit because it deletes cloud resources for that
 stage.
 
-Codex/local worktree setup runs `scripts/setup-local-environment.sh` before
-development actions. The script prepares `.env.local` before dependency
-installation, preserving an existing file, copying one from `LOCAL_ENV_SOURCE`
-when supplied, and otherwise copying the `.env.local` from the primary Git
-worktree for linked worktrees. If no source exists, setup fails before running
-dependency installation so missing credentials are explicit. The script uses
-the global `opensrc` cache at `${OPENSRC_HOME:-~/.opensrc}` and then runs a
-normal `pnpm install --frozen-lockfile`; the root `postinstall` refreshes the
-shared cache and worktrees benefit from cache hits without linking `opensrc/`.
+Codex-managed worktrees copy ignored local env files listed in
+`.worktreeinclude`, including `.env`, `.env.local`, and `.env.*.local`, before
+the local environment setup runs. `scripts/setup-local-environment.sh` then
+checks that `.env.local` is present before dependency installation so missing
+credentials are explicit. The script uses the global `opensrc` cache at
+`${OPENSRC_HOME:-~/.opensrc}` and then runs a normal
+`pnpm install --frozen-lockfile`; the root `postinstall` refreshes the shared
+cache and worktrees benefit from cache hits without linking `opensrc/`.
 
 ## Testing
 
