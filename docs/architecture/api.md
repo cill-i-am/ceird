@@ -742,10 +742,13 @@ metadata for opt-in Electric collection mutation handlers; non-Electric browser
 commands map the response back to `Label` before reconciling local state.
 Create, rename, and archive writes also record `label.created`,
 `label.updated`, and `label.archived` rows through the domain-owned global
-activity read model inside the same command transaction. Those activity rows use
-the product-safe member actor projection and route label targets to
-`/organization/settings/labels`; browser code does not infer label activity
-from local mutations.
+activity read model inside the same command transaction. Normal member writes
+use the product-safe member actor projection. Supported agent-triggered label
+writes use the product-safe Ceird Agent actor projection and correlate through
+the `agent_action_run` activity source rather than private agent thread display
+metadata. Label activity route label targets remain
+`/organization/settings/labels`; browser code does not infer label activity from
+local mutations.
 The sync `labels` shape covers active labels only; archived labels are excluded
 by the domain-approved Electric predicate.
 

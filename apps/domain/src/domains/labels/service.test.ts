@@ -251,7 +251,7 @@ describe("LabelsService", () => {
                     return {
                       actor: {
                         displayDetail: "Agent action",
-                        displayName: "Install planner",
+                        displayName: "Ceird Agent",
                         id: agentActorId,
                         kind: "agent",
                       },

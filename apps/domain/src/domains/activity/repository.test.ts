@@ -388,7 +388,7 @@ describe("activity events repository", () => {
     expect(updatedSummary).toStrictEqual({ display_name: "Taylor Updated" });
   });
 
-  it("does not expose private agent thread titles in synced actor projections", async (context: {
+  it("keeps private agent thread titles out of product activity actor projection", async (context: {
     skip: (note?: string) => never;
   }) => {
     const testDatabase = await createMigratedTestDatabase(context);
@@ -398,8 +398,8 @@ describe("activity events repository", () => {
 
     const organizationId = decodeOrganizationId(randomUUID());
     const userId = decodeUserId(`user_${randomUUID()}`);
-    const threadId = decodeAgentThreadId(randomUUID());
-    const privateThreadTitle = "Private acquisition cleanup plan";
+    const agentThreadId = decodeAgentThreadId(randomUUID());
+    const privateThreadTitle = "Private Acme acquisition prep";
 
     await withPool(testDatabase.url, async (pool) => {
       await seedOrganization(pool, {
@@ -407,13 +407,13 @@ describe("activity events repository", () => {
         name: "Agent Actor Privacy",
       });
       await seedMember(pool, {
-        email: "agent-owner@example.com",
-        name: "Agent Owner",
+        email: "agent-actor-privacy@example.com",
+        name: "Private Thread Owner",
         organizationId,
         userId,
       });
       await seedAgentThread(pool, {
-        id: threadId,
+        id: agentThreadId,
         organizationId,
         title: privateThreadTitle,
         userId,
@@ -423,34 +423,50 @@ describe("activity events repository", () => {
     const created = await runProductActivityActorsRepositoryEffect(
       testDatabase.url,
       ProductActivityActorsRepository.use((repository) =>
-        repository.ensureAgentThreadActor({
+        repository.ensureAgentActor({
+          agentThreadId,
           organizationId,
-          threadId,
-          threadTitle: privateThreadTitle,
           userId,
         })
       )
     );
-    const syncedActor = await runProductActivityActorsRepositoryEffect(
-      testDatabase.url,
-      ProductActivityActorsRepository.use((repository) =>
-        repository.getById(organizationId, created.actor.id)
-      )
-    );
+    const projection = await withPool(testDatabase.url, async (pool) => {
+      const result = await pool.query<{
+        actor_display_detail: string | null;
+        actor_display_name: string;
+        source_agent_thread_id: string | null;
+        source_user_id: string | null;
+      }>(
+        `select
+           actors.display_name as actor_display_name,
+           actors.display_detail as actor_display_detail,
+           sources.agent_thread_id::text as source_agent_thread_id,
+           sources.user_id as source_user_id
+         from product_activity_actors actors
+         inner join product_activity_actor_sources sources
+           on sources.actor_id = actors.id
+          and sources.organization_id = actors.organization_id
+         where actors.organization_id = $1
+           and actors.id = $2
+           and sources.kind = 'agent'`,
+        [organizationId, created.actor.id]
+      );
+
+      return result.rows[0];
+    });
 
     expect(created.actor).toMatchObject({
-      displayDetail: "Agent product action",
-      displayName: "Ceird agent",
-      id: created.actor.id,
+      displayDetail: "Agent action",
+      displayName: "Ceird Agent",
       kind: "agent",
     });
-    expect(syncedActor).toMatchObject({
-      displayDetail: "Agent product action",
-      displayName: "Ceird agent",
-      id: created.actor.id,
-      kind: "agent",
+    expect(projection).toStrictEqual({
+      actor_display_detail: "Agent action",
+      actor_display_name: "Ceird Agent",
+      source_agent_thread_id: agentThreadId,
+      source_user_id: userId,
     });
-    expect(JSON.stringify({ created, syncedActor })).not.toContain(
+    expect(JSON.stringify({ actor: created.actor, projection })).not.toContain(
       privateThreadTitle
     );
   });
@@ -601,7 +617,7 @@ async function seedAgentThread(
       input.id,
       input.organizationId,
       input.userId,
-      `agent-${input.id}`,
+      `agent-${input.organizationId}-${input.userId}-${input.id}`,
       input.title,
     ]
   );
