@@ -323,10 +323,14 @@ The container runs with `CEIRD_ELECTRIC_STORAGE_BACKEND=local`,
 `ELECTRIC_STORAGE_DIR=/var/lib/electric`. It also sets
 `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true` for the single Electric writer process.
 The sync Worker resolves the singleton `ElectricSql` Durable Object with a
-stage-derived `locationHint` based on the Neon region so the container is
-placed near the database. The durability tradeoff is now explicit: restart and
-reschedule evidence should watch shape warmup/catch-up latency, but startup
-must not depend on provider-specific filesystem mounts.
+stage-derived jurisdiction and `locationHint` based on the Neon region so the
+container is constrained to the EU for European database stages and placed near
+the database. Switching a stage from the default namespace to
+`jurisdiction("eu")` creates a separate named Durable Object, which is how a
+stage stops reusing an earlier `primary` object that Cloudflare already placed
+elsewhere. The durability tradeoff is now explicit: restart and reschedule
+evidence should watch shape warmup/catch-up latency, but startup must not
+depend on provider-specific filesystem mounts.
 
 Sync is domain-layer only. Better Auth tables, sessions, accounts, rate limits,
 organizations, members, and invitations are not exposed as Electric shapes.

@@ -182,10 +182,24 @@ const durableObjectLocationHintByNeonRegion = {
   "azure-westus3": "wnam",
 } satisfies Record<InfraStageConfig["neonRegion"], DurableObjectLocationHint>;
 
+const durableObjectJurisdictionByNeonRegion: Partial<
+  Record<InfraStageConfig["neonRegion"], DurableObjectJurisdiction>
+> = {
+  "aws-eu-central-1": "eu",
+  "aws-eu-west-2": "eu",
+  "azure-gwc": "eu",
+};
+
 export function makeDurableObjectLocationHintForNeonRegion(
   neonRegion: InfraStageConfig["neonRegion"]
 ): DurableObjectLocationHint {
   return durableObjectLocationHintByNeonRegion[neonRegion];
+}
+
+export function makeDurableObjectJurisdictionForNeonRegion(
+  neonRegion: InfraStageConfig["neonRegion"]
+): DurableObjectJurisdiction | undefined {
+  return durableObjectJurisdictionByNeonRegion[neonRegion];
 }
 
 export function makeTenantReservedHostBypassRoutePatterns(
@@ -380,6 +394,9 @@ export const makeCloudflareStack = Effect.fn("CloudflareStack.make")(function* (
     config: input.config,
     domain,
     electricContainer,
+    electricSqlJurisdiction: makeDurableObjectJurisdictionForNeonRegion(
+      input.config.neonRegion
+    ),
     electricSqlLocationHint: makeDurableObjectLocationHintForNeonRegion(
       input.config.neonRegion
     ),

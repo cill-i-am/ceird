@@ -80,6 +80,7 @@ import type {
 import type { makeCloudflareStack } from "./cloudflare-stack.ts";
 import {
   makeCloudflareHyperdriveProps,
+  makeDurableObjectJurisdictionForNeonRegion,
   makeDurableObjectLocationHintForNeonRegion,
   makeLocalWorkerOrigins,
   makePortlessLocalWorkerOrigin,
@@ -376,6 +377,7 @@ type SyncWorkerStackRuntimeConfigEnv = Required<
     | "AUTH_APP_ORIGIN"
     | "AUTH_TRUSTED_ORIGINS"
     | "CEIRD_WORKER_ANALYTICS_SAMPLE_RATE"
+    | "ELECTRIC_SQL_JURISDICTION"
     | "ELECTRIC_SQL_LOCATION_HINT"
     | "ELECTRIC_SOURCE_SECRET"
     | "NODE_ENV"
@@ -559,6 +561,7 @@ describe("Cloudflare stack", () => {
     });
     const syncEnv = makeSyncWorkerConfiguredEnv({
       config: configWithoutCloudflareBootstrapSecrets,
+      electricSqlJurisdiction: "eu",
       electricSqlLocationHint: "weur",
       electricSourceSecret: Redacted.make("electric-secret"),
     });
@@ -642,6 +645,7 @@ describe("Cloudflare stack", () => {
       AUTH_TRUSTED_ORIGINS:
         "https://app.example.com,https://*--main.example.com",
       CEIRD_WORKER_ANALYTICS_SAMPLE_RATE: "0.1",
+      ELECTRIC_SQL_JURISDICTION: "eu",
       ELECTRIC_SQL_LOCATION_HINT: "weur",
       NODE_ENV: "production",
       SYNC_AUTHORIZATION_CACHE_TTL_SECONDS: "10",
@@ -1143,6 +1147,7 @@ describe("Cloudflare stack", () => {
         env: electricContainerEnv,
         name: "ceird-main-electric",
       },
+      electricSqlJurisdiction: "eu",
       electricSqlLocationHint: "weur",
       electricSourceSecret,
       hostname: "sync.example.com",
@@ -1247,6 +1252,7 @@ describe("Cloudflare stack", () => {
         ELECTRIC_CONTAINER_DATABASE_URL: electricContainerEnv.DATABASE_URL,
         ELECTRIC_CONTAINER_ELECTRIC_SECRET:
           electricContainerEnv.ELECTRIC_SECRET,
+        ELECTRIC_SQL_JURISDICTION: "eu",
         ELECTRIC_SQL_LOCATION_HINT: "weur",
         ELECTRIC_SOURCE_SECRET: electricSourceSecret,
         NODE_ENV: "production",
@@ -1291,6 +1297,12 @@ describe("Cloudflare stack", () => {
     expect(makeDurableObjectLocationHintForNeonRegion("aws-sa-east-1")).toBe(
       "sam"
     );
+    expect(makeDurableObjectJurisdictionForNeonRegion("aws-eu-west-2")).toBe(
+      "eu"
+    );
+    expect(
+      makeDurableObjectJurisdictionForNeonRegion("aws-us-east-1")
+    ).toBeUndefined();
     expect(
       makeDurableObjectLocationHintForNeonRegion("aws-ap-southeast-1")
     ).toBe("apac");
@@ -1409,6 +1421,7 @@ describe("Cloudflare stack", () => {
       analytics: workerAnalytics,
       config: configWithoutCloudflareBootstrapSecrets,
       domain,
+      electricSqlJurisdiction: "eu",
       electricSqlLocationHint: "weur",
       electricSourceSecret: Redacted.make("electric-secret"),
       hostname: "sync.example.com",

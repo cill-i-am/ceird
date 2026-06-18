@@ -32,7 +32,8 @@ recreated, so restarts may rebuild shape logs from Postgres instead of relying
 on an object-storage mount. The sync Worker receives the generated stage Neon
 connection URL and Electric source secret as secrets, then supplies them to the
 container at startup. It also receives an Alchemy-derived Durable Object
-`locationHint` from the stage Neon region so the singleton Electric container is
+`jurisdiction` and `locationHint` from the stage Neon region so the singleton
+Electric container is constrained to the EU for European database stages and
 placed near Postgres in deployed stages. The exported `ElectricSql` runtime
 class must remain a
 `cloudflare:workers` `DurableObject` subclass and its class name must match the

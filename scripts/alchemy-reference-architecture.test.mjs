@@ -234,6 +234,7 @@ test("state audit flags legacy migration state and validates expected managed re
           ELECTRIC_CONTAINER_DATABASE_URL: "postgresql://redacted",
           ELECTRIC_CONTAINER_ELECTRIC_SECRET: "electric-secret",
           ELECTRIC_SOURCE_SECRET: "secret",
+          ELECTRIC_SQL_JURISDICTION: "eu",
           ELECTRIC_SQL_LOCATION_HINT: "weur",
         },
       },
