@@ -34,7 +34,8 @@ import {
   generateProductActorId,
 } from "./id-generation.js";
 
-const AGENT_ACTIVITY_ACTOR_DISPLAY_DETAIL = "Agent product action";
+const AGENT_ACTIVITY_ACTOR_DISPLAY_NAME = "Ceird Agent";
+const AGENT_ACTIVITY_ACTOR_DISPLAY_DETAIL = "Agent action";
 
 interface ProductActorRow {
   readonly display_detail: string | null;
@@ -49,7 +50,7 @@ interface MemberSourceRow extends ProductActorRow {
   readonly source_user_id: string;
 }
 
-interface AgentThreadSourceRow extends ProductActorRow {
+interface AgentSourceRow extends ProductActorRow {
   readonly source_agent_thread_id: string;
   readonly source_user_id: string;
 }
@@ -77,7 +78,13 @@ export interface ResolveMemberActorInput {
 export interface ResolveAgentThreadActorInput {
   readonly organizationId: OrganizationId;
   readonly threadId: AgentThreadId;
-  readonly threadTitle: string;
+  readonly threadTitle?: string | undefined;
+  readonly userId: UserId;
+}
+
+export interface ResolveAgentActorInput {
+  readonly agentThreadId: AgentThreadId;
+  readonly organizationId: OrganizationId;
   readonly userId: UserId;
 }
 
@@ -414,40 +421,42 @@ export class ProductActivityActorsRepository extends Context.Service<ProductActi
         };
       });
 
-      const ensureAgentThreadActor = Effect.fn(
-        "ProductActivityActorsRepository.ensureAgentThreadActor"
-      )(function* (input: ResolveAgentThreadActorInput) {
+      const ensureAgentActor = Effect.fn(
+        "ProductActivityActorsRepository.ensureAgentActor"
+      )(function* (input: ResolveAgentActorInput) {
         yield* Effect.annotateCurrentSpan(
           "organizationId",
           input.organizationId
         );
-        yield* Effect.annotateCurrentSpan("agent.threadId", input.threadId);
+        yield* Effect.annotateCurrentSpan("userId", input.userId);
+        yield* Effect.annotateCurrentSpan("agentThreadId", input.agentThreadId);
 
         const rows = yield* sql.withTransaction(
           Effect.gen(function* () {
             yield* sql`
               select pg_advisory_xact_lock(
-                hashtext(${buildAgentThreadActorLockKey(input)})
+                hashtext(${buildAgentActorLockKey(input)})
               )
             `;
 
             const actorId = generateProductActorId();
-            return yield* sql<AgentThreadSourceRow>`
+
+            return yield* sql<AgentSourceRow>`
               with source_thread as (
                 select
                   agent_threads.id as source_agent_thread_id,
                   agent_threads.user_id as source_user_id
                 from agent_threads
                 where agent_threads.organization_id = ${input.organizationId}
-                  and agent_threads.id = ${input.threadId}
                   and agent_threads.user_id = ${input.userId}
+                  and agent_threads.id = ${input.agentThreadId}
                   and agent_threads.status = 'active'
                 limit 1
               ),
               existing_actor as (
                 update product_activity_actors
                 set
-                  display_name = 'Ceird agent',
+                  display_name = ${AGENT_ACTIVITY_ACTOR_DISPLAY_NAME},
                   display_detail = ${AGENT_ACTIVITY_ACTOR_DISPLAY_DETAIL},
                   route_href = null,
                   route_label = null,
@@ -480,7 +489,7 @@ export class ProductActivityActorsRepository extends Context.Service<ProductActi
                   ${actorId},
                   ${input.organizationId},
                   'agent',
-                  'Ceird agent',
+                  ${AGENT_ACTIVITY_ACTOR_DISPLAY_NAME},
                   ${AGENT_ACTIVITY_ACTOR_DISPLAY_DETAIL}
                 from source_thread
                 where not exists (select 1 from existing_actor)
@@ -521,18 +530,22 @@ export class ProductActivityActorsRepository extends Context.Service<ProductActi
                   inserted_actor_with_source.source_agent_thread_id
                 from inserted_actor_with_source
                 returning actor_id
+              ),
+              actor_row as (
+                select * from existing_actor
+                union all
+                select inserted_actor_with_source.*
+                from inserted_actor_with_source
+                inner join inserted_source
+                  on inserted_source.actor_id = inserted_actor_with_source.id
               )
-              select * from existing_actor
-              union all
-              select inserted_actor_with_source.*
-              from inserted_actor_with_source
-              inner join inserted_source
-                on inserted_source.actor_id = inserted_actor_with_source.id
+              select *
+              from actor_row
             `;
           })
         );
 
-        const row = yield* getRequiredRow(rows, "agent product activity actor");
+        const row = yield* getRequiredRow(rows, "product activity agent actor");
         yield* Effect.annotateCurrentSpan("productActorId", row.id);
 
         return {
@@ -540,6 +553,16 @@ export class ProductActivityActorsRepository extends Context.Service<ProductActi
           sourceAgentThreadId: row.source_agent_thread_id,
           sourceUserId: decodeUserId(row.source_user_id),
         };
+      });
+
+      const ensureAgentThreadActor = Effect.fn(
+        "ProductActivityActorsRepository.ensureAgentThreadActor"
+      )(function* (input: ResolveAgentThreadActorInput) {
+        return yield* ensureAgentActor({
+          agentThreadId: input.threadId,
+          organizationId: input.organizationId,
+          userId: input.userId,
+        });
       });
 
       const getById = Effect.fn("ProductActivityActorsRepository.getById")(
@@ -566,6 +589,7 @@ export class ProductActivityActorsRepository extends Context.Service<ProductActi
 
       return {
         ensureAgentThreadActor,
+        ensureAgentActor,
         ensureMemberActor,
         getById,
       };
@@ -658,10 +682,8 @@ function buildMemberActorLockKey(input: ResolveMemberActorInput): string {
   return `product-activity-actor:member:${input.organizationId}:${input.userId}`;
 }
 
-function buildAgentThreadActorLockKey(
-  input: ResolveAgentThreadActorInput
-): string {
-  return `product-activity-actor:agent:${input.organizationId}:${input.threadId}`;
+function buildAgentActorLockKey(input: ResolveAgentActorInput): string {
+  return `product-activity-actor:agent:${input.organizationId}:${input.agentThreadId}`;
 }
 
 function getRequiredRow<Row>(

@@ -20,6 +20,7 @@ import {
   UserId,
   UserPreferencesStorageError,
 } from "@ceird/identity-core";
+import type { Label } from "@ceird/labels-core";
 import { SiteId, SiteOptionSchema } from "@ceird/sites-core";
 import { describe, expect, it } from "@effect/vitest";
 import { EffectDrizzleQueryError } from "drizzle-orm/effect-core";
@@ -47,6 +48,7 @@ import {
   JobLabelAssignmentsRepository,
   JobsRepository,
 } from "../jobs/repositories.js";
+import { LabelActivityRecorder } from "../labels/activity-recorder.js";
 import { LabelsRepository } from "../labels/repositories.js";
 import { OrganizationAuthorization } from "../organizations/authorization.js";
 import { CurrentOrganizationActor } from "../organizations/current-actor.js";
@@ -1236,7 +1238,7 @@ describe("agent threads service", () => {
       message: "Agent action storage operation failed",
       operation: "action.execute",
     });
-    expect(error.cause).toContain("EffectDrizzleQueryError");
+    expect(error.cause).toContain("@ceird/labels-core/LabelStorageError");
   });
 
   it("executes site read actions through the derived SitesService layer", async () => {
@@ -1338,7 +1340,7 @@ describe("agent threads service", () => {
             getOptionById: () => Effect.succeed(Option.some(existingSite)),
             update: () => Effect.succeed(Option.some(updatedSite)),
           },
-          sqlClient: makeFakeSqlClient(),
+          sqlClient: makeAgentActionsSqlClient(),
         }
       )
     );
@@ -1358,6 +1360,106 @@ describe("agent threads service", () => {
         targetType: "site",
       }),
     ]);
+  });
+
+  it("records label activity for agent-triggered label writes", async () => {
+    const createdLabel = {
+      createdAt: "2026-05-20T10:00:00.000Z",
+      id: "33333333-3333-4333-8333-333333333333",
+      name: "Plumbing",
+      updatedAt: "2026-05-20T10:00:00.000Z",
+    } as Label;
+    const activityCalls: string[] = [];
+
+    const response = await Effect.runPromise(
+      runAgentActions(
+        Effect.gen(function* () {
+          const actions = yield* AgentActions;
+
+          return yield* actions.execute(actor, "ceird.labels.create", {
+            name: "Plumbing",
+          });
+        }),
+        {
+          labelActivityRecorder: {
+            recordCreated: (recordingActor, label) =>
+              Effect.sync(() => {
+                activityCalls.push(
+                  `${recordingActor.userId}:${label.id}:${label.name}`
+                );
+              }),
+          },
+          labelsRepository: {
+            create: () => Effect.succeed(createdLabel),
+          },
+        }
+      )
+    );
+
+    expect(response).toBe(createdLabel);
+    expect(activityCalls).toStrictEqual([
+      "user_123:33333333-3333-4333-8333-333333333333:Plumbing",
+    ]);
+  });
+
+  it("does not commit agent label writes when activity recording fails", async () => {
+    const createdLabel = {
+      createdAt: "2026-05-20T10:00:00.000Z",
+      id: "33333333-3333-4333-8333-333333333333",
+      name: "Plumbing",
+      updatedAt: "2026-05-20T10:00:00.000Z",
+    } as Label;
+    const committedLabels: Label[] = [];
+    let stagedLabels: Label[] | undefined;
+    const sqlClient = makeAgentActionsSqlClient((effect) =>
+      Effect.gen(function* () {
+        const previousStagedLabels = stagedLabels;
+        const transactionLabels: Label[] = [];
+        stagedLabels = transactionLabels;
+        const exit = yield* Effect.exit(effect);
+        stagedLabels = previousStagedLabels;
+
+        if (Exit.isSuccess(exit)) {
+          committedLabels.push(...transactionLabels);
+          return exit.value;
+        }
+
+        return yield* Effect.failCause(exit.cause);
+      })
+    );
+
+    const error = await Effect.runPromise(
+      runAgentActions(
+        Effect.gen(function* () {
+          const actions = yield* AgentActions;
+
+          return yield* actions
+            .execute(actor, "ceird.labels.create", { name: "Plumbing" })
+            .pipe(Effect.flip);
+        }),
+        {
+          labelActivityRecorder: {
+            recordCreated: () => Effect.fail(makeSqlError()),
+          },
+          labelsRepository: {
+            create: () =>
+              Effect.sync(() => {
+                if (stagedLabels === undefined) {
+                  committedLabels.push(createdLabel);
+                } else {
+                  stagedLabels.push(createdLabel);
+                }
+
+                return createdLabel;
+              }),
+          },
+          sqlClient,
+        }
+      )
+    );
+
+    expect(error).toBeInstanceOf(AgentStorageError);
+    expect(committedLabels).toStrictEqual([]);
   });
 
   it("validates internal current-location access for an enabled thread owner", async () => {
@@ -1680,9 +1782,10 @@ function makeAgentThreadsServiceTestLayer(
 function makeAgentActionsTestLayer(options: AgentActionsTestOptions) {
   return Layer.mergeAll(
     makeUnusedDomainDrizzleLayer(),
-    options.sqlClient === undefined
-      ? makeUnusedSqlClientLayer()
-      : Layer.succeed(SqlClient.SqlClient, options.sqlClient),
+    Layer.succeed(
+      SqlClient.SqlClient,
+      options.sqlClient ?? makeAgentActionsSqlClient()
+    ),
     Layer.succeed(
       ActivityEventsRepository,
       ActivityEventsRepository.of({
@@ -1715,6 +1818,17 @@ function makeAgentActionsTestLayer(options: AgentActionsTestOptions) {
       {} as ContextService<typeof JobsAuthorization>
     ),
     Layer.succeed(JobsRepository, {} as ContextService<typeof JobsRepository>),
+    Layer.succeed(
+      LabelActivityRecorder,
+      LabelActivityRecorder.of({
+        recordArchived:
+          options.labelActivityRecorder?.recordArchived ?? (() => Effect.void),
+        recordCreated:
+          options.labelActivityRecorder?.recordCreated ?? (() => Effect.void),
+        recordUpdated:
+          options.labelActivityRecorder?.recordUpdated ?? (() => Effect.void),
+      } as unknown as ContextService<typeof LabelActivityRecorder>)
+    ),
     Layer.succeed(
       LabelsRepository,
       LabelsRepository.of({
@@ -1779,22 +1893,6 @@ function makeAgentActionsTestLayer(options: AgentActionsTestOptions) {
   );
 }
 
-function makeUnusedSqlClientLayer() {
-  return Layer.succeed(
-    SqlClient.SqlClient,
-    new Proxy(
-      {},
-      {
-        get: (_target, property) => {
-          throw new Error(
-            `SqlClient.${String(property)} should not be called in AgentActions unit tests`
-          );
-        },
-      }
-    ) as unknown as SqlClient.SqlClient
-  );
-}
-
 function makeUnusedDomainDrizzleLayer() {
   return Layer.succeed(
     DomainDrizzle,
@@ -1839,6 +1937,9 @@ interface AgentActionsTestOptions {
   readonly activityEventsRepository?: Partial<
     ContextService<typeof ActivityEventsRepository>
   >;
+  readonly labelActivityRecorder?: Partial<
+    ContextService<typeof LabelActivityRecorder>
+  >;
   readonly labelsRepository?: Partial<ContextService<typeof LabelsRepository>>;
   readonly organizationAuthorization?: Partial<
     ContextService<typeof OrganizationAuthorization>
@@ -1850,7 +1951,11 @@ interface AgentActionsTestOptions {
   readonly sqlClient?: SqlClient.SqlClient;
 }
 
-function makeFakeSqlClient(): SqlClient.SqlClient {
+function makeAgentActionsSqlClient(
+  onTransaction?: <Value, Error, Requirements>(
+    effect: Effect.Effect<Value, Error, Requirements>
+  ) => Effect.Effect<Value, Error, Requirements>
+): SqlClient.SqlClient {
   let nextTxid = 700;
   const sql = Object.assign(
     <Row>() =>
@@ -1864,9 +1969,11 @@ function makeFakeSqlClient(): SqlClient.SqlClient {
         ] as Row[];
       }),
     {
-      withTransaction: <Value, Error, Requirements>(
-        effect: Effect.Effect<Value, Error, Requirements>
-      ) => effect,
+      withTransaction:
+        onTransaction ??
+        (<Value, Error, Requirements>(
+          effect: Effect.Effect<Value, Error, Requirements>
+        ) => effect),
     }
   );
 

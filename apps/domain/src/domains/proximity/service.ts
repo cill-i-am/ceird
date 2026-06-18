@@ -1,5 +1,6 @@
 /* oxlint-disable max-classes-per-file */
 
+import type { AgentActionRunId, AgentThreadId } from "@ceird/agents-core";
 import type { OrganizationId, UserId } from "@ceird/identity-core";
 import type {
   ProximityCoordinates,
@@ -99,7 +100,8 @@ export interface RouteProximityServiceImplementation {
 }
 
 export interface RouteInvocationContextImplementation {
-  readonly agentThreadId?: string;
+  readonly agentActionRunId?: AgentActionRunId;
+  readonly agentThreadId?: AgentThreadId;
 }
 
 export class RouteInvocationContext extends Context.Service<
