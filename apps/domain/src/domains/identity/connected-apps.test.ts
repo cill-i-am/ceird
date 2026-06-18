@@ -460,7 +460,7 @@ function makeConnectedAppSeed(options: {
   readonly reference: "account" | "organization";
   readonly userId?: UserId;
 }): ConnectedAppSeed {
-  const slug = randomUUID().replaceAll("-", "");
+  const slug = randomUUID().replaceAll("-", "").slice(0, 16);
   const { grantId: generatedGrantId } = decodeDisconnectConnectedAppGrantInput({
     grantId: `consent_${slug}`,
   });
