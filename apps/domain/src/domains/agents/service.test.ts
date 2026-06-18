@@ -724,7 +724,7 @@ describe("agent threads service", () => {
     expect(JSON.stringify(activityEvents)).not.toContain(userId);
   });
 
-  it("runs agent label creation through LabelsService with the thread actor", async () => {
+  it("runs agent label creation through the real action bridge with the thread actor", async () => {
     const createdLabel = {
       createdAt: "2026-05-20T10:00:00.000Z",
       id: "33333333-3333-4333-8333-333333333333",
@@ -752,35 +752,29 @@ describe("agent threads service", () => {
           });
         }),
         {
-          actions: {
-            execute: (actionActor, name, input, context) =>
-              runAgentActions(
-                AgentActions.execute(actionActor, name, input, context),
-                {
-                  labelActivityRecorder: {
-                    recordCreated: (recordingActor, label) =>
-                      Effect.sync(() => {
-                        labelActivityCalls.push(
-                          `${recordingActor.userId}:${label.id}:${label.name}`
-                        );
-                      }),
-                  },
-                  labelsRepository: {
-                    create: (labelInput) =>
-                      Effect.sync(() => {
-                        labelCreateCalls.push(labelInput);
+          realActions: {
+            labelActivityRecorder: {
+              recordCreated: (recordingActor, label) =>
+                Effect.sync(() => {
+                  labelActivityCalls.push(
+                    `${recordingActor.userId}:${label.id}:${label.name}`
+                  );
+                }),
+            },
+            labelsRepository: {
+              create: (labelInput) =>
+                Effect.sync(() => {
+                  labelCreateCalls.push(labelInput);
 
-                        return createdLabel;
-                      }),
-                  },
-                  organizationAuthorization: {
-                    ensureCanManageLabels: (authorizedActor) =>
-                      Effect.sync(() => {
-                        labelManageAuthorizationActors.push(authorizedActor);
-                      }),
-                  },
-                }
-              ),
+                  return createdLabel;
+                }),
+            },
+            organizationAuthorization: {
+              ensureCanManageLabels: (authorizedActor) =>
+                Effect.sync(() => {
+                  labelManageAuthorizationActors.push(authorizedActor);
+                }),
+            },
           },
           actionRunsRepository: {
             begin: (input: BeginAgentActionRunInput) =>
@@ -1349,7 +1343,7 @@ describe("agent threads service", () => {
       message: "Agent action storage operation failed",
       operation: "action.execute",
     });
-    expect(error.cause).toContain("@ceird/labels-core/LabelStorageError");
+    expect(error.cause).toContain("EffectDrizzleQueryError");
   });
 
   it("executes site read actions through the derived SitesService layer", async () => {
@@ -1810,14 +1804,21 @@ function runAgentActions<Value, Error>(
 function makeAgentThreadsServiceTestLayer(
   options: AgentThreadsServiceTestOptions
 ) {
+  const agentActionsLayer =
+    options.realActions === undefined
+      ? Layer.succeed(
+          AgentActions,
+          AgentActions.of({
+            execute: () => Effect.die("Unexpected AgentActions.execute call"),
+            ...options.actions,
+          } as unknown as ContextService<typeof AgentActions>)
+        )
+      : AgentActions.DefaultWithoutDependencies.pipe(
+          Layer.provide(makeAgentActionsTestLayer(options.realActions))
+        );
+
   return Layer.mergeAll(
-    Layer.succeed(
-      AgentActions,
-      AgentActions.of({
-        execute: () => Effect.die("Unexpected AgentActions.execute call"),
-        ...options.actions,
-      } as unknown as ContextService<typeof AgentActions>)
-    ),
+    agentActionsLayer,
     Layer.succeed(
       AgentActionRunsRepository,
       AgentActionRunsRepository.of({
@@ -2042,6 +2043,7 @@ interface AgentThreadsServiceTestOptions {
   readonly userPreferencesRepository?: Partial<
     ContextService<typeof UserPreferencesRepository>
   >;
+  readonly realActions?: AgentActionsTestOptions;
 }
 
 interface AgentActionsTestOptions {
