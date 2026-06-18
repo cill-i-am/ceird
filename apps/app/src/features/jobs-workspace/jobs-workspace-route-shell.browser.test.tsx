@@ -718,6 +718,26 @@ describe("jobs workspace route shell", () => {
     expect(screen.getByRole("searchbox")).toHaveFocus();
     expect(onQueryChange).toHaveBeenLastCalledWith("boiler");
   });
+
+  it("restores recent searches as quick actions", async () => {
+    const user = userEvent.setup();
+    const onQueryChange = vi.fn<(query: string | undefined) => void>();
+    const onRecentSearchCommit = vi.fn<(query: string | undefined) => void>();
+
+    renderShell({
+      onQueryChange,
+      onRecentSearchCommit,
+      recentSearch: "pump",
+      recentSearches: ["pump", "boiler"],
+    });
+
+    expect(screen.getByText("Recent search: pump")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "boiler" }));
+
+    expect(onQueryChange).toHaveBeenCalledWith("boiler");
+    expect(onRecentSearchCommit).toHaveBeenCalledWith("boiler");
+  });
 });
 
 function makeCommandStubs(): JobsWorkspaceLiveListState["commands"] {

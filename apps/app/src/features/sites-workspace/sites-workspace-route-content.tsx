@@ -39,6 +39,15 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { Textarea } from "#/components/ui/textarea";
 import type { DataPlaneCollectionHealthSnapshot } from "#/data-plane/collection-health";
 import { useHydratedCollectionItems } from "#/data-plane/hydrated-collection";
+import {
+  commitRecentSearch,
+  getRecentSearchesForSurface,
+  getSelectedEntityForSurface,
+  getWorkspacePreferencesForSurface,
+  saveSelectedEntity,
+  saveWorkspacePreferences,
+  useLocalConvenienceRecords,
+} from "#/data-plane/local-convenience-collections";
 import { useDataPlaneSession } from "#/data-plane/session";
 import type { CommandAction } from "#/features/command-bar/command-bar";
 import { useRegisterCommandActions } from "#/features/command-bar/command-bar";
@@ -222,9 +231,18 @@ function SitesWorkspaceShell({
   const commentFormRef = React.useRef<HTMLFormElement>(null);
   const commentInputRef = React.useRef<HTMLTextAreaElement>(null);
   const selectedSiteIdRef = React.useRef<string | null>(null);
-  const query = workspaceSearch.query ?? "";
-  const filter = workspaceSearch.filter ?? "all";
-  const sort = workspaceSearch.sort ?? "name";
+  const localState = useSitesWorkspaceLocalConvenienceState({
+    onWorkspaceSearchChange,
+    workspaceSearch,
+  });
+  const {
+    filter,
+    query,
+    recentSearches,
+    selectedSiteId,
+    setSelectedSiteId,
+    sort,
+  } = localState;
   const [createOpen, setCreateOpen] = React.useState(false);
   const [commentDraft, setCommentDraft] = React.useState("");
   const [commentWriteStatusBySiteId, setCommentWriteStatusBySiteId] =
@@ -232,42 +250,6 @@ function SitesWorkspaceShell({
   const [editingSiteId, setEditingSiteId] = React.useState<string>();
   const [writeStatus, setWriteStatus] =
     React.useState<WorkspaceWriteStatus>(IDLE_WRITE_STATUS);
-  const [restoredSelectedSiteId, setRestoredSelectedSiteId] =
-    useRestoredSelectedSiteId();
-  const selectedSiteId = resolveSelectedSiteId(
-    workspaceSearch.selectedSiteId,
-    restoredSelectedSiteId
-  );
-  const recentSearches = useRecentSitesSearches(query);
-  const setQuery = React.useCallback(
-    (nextQuery: string) =>
-      onWorkspaceSearchChange({
-        query: nextQuery.trim().length === 0 ? undefined : nextQuery,
-      }),
-    [onWorkspaceSearchChange]
-  );
-  const setFilter = React.useCallback(
-    (nextFilter: SitesWorkspaceFilter) =>
-      onWorkspaceSearchChange({
-        filter: nextFilter === "all" ? undefined : nextFilter,
-      }),
-    [onWorkspaceSearchChange]
-  );
-  const setSort = React.useCallback(
-    (nextSort: SitesWorkspaceSort) =>
-      onWorkspaceSearchChange({
-        sort: nextSort === "name" ? undefined : nextSort,
-      }),
-    [onWorkspaceSearchChange]
-  );
-  const setSelectedSiteId = React.useCallback(
-    (siteId: string | undefined) => {
-      setRestoredSelectedSiteId(siteId);
-      onWorkspaceSearchChange({ selectedSiteId: siteId });
-    },
-    [onWorkspaceSearchChange, setRestoredSelectedSiteId]
-  );
-
   const status = resolveWorkspaceStatus(readModel.health);
   const commandRunner = React.useMemo(
     () =>
@@ -786,7 +768,7 @@ function SitesWorkspaceShell({
             className="pl-9"
             id="sites-workspace-search"
             name="sites-workspace-search"
-            onChange={(event) => setQuery(event.currentTarget.value)}
+            onChange={(event) => localState.setQuery(event.currentTarget.value)}
             placeholder="Search live sites, labels, and locations"
             type="search"
             value={query}
@@ -820,7 +802,9 @@ function SitesWorkspaceShell({
             <select
               className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
               onChange={(event) =>
-                setSort(event.currentTarget.value as SitesWorkspaceSort)
+                localState.setSort(
+                  event.currentTarget.value as SitesWorkspaceSort
+                )
               }
               value={sort}
             >
@@ -850,7 +834,7 @@ function SitesWorkspaceShell({
             type="button"
             size="sm"
             variant={filter === option.value ? "default" : "outline"}
-            onClick={() => setFilter(option.value)}
+            onClick={() => localState.setFilter(option.value)}
           >
             {option.label}
           </Button>
@@ -866,7 +850,7 @@ function SitesWorkspaceShell({
               type="button"
               size="sm"
               variant="ghost"
-              onClick={() => setQuery(recentSearch)}
+              onClick={() => localState.setQuery(recentSearch)}
             >
               {recentSearch}
             </Button>
@@ -922,6 +906,131 @@ function SitesWorkspaceShell({
       />
     </section>
   );
+}
+
+function useSitesWorkspaceLocalConvenienceState({
+  onWorkspaceSearchChange,
+  workspaceSearch,
+}: {
+  readonly onWorkspaceSearchChange: (
+    search: Partial<Omit<SitesWorkspaceSearch, "shell">>
+  ) => void;
+  readonly workspaceSearch: SitesWorkspaceSearch;
+}) {
+  const localConvenience = useLocalConvenienceRecords();
+  const localPreferences = getWorkspacePreferencesForSurface(
+    localConvenience.records,
+    "sites"
+  );
+  const query = workspaceSearch.query ?? "";
+  const filter = workspaceSearch.filter ?? localPreferences?.filter ?? "all";
+  const sort = workspaceSearch.sort ?? localPreferences?.sort ?? "name";
+  const restoredSelectedSiteId = getSelectedEntityForSurface(
+    localConvenience.records,
+    "sites"
+  )?.entityId;
+  const selectedSiteId = resolveSelectedSiteId(
+    workspaceSearch.selectedSiteId,
+    restoredSelectedSiteId
+  );
+  const recentSearches = getRecentSearchesForSurface(
+    localConvenience.records,
+    "sites"
+  );
+
+  const setQuery = React.useCallback(
+    (nextQuery: string) => {
+      onWorkspaceSearchChange({
+        query: nextQuery.trim().length === 0 ? undefined : nextQuery,
+      });
+      commitRecentSearch({
+        collection: localConvenience.collection,
+        query: nextQuery,
+        surface: "sites",
+      });
+    },
+    [localConvenience.collection, onWorkspaceSearchChange]
+  );
+  const setFilter = React.useCallback(
+    (nextFilter: SitesWorkspaceFilter) => {
+      onWorkspaceSearchChange({
+        filter: nextFilter === "all" ? undefined : nextFilter,
+      });
+      saveWorkspacePreferences({
+        collection: localConvenience.collection,
+        filter: nextFilter,
+        sort,
+        surface: "sites",
+      });
+    },
+    [localConvenience.collection, onWorkspaceSearchChange, sort]
+  );
+  const setSort = React.useCallback(
+    (nextSort: SitesWorkspaceSort) => {
+      onWorkspaceSearchChange({
+        sort: nextSort === "name" ? undefined : nextSort,
+      });
+      saveWorkspacePreferences({
+        collection: localConvenience.collection,
+        filter,
+        sort: nextSort,
+        surface: "sites",
+      });
+    },
+    [filter, localConvenience.collection, onWorkspaceSearchChange]
+  );
+  const setSelectedSiteId = React.useCallback(
+    (siteId: string | undefined) => {
+      onWorkspaceSearchChange({ selectedSiteId: siteId });
+      saveSelectedEntity({
+        collection: localConvenience.collection,
+        entityId: siteId,
+        surface: "sites",
+      });
+    },
+    [localConvenience.collection, onWorkspaceSearchChange]
+  );
+
+  React.useEffect(() => {
+    const savedFilter = localPreferences?.filter;
+    const savedSort = localPreferences?.sort;
+
+    if (
+      workspaceSearch.filter !== undefined ||
+      workspaceSearch.sort !== undefined ||
+      localPreferences === undefined ||
+      ((savedFilter === undefined || savedFilter === "all") &&
+        (savedSort === undefined || savedSort === "name"))
+    ) {
+      return;
+    }
+
+    onWorkspaceSearchChange({
+      filter:
+        savedFilter === undefined || savedFilter === "all"
+          ? undefined
+          : savedFilter,
+      sort:
+        savedSort === undefined || savedSort === "name" ? undefined : savedSort,
+    });
+  }, [
+    localPreferences,
+    onWorkspaceSearchChange,
+    workspaceSearch.filter,
+    workspaceSearch.sort,
+  ]);
+
+  return {
+    filter,
+    query,
+    recentSearches,
+    selectedSiteId,
+    setFilter,
+    setQuery,
+    setSelectedSiteId,
+    setSort,
+    sort,
+  };
 }
 
 function useSitesWorkspaceReadModel() {
@@ -1039,35 +1148,6 @@ function useCollectionHealthSnapshots(
   return snapshots;
 }
 
-function useRestoredSelectedSiteId() {
-  const session = useDataPlaneSession();
-  const storageKey = `ceird:${session.scope.organizationId}:sites-workspace:selected-site`;
-  const [selectedSiteId, setSelectedSiteIdState] = React.useState<
-    string | undefined
-  >();
-
-  React.useEffect(() => {
-    setSelectedSiteIdState(
-      window.localStorage.getItem(storageKey) ?? undefined
-    );
-  }, [storageKey]);
-
-  const setSelectedSiteId = React.useCallback(
-    (siteId: string | undefined) => {
-      setSelectedSiteIdState(siteId);
-
-      if (siteId === undefined) {
-        window.localStorage.removeItem(storageKey);
-      } else {
-        window.localStorage.setItem(storageKey, siteId);
-      }
-    },
-    [storageKey]
-  );
-
-  return [selectedSiteId, setSelectedSiteId] as const;
-}
-
 function resolveSelectedSiteId(
   routeSelectedSiteId: string | undefined,
   restoredSelectedSiteId: string | undefined
@@ -1085,58 +1165,6 @@ function areSiteCommentShortcutsEnabled({
   readonly status: SyncPresentationStatus;
 }) {
   return status === "ready" && selectedRow !== undefined && !formOpen;
-}
-
-function useRecentSitesSearches(query: string) {
-  const session = useDataPlaneSession();
-  const storageKey = `ceird:${session.scope.organizationId}:sites-workspace:recent-searches`;
-  const [recentSearches, setRecentSearches] = React.useState<readonly string[]>(
-    []
-  );
-
-  React.useEffect(() => {
-    const stored = window.localStorage.getItem(storageKey);
-    setRecentSearches(parseStoredRecentSearches(stored));
-  }, [storageKey]);
-
-  React.useEffect(() => {
-    const trimmed = query.trim();
-
-    if (trimmed.length < 2) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      setRecentSearches((current) => {
-        const next = [
-          trimmed,
-          ...current.filter((search) => search !== trimmed),
-        ].slice(0, 3);
-        window.localStorage.setItem(storageKey, JSON.stringify(next));
-        return next;
-      });
-    }, 500);
-
-    return () => window.clearTimeout(timeout);
-  }, [query, storageKey]);
-
-  return recentSearches;
-}
-
-function parseStoredRecentSearches(stored: string | null): readonly string[] {
-  if (stored === null) {
-    return [];
-  }
-
-  try {
-    const parsed: unknown = JSON.parse(stored);
-
-    return Array.isArray(parsed)
-      ? parsed.filter((value): value is string => typeof value === "string")
-      : [];
-  } catch {
-    return [];
-  }
 }
 
 export function resolveWorkspaceStatus(

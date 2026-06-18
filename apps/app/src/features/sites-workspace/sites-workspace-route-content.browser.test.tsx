@@ -17,6 +17,12 @@ import type { Exit } from "effect";
 import { Effect } from "effect";
 import * as React from "react";
 
+import {
+  commitRecentSearch,
+  createLocalConvenienceCollection,
+  getLocalConvenienceStorageKey,
+  saveWorkspacePreferences,
+} from "#/data-plane/local-convenience-collections";
 import { createOrganizationDataScope } from "#/data-plane/query-scope";
 import { DataPlaneProvider } from "#/data-plane/session";
 import { CommandBarProvider } from "#/features/command-bar/command-bar";
@@ -183,6 +189,194 @@ describe(SitesWorkspaceRouteContent, () => {
     expect(onWorkspaceSearchChange).toHaveBeenLastCalledWith({
       query: "Cork",
     });
+  });
+
+  it("keeps route search controls usable when local convenience storage rejects writes", () => {
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("local storage unavailable");
+      });
+    const onWorkspaceSearchChange =
+      vi.fn<
+        React.ComponentProps<
+          typeof SitesWorkspaceRouteContent
+        >["onWorkspaceSearchChange"]
+      >();
+
+    try {
+      renderSitesWorkspace({
+        onWorkspaceSearchChange,
+        workspaceSearch: { query: "Dub" },
+      });
+
+      fireEvent.change(
+        screen.getByRole("searchbox", { name: /search sites/i }),
+        {
+          target: { value: "Cork" },
+        }
+      );
+      fireEvent.change(screen.getByLabelText("Sort"), {
+        target: { value: "updated" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Active jobs" }));
+
+      expect(onWorkspaceSearchChange).toHaveBeenCalledWith({ query: "Cork" });
+      expect(onWorkspaceSearchChange).toHaveBeenCalledWith({
+        sort: "updated",
+      });
+      expect(onWorkspaceSearchChange).toHaveBeenCalledWith({
+        filter: "with-active-jobs",
+      });
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it("renders route controls when the localStorage accessor throws", () => {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      window,
+      "localStorage"
+    );
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => {
+        throw new Error("localStorage unavailable");
+      },
+    });
+    const onWorkspaceSearchChange =
+      vi.fn<
+        React.ComponentProps<
+          typeof SitesWorkspaceRouteContent
+        >["onWorkspaceSearchChange"]
+      >();
+
+    try {
+      renderSitesWorkspace({
+        onWorkspaceSearchChange,
+        workspaceSearch: { query: "Dub" },
+      });
+
+      expect(
+        screen.getByRole("searchbox", { name: /search sites/i })
+      ).toHaveValue("Dub");
+
+      fireEvent.change(
+        screen.getByRole("searchbox", { name: /search sites/i }),
+        {
+          target: { value: "Cork" },
+        }
+      );
+
+      expect(onWorkspaceSearchChange).toHaveBeenCalledWith({ query: "Cork" });
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(window, "localStorage", originalDescriptor);
+      }
+    }
+  });
+
+  it("hydrates saved view preferences and recent searches from local collections", async () => {
+    const storageKey = getLocalConvenienceStorageKey({
+      scope: createOrganizationDataScope({
+        organizationId: "org_123" as OrganizationId,
+        role: "owner",
+        userId: "user_123",
+      }),
+    });
+    const collection = createLocalConvenienceCollection({
+      storage: window.localStorage,
+      storageKey,
+    });
+    await collection.preload();
+    commitRecentSearch({
+      collection,
+      nowMs: 20,
+      query: "depot",
+      surface: "sites",
+    });
+    saveWorkspacePreferences({
+      collection,
+      filter: "with-active-jobs",
+      nowMs: 30,
+      sort: "updated",
+      surface: "sites",
+    });
+    await vi.waitFor(() => {
+      expect(window.localStorage.getItem(storageKey)).toContain("depot");
+    });
+
+    const onWorkspaceSearchChange =
+      vi.fn<
+        React.ComponentProps<
+          typeof SitesWorkspaceRouteContent
+        >["onWorkspaceSearchChange"]
+      >();
+    renderSitesWorkspace({ onWorkspaceSearchChange });
+
+    await expect(
+      screen.findByRole("button", { name: "depot" })
+    ).resolves.toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(onWorkspaceSearchChange).toHaveBeenCalledWith({
+        filter: "with-active-jobs",
+        sort: "updated",
+      });
+    });
+  });
+
+  it("does not hydrate schema-invalid saved view preferences or recent searches", async () => {
+    const storageKey = getLocalConvenienceStorageKey({
+      scope: createOrganizationDataScope({
+        organizationId: "org_123" as OrganizationId,
+        role: "owner",
+        userId: "user_123",
+      }),
+    });
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        "sites%3Arecent-search%3Adepot": {
+          data: {
+            committedAtMs: -1,
+            id: "sites:recent-search:depot",
+            kind: "recent-search",
+            query: "depot",
+            surface: "sites",
+          },
+          versionKey: "invalid-sites-search",
+        },
+        "sites%3Aworkspace-preferences": {
+          data: {
+            filter: "archived",
+            id: "sites:workspace-preferences",
+            kind: "workspace-preferences",
+            sort: "updated",
+            surface: "sites",
+            updatedAtMs: 30,
+          },
+          versionKey: "invalid-sites-filter",
+        },
+      })
+    );
+    const onWorkspaceSearchChange =
+      vi.fn<
+        React.ComponentProps<
+          typeof SitesWorkspaceRouteContent
+        >["onWorkspaceSearchChange"]
+      >();
+
+    renderSitesWorkspace({ onWorkspaceSearchChange });
+
+    await vi.waitFor(() => {
+      expect(onWorkspaceSearchChange).not.toHaveBeenCalledWith({
+        filter: "archived",
+        sort: "updated",
+      });
+    });
+    expect(
+      screen.queryByRole("button", { name: "depot" })
+    ).not.toBeInTheDocument();
   });
 
   it("fails closed when joined read-model slices are unavailable with base sites ready", () => {

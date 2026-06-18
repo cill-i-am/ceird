@@ -17,6 +17,7 @@ const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
 const DIRECT_COLLECTION_IMPORT_ALLOWLIST = new Set([
   "data-plane/collection-contract.ts",
   "data-plane/electric-collection.ts",
+  "data-plane/local-convenience-collections.ts",
   "data-plane/live-query.ts",
 ]);
 const PRODUCT_COLLECTION_ROOTS = DATA_PLANE_COLLECTION_NAMES;
