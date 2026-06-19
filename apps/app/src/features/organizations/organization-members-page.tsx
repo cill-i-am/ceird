@@ -1,5 +1,6 @@
 import { isAdministrativeOrganizationRole } from "@ceird/identity-core";
 import type {
+  InvitationId,
   OrganizationId,
   OrganizationInvitation,
   OrganizationMember,
@@ -245,7 +246,7 @@ export function OrganizationMembersPage({
   const [invitationActionSuccessMessage, setInvitationActionSuccessMessage] =
     React.useState<string | null>(null);
   const [activeInvitationAction, setActiveInvitationAction] = React.useState<{
-    readonly invitationId: string;
+    readonly invitationId: InvitationId;
     readonly type: InvitationAction;
   } | null>(null);
   const [isLoadingInvitations, setIsLoadingInvitations] = React.useState(false);
@@ -1144,7 +1145,7 @@ function PendingInvitationsSection({
   onInvitationAction,
 }: {
   readonly activeInvitationAction: {
-    readonly invitationId: string;
+    readonly invitationId: InvitationId;
     readonly type: InvitationAction;
   } | null;
   readonly invitationActionErrorMessage: string | null;

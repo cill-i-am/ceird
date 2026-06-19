@@ -1,12 +1,131 @@
+import { decodeOrganizationId, decodeUserId } from "@ceird/identity-core";
+import { Effect, Layer } from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
+
+import { OrganizationAuthorization } from "../organizations/authorization.js";
+import { CurrentOrganizationActor } from "../organizations/current-actor.js";
+import type { OrganizationActor } from "../organizations/current-actor.js";
+import type { AuthenticationSessionResult } from "./authentication/auth-boundary-utils.js";
+import { withOrganizationSecurityAuditEventRecorder } from "./authentication/auth-oauth-policy.js";
+import { Authentication } from "./authentication/auth.js";
+import {
+  DEFAULT_AUTH_DATABASE_URL,
+  makeAuthenticationConfig,
+} from "./authentication/config.js";
 import {
   makeOrganizationAuthRequestHeaders,
   mapOrganizationInvitationPayload,
   mapOrganizationInvitationRow,
   mapOrganizationMemberRemovalPayload,
   mapOrganizationMemberRow,
+  OrganizationMembersRepository,
+  OrganizationMembersService,
 } from "./organization-members.js";
 
+interface CapturedOrganizationAuthRequest {
+  readonly body: unknown;
+  readonly method: string;
+  readonly pathname: string;
+}
+
+interface CapturedAuthSecurityAuditEvent {
+  readonly actorUserId?: string | null;
+  readonly eventType: string;
+  readonly metadata?: Record<string, unknown>;
+  readonly organizationId?: string | null;
+  readonly sessionId?: string | null;
+}
+
 describe("organization member identity mapping", () => {
+  it("routes Ceird invite creation through the Better Auth organization handler", async () => {
+    const requests: CapturedOrganizationAuthRequest[] = [];
+    const result = await runInviteMemberServiceWithHandler(async (request) => {
+      requests.push({
+        body: await request.json(),
+        method: request.method,
+        pathname: new URL(request.url).pathname,
+      });
+
+      return Response.json(makeNativeInvitationPayload());
+    });
+
+    expect(requests).toStrictEqual([
+      {
+        body: {
+          email: "pending@example.com",
+          organizationId: "org_123",
+          role: "member",
+        },
+        method: "POST",
+        pathname: "/api/auth/organization/invite-member",
+      },
+    ]);
+    expect(result.invitation).toStrictEqual({
+      createdAt: "2026-04-01T09:30:00.000Z",
+      email: "pending@example.com",
+      expiresAt: "2026-04-12T09:30:00.000Z",
+      id: "inv_123",
+      organizationId: "org_123",
+      role: "member",
+      status: "pending",
+    });
+  });
+
+  it("propagates invite rate-limit failures from the Better Auth handler path", async () => {
+    await expect(
+      runInviteMemberServiceWithHandler(() =>
+        Promise.resolve(
+          Response.json(
+            {
+              code: "AUTH_RATE_LIMIT_EXCEEDED",
+              message: "Too many organization invitations.",
+            },
+            {
+              status: 429,
+              statusText: "Too Many Requests",
+            }
+          )
+        )
+      )
+    ).rejects.toMatchObject({
+      code: "AUTH_RATE_LIMIT_EXCEEDED",
+      message: "Too many organization invitations.",
+      status: 429,
+    });
+  });
+
+  it("lets resend invites traverse the Better Auth organization audit wrapper", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const handler = withOrganizationSecurityAuditEventRecorder(
+      () => Promise.resolve(Response.json(makeNativeInvitationPayload())),
+      {
+        authConfig: makeAuthenticationConfig({
+          baseUrl: "https://api.ceird.example/api/auth",
+          databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+          secret: "0123456789abcdef0123456789abcdef",
+        }),
+        database: makeOrganizationInviteAuditDatabase(auditEvents),
+        resolveSession: () => Promise.resolve(makeAuthenticationSession()),
+      }
+    );
+
+    await runInviteMemberServiceWithHandler(handler, { resend: true });
+
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        actorUserId: "user_owner",
+        eventType: "organization_invitation_resent",
+        organizationId: "org_123",
+        sessionId: "session_123",
+        metadata: expect.objectContaining({
+          invitationEmailMasked: "p***@e***.com",
+          role: "member",
+          source: "better_auth_organization_endpoint",
+        }),
+      })
+    );
+  });
+
   it("scrubs body transport headers from synthetic Better Auth requests", () => {
     const headers = makeOrganizationAuthRequestHeaders({
       accept: "text/html",
@@ -212,3 +331,167 @@ describe("organization member identity mapping", () => {
     ).toThrow(/Unexpected key/);
   });
 });
+
+function makeNativeInvitationPayload() {
+  return {
+    createdAt: "2026-04-01T09:30:00.000Z",
+    email: "pending@example.com",
+    expiresAt: "2026-04-12T09:30:00.000Z",
+    id: "inv_123",
+    inviterId: "user_owner",
+    organizationId: "org_123",
+    role: "member",
+    status: "pending",
+    teamId: null,
+  };
+}
+
+function makeOrganizationActor(): OrganizationActor {
+  return {
+    organizationId: decodeOrganizationId("org_123"),
+    role: "owner",
+    userId: decodeUserId("user_owner"),
+  };
+}
+
+async function runInviteMemberServiceWithHandler(
+  handler: (request: Request) => Promise<Response>,
+  options: {
+    readonly resend?: boolean;
+  } = {}
+) {
+  const dependenciesLayer = Layer.mergeAll(
+    Layer.succeed(
+      Authentication,
+      Authentication.of({
+        api: {
+          getSession: () => Promise.resolve(null),
+        },
+        handler,
+        options: {
+          plugins: [],
+        },
+      })
+    ),
+    Layer.succeed(
+      CurrentOrganizationActor,
+      CurrentOrganizationActor.of({
+        get: () => Effect.succeed(makeOrganizationActor()),
+      })
+    ),
+    Layer.succeed(
+      OrganizationAuthorization,
+      OrganizationAuthorization.of({
+        ensureCanCreateSite: () => Effect.void,
+        ensureCanManageConfiguration: () => Effect.void,
+        ensureCanManageLabels: () => Effect.void,
+        ensureCanViewOrganizationData: () => Effect.void,
+        ensureCanViewOrganizationSecurityActivity: () => Effect.void,
+      })
+    ),
+    Layer.succeed(
+      OrganizationMembersRepository,
+      OrganizationMembersRepository.of({
+        getMember: () => Effect.die(new Error("getMember was not expected")),
+        listInvitations: () =>
+          Effect.die(new Error("listInvitations was not expected")),
+        listMembers: () =>
+          Effect.die(new Error("listMembers was not expected")),
+      })
+    )
+  );
+  const layer = Layer.merge(
+    OrganizationMembersService.DefaultWithoutDependencies.pipe(
+      Layer.provide(dependenciesLayer)
+    ),
+    Layer.succeed(
+      HttpServerRequest.HttpServerRequest,
+      makeTestHttpServerRequest()
+    )
+  );
+
+  return await Effect.runPromise(
+    Effect.gen(function* () {
+      const service = yield* OrganizationMembersService;
+
+      return yield* service.invite({
+        email: "pending@example.com",
+        ...(options.resend === undefined ? {} : { resend: options.resend }),
+        role: "member",
+      });
+    }).pipe(Effect.provide(layer))
+  );
+}
+
+function makeTestHttpServerRequest(): HttpServerRequest.HttpServerRequest {
+  const request = new Request(
+    "https://api.ceird.example/organization/invitations",
+    {
+      headers: {
+        cookie: "better-auth.session_token=session_123",
+        origin: "https://app.ceird.example",
+      },
+    }
+  );
+
+  return {
+    headers: request.headers,
+    url: request.url,
+  } as unknown as HttpServerRequest.HttpServerRequest;
+}
+
+function makeAuthenticationSession(): AuthenticationSessionResult {
+  const now = new Date("2026-04-01T09:30:00.000Z");
+
+  return {
+    session: {
+      activeOrganizationId: "org_123",
+      createdAt: now,
+      expiresAt: new Date("2026-04-01T10:30:00.000Z"),
+      id: "session_123",
+      token: "session_token_123",
+      updatedAt: now,
+      userId: "user_owner",
+    },
+    user: {
+      createdAt: now,
+      email: "owner@example.com",
+      emailVerified: true,
+      id: "user_owner",
+      name: "Owner Example",
+      twoFactorEnabled: false,
+      updatedAt: now,
+    },
+  };
+}
+
+function makeOrganizationInviteAuditDatabase(
+  events: CapturedAuthSecurityAuditEvent[]
+): Parameters<
+  typeof withOrganizationSecurityAuditEventRecorder
+>[1]["database"] {
+  return {
+    insert: () => ({
+      values: (event: CapturedAuthSecurityAuditEvent) => {
+        events.push(event);
+        return Promise.resolve();
+      },
+    }),
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          limit: () =>
+            Promise.resolve([
+              {
+                email: "pending@example.com",
+                organizationId: "org_123",
+                role: "member",
+              },
+            ]),
+        }),
+      }),
+    }),
+  } as unknown as Parameters<
+    typeof withOrganizationSecurityAuditEventRecorder
+  >[1]["database"];
+}

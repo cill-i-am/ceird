@@ -3,6 +3,7 @@ import {
   isAdministrativeOrganizationRole,
 } from "@ceird/identity-core";
 import type {
+  InvitationId,
   IsoDateTimeString as IsoDateTimeStringType,
   OrganizationInvitation,
   OrganizationMember,
@@ -235,7 +236,7 @@ export function PendingInvitationRow({
   onInvitationAction,
 }: {
   readonly activeAction: {
-    readonly invitationId: string;
+    readonly invitationId: InvitationId;
     readonly type: InvitationAction;
   } | null;
   readonly actionsDisabled: boolean;

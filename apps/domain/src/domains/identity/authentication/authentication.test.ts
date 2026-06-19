@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { decodeInvitationId, decodeUserId } from "@ceird/identity-core";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
@@ -40,6 +41,7 @@ import {
   assertUserCanAcceptOrganizationInvitation,
   createAuthentication,
   extractBetterAuthSessionToken,
+  findPublicInvitationPreview,
   hashOAuthStoredToken,
   makeEmailFailureReporter,
   makeAuthenticationWebHandler,
@@ -1375,6 +1377,19 @@ describe("createAuthentication()", () => {
     expect(maskInvitationEmail("member@example.com")).toBe("m***@e***.com");
     expect(maskInvitationEmail("a@b.co")).toBe("a***@b***.co");
     expect(maskInvitationEmail("invalid-email")).toBe("***");
+  }, 10_000);
+
+  it("decodes public invitation preview rows before masking the public DTO", async () => {
+    await expect(
+      findPublicInvitationPreview({
+        database: makePublicInvitationPreviewDatabase({
+          email: "not-an-email",
+          organizationName: "Acme Field Ops",
+          role: "member",
+        }),
+        invitationId: decodeInvitationId("inv_123"),
+      })
+    ).rejects.toThrow(/Expected/);
   }, 10_000);
 
   it("serves mounted session lookups through the typed auth API", async () => {
@@ -7088,7 +7103,7 @@ describe("createAuthentication()", () => {
     await expect(
       assertUserCanAcceptOrganizationInvitation({
         database: makeOrganizationMembershipCountDatabase(9),
-        userId: "user_123",
+        userId: decodeUserId("user_123"),
       })
     ).resolves.toBeUndefined();
   }, 10_000);
@@ -7097,7 +7112,7 @@ describe("createAuthentication()", () => {
     await expect(
       assertUserCanAcceptOrganizationInvitation({
         database: makeOrganizationMembershipCountDatabase(10),
-        userId: "user_123",
+        userId: decodeUserId("user_123"),
       })
     ).rejects.toMatchObject({
       status: "FORBIDDEN",
@@ -7105,6 +7120,87 @@ describe("createAuthentication()", () => {
         code: "YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS",
       },
     });
+  }, 10_000);
+
+  it("fails closed on malformed accept-invitation before-hook payloads before membership queries", async () => {
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        database: makeFailingOrganizationAcceptHookDatabase(
+          "membership query should not run for malformed accept hook payloads"
+        ),
+      }
+    );
+
+    try {
+      const beforeAcceptInvitation =
+        getOrganizationPluginOptions(auth).organizationHooks
+          ?.beforeAcceptInvitation;
+
+      if (!beforeAcceptInvitation) {
+        throw new Error("Expected beforeAcceptInvitation hook.");
+      }
+
+      await expect(
+        beforeAcceptInvitation({
+          user: {
+            id: "",
+          },
+        })
+      ).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
+        },
+      });
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("fails closed on malformed accept-invitation after-hook payloads before audit writes", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+      }
+    );
+
+    try {
+      const afterAcceptInvitation =
+        getOrganizationPluginOptions(auth).organizationHooks
+          ?.afterAcceptInvitation;
+
+      if (!afterAcceptInvitation) {
+        throw new Error("Expected afterAcceptInvitation hook.");
+      }
+
+      await expect(
+        afterAcceptInvitation({
+          invitation: {
+            email: "not-an-email",
+            organizationId: "org_123",
+            role: "member",
+          },
+          member: {
+            id: "member_accepted",
+            userId: "user_member",
+          },
+          user: {
+            id: "user_member",
+          },
+        })
+      ).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
+        },
+      });
+      expect(auditEvents).toStrictEqual([]);
+    } finally {
+      await cleanup();
+    }
   }, 10_000);
 
   it("requires verified email before organization invitations", async () => {
@@ -8976,6 +9072,25 @@ function getOrganizationPluginOptions(
                 readonly metadata: null;
               };
             }) => Promise<unknown>;
+            readonly beforeAcceptInvitation?: (data: {
+              readonly user: {
+                readonly id: unknown;
+              };
+            }) => Promise<unknown>;
+            readonly afterAcceptInvitation?: (data: {
+              readonly invitation: {
+                readonly email: unknown;
+                readonly organizationId: unknown;
+                readonly role: unknown;
+              };
+              readonly member: {
+                readonly id: unknown;
+                readonly userId: unknown;
+              };
+              readonly user: {
+                readonly id: unknown;
+              };
+            }) => Promise<void>;
             readonly beforeUpdateOrganization?: (data: {
               readonly member: {
                 readonly id: string;
@@ -9565,6 +9680,34 @@ function makeOrganizationMembershipCountDatabase(count: number) {
         }),
       }),
     }),
+  } as unknown as Parameters<
+    typeof assertUserCanAcceptOrganizationInvitation
+  >[0]["database"];
+}
+
+function makePublicInvitationPreviewDatabase(row: {
+  readonly email: string;
+  readonly organizationName: string;
+  readonly role: string;
+}) {
+  return {
+    select: () => ({
+      from: () => ({
+        innerJoin: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([row]),
+          }),
+        }),
+      }),
+    }),
+  } as unknown as Parameters<typeof findPublicInvitationPreview>[0]["database"];
+}
+
+function makeFailingOrganizationAcceptHookDatabase(message: string) {
+  return {
+    select: () => {
+      throw new Error(message);
+    },
   } as unknown as Parameters<
     typeof assertUserCanAcceptOrganizationInvitation
   >[0]["database"];

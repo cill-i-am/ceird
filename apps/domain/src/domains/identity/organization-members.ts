@@ -33,7 +33,6 @@ import type {
   RemoveOrganizationMemberInput,
   UpdateOrganizationMemberRoleInput,
 } from "@ceird/identity-core";
-import { APIError } from "better-auth/api";
 import { Context, Effect, Layer, Schema } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
@@ -407,8 +406,9 @@ export class OrganizationMembersService extends Context.Service<OrganizationMemb
         input: InviteOrganizationMemberInput
       ) {
         const actor = yield* getAdministrativeActor();
-        const response = yield* createOrganizationInvitation(
-          auth.api.createInvitation,
+        const response = yield* dispatchOrganizationAuthRequest(
+          auth.handler,
+          "/organization/invite-member",
           {
             email: input.email,
             organizationId: actor.organizationId,
@@ -604,28 +604,6 @@ export function makeOrganizationAuthRequestHeaders(input: HeadersInit) {
   return headers;
 }
 
-function createOrganizationInvitation(
-  createInvitation: Context.Service.Shape<
-    typeof Authentication
-  >["api"]["createInvitation"],
-  payload: Parameters<
-    Context.Service.Shape<typeof Authentication>["api"]["createInvitation"]
-  >[0]["body"]
-) {
-  return Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-
-    return yield* Effect.tryPromise({
-      catch: mapAuthenticationApiFailure,
-      try: () =>
-        createInvitation({
-          body: payload,
-          headers: makeOrganizationAuthRequestHeaders(request.headers),
-        }),
-    });
-  });
-}
-
 function dispatchOrganizationAuthRequest(
   handler: (request: Request) => Promise<Response>,
   path: string,
@@ -680,30 +658,6 @@ function readResponseBody(response: Response) {
 
       return body;
     },
-  });
-}
-
-function mapAuthenticationApiFailure(cause: unknown) {
-  if (cause instanceof APIError) {
-    const statusText =
-      typeof cause.status === "string" ? cause.status : undefined;
-
-    return mapAuthenticationFailure(
-      new Response(null, {
-        status: cause.statusCode,
-        ...(statusText === undefined ? {} : { statusText }),
-      }),
-      {
-        code: cause.body?.code,
-        message: cause.message,
-        ...(statusText === undefined ? {} : { statusText }),
-      }
-    );
-  }
-
-  return new OrganizationIdentityStorageError({
-    cause: formatUnknownCause(cause),
-    message: "Organization identity mutation failed",
   });
 }
 

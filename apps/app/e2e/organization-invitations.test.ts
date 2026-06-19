@@ -6,7 +6,11 @@ import {
   decodeAcceptedOrganizationId,
   decodePublicInvitationPreview,
   InviteOrganizationMemberResponseSchema,
+  OrganizationId,
   OrganizationInvitationListResponseSchema,
+  OrganizationNameSchema,
+  OrganizationRole,
+  OrganizationSlugSchema,
 } from "@ceird/identity-core";
 import { expect, test } from "@playwright/test";
 import type {
@@ -56,6 +60,24 @@ const decodeOrganizationInvitationListResponse = Schema.decodeUnknownSync(
 );
 const decodeInviteOrganizationMemberResponse = Schema.decodeUnknownSync(
   InviteOrganizationMemberResponseSchema
+);
+const CreatedOrganizationResponseSchema = Schema.Struct({
+  id: OrganizationId,
+  members: Schema.Array(
+    Schema.Struct({
+      organizationId: OrganizationId,
+      role: OrganizationRole,
+    }).annotate({
+      parseOptions: { onExcessProperty: "error" },
+    })
+  ),
+  name: OrganizationNameSchema,
+  slug: OrganizationSlugSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const decodeCreatedOrganizationResponse = Schema.decodeUnknownSync(
+  CreatedOrganizationResponseSchema
 );
 
 function createTestEmail(prefix: string): string {
@@ -327,15 +349,9 @@ async function seedOwnerOrganization(
       forwardedFor,
     }
   );
-  const organizationPayload = (await organizationResponse.json()) as {
-    readonly id?: unknown;
-  };
-
-  if (typeof organizationPayload.id !== "string") {
-    throw new TypeError(
-      "Expected created organization response to include an id."
-    );
-  }
+  const organizationPayload = decodeCreatedOrganizationResponse(
+    await organizationResponse.json()
+  );
 
   return organizationPayload.id;
 }

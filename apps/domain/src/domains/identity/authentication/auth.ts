@@ -12,15 +12,17 @@ import {
   decodeSessionId,
   decodeUpdateOrganizationInput,
   decodeUserId,
+  InvitableOrganizationRole,
+  OrganizationEmailAddress,
   OrganizationId,
+  OrganizationMemberId,
+  OrganizationNameSchema,
+  UserId,
 } from "@ceird/identity-core";
 import type {
   InvitationId,
-  InvitableOrganizationRole,
-  OrganizationId,
   OrganizationRole,
   PublicInvitationPreview,
-  UserId,
 } from "@ceird/identity-core";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -143,17 +145,55 @@ interface AuthenticationPluginOption {
   readonly options?: unknown;
 }
 
+const PublicInvitationPreviewRowSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  organizationName: OrganizationNameSchema,
+  role: InvitableOrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const NativeAcceptInvitationUserSchema = Schema.Struct({
+  id: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeAcceptInvitationMemberSchema = Schema.Struct({
+  id: OrganizationMemberId,
+  userId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeAcceptInvitationInvitationSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  organizationId: OrganizationId,
+  role: InvitableOrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeAcceptInvitationBeforeHookPayloadSchema = Schema.Struct({
+  user: NativeAcceptInvitationUserSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeAcceptInvitationAfterHookPayloadSchema = Schema.Struct({
+  invitation: NativeAcceptInvitationInvitationSchema,
+  member: NativeAcceptInvitationMemberSchema,
+  user: NativeAcceptInvitationUserSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const decodePublicInvitationPreviewRow = Schema.decodeUnknownSync(
+  PublicInvitationPreviewRowSchema
+);
+const decodeNativeAcceptInvitationBeforeHookPayload = Schema.decodeUnknownSync(
+  NativeAcceptInvitationBeforeHookPayloadSchema
+);
+const decodeNativeAcceptInvitationAfterHookPayload = Schema.decodeUnknownSync(
+  NativeAcceptInvitationAfterHookPayloadSchema
+);
+
 export interface CeirdAuthentication {
   api: {
-    readonly createInvitation: (options: {
-      readonly body: {
-        readonly email: string;
-        readonly organizationId: OrganizationId;
-        readonly resend?: boolean | undefined;
-        readonly role: InvitableOrganizationRole;
-      };
-      readonly headers: Headers;
-    }) => Promise<unknown>;
     readonly getSession: (options: {
       readonly headers: Headers;
     }) => Promise<AuthenticationSessionResult | null>;
@@ -197,16 +237,18 @@ export async function findPublicInvitationPreview(options: {
     return null;
   }
 
+  const decodedPreview = decodePublicInvitationPreviewRow(preview);
+
   return decodePublicInvitationPreview({
-    email: maskInvitationEmail(preview.email),
-    organizationName: preview.organizationName,
-    role: preview.role,
+    email: maskInvitationEmail(decodedPreview.email),
+    organizationName: decodedPreview.organizationName,
+    role: decodedPreview.role,
   });
 }
 
 export async function assertUserCanAcceptOrganizationInvitation(options: {
   readonly database: NodePgDatabase;
-  readonly userId: string;
+  readonly userId: UserId;
 }) {
   const [membershipCount] = await options.database
     .select({
@@ -291,6 +333,29 @@ function throwOrganizationLimitReached(): never {
     code: ORGANIZATION_LIMIT_REACHED_ERROR_CODE,
     message: "You have reached the maximum number of organizations.",
   });
+}
+
+function throwInvalidOrganizationInvitationHookPayload(): never {
+  throw APIError.from("BAD_REQUEST", {
+    code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
+    message: "Organization invitation hook payload was invalid.",
+  });
+}
+
+export function decodeAcceptInvitationBeforeHookPayload(input: unknown) {
+  try {
+    return decodeNativeAcceptInvitationBeforeHookPayload(input);
+  } catch {
+    throwInvalidOrganizationInvitationHookPayload();
+  }
+}
+
+export function decodeAcceptInvitationAfterHookPayload(input: unknown) {
+  try {
+    return decodeNativeAcceptInvitationAfterHookPayload(input);
+  } catch {
+    throwInvalidOrganizationInvitationHookPayload();
+  }
 }
 
 function decodeWritableOrganizationRole(input: unknown) {
@@ -706,17 +771,22 @@ export function createAuthentication(options: {
               }
             );
           },
-          beforeAcceptInvitation: async ({ user }) => {
+          beforeAcceptInvitation: async (payload) => {
+            const decodedPayload =
+              decodeAcceptInvitationBeforeHookPayload(payload);
+
             await assertUserCanAcceptOrganizationInvitation({
               database,
-              userId: user.id,
+              userId: decodedPayload.user.id,
             });
           },
-          afterAcceptInvitation: async ({
-            invitation: acceptedInvitation,
-            member,
-            user,
-          }) => {
+          afterAcceptInvitation: async (payload) => {
+            const {
+              invitation: acceptedInvitation,
+              member,
+              user,
+            } = decodeAcceptInvitationAfterHookPayload(payload);
+
             await recordOrganizationSecurityAuditEvent(
               {
                 database,
