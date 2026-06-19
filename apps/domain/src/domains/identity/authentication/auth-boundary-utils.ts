@@ -1,5 +1,5 @@
 import { OrganizationId, SessionId, UserId } from "@ceird/identity-core";
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { Context } from "effect";
 
 import type { AuthenticationConfig } from "./config.js";
@@ -11,18 +11,26 @@ export const DEFAULT_BETTER_AUTH_COOKIE_PREFIX = "better-auth";
 
 export type AuthEffectRuntimeContext = Context.Context<never>;
 
-const AuthenticationDate = Schema.Union([Schema.DateValid, Schema.String]);
-const OptionalNullableString = Schema.optional(Schema.NullOr(Schema.String));
+const AuthenticationDate = Schema.Union([
+  Schema.DateValid,
+  Schema.DateFromString,
+]);
+const NullableString = Schema.NullOr(Schema.String).pipe(
+  Schema.withDecodingDefault(Effect.succeed(null))
+);
+const NullableOrganizationId = Schema.NullOr(OrganizationId).pipe(
+  Schema.withDecodingDefault(Effect.succeed(null))
+);
 
 export const BetterAuthSessionSchema = Schema.Struct({
-  activeOrganizationId: Schema.optional(Schema.NullOr(OrganizationId)),
+  activeOrganizationId: NullableOrganizationId,
   createdAt: AuthenticationDate,
   expiresAt: AuthenticationDate,
   id: SessionId,
-  ipAddress: OptionalNullableString,
+  ipAddress: NullableString,
   token: Schema.NonEmptyString,
   updatedAt: AuthenticationDate,
-  userAgent: OptionalNullableString,
+  userAgent: NullableString,
   userId: UserId,
 });
 
@@ -31,20 +39,11 @@ export const BetterAuthSessionUserSchema = Schema.Struct({
   email: Schema.NonEmptyString,
   emailVerified: Schema.Boolean,
   id: UserId,
-  image: OptionalNullableString,
+  image: NullableString,
   name: Schema.String,
-  twoFactorEnabled: Schema.Boolean,
-  updatedAt: AuthenticationDate,
-});
-
-export const RawBetterAuthSessionUserSchema = Schema.Struct({
-  createdAt: AuthenticationDate,
-  email: Schema.NonEmptyString,
-  emailVerified: Schema.Boolean,
-  id: UserId,
-  image: OptionalNullableString,
-  name: Schema.String,
-  twoFactorEnabled: Schema.optional(Schema.NullOr(Schema.Boolean)),
+  twoFactorEnabled: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false))
+  ),
   updatedAt: AuthenticationDate,
 });
 
@@ -54,14 +53,6 @@ export const AuthenticationSessionResultSchema = Schema.Struct({
 });
 export type AuthenticationSessionResult = Schema.Schema.Type<
   typeof AuthenticationSessionResultSchema
->;
-
-export const RawAuthenticationSessionResultSchema = Schema.Struct({
-  session: BetterAuthSessionSchema,
-  user: RawBetterAuthSessionUserSchema,
-});
-export type RawAuthenticationSessionResult = Schema.Schema.Type<
-  typeof RawAuthenticationSessionResultSchema
 >;
 
 export const AuthBoundaryRecordSchema = Schema.Record(
@@ -81,10 +72,6 @@ const DecodedHttpContentLengthSchema = Schema.Number.pipe(
 const decodeHttpContentLength = Schema.decodeUnknownOption(
   HttpContentLengthSchema
 );
-const decodeAuthBoundaryRecord = Schema.decodeUnknownOption(
-  AuthBoundaryRecordSchema
-);
-const decodeNonEmptyString = Schema.decodeUnknownOption(Schema.NonEmptyString);
 
 export const AuthBoundaryRequestEnvelopeSchema = Schema.Struct({
   contentLength: Schema.NullOr(DecodedHttpContentLengthSchema),
@@ -102,9 +89,9 @@ export type AuthenticationRateLimitRequestBodyReadFailureReason =
   | "read_failed"
   | "unsupported_content_type";
 
-export type AuthBoundaryRequestBodyReadResult =
+export type AuthBoundaryRequestBodyReadResult<T> =
   | {
-      readonly body: AuthBoundaryRecord | null;
+      readonly body: T | null;
       readonly status: "available";
     }
   | {
@@ -260,10 +247,13 @@ export function readRequestContentLength(request: Request) {
     : Option.getOrNull(decodeHttpContentLength(contentLength));
 }
 
-export async function readAuthBoundaryJsonRequestBody(
+export async function readAuthBoundaryJsonRequestBody<
+  S extends Schema.Decoder<unknown>,
+>(
   request: Request,
-  endpointPath: string
-) {
+  endpointPath: string,
+  schema: S
+): Promise<S["Type"] | null> {
   try {
     const contentType = request.headers.get("content-type") ?? "";
     const contentLength = readRequestContentLength(request);
@@ -306,8 +296,17 @@ export async function readAuthBoundaryJsonRequestBody(
       return null;
     }
 
+    const parsedBody = decodeJsonBodyText(bodyText);
+
+    if (parsedBody.status === "invalid") {
+      throw new AuthRateLimitRequestBodyUnavailableError({
+        endpointPath,
+        reason: "invalid_body",
+      });
+    }
+
     const body = Option.getOrNull(
-      decodeAuthBoundaryRecord(JSON.parse(bodyText))
+      Schema.decodeUnknownOption(schema)(parsedBody.value)
     );
 
     if (body === null) {
@@ -330,14 +329,17 @@ export async function readAuthBoundaryJsonRequestBody(
   }
 }
 
-export async function readAuthBoundaryJsonOrFormRequestBody(
+export async function readAuthBoundaryJsonOrFormRequestBody<
+  S extends Schema.Decoder<unknown>,
+>(
   request: Request,
   maxBodyBytes: number,
+  schema: S,
   options: {
     readonly allowEmptyUnsupportedContentType?: boolean | undefined;
     readonly rejectDuplicateFormFields?: readonly string[] | undefined;
   } = {}
-): Promise<AuthBoundaryRequestBodyReadResult> {
+): Promise<AuthBoundaryRequestBodyReadResult<S["Type"]>> {
   try {
     const contentType = request.headers.get("content-type") ?? "";
     const contentLength = readRequestContentLength(request);
@@ -382,17 +384,22 @@ export async function readAuthBoundaryJsonOrFormRequestBody(
     }
 
     const rawBody = contentType.includes("application/json")
-      ? JSON.parse(bodyText)
-      : parseAuthBoundaryFormBody(bodyText, options);
+      ? decodeJsonBodyText(bodyText)
+      : {
+          status: "decoded" as const,
+          value: parseAuthBoundaryFormBody(bodyText, options),
+        };
 
-    if (rawBody === null) {
+    if (rawBody.status === "invalid" || rawBody.value === null) {
       return {
         reason: "invalid_body",
         status: "unavailable",
       };
     }
 
-    const body = Option.getOrNull(decodeAuthBoundaryRecord(rawBody));
+    const body = Option.getOrNull(
+      Schema.decodeUnknownOption(schema)(rawBody.value)
+    );
 
     return body === null
       ? {
@@ -409,6 +416,20 @@ export async function readAuthBoundaryJsonOrFormRequestBody(
       status: "unavailable",
     };
   }
+}
+
+function decodeJsonBodyText(
+  bodyText: string
+):
+  | { readonly status: "decoded"; readonly value: unknown }
+  | { readonly status: "invalid" } {
+  return Option.match(
+    Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(bodyText),
+    {
+      onNone: () => ({ status: "invalid" }),
+      onSome: (value) => ({ status: "decoded", value }),
+    }
+  );
 }
 
 function parseAuthBoundaryFormBody(
@@ -428,27 +449,6 @@ function parseAuthBoundaryFormBody(
   }
 
   return Object.fromEntries(params.entries());
-}
-
-export function readAuthBoundaryStringField(
-  value: AuthBoundaryRecord | null,
-  field: string
-) {
-  return value === null
-    ? null
-    : Option.getOrNull(decodeNonEmptyString(value[field]));
-}
-
-export function readAuthBoundaryRecordField(
-  value: AuthBoundaryRecord | null,
-  field: string
-) {
-  const fieldValue = value?.[field];
-  return Option.getOrNull(decodeAuthBoundaryRecord(fieldValue));
-}
-
-export function decodeAuthBoundaryRecordOrNull(value: unknown) {
-  return Option.getOrNull(decodeAuthBoundaryRecord(value));
 }
 
 export function sanitizeAuthFailureLogValue(value: string) {

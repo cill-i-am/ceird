@@ -5,7 +5,7 @@ import { OrganizationId, UserId } from "@ceird/identity-core";
 import { getIp } from "better-auth/api";
 import { eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Context, Effect, Option } from "effect";
+import { Context, Effect, Option, Schema } from "effect";
 
 import {
   AuthRateLimitRequestBodyUnavailableError,
@@ -13,12 +13,10 @@ import {
   decodeAuthBoundaryOption,
   makeAuthBoundaryRequestEnvelope,
   readAuthBoundaryJsonOrFormRequestBody,
-  readAuthBoundaryStringField,
   resolveActiveAuthenticationSecret,
   serializeUnknownCause,
 } from "./auth-boundary-utils.js";
 import type {
-  AuthBoundaryRecord,
   AuthEffectRuntimeContext,
   AuthenticationRateLimitRequestBodyReadFailureReason,
   AuthenticationSessionResult,
@@ -70,6 +68,14 @@ const AUTH_RATE_LIMIT_REQUEST_INVALID_ERROR_CODE =
 const AUTH_ORGANIZATION_CONTEXT_MISMATCH_ERROR_CODE =
   "AUTH_ORGANIZATION_CONTEXT_MISMATCH";
 const AUTH_RATE_LIMIT_UNAVAILABLE_RETRY_AFTER_SECONDS = 30;
+const AuthenticationRateLimitRequestBodySchema = Schema.Struct({
+  email: Schema.optional(Schema.String),
+  newEmail: Schema.optional(Schema.String),
+  organizationId: Schema.optional(OrganizationId),
+});
+type DecodedAuthenticationRateLimitRequestBody = Schema.Schema.Type<
+  typeof AuthenticationRateLimitRequestBodySchema
+>;
 
 interface ObservedRateLimit {
   readonly count: number;
@@ -114,7 +120,7 @@ interface AuthenticationRateLimitReservationRequest {
 }
 type AuthenticationRateLimitRequestBody =
   | {
-      readonly body: AuthBoundaryRecord | null;
+      readonly body: DecodedAuthenticationRateLimitRequestBody | null;
       readonly status: "available";
     }
   | {
@@ -426,7 +432,10 @@ async function makeAuthenticationAbuseRateLimitReservationRequests(options: {
     options.endpointPath,
     sessionResolution
   )
-    ? await readAuthenticationRateLimitRequestBody(options.request)
+    ? await readAuthenticationRateLimitRequestBody(
+        options.request,
+        options.endpointPath
+      )
     : ({
         body: null,
         status: "available",
@@ -749,18 +758,44 @@ function makeAuthenticationUserRateLimitReservationRequest(options: {
   };
 }
 
-async function readAuthenticationRateLimitRequestBody(request: Request) {
+async function readAuthenticationRateLimitRequestBody(
+  request: Request,
+  endpointPath: string
+) {
   return await readAuthBoundaryJsonOrFormRequestBody(
     request,
-    AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES
+    AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES,
+    AuthenticationRateLimitRequestBodySchema,
+    {
+      rejectDuplicateFormFields:
+        resolveRateLimitRequestBodyDuplicateFields(endpointPath),
+    }
   );
 }
 
+function resolveRateLimitRequestBodyDuplicateFields(endpointPath: string) {
+  switch (endpointPath) {
+    case "/change-email": {
+      return ["newEmail"];
+    }
+    case "/request-password-reset":
+    case "/send-verification-email": {
+      return ["email"];
+    }
+    case ORGANIZATION_INVITE_MEMBER_ENDPOINT_PATH: {
+      return ["email", "organizationId"];
+    }
+    default: {
+      return [];
+    }
+  }
+}
+
 function readNormalizedAuthDeliveryEmailField(
-  body: AuthBoundaryRecord | null,
-  field: string
+  body: DecodedAuthenticationRateLimitRequestBody | null,
+  field: "email" | "newEmail"
 ) {
-  return normalizeAuthDeliveryEmail(readAuthBoundaryStringField(body, field));
+  return normalizeAuthDeliveryEmail(body?.[field]);
 }
 
 function normalizeAuthDeliveryEmail(value: string | null | undefined) {
@@ -800,7 +835,7 @@ async function resolveAuthenticationAbuseRateLimitSession(
 }
 
 function resolveOrganizationInviteMemberRateLimitOrganizationId(options: {
-  readonly requestBody: AuthBoundaryRecord | null;
+  readonly requestBody: DecodedAuthenticationRateLimitRequestBody | null;
   readonly session: AuthenticationSessionResult;
 }) {
   const activeOrganizationId = Option.getOrNull(
@@ -809,12 +844,7 @@ function resolveOrganizationInviteMemberRateLimitOrganizationId(options: {
       options.session.session.activeOrganizationId
     )
   );
-  const requestedOrganizationId = Option.getOrNull(
-    decodeAuthBoundaryOption(
-      OrganizationId,
-      readAuthBoundaryStringField(options.requestBody, "organizationId")
-    )
-  );
+  const requestedOrganizationId = options.requestBody?.organizationId ?? null;
 
   if (
     activeOrganizationId !== null &&

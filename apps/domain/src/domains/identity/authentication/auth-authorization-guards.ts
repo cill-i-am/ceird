@@ -7,7 +7,7 @@ import {
 } from "@ceird/identity-core";
 import { and, eq, gt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 
 import {
   DEFAULT_BETTER_AUTH_COOKIE_PREFIX,
@@ -45,6 +45,12 @@ const TWO_FACTOR_TRUSTED_DEVICE_ENDPOINT_PATHS = [
   TWO_FACTOR_VERIFY_OTP_ENDPOINT_PATH,
   TWO_FACTOR_VERIFY_TOTP_ENDPOINT_PATH,
 ] as const;
+const TwoFactorTrustedDeviceRequestBodySchema = Schema.Struct({
+  trustDevice: Schema.optional(Schema.Boolean),
+});
+const OAuthConsentAuthorizationRequestBodySchema = Schema.Struct({
+  accept: Schema.optional(Schema.Unknown),
+});
 
 interface AuthenticationAuthorizationGuardOptions {
   readonly cookiePrefix?: string | undefined;
@@ -204,7 +210,11 @@ async function requestsUnsupportedTwoFactorTrustedDevice(request: Request) {
   }
 
   try {
-    const body = await readAuthBoundaryJsonRequestBody(request, endpointPath);
+    const body = await readAuthBoundaryJsonRequestBody(
+      request,
+      endpointPath,
+      TwoFactorTrustedDeviceRequestBodySchema
+    );
 
     return body?.trustDevice === true;
   } catch {
@@ -228,7 +238,8 @@ function isPostAuthEndpointRequest(request: Request, endpointPath: string) {
 async function isAcceptedOAuthConsentRequest(request: Request) {
   const body = await readAuthBoundaryJsonRequestBody(
     request,
-    OAUTH_CONSENT_ENDPOINT_PATH
+    OAUTH_CONSENT_ENDPOINT_PATH,
+    OAuthConsentAuthorizationRequestBodySchema
   );
 
   if (body === null) {

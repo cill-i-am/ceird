@@ -1,7 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 
-import { OrganizationId } from "@ceird/identity-core";
+import {
+  OAuthClientId,
+  OrganizationId,
+  SessionId,
+  UserId,
+} from "@ceird/identity-core";
 import { getIp } from "better-auth/api";
 import { and, eq, gt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
@@ -11,13 +16,10 @@ import {
   OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES,
   AuthBoundaryRecordSchema,
   decodeAuthBoundaryOption,
-  decodeAuthBoundaryRecordOrNull,
   makeAuthBoundaryRequestEnvelope,
   maskInvitationEmail,
   readAuthBoundaryJsonOrFormRequestBody,
   readAuthBoundaryJsonRequestBody,
-  readAuthBoundaryRecordField,
-  readAuthBoundaryStringField,
   sanitizeAuthFailureLogValue,
 } from "./auth-boundary-utils.js";
 import type {
@@ -27,6 +29,7 @@ import type {
 } from "./auth-boundary-utils.js";
 import type { AuthenticationConfig } from "./config.js";
 import {
+  AUTH_SECURITY_AUDIT_EVENT_TYPES,
   authSecurityAuditEvent as authSecurityAuditEventTable,
   invitation as invitationTable,
   member as memberTable,
@@ -103,8 +106,33 @@ const OAUTH_CLIENT_REGISTRATION_ALLOWED_FIELDS = new Set([
   "skip_consent",
 ]);
 const OAuthClientRegistrationStringArraySchema = Schema.Array(Schema.String);
+const OAuthClientRegistrationRequestBodySchema = Schema.Struct({
+  client_name: Schema.optional(Schema.String),
+  client_uri: Schema.optional(Schema.String),
+  contacts: Schema.optional(OAuthClientRegistrationStringArraySchema),
+  grant_types: Schema.optional(OAuthClientRegistrationStringArraySchema),
+  logo_uri: Schema.optional(Schema.String),
+  policy_uri: Schema.optional(Schema.String),
+  post_logout_redirect_uris: Schema.optional(
+    OAuthClientRegistrationStringArraySchema
+  ),
+  redirect_uris: Schema.optional(OAuthClientRegistrationStringArraySchema),
+  response_types: Schema.optional(OAuthClientRegistrationStringArraySchema),
+  scope: Schema.optional(Schema.String),
+  skip_consent: Schema.optional(Schema.Unknown),
+  software_id: Schema.optional(Schema.String),
+  software_statement: Schema.optional(Schema.String),
+  software_version: Schema.optional(Schema.String),
+  subject_type: Schema.optional(Schema.String),
+  token_endpoint_auth_method: Schema.optional(Schema.String),
+  tos_uri: Schema.optional(Schema.String),
+  type: Schema.optional(Schema.String),
+});
+type OAuthClientRegistrationRequestBody = Schema.Schema.Type<
+  typeof OAuthClientRegistrationRequestBodySchema
+>;
 const OAuthClientRegistrationPolicyInputSchema = Schema.Struct({
-  body: AuthBoundaryRecordSchema,
+  body: OAuthClientRegistrationRequestBodySchema,
   clientName: Schema.optional(Schema.String),
   clientUri: Schema.optional(Schema.String),
   contacts: Schema.optional(OAuthClientRegistrationStringArraySchema),
@@ -121,6 +149,7 @@ const OAuthClientRegistrationPolicyInputSchema = Schema.Struct({
   softwareId: Schema.optional(Schema.String),
   softwareStatement: Schema.optional(Schema.String),
   softwareVersion: Schema.optional(Schema.String),
+  subjectType: Schema.optional(Schema.String),
   tosUri: Schema.optional(Schema.String),
   tokenEndpointAuthMethod: Schema.optional(Schema.String),
   type: Schema.optional(Schema.String),
@@ -128,8 +157,8 @@ const OAuthClientRegistrationPolicyInputSchema = Schema.Struct({
 type OAuthClientRegistrationPolicyInput = Schema.Schema.Type<
   typeof OAuthClientRegistrationPolicyInputSchema
 >;
-const decodeOAuthClientRegistrationStringArray = Schema.decodeUnknownOption(
-  OAuthClientRegistrationStringArraySchema
+const decodeOAuthClientRegistrationRequestBody = Schema.decodeUnknownOption(
+  OAuthClientRegistrationRequestBodySchema
 );
 const OAUTH_SECURITY_AUDIT_ENDPOINT_PATHS = new Set([
   OAUTH_CLIENT_REGISTRATION_ENDPOINT_PATH,
@@ -149,6 +178,99 @@ const ORGANIZATION_SECURITY_AUDIT_ENDPOINT_PATHS = new Set([
 ]);
 const OAUTH_SECURITY_AUDIT_MAX_SCOPES = 16;
 const OAUTH_SECURITY_AUDIT_MAX_SCOPE_LENGTH = 128;
+const OAuthAuditRequestBodySchema = Schema.Struct({
+  accept: Schema.optional(Schema.Boolean),
+  client_id: Schema.optional(Schema.String),
+  grant_type: Schema.optional(Schema.String),
+  oauth_query: Schema.optional(Schema.String),
+  refresh_token: Schema.optional(Schema.String),
+  scope: Schema.optional(Schema.String),
+  token: Schema.optional(Schema.String),
+  token_type_hint: Schema.optional(Schema.String),
+});
+type OAuthAuditRequestBody = Schema.Schema.Type<
+  typeof OAuthAuditRequestBodySchema
+>;
+const OAuthAuditResponseBodySchema = Schema.Struct({
+  client_id: Schema.optional(Schema.String),
+  error: Schema.optional(Schema.String),
+  scope: Schema.optional(Schema.String),
+  user_id: Schema.optional(Schema.String),
+});
+const OrganizationAuditMemberSnapshotSchema = Schema.Struct({
+  id: Schema.optional(Schema.String),
+  organizationId: Schema.optional(OrganizationId),
+  role: Schema.optional(Schema.String),
+  userId: Schema.optional(UserId),
+});
+const OrganizationAuditRequestBodySchema = Schema.Struct({
+  email: Schema.optional(Schema.String),
+  memberId: Schema.optional(Schema.String),
+  memberIdOrEmail: Schema.optional(Schema.String),
+  organizationId: Schema.optional(Schema.NullOr(OrganizationId)),
+  resend: Schema.optional(Schema.Boolean),
+  role: Schema.optional(Schema.String),
+});
+type OrganizationAuditRequestBody = Schema.Schema.Type<
+  typeof OrganizationAuditRequestBodySchema
+>;
+const OrganizationAuditResponseBodySchema = Schema.Struct({
+  email: Schema.optional(Schema.String),
+  id: Schema.optional(Schema.NullOr(Schema.String)),
+  member: Schema.optional(OrganizationAuditMemberSnapshotSchema),
+  organizationId: Schema.optional(Schema.NullOr(OrganizationId)),
+  role: Schema.optional(Schema.String),
+  userId: Schema.optional(UserId),
+});
+const AuthSecurityAuditEventTypeSchema = Schema.Literals(
+  AUTH_SECURITY_AUDIT_EVENT_TYPES
+);
+const AuthSecurityAuditEventTelemetrySchema = Schema.Struct({
+  eventType: AuthSecurityAuditEventTypeSchema,
+});
+const AuthSecurityAuditMetadataSchema = AuthBoundaryRecordSchema;
+export const AuthSecurityAuditEventWriteSchema = Schema.Struct({
+  actorUserId: Schema.NullOr(UserId).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  eventType: AuthSecurityAuditEventTypeSchema,
+  metadata: AuthSecurityAuditMetadataSchema.pipe(
+    Schema.withDecodingDefault(Effect.succeed({}))
+  ),
+  oauthClientId: Schema.NullOr(OAuthClientId).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  organizationId: Schema.NullOr(OrganizationId).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  scopes: Schema.NullOr(Schema.Array(Schema.NonEmptyString)).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  sessionId: Schema.NullOr(SessionId).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  sourceIp: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  userAgent: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+});
+export type AuthSecurityAuditEventWrite = Schema.Schema.Type<
+  typeof AuthSecurityAuditEventWriteSchema
+>;
+type AuthSecurityAuditEventInput =
+  (typeof AuthSecurityAuditEventWriteSchema)["Encoded"];
+type OrganizationSecurityAuditEventInput = Pick<
+  AuthSecurityAuditEventInput,
+  | "actorUserId"
+  | "eventType"
+  | "metadata"
+  | "organizationId"
+  | "sessionId"
+  | "sourceIp"
+  | "userAgent"
+>;
 
 interface OrganizationSecurityAuditRequestContext {
   readonly session: AuthenticationSessionResult | null;
@@ -161,15 +283,7 @@ const organizationSecurityAuditRequestContext =
 
 export async function recordOrganizationSecurityAuditEvent(
   options: AuthSecurityAuditEventWriterOptions,
-  input: {
-    readonly actorUserId?: string | null | undefined;
-    readonly eventType: AuthSecurityAuditEventType;
-    readonly metadata?: AuthBoundaryRecord | undefined;
-    readonly organizationId?: string | null | undefined;
-    readonly sessionId?: string | null | undefined;
-    readonly sourceIp?: string | null | undefined;
-    readonly userAgent?: string | null | undefined;
-  }
+  input: OrganizationSecurityAuditEventInput
 ) {
   const requestContext = organizationSecurityAuditRequestContext.getStore();
 
@@ -271,16 +385,11 @@ export function withOAuthRefreshTokenConsentGuard(
       });
     }
 
-    if (
-      readAuthBoundaryStringField(body.value, "grant_type") !== "refresh_token"
-    ) {
+    if (body.value.grant_type !== "refresh_token") {
       return await handler(request);
     }
 
-    const refreshToken = readAuthBoundaryStringField(
-      body.value,
-      "refresh_token"
-    );
+    const refreshToken = body.value.refresh_token;
 
     if (!refreshToken) {
       return await handler(request);
@@ -319,7 +428,7 @@ export function withOAuthRefreshTokenConsentGuard(
 type OAuthRefreshTokenConsentGuardRequestBody =
   | {
       readonly status: "inspectable";
-      readonly value: AuthBoundaryRecord;
+      readonly value: OAuthAuditRequestBody;
     }
   | {
       readonly status: "uninspectable";
@@ -331,6 +440,7 @@ async function readOAuthRefreshTokenConsentGuardRequestBody(
   const body = await readAuthBoundaryJsonOrFormRequestBody(
     request,
     OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES,
+    OAuthAuditRequestBodySchema,
     {
       allowEmptyUnsupportedContentType: false,
       rejectDuplicateFormFields: ["grant_type", "refresh_token"],
@@ -420,7 +530,7 @@ interface OrganizationSecurityAuditEventRecorderOptions extends AuthSecurityAudi
 }
 
 interface OAuthSecurityAuditRequestSnapshot {
-  readonly body: AuthBoundaryRecord | null;
+  readonly body: OAuthAuditRequestBody | null;
   readonly endpointPath: string;
   readonly sourceIp: string | null;
   readonly tokenContext?: OAuthSecurityAuditTokenContext | null | undefined;
@@ -433,18 +543,6 @@ interface OAuthSecurityAuditTokenContext {
   readonly sessionId?: string | null | undefined;
   readonly tokenKind: "access_token" | "refresh_token";
   readonly userId?: string | null | undefined;
-}
-
-interface AuthSecurityAuditEventInput {
-  readonly actorUserId?: string | null | undefined;
-  readonly eventType: AuthSecurityAuditEventType;
-  readonly metadata?: AuthBoundaryRecord | undefined;
-  readonly oauthClientId?: string | null | undefined;
-  readonly organizationId?: string | null | undefined;
-  readonly scopes?: readonly string[] | undefined;
-  readonly sessionId?: string | null | undefined;
-  readonly sourceIp?: string | null | undefined;
-  readonly userAgent?: string | null | undefined;
 }
 
 export function withOAuthSecurityAuditEventRecorder(
@@ -475,7 +573,7 @@ export function withOAuthSecurityAuditEventRecorder(
 }
 
 interface OrganizationSecurityAuditRequestSnapshot {
-  readonly body: AuthBoundaryRecord | null;
+  readonly body: OrganizationAuditRequestBody | null;
   readonly endpointPath: string;
   readonly invitationBefore: {
     readonly email: string;
@@ -547,7 +645,7 @@ async function makeOrganizationSecurityAuditRequestSnapshot(
     return null;
   }
 
-  const body = await readOAuthSecurityAuditRequestBody(request);
+  const body = await readOrganizationSecurityAuditRequestBody(request);
   const session = await resolveOrganizationSecurityAuditSession(
     request,
     options
@@ -577,7 +675,7 @@ async function makeOrganizationSecurityAuditRequestSnapshot(
 }
 
 async function resolveOrganizationInvitationResendAuditContext(options: {
-  readonly body: AuthBoundaryRecord | null;
+  readonly body: OrganizationAuditRequestBody | null;
   readonly database: NodePgDatabase;
   readonly endpointPath: string;
   readonly runtimeContext: AuthEffectRuntimeContext;
@@ -592,10 +690,9 @@ async function resolveOrganizationInvitationResendAuditContext(options: {
       return null;
     }
 
-    const email =
-      readAuthBoundaryStringField(options.body, "email")?.toLowerCase() ?? null;
+    const email = options.body.email?.toLowerCase() ?? null;
     const organizationId =
-      readAuthBoundaryStringField(options.body, "organizationId") ??
+      options.body.organizationId ??
       options.session.session.activeOrganizationId ??
       null;
 
@@ -645,13 +742,11 @@ async function findOrganizationInvitationAuditContext(
 }
 
 async function resolveOrganizationMemberAuditContext(options: {
-  readonly body: AuthBoundaryRecord | null;
+  readonly body: OrganizationAuditRequestBody | null;
   readonly database: NodePgDatabase;
   readonly runtimeContext: AuthEffectRuntimeContext;
 }) {
-  const memberId =
-    readAuthBoundaryStringField(options.body, "memberId") ??
-    readAuthBoundaryStringField(options.body, "memberIdOrEmail");
+  const memberId = options.body?.memberId ?? options.body?.memberIdOrEmail;
 
   if (!memberId) {
     return null;
@@ -752,7 +847,8 @@ async function recordOrganizationInvitationResentSecurityAuditEvent(options: {
   }
 
   const responseBody = await readOAuthSecurityAuditResponseBody(
-    options.response
+    options.response,
+    OrganizationAuditResponseBodySchema
   );
 
   await recordOrganizationSecurityAuditEvent(options.options, {
@@ -760,18 +856,14 @@ async function recordOrganizationInvitationResentSecurityAuditEvent(options: {
     eventType: "organization_invitation_resent",
     metadata: {
       ...makeOrganizationInvitationAuditMetadata({
-        email:
-          readAuthBoundaryStringField(responseBody, "email") ??
-          options.snapshot.invitationBefore.email,
-        role:
-          readAuthBoundaryStringField(responseBody, "role") ??
-          options.snapshot.invitationBefore.role,
+        email: responseBody?.email ?? options.snapshot.invitationBefore.email,
+        role: responseBody?.role ?? options.snapshot.invitationBefore.role,
       }),
       outcome: "succeeded",
       source: "better_auth_organization_endpoint",
     },
     organizationId:
-      readAuthBoundaryStringField(responseBody, "organizationId") ??
+      responseBody?.organizationId ??
       options.snapshot.invitationBefore.organizationId ??
       options.snapshot.session?.session.activeOrganizationId,
     sessionId: options.snapshot.session?.session.id,
@@ -786,12 +878,13 @@ async function recordOrganizationActiveChangedSecurityAuditEvent(options: {
   readonly snapshot: OrganizationSecurityAuditRequestSnapshot;
 }) {
   const responseBody = await readOAuthSecurityAuditResponseBody(
-    options.response
+    options.response,
+    OrganizationAuditResponseBodySchema
   );
   const previousOrganizationId =
     options.snapshot.session?.session.activeOrganizationId ?? null;
   const activeOrganizationId =
-    readAuthBoundaryStringField(responseBody, "id") ??
+    responseBody?.id ??
     resolveRequestedActiveOrganizationId(
       options.snapshot.body,
       previousOrganizationId
@@ -818,21 +911,14 @@ async function recordOrganizationActiveChangedSecurityAuditEvent(options: {
 }
 
 function resolveRequestedActiveOrganizationId(
-  body: AuthBoundaryRecord | null,
+  body: OrganizationAuditRequestBody | null,
   previousOrganizationId: string | null
 ) {
-  const requestedOrganizationValue = body?.organizationId;
-
-  if (requestedOrganizationValue === null) {
-    return null;
+  if (body !== null && Object.hasOwn(body, "organizationId")) {
+    return body.organizationId ?? null;
   }
 
-  const requestedOrganizationId = readAuthBoundaryStringField(
-    body,
-    "organizationId"
-  );
-
-  return requestedOrganizationId ?? previousOrganizationId;
+  return previousOrganizationId;
 }
 
 async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
@@ -841,15 +927,13 @@ async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
   readonly snapshot: OrganizationSecurityAuditRequestSnapshot;
 }) {
   const responseBody = await readOAuthSecurityAuditResponseBody(
-    options.response
+    options.response,
+    OrganizationAuditResponseBodySchema
   );
-  const member =
-    readAuthBoundaryRecordField(responseBody, "member") ?? responseBody;
-  const memberId =
-    readAuthBoundaryStringField(member, "id") ??
-    readAuthBoundaryStringField(options.snapshot.body, "memberId");
+  const member = responseBody?.member ?? responseBody ?? null;
+  const memberId = member?.id ?? options.snapshot.body?.memberId;
   const organizationId =
-    readAuthBoundaryStringField(member, "organizationId") ??
+    member?.organizationId ??
     options.snapshot.memberBefore?.organizationId ??
     options.snapshot.session?.session.activeOrganizationId;
 
@@ -860,10 +944,8 @@ async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
       ...makeOrganizationMemberAuditMetadata({
         memberId,
         previousRole: options.snapshot.memberBefore?.role,
-        role: readAuthBoundaryStringField(member, "role"),
-        targetUserId:
-          readAuthBoundaryStringField(member, "userId") ??
-          options.snapshot.memberBefore?.userId,
+        role: member?.role,
+        targetUserId: member?.userId ?? options.snapshot.memberBefore?.userId,
       }),
       outcome: "succeeded",
       source: "better_auth_organization_endpoint",
@@ -881,33 +963,25 @@ async function recordOrganizationMemberRemovedSecurityAuditEvent(options: {
   readonly snapshot: OrganizationSecurityAuditRequestSnapshot;
 }) {
   const responseBody = await readOAuthSecurityAuditResponseBody(
-    options.response
+    options.response,
+    OrganizationAuditResponseBodySchema
   );
-  const member =
-    readAuthBoundaryRecordField(responseBody, "member") ??
-    decodeAuthBoundaryRecordOrNull(options.snapshot.memberBefore) ??
-    null;
+  const member = responseBody?.member ?? options.snapshot.memberBefore ?? null;
 
   await recordOrganizationSecurityAuditEvent(options.options, {
     actorUserId: options.snapshot.session?.user.id,
     eventType: "organization_member_removed",
     metadata: {
       ...makeOrganizationMemberAuditMetadata({
-        memberId:
-          readAuthBoundaryStringField(member, "id") ??
-          options.snapshot.memberBefore?.id,
-        role:
-          readAuthBoundaryStringField(member, "role") ??
-          options.snapshot.memberBefore?.role,
-        targetUserId:
-          readAuthBoundaryStringField(member, "userId") ??
-          options.snapshot.memberBefore?.userId,
+        memberId: member?.id ?? options.snapshot.memberBefore?.id,
+        role: member?.role ?? options.snapshot.memberBefore?.role,
+        targetUserId: member?.userId ?? options.snapshot.memberBefore?.userId,
       }),
       outcome: "succeeded",
       source: "better_auth_organization_endpoint",
     },
     organizationId:
-      readAuthBoundaryStringField(member, "organizationId") ??
+      member?.organizationId ??
       options.snapshot.memberBefore?.organizationId ??
       options.snapshot.session?.session.activeOrganizationId,
     sessionId: options.snapshot.session?.session.id,
@@ -953,14 +1027,25 @@ async function makeOAuthSecurityAuditRequestSnapshot(
 async function readOAuthSecurityAuditRequestBody(request: Request) {
   const body = await readAuthBoundaryJsonOrFormRequestBody(
     request,
-    OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
+    OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES,
+    OAuthAuditRequestBodySchema
+  );
+
+  return body.status === "available" ? body.body : null;
+}
+
+async function readOrganizationSecurityAuditRequestBody(request: Request) {
+  const body = await readAuthBoundaryJsonOrFormRequestBody(
+    request,
+    OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES,
+    OrganizationAuditRequestBodySchema
   );
 
   return body.status === "available" ? body.body : null;
 }
 
 async function resolveOAuthSecurityAuditTokenContext(options: {
-  readonly body: AuthBoundaryRecord | null;
+  readonly body: OAuthAuditRequestBody | null;
   readonly database: NodePgDatabase;
   readonly endpointPath: string;
   readonly runtimeContext: AuthEffectRuntimeContext;
@@ -968,13 +1053,9 @@ async function resolveOAuthSecurityAuditTokenContext(options: {
   try {
     if (
       options.endpointPath === OAUTH_TOKEN_ENDPOINT_PATH &&
-      readAuthBoundaryStringField(options.body, "grant_type") ===
-        "refresh_token"
+      options.body?.grant_type === "refresh_token"
     ) {
-      const refreshToken = readAuthBoundaryStringField(
-        options.body,
-        "refresh_token"
-      );
+      const refreshToken = options.body.refresh_token;
       return refreshToken
         ? await findOAuthRefreshTokenAuditContext(
             options.database,
@@ -987,15 +1068,12 @@ async function resolveOAuthSecurityAuditTokenContext(options: {
       return null;
     }
 
-    const token = readAuthBoundaryStringField(options.body, "token");
+    const token = options.body?.token;
     if (!token) {
       return null;
     }
 
-    const tokenTypeHint = readAuthBoundaryStringField(
-      options.body,
-      "token_type_hint"
-    );
+    const tokenTypeHint = options.body.token_type_hint;
 
     if (tokenTypeHint === "access_token") {
       return await findOAuthAccessTokenAuditContext(options.database, token);
@@ -1120,28 +1198,27 @@ async function recordOAuthClientRegistrationSecurityAuditEvent(options: {
   }
 
   const responseBody = await readOAuthSecurityAuditResponseBody(
-    options.response
+    options.response,
+    OAuthAuditResponseBodySchema
   );
   const succeeded =
     options.response.status >= 200 && options.response.status < 300;
   const scopes = resolveOAuthAuditScopes(
-    readAuthBoundaryStringField(responseBody, "scope"),
-    readAuthBoundaryStringField(options.snapshot.body, "scope")
+    responseBody?.scope,
+    options.snapshot.body?.scope
   );
 
   await writeAuthSecurityAuditEvent(options.options, {
-    actorUserId: readAuthBoundaryStringField(responseBody, "user_id"),
+    actorUserId: responseBody?.user_id,
     eventType: succeeded
       ? "oauth_client_registration_succeeded"
       : "oauth_client_registration_rejected",
     metadata: {
       dynamicRegistration: true,
-      oauthError: succeeded
-        ? null
-        : readAuthBoundaryStringField(responseBody, "error"),
+      oauthError: succeeded ? null : responseBody?.error,
       outcome: succeeded ? "succeeded" : "rejected",
     },
-    oauthClientId: readAuthBoundaryStringField(responseBody, "client_id"),
+    oauthClientId: responseBody?.client_id,
     scopes,
     sourceIp: options.snapshot.sourceIp,
     userAgent: options.snapshot.userAgent,
@@ -1154,18 +1231,20 @@ async function recordOAuthConsentSecurityAuditEvent(options: {
   readonly response: Response;
   readonly snapshot: OAuthSecurityAuditRequestSnapshot;
 }) {
+  const accepted = options.snapshot.body?.accept;
+
   if (
     options.response.status < 200 ||
     options.response.status >= 400 ||
-    typeof options.snapshot.body?.accept !== "boolean"
+    accepted === undefined ||
+    options.snapshot.body === null
   ) {
     return;
   }
 
-  const accepted = options.snapshot.body.accept;
   const oauthQuery = readOAuthQuerySearchParams(options.snapshot.body);
   const scopes = resolveOAuthAuditScopes(
-    readAuthBoundaryStringField(options.snapshot.body, "scope"),
+    options.snapshot.body.scope,
     oauthQuery?.get("scope")
   );
   const session = await resolveOAuthSecurityAuditSession(
@@ -1198,14 +1277,14 @@ async function recordOAuthTokenSecurityAuditEvent(options: {
   if (
     options.response.status < 200 ||
     options.response.status >= 300 ||
-    readAuthBoundaryStringField(options.snapshot.body, "grant_type") !==
-      "refresh_token"
+    options.snapshot.body?.grant_type !== "refresh_token"
   ) {
     return;
   }
 
   const responseBody = await readOAuthSecurityAuditResponseBody(
-    options.response
+    options.response,
+    OAuthAuditResponseBodySchema
   );
 
   await writeAuthSecurityAuditEvent(options.options, {
@@ -1220,13 +1299,13 @@ async function recordOAuthTokenSecurityAuditEvent(options: {
     },
     oauthClientId:
       options.snapshot.tokenContext?.clientId ??
-      readAuthBoundaryStringField(options.snapshot.body, "client_id"),
+      options.snapshot.body?.client_id,
     organizationId: options.snapshot.tokenContext?.organizationId,
     scopes:
       options.snapshot.tokenContext?.scopes ??
       resolveOAuthAuditScopes(
-        readAuthBoundaryStringField(responseBody, "scope"),
-        readAuthBoundaryStringField(options.snapshot.body, "scope")
+        responseBody?.scope,
+        options.snapshot.body?.scope
       ),
     sessionId: options.snapshot.tokenContext?.sessionId,
     sourceIp: options.snapshot.sourceIp,
@@ -1251,13 +1330,11 @@ async function recordOAuthRevocationSecurityAuditEvent(options: {
         options.snapshot.tokenContext !== undefined &&
         options.snapshot.tokenContext !== null,
       tokenKind: options.snapshot.tokenContext?.tokenKind ?? null,
-      tokenTypeHint:
-        readAuthBoundaryStringField(options.snapshot.body, "token_type_hint") ??
-        null,
+      tokenTypeHint: options.snapshot.body?.token_type_hint ?? null,
     },
     oauthClientId:
       options.snapshot.tokenContext?.clientId ??
-      readAuthBoundaryStringField(options.snapshot.body, "client_id"),
+      options.snapshot.body?.client_id,
     organizationId: options.snapshot.tokenContext?.organizationId,
     scopes: options.snapshot.tokenContext?.scopes,
     sessionId: options.snapshot.tokenContext?.sessionId,
@@ -1266,7 +1343,9 @@ async function recordOAuthRevocationSecurityAuditEvent(options: {
   });
 }
 
-async function readOAuthSecurityAuditResponseBody(response: Response) {
+async function readOAuthSecurityAuditResponseBody<
+  S extends Schema.Decoder<unknown>,
+>(response: Response, schema: S): Promise<S["Type"] | null> {
   try {
     const contentType = response.headers.get("content-type") ?? "";
 
@@ -1275,14 +1354,14 @@ async function readOAuthSecurityAuditResponseBody(response: Response) {
     }
 
     const body = await response.clone().json();
-    return decodeAuthBoundaryRecordOrNull(body);
+    return Option.getOrNull(Schema.decodeUnknownOption(schema)(body));
   } catch {
     return null;
   }
 }
 
-function readOAuthQuerySearchParams(body: AuthBoundaryRecord | null) {
-  const oauthQuery = readAuthBoundaryStringField(body, "oauth_query");
+function readOAuthQuerySearchParams(body: OAuthAuditRequestBody | null) {
+  const oauthQuery = body?.oauth_query;
   return oauthQuery ? new URLSearchParams(oauthQuery) : null;
 }
 
@@ -1355,34 +1434,51 @@ function sanitizeOAuthSecurityAuditScopes(scopes: readonly string[] | null) {
     .slice(0, OAUTH_SECURITY_AUDIT_MAX_SCOPES);
 }
 
-async function writeAuthSecurityAuditEvent(
+export async function writeAuthSecurityAuditEvent(
   options: AuthSecurityAuditEventWriterOptions,
-  input: AuthSecurityAuditEventInput
+  input: unknown
 ) {
+  const eventType = resolveAuthSecurityAuditEventInputTypeForTelemetry(input);
+
   try {
+    const decodedInput = Schema.decodeUnknownSync(
+      AuthSecurityAuditEventWriteSchema
+    )(input);
     await options.database.insert(authSecurityAuditEventTable).values({
-      actorUserId: input.actorUserId ?? null,
-      eventType: input.eventType,
-      metadata: input.metadata ?? {},
-      oauthClientId: input.oauthClientId ?? null,
-      organizationId: input.organizationId ?? null,
+      actorUserId: decodedInput.actorUserId,
+      eventType: decodedInput.eventType,
+      metadata: decodedInput.metadata,
+      oauthClientId: decodedInput.oauthClientId,
+      organizationId: decodedInput.organizationId,
       scopes:
-        input.scopes && input.scopes.length > 0 ? [...input.scopes] : null,
-      sessionId: input.sessionId ?? null,
-      sourceIp: input.sourceIp ?? null,
-      userAgent: input.userAgent ?? null,
+        decodedInput.scopes === null || decodedInput.scopes.length === 0
+          ? null
+          : [...decodedInput.scopes],
+      sessionId: decodedInput.sessionId,
+      sourceIp: decodedInput.sourceIp,
+      userAgent: decodedInput.userAgent,
     });
   } catch (error) {
     await reportAuthSecurityAuditWriteFailure(
-      input.eventType,
+      eventType,
       error,
       options.runtimeContext ?? Context.empty()
     );
   }
 }
 
+function resolveAuthSecurityAuditEventInputTypeForTelemetry(
+  input: unknown
+): AuthSecurityAuditEventType | "unknown" {
+  const decodedInput = Option.getOrNull(
+    Schema.decodeUnknownOption(AuthSecurityAuditEventTelemetrySchema)(input)
+  );
+
+  return decodedInput?.eventType ?? "unknown";
+}
+
 async function reportAuthSecurityAuditWriteFailure(
-  eventType: AuthSecurityAuditEventType,
+  eventType: AuthSecurityAuditEventType | "unknown",
   error: unknown,
   runtimeContext: AuthEffectRuntimeContext
 ) {
@@ -1509,7 +1605,8 @@ export function withOAuthClientRegistrationPolicyGuard(
 
     const body = await readAuthBoundaryJsonRequestBody(
       request,
-      OAUTH_CLIENT_REGISTRATION_ENDPOINT_PATH
+      OAUTH_CLIENT_REGISTRATION_ENDPOINT_PATH,
+      AuthBoundaryRecordSchema
     );
 
     if (body === null) {
@@ -1517,17 +1614,23 @@ export function withOAuthClientRegistrationPolicyGuard(
     }
 
     const input = decodeOAuthClientRegistrationPolicyInput(body);
-    const rejection =
-      input.status === "rejected"
-        ? input.rejection
-        : validateOAuthClientRegistrationRequest(input.value, options);
+    if (input.status === "rejected") {
+      await reportOAuthClientRegistrationRejected(
+        input.rejection.reason,
+        input.rejection.severity,
+        options.runtimeContext ?? Context.empty()
+      );
 
+      return makeOAuthClientRegistrationPolicyErrorResponse(input.rejection);
+    }
+
+    const rejection = validateOAuthClientRegistrationRequest(
+      input.value,
+      options
+    );
     if (rejection === null) {
       return handler(
-        makePublicOAuthClientRegistrationRequest(
-          request,
-          input.status === "decoded" ? input.value.body : body
-        )
+        makePublicOAuthClientRegistrationRequest(request, input.value.body)
       );
     }
 
@@ -1570,171 +1673,97 @@ function decodeOAuthClientRegistrationPolicyInput(
     };
   }
 
-  const redirectUris = decodeOAuthClientRegistrationStringArrayField(
-    body,
-    "redirect_uris"
+  const decodedBody = Option.getOrNull(
+    decodeOAuthClientRegistrationRequestBody(body)
   );
-  if (redirectUris.status === "rejected") {
-    return redirectUris;
-  }
 
-  const postLogoutRedirectUris = decodeOAuthClientRegistrationStringArrayField(
-    body,
-    "post_logout_redirect_uris"
-  );
-  if (postLogoutRedirectUris.status === "rejected") {
-    return postLogoutRedirectUris;
-  }
-
-  const grantTypes = decodeOAuthClientRegistrationStringArrayField(
-    body,
-    "grant_types"
-  );
-  if (grantTypes.status === "rejected") {
-    return grantTypes;
-  }
-
-  const responseTypes = decodeOAuthClientRegistrationStringArrayField(
-    body,
-    "response_types"
-  );
-  if (responseTypes.status === "rejected") {
-    return responseTypes;
-  }
-
-  const contacts = decodeOAuthClientRegistrationStringArrayField(
-    body,
-    "contacts"
-  );
-  if (contacts.status === "rejected") {
-    return contacts;
-  }
-
-  const tokenEndpointAuthMethod = decodeOAuthClientRegistrationStringField({
-    body,
-    description: "token_endpoint_auth_method must be a string.",
-    field: "token_endpoint_auth_method",
-    reason: "token_endpoint_auth_method_invalid_shape",
-  });
-  if (tokenEndpointAuthMethod.status === "rejected") {
-    return tokenEndpointAuthMethod;
-  }
-
-  const type = decodeOAuthClientRegistrationStringField({
-    body,
-    description: "type must be a string.",
-    field: "type",
-    reason: "type_invalid_shape",
-  });
-  if (type.status === "rejected") {
-    return type;
+  if (decodedBody === null) {
+    return {
+      rejection: classifyOAuthClientRegistrationBodyShapeRejection(body),
+      status: "rejected",
+    };
   }
 
   return {
     status: "decoded",
     value: Schema.decodeUnknownSync(OAuthClientRegistrationPolicyInputSchema)({
-      body,
-      clientName: readOAuthClientRegistrationStringField(body, "client_name"),
-      clientUri: readOAuthClientRegistrationStringField(body, "client_uri"),
-      contacts: contacts.value,
-      grantTypes: grantTypes.value,
-      logoUri: readOAuthClientRegistrationStringField(body, "logo_uri"),
-      policyUri: readOAuthClientRegistrationStringField(body, "policy_uri"),
-      postLogoutRedirectUris: postLogoutRedirectUris.value,
-      redirectUris: redirectUris.value,
-      responseTypes: responseTypes.value,
-      scope: readOAuthClientRegistrationStringField(body, "scope"),
-      skipConsentRequested: "skip_consent" in body,
-      softwareId: readOAuthClientRegistrationStringField(body, "software_id"),
-      softwareStatement: readOAuthClientRegistrationStringField(
-        body,
-        "software_statement"
-      ),
-      softwareVersion: readOAuthClientRegistrationStringField(
-        body,
-        "software_version"
-      ),
-      tokenEndpointAuthMethod: tokenEndpointAuthMethod.value,
-      tosUri: readOAuthClientRegistrationStringField(body, "tos_uri"),
-      type: type.value,
+      body: decodedBody,
+      clientName: decodedBody.client_name,
+      clientUri: decodedBody.client_uri,
+      contacts: decodedBody.contacts,
+      grantTypes: decodedBody.grant_types,
+      logoUri: decodedBody.logo_uri,
+      policyUri: decodedBody.policy_uri,
+      postLogoutRedirectUris: decodedBody.post_logout_redirect_uris,
+      redirectUris: decodedBody.redirect_uris,
+      responseTypes: decodedBody.response_types,
+      scope: decodedBody.scope,
+      skipConsentRequested: decodedBody.skip_consent !== undefined,
+      softwareId: decodedBody.software_id,
+      softwareStatement: decodedBody.software_statement,
+      softwareVersion: decodedBody.software_version,
+      subjectType: decodedBody.subject_type,
+      tokenEndpointAuthMethod: decodedBody.token_endpoint_auth_method,
+      tosUri: decodedBody.tos_uri,
+      type: decodedBody.type,
     }),
   };
 }
 
-type OAuthClientRegistrationFieldDecodeResult<T> =
-  | {
-      readonly status: "decoded";
-      readonly value: T | undefined;
-    }
-  | {
-      readonly rejection: OAuthClientRegistrationPolicyRejection;
-      readonly status: "rejected";
-    };
-
-function decodeOAuthClientRegistrationStringArrayField(
-  body: AuthBoundaryRecord,
-  field: string
-): OAuthClientRegistrationFieldDecodeResult<readonly string[]> {
-  const value = body[field];
-
-  if (value === undefined) {
-    return {
-      status: "decoded",
-      value: undefined,
-    };
-  }
-
-  return Option.match(decodeOAuthClientRegistrationStringArray(value), {
-    onNone: () => ({
-      rejection: makeOAuthClientRegistrationInvalidArrayShapeRejection(field),
-      status: "rejected",
-    }),
-    onSome: (decodedValue) => ({
-      status: "decoded",
-      value: decodedValue,
-    }),
-  });
-}
-
-function decodeOAuthClientRegistrationStringField(options: {
-  readonly body: AuthBoundaryRecord;
-  readonly description: string;
-  readonly field: string;
-  readonly reason: string;
-}): OAuthClientRegistrationFieldDecodeResult<string> {
-  const value = options.body[options.field];
-
-  if (value === undefined) {
-    return {
-      status: "decoded",
-      value: undefined,
-    };
-  }
-
-  if (typeof value !== "string") {
-    return {
-      rejection: makeOAuthClientRegistrationPolicyRejection({
-        error: "invalid_client_metadata",
-        description: options.description,
-        reason: options.reason,
-        severity: "dashboard",
-      }),
-      status: "rejected",
-    };
-  }
-
-  return {
-    status: "decoded",
-    value,
-  };
-}
-
-function readOAuthClientRegistrationStringField(
-  body: AuthBoundaryRecord,
-  field: string
+function classifyOAuthClientRegistrationBodyShapeRejection(
+  body: AuthBoundaryRecord
 ) {
-  const value = body[field];
-  return typeof value === "string" ? value : undefined;
+  const invalidArrayField = [
+    "contacts",
+    "grant_types",
+    "post_logout_redirect_uris",
+    "redirect_uris",
+    "response_types",
+  ].find(
+    (field) =>
+      field in body &&
+      !(
+        Array.isArray(body[field]) &&
+        body[field].every((value) => typeof value === "string")
+      )
+  );
+
+  if (invalidArrayField) {
+    return makeOAuthClientRegistrationInvalidArrayShapeRejection(
+      invalidArrayField
+    );
+  }
+
+  const invalidStringField = [
+    "client_name",
+    "client_uri",
+    "logo_uri",
+    "policy_uri",
+    "scope",
+    "software_id",
+    "software_statement",
+    "software_version",
+    "subject_type",
+    "token_endpoint_auth_method",
+    "tos_uri",
+    "type",
+  ].find((field) => field in body && typeof body[field] !== "string");
+
+  if (invalidStringField) {
+    return makeOAuthClientRegistrationPolicyRejection({
+      error: "invalid_client_metadata",
+      description: `${invalidStringField} must be a string.`,
+      reason: `${invalidStringField}_invalid_shape`,
+      severity: "dashboard",
+    });
+  }
+
+  return makeOAuthClientRegistrationPolicyRejection({
+    error: "invalid_client_metadata",
+    description: "Dynamic client registration metadata is malformed.",
+    reason: "metadata_invalid_shape",
+    severity: "dashboard",
+  });
 }
 
 function validateOAuthClientRegistrationRequest(
@@ -1861,7 +1890,7 @@ function validateOAuthClientRegistrationRequest(
 
 function makePublicOAuthClientRegistrationRequest(
   request: Request,
-  body: AuthBoundaryRecord
+  body: OAuthClientRegistrationRequestBody
 ) {
   const headers = new Headers(request.headers);
   headers.delete("content-length");

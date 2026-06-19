@@ -20,8 +20,12 @@ import {
 import { Pool } from "pg";
 
 import { readMigrationSql } from "../../../platform/database/test-database.js";
-import { AuthenticationSessionResultSchema } from "./auth-boundary-utils.js";
+import {
+  AuthenticationSessionResultSchema,
+  readAuthBoundaryJsonOrFormRequestBody,
+} from "./auth-boundary-utils.js";
 import type { AuthenticationSessionResult } from "./auth-boundary-utils.js";
+import { writeAuthSecurityAuditEvent } from "./auth-oauth-policy.js";
 import {
   makeAuthenticationRequestObservation,
   runWithAuthenticationRequestObservation,
@@ -1512,6 +1516,68 @@ describe("createAuthentication()", () => {
     });
   }, 10_000);
 
+  it("normalizes Better Auth session boundary dates and absent optional fields through schema", () => {
+    const decoded = Schema.decodeUnknownSync(AuthenticationSessionResultSchema)(
+      {
+        session: {
+          createdAt: "2026-06-19T08:00:00.000Z",
+          expiresAt: "2026-06-20T08:00:00.000Z",
+          id: "session_123",
+          token: "session-token",
+          updatedAt: new Date("2026-06-19T08:10:00.000Z"),
+          userId: "user_123",
+        },
+        user: {
+          createdAt: "2026-06-19T08:00:00.000Z",
+          email: "owner@example.com",
+          emailVerified: true,
+          id: "user_123",
+          name: "Owner",
+          updatedAt: "2026-06-19T08:10:00.000Z",
+        },
+      }
+    );
+
+    expect(decoded.session.activeOrganizationId).toBeNull();
+    expect(decoded.session.createdAt).toBeInstanceOf(Date);
+    expect(decoded.session.createdAt.toISOString()).toBe(
+      "2026-06-19T08:00:00.000Z"
+    );
+    expect(decoded.session.ipAddress).toBeNull();
+    expect(decoded.session.userAgent).toBeNull();
+    expect(decoded.user.image).toBeNull();
+    expect(decoded.user.twoFactorEnabled).toBeFalsy();
+    expect(decoded.user.updatedAt).toBeInstanceOf(Date);
+  }, 10_000);
+
+  it("rejects null Better Auth two-factor session flags at the session schema boundary", () => {
+    expect(() =>
+      Schema.decodeUnknownSync(AuthenticationSessionResultSchema)({
+        session: {
+          activeOrganizationId: null,
+          createdAt: "2026-06-19T08:00:00.000Z",
+          expiresAt: "2026-06-20T08:00:00.000Z",
+          id: "session_123",
+          ipAddress: null,
+          token: "session-token",
+          updatedAt: "2026-06-19T08:10:00.000Z",
+          userAgent: null,
+          userId: "user_123",
+        },
+        user: {
+          createdAt: "2026-06-19T08:00:00.000Z",
+          email: "owner@example.com",
+          emailVerified: true,
+          id: "user_123",
+          image: null,
+          name: "Owner",
+          twoFactorEnabled: null,
+          updatedAt: "2026-06-19T08:10:00.000Z",
+        },
+      })
+    ).toThrow(/Expected boolean/);
+  }, 10_000);
+
   it("configures an observable database-backed auth rate-limit store", () => {
     const { auth, cleanup } = createAuthenticationForPluginInspection();
 
@@ -2163,6 +2229,169 @@ describe("createAuthentication()", () => {
     expect(reservationKeys).toStrictEqual([]);
   }, 10_000);
 
+  it("classifies invalid JSON and schema body failures as invalid_body", async () => {
+    const bodySchema = Schema.Struct({
+      email: Schema.String,
+    });
+
+    await expect(
+      readAuthBoundaryJsonOrFormRequestBody(
+        new Request("http://127.0.0.1:3000/api/auth/request-password-reset", {
+          body: '{"email":',
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        }),
+        1024,
+        bodySchema
+      )
+    ).resolves.toStrictEqual({
+      reason: "invalid_body",
+      status: "unavailable",
+    });
+    await expect(
+      readAuthBoundaryJsonOrFormRequestBody(
+        new Request("http://127.0.0.1:3000/api/auth/request-password-reset", {
+          body: JSON.stringify({
+            email: ["person@example.com"],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        }),
+        1024,
+        bodySchema
+      )
+    ).resolves.toStrictEqual({
+      reason: "invalid_body",
+      status: "unavailable",
+    });
+  }, 10_000);
+
+  it("rejects malformed rate-limit endpoint bodies before reservation or delegation", async () => {
+    let delegated = false;
+    const reservationKeys: string[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withAuthenticationRateLimitFailureResponse(
+      withAuthenticationAbuseRateLimitGuard(
+        () => {
+          delegated = true;
+          return Promise.resolve(Response.json({ delegated: true }));
+        },
+        makeRateLimitReservationSequenceDatabase(
+          [{ count: 1 }, { count: 1 }],
+          reservationKeys
+        ),
+        config
+      )
+    );
+
+    const response = await handler(
+      new Request("http://127.0.0.1:3000/api/auth/request-password-reset", {
+        body: JSON.stringify({
+          email: ["person@example.com"],
+        }),
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "127.0.0.1",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      code: "AUTH_RATE_LIMIT_REQUEST_INVALID",
+      message: "Authentication request is invalid.",
+    });
+    expect(response.status).toBe(400);
+    expect(delegated).toBeFalsy();
+    expect(reservationKeys).toStrictEqual([]);
+  }, 10_000);
+
+  it.each([
+    {
+      body: "email=first%40example.com&email=second%40example.com",
+      endpointPath: "/request-password-reset",
+      withSession: false,
+    },
+    {
+      body: "newEmail=first%40example.com&newEmail=second%40example.com",
+      endpointPath: "/change-email",
+      withSession: true,
+    },
+    {
+      body: "email=first%40example.com&email=second%40example.com&organizationId=org_123",
+      endpointPath: "/organization/invite-member",
+      withSession: true,
+    },
+    {
+      body: "email=member%40example.com&organizationId=org_123&organizationId=org_456",
+      endpointPath: "/organization/invite-member",
+      withSession: true,
+    },
+  ])(
+    "rejects duplicate form rate-limit subject fields for $endpointPath",
+    async ({ body, endpointPath, withSession }) => {
+      let delegated = false;
+      const reservationKeys: string[] = [];
+      const config = makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+      });
+      const handler = withAuthenticationRateLimitFailureResponse(
+        withAuthenticationAbuseRateLimitGuard(
+          () => {
+            delegated = true;
+            return Promise.resolve(Response.json({ delegated: true }));
+          },
+          makeRateLimitReservationSequenceDatabase(
+            [{ count: 1 }, { count: 1 }, { count: 1 }],
+            reservationKeys
+          ),
+          config,
+          undefined,
+          withSession
+            ? {
+                resolveSession: () =>
+                  Promise.resolve(
+                    makeAuthenticationSessionResult({
+                      activeOrganizationId: "org_123",
+                    })
+                  ),
+              }
+            : undefined
+        )
+      );
+
+      const response = await handler(
+        new Request(`http://127.0.0.1:3000/api/auth${endpointPath}`, {
+          body,
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            "x-forwarded-for": "127.0.0.1",
+          },
+          method: "POST",
+        })
+      );
+
+      await expect(response.json()).resolves.toStrictEqual({
+        code: "AUTH_RATE_LIMIT_REQUEST_INVALID",
+        message: "Authentication request is invalid.",
+      });
+      expect(response.status).toBe(400);
+      expect(delegated).toBeFalsy();
+      expect(reservationKeys).toStrictEqual([]);
+    },
+    10_000
+  );
+
   it("reserves verification resend limits by email and authenticated user when a session is present", async () => {
     const reservationKeys: string[] = [];
     const config = makeAuthenticationConfig({
@@ -2769,8 +2998,22 @@ describe("createAuthentication()", () => {
 
     const body = {
       client_name: "Ceird MCP Client",
+      client_uri: "https://client.example",
+      contacts: ["security@client.example"],
+      grant_types: ["authorization_code", "refresh_token"],
+      logo_uri: "https://client.example/logo.png",
+      policy_uri: "https://client.example/privacy",
+      post_logout_redirect_uris: ["https://client.example/logout"],
       redirect_uris: ["https://client.example/oauth/callback"],
+      response_types: ["code"],
       scope: "openid profile email offline_access ceird:read",
+      software_id: "ceird-mcp-client",
+      software_statement: "signed-client-metadata-placeholder",
+      software_version: "1.2.3",
+      subject_type: "public",
+      token_endpoint_auth_method: "none",
+      tos_uri: "https://client.example/terms",
+      type: "native",
     };
     const response = await handler(
       new Request("https://api.ceird.example/api/auth/oauth2/register", {
@@ -2789,6 +3032,123 @@ describe("createAuthentication()", () => {
       token_endpoint_auth_method: "none",
     });
   }, 10_000);
+
+  it.each([
+    [
+      "scope array",
+      {
+        redirect_uris: ["https://client.example/oauth/callback"],
+        scope: ["ceird:admin"],
+      },
+      "scope_invalid_shape",
+    ],
+    [
+      "client URI array",
+      {
+        client_uri: [],
+        redirect_uris: ["https://client.example/oauth/callback"],
+      },
+      "client_uri_invalid_shape",
+    ],
+    [
+      "malformed client name",
+      {
+        client_name: 123,
+        redirect_uris: ["https://client.example/oauth/callback"],
+      },
+      "client_name_invalid_shape",
+    ],
+    [
+      "malformed software id",
+      {
+        redirect_uris: ["https://client.example/oauth/callback"],
+        software_id: 123,
+      },
+      "software_id_invalid_shape",
+    ],
+    [
+      "malformed software version",
+      {
+        redirect_uris: ["https://client.example/oauth/callback"],
+        software_version: [],
+      },
+      "software_version_invalid_shape",
+    ],
+    [
+      "malformed software statement",
+      {
+        redirect_uris: ["https://client.example/oauth/callback"],
+        software_statement: {},
+      },
+      "software_statement_invalid_shape",
+    ],
+    [
+      "malformed subject type",
+      {
+        redirect_uris: ["https://client.example/oauth/callback"],
+        subject_type: [],
+      },
+      "subject_type_invalid_shape",
+    ],
+  ])(
+    "rejects OAuth dynamic client registration wrong-type scalar metadata for %s before delegation",
+    async (_caseName, body, expectedTelemetryReason) => {
+      let delegated = false;
+      const { logger, logs } = captureLogs();
+      const config = makeAuthenticationConfig({
+        baseUrl: "https://api.ceird.example/api/auth",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+      });
+      const response = await Effect.gen(
+        function* verifyRegistrationRejection() {
+          const runtimeContext = yield* Effect.context<never>();
+          const handler = withOAuthClientRegistrationPolicyGuard(
+            () => {
+              delegated = true;
+              return Promise.resolve(Response.json({ delegated: true }));
+            },
+            {
+              allowLoopbackRedirects:
+                config.oauthClientRegistrationAllowLoopbackRedirects,
+              allowedScopes: config.oauthClientRegistrationAllowedScopes,
+              basePath: config.basePath,
+              runtimeContext,
+            }
+          );
+
+          return yield* Effect.promise(() =>
+            handler(
+              new Request(
+                "https://api.ceird.example/api/auth/oauth2/register",
+                {
+                  body: JSON.stringify(body),
+                  headers: {
+                    "content-type": "application/json",
+                  },
+                  method: "POST",
+                }
+              )
+            )
+          );
+        }
+      ).pipe(
+        Effect.provide(Logger.layer([logger])),
+        Effect.provideService(References.MinimumLogLevel, "Trace"),
+        Effect.runPromise
+      );
+
+      await expect(response.json()).resolves.toMatchObject({
+        error: "invalid_client_metadata",
+      });
+      expect(response.status).toBe(400);
+      expect(delegated).toBeFalsy();
+      const logText = JSON.stringify(logs);
+
+      expect(logText).toContain("oauth_dynamic_client_registration_rejected");
+      expect(logText).toContain(expectedTelemetryReason);
+    }
+  );
 
   it("rejects oversized OAuth dynamic client registration bodies before Better Auth handles the request", async () => {
     let delegated = false;
@@ -3758,6 +4118,52 @@ describe("createAuthentication()", () => {
     );
   }, 10_000);
 
+  it("fails open for malformed OAuth consent audit request bodies", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthSecurityAuditEventRecorder(
+      () =>
+        Promise.resolve(
+          Response.json({
+            redirect_uri:
+              "https://client.example/callback?code=raw-code&state=state",
+          })
+        ),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+        resolveSession: () =>
+          Promise.resolve(
+            makeOAuthAuditSessionResult({
+              activeOrganizationId: "org_123",
+              sessionId: "session_123",
+              userId: "user_123",
+            })
+          ),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/consent", {
+        body: JSON.stringify({
+          accept: "true",
+          oauth_query: ["client_id=client_admin"],
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+  }, 10_000);
+
   it("logs stable telemetry when OAuth audit session resolution fails", async () => {
     const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
     const { logger, logs } = captureLogs();
@@ -4038,6 +4444,69 @@ describe("createAuthentication()", () => {
     expect(serializedLogs).toContain("[redacted-token]");
     expect(serializedLogs).not.toContain("member@example.com");
     expect(serializedLogs).not.toContain("https://app.example");
+    expect(serializedLogs).not.toContain(
+      "rawtokenrawtokenrawtokenrawtoken1234"
+    );
+  }, 10_000);
+
+  it("fails open and does not insert raw rows when auth security audit write schema decoding fails", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const invalidAuditIdsAndScopes = {
+      actorUserId: "",
+      eventType: "oauth_token_refreshed",
+      metadata: {},
+      oauthClientId: "",
+      organizationId: "",
+      scopes: ["openid", 123],
+      sessionId: "",
+      sourceIp: "203.0.113.10",
+      userAgent: "Ceird Test",
+    };
+    const malformedMetadataAuditWrite = {
+      actorUserId: "user_123",
+      eventType: "oauth_token_refreshed",
+      metadata: [
+        "member@example.com https://app.example/raw rawtokenrawtokenrawtokenrawtoken1234",
+      ],
+      oauthClientId: "client_123",
+      organizationId: "org_123",
+      scopes: ["openid", "ceird:read"],
+      sessionId: "session_123",
+      sourceIp: "203.0.113.10",
+      userAgent: "Ceird Test",
+    };
+
+    await Effect.gen(function* verifyAuditWriteSchemaFailOpen() {
+      const runtimeContext = yield* Effect.context<never>();
+      const database = makeAuthSecurityAuditEventDatabase(auditEvents);
+
+      yield* Effect.promise(() =>
+        writeAuthSecurityAuditEvent(
+          { database, runtimeContext },
+          invalidAuditIdsAndScopes
+        )
+      );
+      return yield* Effect.promise(() =>
+        writeAuthSecurityAuditEvent(
+          { database, runtimeContext },
+          malformedMetadataAuditWrite
+        )
+      );
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+    expect(serializedLogs).toContain("auth_security_audit_write_failure");
+    expect(serializedLogs).toContain("[redacted-email]");
+    expect(serializedLogs).toContain("[redacted-url]");
+    expect(serializedLogs).toContain("[redacted-token]");
+    expect(serializedLogs).not.toContain("member@example.com");
+    expect(serializedLogs).not.toContain("https://app.example/raw");
     expect(serializedLogs).not.toContain(
       "rawtokenrawtokenrawtokenrawtoken1234"
     );
@@ -4344,6 +4813,23 @@ describe("createAuthentication()", () => {
       )
     );
     await makeHandler({
+      id: null,
+    })(
+      new Request(
+        "https://api.ceird.example/api/auth/organization/set-active",
+        {
+          body: JSON.stringify({
+            organizationId: null,
+          }),
+          headers: {
+            "content-type": "application/json",
+            "x-forwarded-for": "203.0.113.10",
+          },
+          method: "POST",
+        }
+      )
+    );
+    await makeHandler({
       email: "member@example.com",
       organizationId: "org_123",
       role: "member",
@@ -4410,10 +4896,22 @@ describe("createAuthentication()", () => {
 
     expect(auditEvents.map((event) => event.eventType)).toStrictEqual([
       "organization_active_changed",
+      "organization_active_changed",
       "organization_invitation_resent",
       "organization_member_role_updated",
       "organization_member_removed",
     ]);
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        actorUserId: "user_123",
+        eventType: "organization_active_changed",
+        metadata: expect.objectContaining({
+          activeOrganizationId: null,
+          previousOrganizationId: "org_previous",
+        }),
+        organizationId: "org_previous",
+      })
+    );
     expect(auditEvents).toContainEqual(
       expect.objectContaining({
         actorUserId: "user_123",
@@ -5383,6 +5881,33 @@ describe("createAuthentication()", () => {
     });
     expect(response.status).toBe(403);
     expect(delegated).toBeFalsy();
+  }, 10_000);
+
+  it("delegates non-boolean OAuth consent accept values without a verified-email probe", async () => {
+    let delegatedBody: unknown;
+    const handler = withAuthenticationAuthorizationGuards(async (request) => {
+      delegatedBody = await request.json();
+      return Response.json({ delegated: true });
+    }, makeThrowingGuardDatabase());
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/consent", {
+        body: JSON.stringify({
+          accept: "true",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "better-auth.session_token=session-token.signature",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({ delegated: true });
+    expect(response.status).toBe(200);
+    expect(delegatedBody).toStrictEqual({
+      accept: "true",
+    });
   }, 10_000);
 
   it("allows verified users to approve Ceird OAuth consent without consuming the request body", async () => {

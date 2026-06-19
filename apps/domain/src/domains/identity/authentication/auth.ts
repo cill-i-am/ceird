@@ -40,12 +40,10 @@ import { AppDatabase } from "../../../platform/database/database.js";
 import { makeBetterAuthBoundaryPolicyHandler } from "./auth-boundary-policy-adapter.js";
 import {
   AuthenticationSessionResultSchema,
-  RawAuthenticationSessionResultSchema,
+  AuthBoundaryRecordSchema,
   decodeAuthBoundaryOption,
-  decodeAuthBoundaryRecordOrNull,
   makeRequestLocalAuthenticationSessionResolver,
   maskInvitationEmail,
-  readAuthBoundaryStringField,
   sanitizeAuthFailureLogValue,
 } from "./auth-boundary-utils.js";
 import type {
@@ -123,6 +121,9 @@ const PUBLIC_INVITATION_PREVIEW_PATH_PATTERN =
 const OAUTH_ACTIVE_ORGANIZATION_REQUIRED_ERROR_CODE =
   "OAUTH_ACTIVE_ORGANIZATION_REQUIRED";
 const OAUTH_ACCESS_TOKEN_ORGANIZATION_ID_CLAIM = "ceird_org_id";
+const OAuthConsentSessionOrganizationSchema = Schema.Struct({
+  activeOrganizationId: Schema.optional(Schema.NullOr(OrganizationId)),
+});
 const ORGANIZATION_LIMIT_PER_USER = 10;
 const ORGANIZATION_MEMBERSHIP_LIMIT = 200;
 const ORGANIZATION_PENDING_INVITATION_LIMIT = 100;
@@ -293,14 +294,11 @@ function oauthRequestIncludesCeirdScopes(scopes: readonly string[]): boolean {
 }
 
 function resolveOAuthConsentActiveOrganizationId(session: unknown) {
-  const sessionRecord = decodeAuthBoundaryRecordOrNull(session);
-
-  return Option.getOrNull(
-    decodeAuthBoundaryOption(
-      OrganizationId,
-      readAuthBoundaryStringField(sessionRecord, "activeOrganizationId")
-    )
+  const decodedSession = Option.getOrNull(
+    Schema.decodeUnknownOption(OAuthConsentSessionOrganizationSchema)(session)
   );
+
+  return decodedSession?.activeOrganizationId ?? null;
 }
 
 function resolveOAuthConsentReferenceId(
@@ -349,8 +347,9 @@ function resolveOAuthAccessTokenCustomClaims(input: {
 }
 
 function assertOrganizationUpdateOnlyChangesName(organizationUpdate: unknown) {
-  const decodedOrganizationUpdate =
-    decodeAuthBoundaryRecordOrNull(organizationUpdate);
+  const decodedOrganizationUpdate = Option.getOrNull(
+    Schema.decodeUnknownOption(AuthBoundaryRecordSchema)(organizationUpdate)
+  );
 
   if (decodedOrganizationUpdate === null) {
     throwInvalidOrganizationInput("Invalid organization update.");
@@ -855,19 +854,7 @@ function normalizeAuthenticationSessionResult(
     return null;
   }
 
-  const decoded = Schema.decodeUnknownSync(
-    RawAuthenticationSessionResultSchema
-  )(result);
-
-  return Schema.decodeUnknownSync(AuthenticationSessionResultSchema)({
-    ...decoded,
-    user: {
-      ...decoded.user,
-      twoFactorEnabled: readAuthenticationSessionUserTwoFactorEnabled(
-        decoded.user
-      ),
-    },
-  });
+  return Schema.decodeUnknownSync(AuthenticationSessionResultSchema)(result);
 }
 
 function makeAuthenticationBackgroundTaskHandler() {
@@ -1015,11 +1002,7 @@ function serializeAuthenticationSessionResult(
 
   return {
     session: {
-      activeOrganizationId:
-        result.session.activeOrganizationId === null ||
-        result.session.activeOrganizationId === undefined
-          ? null
-          : result.session.activeOrganizationId,
+      activeOrganizationId: result.session.activeOrganizationId,
       createdAt: serializeAuthenticationDate(result.session.createdAt),
       expiresAt: serializeAuthenticationDate(result.session.expiresAt),
       id: decodeSessionId(result.session.id),
@@ -1031,30 +1014,16 @@ function serializeAuthenticationSessionResult(
       email: result.user.email,
       emailVerified: result.user.emailVerified,
       id: decodeUserId(result.user.id),
-      image: result.user.image ?? null,
+      image: result.user.image,
       name: result.user.name,
-      twoFactorEnabled: readAuthenticationSessionUserTwoFactorEnabled(
-        result.user
-      ),
+      twoFactorEnabled: result.user.twoFactorEnabled,
       updatedAt: serializeAuthenticationDate(result.user.updatedAt),
     },
   };
 }
 
-function readAuthenticationSessionUserTwoFactorEnabled(user: {
-  readonly twoFactorEnabled?: unknown;
-}) {
-  if (typeof user.twoFactorEnabled !== "boolean") {
-    throw new TypeError(
-      "Authenticated Better Auth sessions must include twoFactorEnabled."
-    );
-  }
-
-  return user.twoFactorEnabled;
-}
-
-function serializeAuthenticationDate(value: Date | string) {
-  return value instanceof Date ? value.toISOString() : value;
+function serializeAuthenticationDate(value: Date) {
+  return value.toISOString();
 }
 
 export function withAuthenticationCors(
