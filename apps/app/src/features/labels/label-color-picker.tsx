@@ -26,7 +26,18 @@ import { cn } from "#/lib/utils";
 
 const decodeLabelColor = Schema.decodeUnknownSync(LabelColorSchema);
 const DEFAULT_PICKER_STATE = parseLabelColor(DEFAULT_LABEL_COLOR);
-const MAX_CHROMA = 0.28;
+const PICKER_CHROMA_MAX = 0.28;
+const PICKER_LIGHTNESS_MIN = 40;
+const PICKER_LIGHTNESS_MAX = 96;
+const PICKER_LIGHTNESS_RANGE = PICKER_LIGHTNESS_MAX - PICKER_LIGHTNESS_MIN;
+const PICKER_CANVAS_LIGHTNESS = 70;
+const HUE_MIN = 0;
+const HUE_MAX = 359;
+const KEYBOARD_LIGHTNESS_STEP = 2;
+const KEYBOARD_CHROMA_STEP = 0.01;
+const OKLCH_LIGHTNESS_DIGITS = 3;
+const OKLCH_CHROMA_DIGITS = 4;
+const OKLCH_HUE_DIGITS = 3;
 
 export function LabelColorPicker({
   disabled = false,
@@ -210,9 +221,12 @@ function AdvancedLabelColorPicker({
       const y = clamp((clientY - rect.top) / rect.height, 0, 1);
 
       commitPickerState({
-        chroma: roundPickerNumber(x * MAX_CHROMA, 4),
+        chroma: roundPickerNumber(x * PICKER_CHROMA_MAX, OKLCH_CHROMA_DIGITS),
         hue: picker.hue,
-        lightness: roundPickerNumber(96 - y * 56, 3),
+        lightness: roundPickerNumber(
+          PICKER_LIGHTNESS_MAX - y * PICKER_LIGHTNESS_RANGE,
+          OKLCH_LIGHTNESS_DIGITS
+        ),
       });
     },
     [commitPickerState, picker.hue]
@@ -243,7 +257,7 @@ function AdvancedLabelColorPicker({
         aria-valuenow={Math.round(picker.lightness)}
         className="relative h-40 touch-none rounded-lg border border-border outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
         style={{
-          background: `linear-gradient(to top, oklch(40% 0 ${picker.hue}), oklch(96% 0 ${picker.hue})), linear-gradient(to right, oklch(70% 0 ${picker.hue}), oklch(70% ${MAX_CHROMA} ${picker.hue}))`,
+          background: `linear-gradient(to top, oklch(${PICKER_LIGHTNESS_MIN}% 0 ${picker.hue}), oklch(${PICKER_LIGHTNESS_MAX}% 0 ${picker.hue})), linear-gradient(to right, oklch(${PICKER_CANVAS_LIGHTNESS}% 0 ${picker.hue}), oklch(${PICKER_CANVAS_LIGHTNESS}% ${PICKER_CHROMA_MAX} ${picker.hue}))`,
           backgroundBlendMode: "multiply",
         }}
         onKeyDown={(event) => {
@@ -257,13 +271,13 @@ function AdvancedLabelColorPicker({
           event.preventDefault();
           commitPickerState({
             chroma: roundPickerNumber(
-              clamp(picker.chroma + chromaDelta, 0, MAX_CHROMA),
-              4
+              clamp(picker.chroma + chromaDelta, 0, PICKER_CHROMA_MAX),
+              OKLCH_CHROMA_DIGITS
             ),
             hue: picker.hue,
             lightness: roundPickerNumber(
               clamp(picker.lightness + lightnessDelta, 0, 100),
-              3
+              OKLCH_LIGHTNESS_DIGITS
             ),
           });
         }}
@@ -283,8 +297,14 @@ function AdvancedLabelColorPicker({
           className="pointer-events-none absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow-[0_0_0_1px_var(--foreground),0_1px_4px_rgb(0_0_0/0.25)]"
           style={{
             backgroundColor: value,
-            left: `${clamp((picker.chroma / MAX_CHROMA) * 100, 0, 100)}%`,
-            top: `${clamp(((96 - picker.lightness) / 56) * 100, 0, 100)}%`,
+            left: `${clamp((picker.chroma / PICKER_CHROMA_MAX) * 100, 0, 100)}%`,
+            top: `${clamp(
+              ((PICKER_LIGHTNESS_MAX - picker.lightness) /
+                PICKER_LIGHTNESS_RANGE) *
+                100,
+              0,
+              100
+            )}%`,
           }}
         />
       </div>
@@ -297,8 +317,8 @@ function AdvancedLabelColorPicker({
         <input
           id={hueInputId}
           type="range"
-          min={0}
-          max={359}
+          min={HUE_MIN}
+          max={HUE_MAX}
           value={Math.round(picker.hue)}
           aria-label="Label color hue"
           className="h-8 w-full accent-primary"
@@ -486,11 +506,11 @@ function parseLabelColor(color: LabelColor): OklchPickerState {
 
 function getKeyboardLightnessDelta(key: string) {
   if (key === "ArrowUp") {
-    return 2;
+    return KEYBOARD_LIGHTNESS_STEP;
   }
 
   if (key === "ArrowDown") {
-    return -2;
+    return -KEYBOARD_LIGHTNESS_STEP;
   }
 
   return 0;
@@ -498,11 +518,11 @@ function getKeyboardLightnessDelta(key: string) {
 
 function getKeyboardChromaDelta(key: string) {
   if (key === "ArrowRight") {
-    return 0.01;
+    return KEYBOARD_CHROMA_STEP;
   }
 
   if (key === "ArrowLeft") {
-    return -0.01;
+    return -KEYBOARD_CHROMA_STEP;
   }
 
   return 0;
@@ -510,10 +530,10 @@ function getKeyboardChromaDelta(key: string) {
 
 function formatOklch(state: OklchPickerState): LabelColor {
   return decodeLabelColor(
-    `oklch(${formatNumber(state.lightness, 3)}% ${formatNumber(
+    `oklch(${formatNumber(state.lightness, OKLCH_LIGHTNESS_DIGITS)}% ${formatNumber(
       state.chroma,
-      4
-    )} ${formatNumber(moduloHue(state.hue), 3)})`
+      OKLCH_CHROMA_DIGITS
+    )} ${formatNumber(moduloHue(state.hue), OKLCH_HUE_DIGITS)})`
   );
 }
 
@@ -563,9 +583,9 @@ function hexToOklch(hex: string): LabelColor {
   const hue = moduloHue((Math.atan2(b, a) * 180) / Math.PI);
 
   return formatOklch({
-    chroma: roundPickerNumber(chroma, 4),
-    hue: roundPickerNumber(hue, 3),
-    lightness: roundPickerNumber(lightness * 100, 3),
+    chroma: roundPickerNumber(chroma, OKLCH_CHROMA_DIGITS),
+    hue: roundPickerNumber(hue, OKLCH_HUE_DIGITS),
+    lightness: roundPickerNumber(lightness * 100, OKLCH_LIGHTNESS_DIGITS),
   });
 }
 
