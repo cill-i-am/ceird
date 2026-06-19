@@ -2,6 +2,7 @@ import {
   decodeOrganizationRole,
   isAdministrativeOrganizationRole,
   OrganizationId,
+  OrganizationRole,
   OrganizationSlugSchema,
   UserId,
 } from "@ceird/identity-core";
@@ -51,6 +52,36 @@ const TwoFactorTrustedDeviceRequestBodySchema = Schema.Struct({
 const OAuthConsentAuthorizationRequestBodySchema = Schema.Struct({
   accept: Schema.optional(Schema.Unknown),
 });
+const VerifiedEmailGuardSessionRowSchema = Schema.Struct({
+  userId: UserId,
+});
+const VerifiedEmailGuardUserRowSchema = Schema.Struct({
+  emailVerified: Schema.Boolean,
+});
+const AdministrativeOrganizationGuardSessionRowSchema = Schema.Struct({
+  activeOrganizationId: Schema.NullOr(OrganizationId),
+  userId: UserId,
+});
+const AdministrativeOrganizationGuardMemberRowSchema = Schema.Struct({
+  role: OrganizationRole,
+});
+const AdministrativeOrganizationGuardOrganizationRowSchema = Schema.Struct({
+  id: OrganizationId,
+});
+const decodeVerifiedEmailGuardSessionRowOption = Schema.decodeUnknownOption(
+  VerifiedEmailGuardSessionRowSchema
+);
+const decodeVerifiedEmailGuardUserRowOption = Schema.decodeUnknownOption(
+  VerifiedEmailGuardUserRowSchema
+);
+const decodeAdministrativeOrganizationGuardSessionRowOption =
+  Schema.decodeUnknownOption(AdministrativeOrganizationGuardSessionRowSchema);
+const decodeAdministrativeOrganizationGuardMemberRowOption =
+  Schema.decodeUnknownOption(AdministrativeOrganizationGuardMemberRowSchema);
+const decodeAdministrativeOrganizationGuardOrganizationRowOption =
+  Schema.decodeUnknownOption(
+    AdministrativeOrganizationGuardOrganizationRowSchema
+  );
 
 interface AuthenticationAuthorizationGuardOptions {
   readonly cookiePrefix?: string | undefined;
@@ -281,7 +312,7 @@ async function resolveVerifiedEmailEndpointAccess(
     return "unknown";
   }
 
-  const [session] = await database
+  const [sessionRow] = await database
     .select({
       userId: sessionTable.userId,
     })
@@ -294,25 +325,31 @@ async function resolveVerifiedEmailEndpointAccess(
     )
     .limit(1);
 
-  if (session === undefined) {
+  if (sessionRow === undefined) {
     return "unknown";
   }
 
-  const userId = Option.getOrNull(
-    decodeAuthBoundaryOption(UserId, session.userId)
+  const session = Option.getOrNull(
+    decodeVerifiedEmailGuardSessionRowOption(sessionRow)
   );
 
-  if (userId === null) {
+  if (session === null) {
     return "unverified";
   }
 
-  const [user] = await database
+  const [userRow] = await database
     .select({
       emailVerified: userTable.emailVerified,
     })
     .from(userTable)
-    .where(eq(userTable.id, userId))
+    .where(eq(userTable.id, session.userId))
     .limit(1);
+
+  if (userRow === undefined) {
+    return "unverified";
+  }
+
+  const user = Option.getOrNull(decodeVerifiedEmailGuardUserRowOption(userRow));
 
   return user?.emailVerified === true ? "verified" : "unverified";
 }
@@ -366,7 +403,7 @@ async function resolveAdministrativeOrganizationEndpointAccess(
     return "unknown";
   }
 
-  const [session] = await database
+  const [sessionRow] = await database
     .select({
       activeOrganizationId: sessionTable.activeOrganizationId,
       userId: sessionTable.userId,
@@ -380,8 +417,16 @@ async function resolveAdministrativeOrganizationEndpointAccess(
     )
     .limit(1);
 
-  if (session === undefined) {
+  if (sessionRow === undefined) {
     return "unknown";
+  }
+
+  const session = Option.getOrNull(
+    decodeAdministrativeOrganizationGuardSessionRowOption(sessionRow)
+  );
+
+  if (session === null) {
+    return "nonAdministrative";
   }
 
   return await resolveAdministrativeOrganizationSessionAccess(
@@ -417,7 +462,7 @@ async function resolveAdministrativeOrganizationSessionAccess(
     return "nonAdministrative";
   }
 
-  const [member] = await database
+  const [memberRow] = await database
     .select({
       role: memberTable.role,
     })
@@ -430,8 +475,16 @@ async function resolveAdministrativeOrganizationSessionAccess(
     )
     .limit(1);
 
-  if (member === undefined) {
+  if (memberRow === undefined) {
     return "unknown";
+  }
+
+  const member = Option.getOrNull(
+    decodeAdministrativeOrganizationGuardMemberRowOption(memberRow)
+  );
+
+  if (member === null) {
+    return "nonAdministrative";
   }
 
   return isAdministrativeOrganizationRole(decodeOrganizationRole(member.role))
@@ -456,7 +509,7 @@ async function resolveAdministrativeOrganizationTargetId(
       return null;
     }
 
-    const [organizationRow] = await database
+    const [rawOrganizationRow] = await database
       .select({
         id: organizationTable.id,
       })
@@ -464,11 +517,17 @@ async function resolveAdministrativeOrganizationTargetId(
       .where(eq(organizationTable.slug, decodedOrganizationSlug))
       .limit(1);
 
-    return organizationRow === undefined
-      ? null
-      : Option.getOrNull(
-          decodeAuthBoundaryOption(OrganizationId, organizationRow.id)
-        );
+    if (rawOrganizationRow === undefined) {
+      return null;
+    }
+
+    const organizationRow = Option.getOrNull(
+      decodeAdministrativeOrganizationGuardOrganizationRowOption(
+        rawOrganizationRow
+      )
+    );
+
+    return organizationRow?.id ?? null;
   }
 
   const organizationId =
