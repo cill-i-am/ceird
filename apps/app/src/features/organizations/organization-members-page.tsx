@@ -79,7 +79,7 @@ import {
   decodeOrganizationMemberInviteInput,
   organizationMemberInviteSchema,
 } from "./organization-member-invite-schemas";
-import type { OrganizationMemberInviteInput } from "./organization-member-invite-schemas";
+import type { OrganizationMemberInviteDraft } from "./organization-member-invite-schemas";
 import {
   CurrentMemberRow,
   PendingInvitationRow,
@@ -99,7 +99,7 @@ interface CurrentMemberSummary {
   readonly role: OrganizationRoleType;
 }
 
-const DEFAULT_INVITE_VALUES: OrganizationMemberInviteInput = {
+const DEFAULT_INVITE_VALUES: OrganizationMemberInviteDraft = {
   email: "",
   role: "member",
 };

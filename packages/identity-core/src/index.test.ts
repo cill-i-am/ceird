@@ -42,6 +42,8 @@ import {
   decodeDisconnectConnectedAppGrantInput,
   decodeInviteOrganizationMemberInput,
   decodeNativeAuthClientSessionResult,
+  InviteOrganizationMemberResponseSchema,
+  CancelOrganizationInvitationResponseSchema,
   decodeOrganizationInvitation,
   decodeOrganizationInvitationDetails,
   decodeOrganizationInvitationListResponse,
@@ -530,6 +532,48 @@ describe("organization member identity boundary", () => {
         inviter: { id: "user_owner" },
       })
     ).toThrow(/[Uu]nexpected/);
+  }, 1000);
+
+  it("narrows invitation endpoint responses to their promised lifecycle statuses", () => {
+    const decodeInviteResponse = Schema.decodeUnknownSync(
+      InviteOrganizationMemberResponseSchema
+    );
+    const decodeCancelResponse = Schema.decodeUnknownSync(
+      CancelOrganizationInvitationResponseSchema
+    );
+
+    expect(
+      decodeInviteResponse({
+        invitation,
+      }).invitation.status
+    ).toBe("pending");
+    expect(
+      decodeCancelResponse({
+        invitation: {
+          ...invitation,
+          status: "canceled",
+        },
+      }).invitation.status
+    ).toBe("canceled");
+
+    expect(() =>
+      decodeOrganizationInvitationListResponse({
+        invitations: [{ ...invitation, status: "accepted" }],
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      decodeInviteResponse({
+        invitation: {
+          ...invitation,
+          status: "canceled",
+        },
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      decodeCancelResponse({
+        invitation,
+      })
+    ).toThrow(/Expected/);
   }, 1000);
 
   it("projects native signed-in invitation details into the Ceird DTO", () => {

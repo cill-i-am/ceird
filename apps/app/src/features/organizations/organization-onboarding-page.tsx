@@ -48,7 +48,7 @@ import {
   decodeOrganizationMemberInviteInput,
   organizationMemberInviteSchema,
 } from "./organization-member-invite-schemas";
-import type { OrganizationMemberInviteInput } from "./organization-member-invite-schemas";
+import type { OrganizationMemberInviteDraft } from "./organization-member-invite-schemas";
 import { inviteOrganizationMember } from "./organization-members-api";
 import {
   decodeCreateOrganizationNameInput,
@@ -60,7 +60,7 @@ const CREATE_ORGANIZATION_FAILURE_MESSAGE =
   "We couldn't create your team. Please try again.";
 const INVITE_FAILURE_MESSAGE =
   "We couldn't send that invitation. Please check the email and try again.";
-const DEFAULT_INVITE_VALUES: OrganizationMemberInviteInput = {
+const DEFAULT_INVITE_VALUES: OrganizationMemberInviteDraft = {
   email: "",
   role: "member",
 };

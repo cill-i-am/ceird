@@ -3,7 +3,6 @@ import { createRequire } from "node:module";
 
 import {
   appendOrganizationSlugSuffix,
-  decodeAcceptedOrganizationId,
   decodePublicInvitationPreview,
   InviteOrganizationMemberResponseSchema,
   IsoDateTimeString,
@@ -28,6 +27,7 @@ import { skipLocationAccessBeforeExpectedPage } from "./pages/location-access-pa
 import { LoginPage } from "./pages/login-page";
 import { MembersPage } from "./pages/members-page";
 import { SignupPage } from "./pages/signup-page";
+import { waitForSubmitHydration } from "./pages/wait-for-submit-hydration";
 import { API_ORIGIN, APP_ORIGIN, readPlaywrightDatabaseUrl } from "./test-urls";
 
 type CookieJar = Map<string, string>;
@@ -285,36 +285,6 @@ async function markUserEmailVerified(email: string) {
   } finally {
     await client.end();
   }
-}
-
-async function acceptInvitationWithCurrentSession(
-  request: APIRequestContext,
-  page: Page,
-  invitationId: string
-) {
-  const cookieJar = await createCookieJarFromPage(page);
-
-  const acceptInvitationResponse = await sendAuthRequest(
-    request,
-    "/organization/accept-invitation",
-    {
-      body: {
-        invitationId,
-      },
-      cookieJar,
-    }
-  );
-  const acceptedOrganizationId = decodeAcceptedOrganizationId(
-    await acceptInvitationResponse.json()
-  );
-
-  await sendAuthRequest(request, "/organization/set-active", {
-    body: {
-      organizationId: acceptedOrganizationId,
-    },
-    cookieJar,
-  });
-  await syncCookieJarToPage(page, cookieJar);
 }
 
 async function seedUser(
@@ -639,18 +609,21 @@ test.describe("organization invitations", () => {
         { timeout: INVITATION_UI_TIMEOUT_MS }
       );
       await markUserEmailVerified(invitedEmail);
-      await signInInvitationContext(
-        request,
-        invitedPage,
-        invitedEmail,
-        invitedPassword
+      await invitedContext.clearCookies();
+      await invitedPage.goto(`/login?invitation=${invitationId}`);
+      await waitForSubmitHydration(invitedPage);
+      const invitedLoginPage = new LoginPage(invitedPage);
+      await invitedLoginPage.email.fill(invitedEmail);
+      await invitedLoginPage.password.fill(invitedPassword);
+      await invitedLoginPage.submit.click();
+
+      await expect(invitedPage).toHaveURL(
+        `${APP_ORIGIN}/accept-invitation/${invitationId}`,
+        { timeout: INVITATION_UI_TIMEOUT_MS }
       );
-      await acceptInvitationWithCurrentSession(
-        request,
-        invitedPage,
-        invitationId
-      );
-      await invitedPage.goto("/");
+      await invitedPage
+        .getByRole("button", { name: "Accept invitation" })
+        .click();
 
       await expectAuthenticatedHome(invitedPage);
     } finally {
@@ -689,6 +662,7 @@ test.describe("organization invitations", () => {
       await expect(invitedPage).toHaveURL(
         `${APP_ORIGIN}/login?invitation=${invitationId}`
       );
+      await waitForSubmitHydration(invitedPage);
 
       const invitedLoginPage = new LoginPage(invitedPage);
       await invitedLoginPage.email.fill(invitedEmail);

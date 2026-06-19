@@ -6,11 +6,12 @@ import {
 } from "@ceird/identity-core";
 import type {
   CancelOrganizationInvitationResponse,
+  CanceledOrganizationInvitation,
   InviteOrganizationMemberResponse,
-  OrganizationInvitation,
   OrganizationInvitationListResponse,
   OrganizationMember,
   OrganizationMemberListResponse,
+  PendingOrganizationInvitation,
   RemoveOrganizationMemberResponse,
   UpdateOrganizationMemberRoleResponse,
 } from "@ceird/identity-core";
@@ -41,10 +42,12 @@ const currentUserId = decodeUserId("user_owner");
 const defaultInvitationExpiresAt = "2026-04-12T09:30:00.000Z";
 
 type InvitationFixtureOverrides = Partial<
-  Omit<OrganizationInvitation, "id" | "organizationId">
+  Omit<PendingOrganizationInvitation, "id" | "organizationId">
 > & {
-  readonly id?: string | OrganizationInvitation["id"];
-  readonly organizationId?: string | OrganizationInvitation["organizationId"];
+  readonly id?: string | PendingOrganizationInvitation["id"];
+  readonly organizationId?:
+    | string
+    | PendingOrganizationInvitation["organizationId"];
 };
 type MemberFixtureOverrides = Partial<
   Omit<OrganizationMember, "id" | "organizationId" | "userId">
@@ -124,7 +127,7 @@ function createDeferredResult<Value>() {
 
 function createInvitation(
   overrides: InvitationFixtureOverrides = {}
-): OrganizationInvitation {
+): PendingOrganizationInvitation {
   const {
     id = "inv_123",
     organizationId: orgId = organizationId,
@@ -184,19 +187,28 @@ function createMemberList(
 }
 
 function createInvitationList(
-  invitations: OrganizationInvitation[] = [createInvitation()]
+  invitations: PendingOrganizationInvitation[] = [createInvitation()]
 ): OrganizationInvitationListResponse {
   return { invitations };
 }
 
 function createInviteResponse(
-  invitation: OrganizationInvitation = createInvitation({ id: "inv_456" })
+  invitation: PendingOrganizationInvitation = createInvitation({
+    id: "inv_456",
+  })
 ): InviteOrganizationMemberResponse {
   return { invitation };
 }
 
+function createCanceledInvitation(): CanceledOrganizationInvitation {
+  return {
+    ...createInvitation(),
+    status: "canceled",
+  };
+}
+
 function createCancelInvitationResponse(
-  invitation: OrganizationInvitation = createInvitation()
+  invitation: CanceledOrganizationInvitation = createCanceledInvitation()
 ): CancelOrganizationInvitationResponse {
   return { invitation };
 }

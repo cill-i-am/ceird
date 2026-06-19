@@ -701,13 +701,17 @@ export type OrganizationMemberListResponse = Schema.Schema.Type<
   typeof OrganizationMemberListResponseSchema
 >;
 
-export const OrganizationInvitationSchema = Schema.Struct({
+const OrganizationInvitationFields = {
   createdAt: IsoDateTimeString,
   email: OrganizationEmailAddress,
   expiresAt: IsoDateTimeString,
   id: InvitationId,
   organizationId: OrganizationId,
   role: InvitableOrganizationRole,
+};
+
+export const OrganizationInvitationSchema = Schema.Struct({
+  ...OrganizationInvitationFields,
   status: OrganizationInvitationStatus,
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
@@ -716,8 +720,28 @@ export type OrganizationInvitation = Schema.Schema.Type<
   typeof OrganizationInvitationSchema
 >;
 
+export const PendingOrganizationInvitationSchema = Schema.Struct({
+  ...OrganizationInvitationFields,
+  status: Schema.Literal("pending"),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type PendingOrganizationInvitation = Schema.Schema.Type<
+  typeof PendingOrganizationInvitationSchema
+>;
+
+export const CanceledOrganizationInvitationSchema = Schema.Struct({
+  ...OrganizationInvitationFields,
+  status: Schema.Literal("canceled"),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type CanceledOrganizationInvitation = Schema.Schema.Type<
+  typeof CanceledOrganizationInvitationSchema
+>;
+
 export const OrganizationInvitationListResponseSchema = Schema.Struct({
-  invitations: Schema.Array(OrganizationInvitationSchema),
+  invitations: Schema.Array(PendingOrganizationInvitationSchema),
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -737,7 +761,7 @@ export type InviteOrganizationMemberInput = Schema.Schema.Type<
 >;
 
 export const InviteOrganizationMemberResponseSchema = Schema.Struct({
-  invitation: OrganizationInvitationSchema,
+  invitation: PendingOrganizationInvitationSchema,
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -755,7 +779,7 @@ export type CancelOrganizationInvitationInput = Schema.Schema.Type<
 >;
 
 export const CancelOrganizationInvitationResponseSchema = Schema.Struct({
-  invitation: OrganizationInvitationSchema,
+  invitation: CanceledOrganizationInvitationSchema,
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });

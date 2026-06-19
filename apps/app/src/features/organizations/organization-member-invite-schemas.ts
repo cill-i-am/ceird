@@ -1,6 +1,14 @@
 import { InviteOrganizationMemberInputSchema } from "@ceird/identity-core";
-import type { InviteOrganizationMemberInput } from "@ceird/identity-core";
+import type {
+  InviteOrganizationMemberInput,
+  InvitableOrganizationRole,
+} from "@ceird/identity-core";
 import { Schema } from "effect";
+
+export interface OrganizationMemberInviteDraft {
+  readonly email: string;
+  readonly role: InvitableOrganizationRole;
+}
 
 export type OrganizationMemberInviteInput = InviteOrganizationMemberInput;
 
