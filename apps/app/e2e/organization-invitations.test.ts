@@ -6,11 +6,14 @@ import {
   decodeAcceptedOrganizationId,
   decodePublicInvitationPreview,
   InviteOrganizationMemberResponseSchema,
+  IsoDateTimeString,
   OrganizationId,
   OrganizationInvitationListResponseSchema,
+  OrganizationMemberId,
   OrganizationNameSchema,
   OrganizationRole,
   OrganizationSlugSchema,
+  UserId,
 } from "@ceird/identity-core";
 import { expect, test } from "@playwright/test";
 import type {
@@ -61,23 +64,39 @@ const decodeOrganizationInvitationListResponse = Schema.decodeUnknownSync(
 const decodeInviteOrganizationMemberResponse = Schema.decodeUnknownSync(
   InviteOrganizationMemberResponseSchema
 );
-const CreatedOrganizationResponseSchema = Schema.Struct({
+const CreatedOrganizationMemberResponseSchema = Schema.Struct({
+  createdAt: IsoDateTimeString,
+  id: OrganizationMemberId,
+  organizationId: OrganizationId,
+  role: OrganizationRole,
+  userId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const CreatedOrganizationNativeResponseSchema = Schema.Struct({
+  createdAt: IsoDateTimeString,
   id: OrganizationId,
-  members: Schema.Array(
-    Schema.Struct({
-      organizationId: OrganizationId,
-      role: OrganizationRole,
-    }).annotate({
-      parseOptions: { onExcessProperty: "error" },
-    })
+  logo: Schema.optional(Schema.NullOr(Schema.String)),
+  members: Schema.Array(CreatedOrganizationMemberResponseSchema),
+  metadata: Schema.optional(
+    Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))
   ),
   name: OrganizationNameSchema,
   slug: OrganizationSlugSchema,
+  updatedAt: Schema.optional(IsoDateTimeString),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const CreatedOrganizationResponseSchema = Schema.Struct({
+  id: OrganizationId,
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 const decodeCreatedOrganizationResponse = Schema.decodeUnknownSync(
   CreatedOrganizationResponseSchema
+);
+const decodeCreatedOrganizationNativeResponse = Schema.decodeUnknownSync(
+  CreatedOrganizationNativeResponseSchema
 );
 
 function createTestEmail(prefix: string): string {
@@ -349,9 +368,12 @@ async function seedOwnerOrganization(
       forwardedFor,
     }
   );
-  const organizationPayload = decodeCreatedOrganizationResponse(
+  const createdOrganization = decodeCreatedOrganizationNativeResponse(
     await organizationResponse.json()
   );
+  const organizationPayload = decodeCreatedOrganizationResponse({
+    id: createdOrganization.id,
+  });
 
   return organizationPayload.id;
 }
