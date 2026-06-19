@@ -1194,7 +1194,7 @@ function LabelRowActions({
                 <Button
                   type="button"
                   aria-label={`Open actions for ${label.name}`}
-                  className="opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-focus-within/label-row:opacity-100 sm:group-hover/label-row:opacity-100"
+                  className="pointer-events-auto opacity-100 transition-opacity focus-visible:pointer-events-auto focus-visible:opacity-100 sm:pointer-events-none sm:opacity-0 sm:group-focus-within/label-row:pointer-events-auto sm:group-focus-within/label-row:opacity-100 sm:group-hover/label-row:pointer-events-auto sm:group-hover/label-row:opacity-100"
                   disabled={actionsDisabled}
                   size="icon-sm"
                   title={`Actions for ${label.name}`}
