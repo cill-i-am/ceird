@@ -1169,20 +1169,22 @@ export const OrganizationSecurityActivityQuerySchema = Schema.Struct({
   cursor: Schema.optional(OrganizationSecurityActivityCursor),
   eventType: Schema.optional(OrganizationSecurityActivityEventType),
   fromDate: Schema.optional(IsoDateString),
-  limit: Schema.optional(
-    Schema.NumberFromString.pipe(
-      Schema.check(
-        Schema.isInt(),
-        Schema.isGreaterThan(0),
-        Schema.isLessThanOrEqualTo(100)
-      )
-    )
+  limit: Schema.Union([Schema.Number, Schema.NumberFromString]).pipe(
+    Schema.check(
+      Schema.isInt(),
+      Schema.isGreaterThan(0),
+      Schema.isLessThanOrEqualTo(100)
+    ),
+    Schema.withDecodingDefaultTypeKey(Effect.succeed(50))
   ),
   targetSearch: Schema.optional(NonEmptyTrimmedString),
   targetType: Schema.optional(OrganizationSecurityActivityTargetType),
   toDate: Schema.optional(IsoDateString),
 });
 export type OrganizationSecurityActivityQuery = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityQuerySchema
+>;
+export type OrganizationSecurityActivityQueryInput = Schema.Codec.Encoded<
   typeof OrganizationSecurityActivityQuerySchema
 >;
 

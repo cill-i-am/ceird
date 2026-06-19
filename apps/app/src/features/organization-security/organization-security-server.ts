@@ -1,6 +1,7 @@
 import type {
   OrganizationSecurityActivityListResponse,
   OrganizationSecurityActivityQuery,
+  OrganizationSecurityActivityQueryInput,
 } from "@ceird/identity-core";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { Effect } from "effect";
@@ -8,18 +9,40 @@ import { Effect } from "effect";
 import { runBrowserAppApiRequest } from "#/features/api/app-api-client";
 import type { AppApiClient } from "#/features/api/app-api-client";
 
+import {
+  DEFAULT_ORGANIZATION_SECURITY_ACTIVITY_QUERY,
+  decodeOrganizationSecurityActivityQueryInput,
+} from "./organization-security-query";
+
+type OrganizationSecurityActivityQueryArgument =
+  | OrganizationSecurityActivityQueryInput
+  | OrganizationSecurityActivityQuery;
+
 const importOrganizationSecurityServerSsr = () =>
   import("./organization-security-server-ssr");
 
 const listCurrentServerOrganizationSecurityActivityIsomorphic =
   createIsomorphicFn()
-    .server(async (query: OrganizationSecurityActivityQuery = {}) => {
-      const { listCurrentServerOrganizationSecurityActivityDirect } =
-        await importOrganizationSecurityServerSsr();
-      return await listCurrentServerOrganizationSecurityActivityDirect(query);
-    })
-    .client((query: OrganizationSecurityActivityQuery = {}) =>
-      listCurrentBrowserOrganizationSecurityActivity(query)
+    .server(
+      async (
+        query: OrganizationSecurityActivityQueryArgument = DEFAULT_ORGANIZATION_SECURITY_ACTIVITY_QUERY
+      ) => {
+        const decodedQuery =
+          decodeOrganizationSecurityActivityQueryInput(query);
+        const { listCurrentServerOrganizationSecurityActivityDirect } =
+          await importOrganizationSecurityServerSsr();
+        return await listCurrentServerOrganizationSecurityActivityDirect(
+          decodedQuery
+        );
+      }
+    )
+    .client(
+      (
+        query: OrganizationSecurityActivityQueryArgument = DEFAULT_ORGANIZATION_SECURITY_ACTIVITY_QUERY
+      ) =>
+        listCurrentBrowserOrganizationSecurityActivity(
+          decodeOrganizationSecurityActivityQueryInput(query)
+        )
     );
 
 function runBrowserAppApiClient<Response>(
@@ -30,19 +53,23 @@ function runBrowserAppApiClient<Response>(
 }
 
 async function listCurrentBrowserOrganizationSecurityActivity(
-  query: OrganizationSecurityActivityQuery = {}
+  query: OrganizationSecurityActivityQueryArgument = DEFAULT_ORGANIZATION_SECURITY_ACTIVITY_QUERY
 ): Promise<OrganizationSecurityActivityListResponse> {
+  const decodedQuery = decodeOrganizationSecurityActivityQueryInput(query);
+
   return await runBrowserAppApiClient(
     "OrganizationSecurityClient.listOrganizationSecurityActivity",
     (client) =>
       client.identity.listOrganizationSecurityActivity({
-        query,
+        query: decodedQuery,
       })
   );
 }
 
 export function listCurrentServerOrganizationSecurityActivity(
-  query: OrganizationSecurityActivityQuery = {}
+  query: OrganizationSecurityActivityQueryArgument = DEFAULT_ORGANIZATION_SECURITY_ACTIVITY_QUERY
 ): Promise<OrganizationSecurityActivityListResponse> {
-  return listCurrentServerOrganizationSecurityActivityIsomorphic(query);
+  return listCurrentServerOrganizationSecurityActivityIsomorphic(
+    decodeOrganizationSecurityActivityQueryInput(query)
+  );
 }

@@ -1,5 +1,6 @@
 import {
   decodeOrganizationId,
+  OrganizationSecurityActivityQuerySchema,
   OrganizationSecurityActivityStorageError,
 } from "@ceird/identity-core";
 import type { OrganizationSecurityActivityCursor } from "@ceird/identity-core";
@@ -24,6 +25,9 @@ const decodeActivityRow = Schema.decodeUnknownSync(
 );
 const decodeOrganizationSecurityAuditWrite = Schema.decodeUnknownSync(
   OrganizationSecurityAuditWriteSchema
+);
+const decodeSecurityActivityQuery = Schema.decodeUnknownSync(
+  OrganizationSecurityActivityQuerySchema
 );
 const auditMetadataSource = {
   outcome: "succeeded",
@@ -518,6 +522,12 @@ describe("organization security audit writes", () => {
 });
 
 describe("organization security activity repository", () => {
+  it("uses the schema-owned default list limit", () => {
+    expect(decodeSecurityActivityQuery({})).toStrictEqual({
+      limit: 50,
+    });
+  });
+
   it("lists organization-created rows with creator member metadata after target projection", async () => {
     const response = await Effect.runPromise(
       runRepositoryList([
@@ -676,7 +686,10 @@ function runRepositoryList(rows: readonly Record<string, unknown>[]) {
   return Effect.gen(function* runSecurityActivityRepositoryList() {
     const repository = yield* OrganizationSecurityActivityRepository;
 
-    return yield* repository.list(decodeOrganizationId("org_123"), {});
+    return yield* repository.list(
+      decodeOrganizationId("org_123"),
+      decodeSecurityActivityQuery({})
+    );
   }).pipe(
     Effect.provide(OrganizationSecurityActivityRepository.Default),
     Effect.provide(

@@ -570,19 +570,10 @@ async function readOAuthRefreshTokenConsentGuardRequestBody(
         : { status: "uninspectable" };
     }
 
-    const params = new URLSearchParams(bodyText);
-
-    if (
-      params.getAll("grant_type").length > 1 ||
-      params.getAll("refresh_token").length > 1
-    ) {
-      return { status: "uninspectable" };
-    }
-
     return {
       status: "inspectable",
       value: decodeOAuthRefreshTokenConsentGuardRequestBody(
-        Object.fromEntries(params)
+        readUniqueUrlEncodedFormBody(bodyText)
       ),
     };
   } catch {
@@ -1143,10 +1134,26 @@ async function recordOrganizationActiveChangedSecurityAuditEvent(options: {
   readonly response: Response;
   readonly snapshot: OrganizationSecurityAuditRequestSnapshot;
 }) {
+  let responseBodyDecodeFailed = false;
   const responseBody = await readSchemaOwnedResponseBody(
     options.response,
-    Schema.decodeUnknownSync(OrganizationActiveResponseBodySchema)
+    Schema.decodeUnknownSync(OrganizationActiveResponseBodySchema),
+    {
+      onDecodeFailure: async (error) => {
+        responseBodyDecodeFailed = true;
+        await reportAuthSecurityAuditParseFailure(
+          "organization_active_changed",
+          error,
+          options.options.runtimeContext ?? Context.empty()
+        );
+      },
+    }
   );
+
+  if (responseBodyDecodeFailed) {
+    return;
+  }
+
   const previousOrganizationId =
     options.snapshot.session?.session.activeOrganizationId ?? null;
   const activeOrganizationId =
@@ -1302,43 +1309,54 @@ async function makeOAuthSecurityAuditRequestSnapshot(
 }
 
 async function readRawSecurityAuditRequestBody(request: Request) {
-  try {
-    const contentType = request.headers.get("content-type") ?? "";
-    const contentLength = readRequestContentLength(request);
+  const contentType = request.headers.get("content-type") ?? "";
+  const contentLength = readRequestContentLength(request);
 
-    if (
-      contentLength !== null &&
-      Number.isFinite(contentLength) &&
-      contentLength > OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
-    ) {
-      return null;
-    }
-
-    if (
-      !contentType.includes("application/json") &&
-      !contentType.includes("application/x-www-form-urlencoded")
-    ) {
-      return null;
-    }
-
-    const bodyText = await readLimitedRequestText(
-      request,
-      OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
-    );
-
-    if (bodyText === null || bodyText.length === 0) {
-      return null;
-    }
-
-    if (contentType.includes("application/json")) {
-      const body = JSON.parse(bodyText);
-      return isRecord(body) ? body : null;
-    }
-
-    return Object.fromEntries(new URLSearchParams(bodyText).entries());
-  } catch {
+  if (
+    contentLength !== null &&
+    Number.isFinite(contentLength) &&
+    contentLength > OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
+  ) {
     return null;
   }
+
+  if (
+    !contentType.includes("application/json") &&
+    !contentType.includes("application/x-www-form-urlencoded")
+  ) {
+    return null;
+  }
+
+  const bodyText = await readLimitedRequestText(
+    request,
+    OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
+  );
+
+  if (bodyText === null || bodyText.length === 0) {
+    return null;
+  }
+
+  if (contentType.includes("application/json")) {
+    const body = JSON.parse(bodyText);
+    return isRecord(body) ? body : null;
+  }
+
+  return readUniqueUrlEncodedFormBody(bodyText);
+}
+
+function readUniqueUrlEncodedFormBody(bodyText: string) {
+  const body: Record<string, string> = {};
+  const params = new URLSearchParams(bodyText);
+
+  for (const [key, value] of params) {
+    if (Object.hasOwn(body, key)) {
+      throw new Error(`Duplicate URL-encoded form field: ${key}`);
+    }
+
+    body[key] = value;
+  }
+
+  return body;
 }
 
 async function readOAuthSecurityAuditRequestBody(
@@ -1346,13 +1364,13 @@ async function readOAuthSecurityAuditRequestBody(
   endpointPath: string,
   runtimeContext: AuthEffectRuntimeContext
 ): Promise<OAuthSecurityAuditRequestBody | null> {
-  const rawBody = await readRawSecurityAuditRequestBody(request);
-
-  if (rawBody === null) {
-    return null;
-  }
-
   try {
+    const rawBody = await readRawSecurityAuditRequestBody(request);
+
+    if (rawBody === null) {
+      return null;
+    }
+
     switch (endpointPath) {
       case OAUTH_CLIENT_REGISTRATION_ENDPOINT_PATH: {
         return {
@@ -1403,13 +1421,13 @@ async function readOrganizationSecurityAuditRequestBody(
   endpointPath: string,
   runtimeContext: AuthEffectRuntimeContext
 ): Promise<OrganizationSecurityAuditRequestBody | null> {
-  const rawBody = await readRawSecurityAuditRequestBody(request);
-
-  if (rawBody === null) {
-    return null;
-  }
-
   try {
+    const rawBody = await readRawSecurityAuditRequestBody(request);
+
+    if (rawBody === null) {
+      return null;
+    }
+
     switch (endpointPath) {
       case ORGANIZATION_INVITE_MEMBER_ENDPOINT_PATH: {
         return {
@@ -1760,6 +1778,12 @@ async function recordOAuthRevocationSecurityAuditEvent(options: {
   if (options.response.status < 200 || options.response.status >= 300) {
     return;
   }
+  const { body } = options.snapshot;
+
+  if (body?.endpointPath !== OAUTH_REVOKE_ENDPOINT_PATH) {
+    return;
+  }
+
   const tokenContext =
     options.snapshot.tokenContext.status === "matched"
       ? options.snapshot.tokenContext.value
@@ -1776,16 +1800,9 @@ async function recordOAuthRevocationSecurityAuditEvent(options: {
       matchedStoredToken: tokenContext !== null,
       source: "better_auth_oauth_endpoint",
       tokenKind: tokenContext?.tokenKind ?? null,
-      tokenTypeHint:
-        options.snapshot.body?.endpointPath === OAUTH_REVOKE_ENDPOINT_PATH
-          ? (options.snapshot.body.value.token_type_hint ?? null)
-          : null,
+      tokenTypeHint: body.value.token_type_hint ?? null,
     },
-    oauthClientId:
-      tokenContext?.clientId ??
-      (options.snapshot.body?.endpointPath === OAUTH_REVOKE_ENDPOINT_PATH
-        ? options.snapshot.body.value.client_id
-        : undefined),
+    oauthClientId: tokenContext?.clientId ?? body.value.client_id,
     organizationId: tokenContext?.organizationId,
     scopes: tokenContext?.scopes,
     sessionId: tokenContext?.sessionId,
@@ -1809,7 +1826,14 @@ async function readSchemaOwnedResponseBody<Decoded>(
     }
 
     const body = await response.clone().json();
-    return isRecord(body) ? decode(body) : null;
+    if (!isRecord(body)) {
+      await options?.onDecodeFailure?.(
+        new Error("Expected JSON response object")
+      );
+      return null;
+    }
+
+    return decode(body);
   } catch (error) {
     await options?.onDecodeFailure?.(error);
     return null;

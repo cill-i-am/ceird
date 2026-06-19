@@ -554,10 +554,13 @@ or persisting unverifiable metadata.
 OAuth audit writes use the same schema-owned insert boundary. Successful client
 registration and consent rows require a decoded OAuth client id before insert.
 Token refresh/revoke rows split matched stored-token evidence from unmatched
-endpoint evidence: every refresh row requires a decoded OAuth client id, matched
-rows require the decoded stored-token client and scope context, and malformed
-stored-token rows emit token-context telemetry and skip the audit write instead
-of being downgraded to `matchedStoredToken: false`.
+endpoint evidence: every refresh and revoke row requires a decoded OAuth client
+id, matched rows require the decoded stored-token client and scope context, and
+malformed stored-token rows emit token-context telemetry and skip the audit
+write instead of being downgraded to `matchedStoredToken: false`.
+URL-encoded OAuth audit request bodies reject duplicate form keys before schema
+decode so singleton fields cannot be normalized by `URLSearchParams`
+projection.
 Optional source IP and user-agent provenance is decoded by the schema and empty
 values normalize to `null`; empty optional provenance does not suppress an
 otherwise trustworthy audit row.
@@ -604,7 +607,8 @@ connected-app management plus the owner/admin organization member workspace:
   the active organization, so schemaless audit metadata cannot expose another
   user's profile details
 - filtering supports event type, actor user id, target type, date range, target
-  search, limit, and cursor parameters; cursors preserve the database timestamp
+  search, limit, and cursor parameters; the shared query schema owns the default
+  limit of 50 before repository access; cursors preserve the database timestamp
   precision used by the `(created_at desc, id desc)` ordering
 - connected-app list and disconnect resolve only the current authenticated user.
   A grant id owned by another user is treated as not found so grant existence is
@@ -664,7 +668,8 @@ Reliability notes:
 - revoke events pre-read stored refresh or opaque access-token rows when
   possible; JWT access-token revocation and unknown-token revocation cannot
   prove a stored row mutation from the endpoint response alone, so those rows
-  remain redacted endpoint audit evidence with `matchedStoredToken: false`
+  remain redacted endpoint audit evidence with `matchedStoredToken: false` only
+  when the decoded revoke request carries a trusted OAuth client id
 - stored OAuth token rows that are found but fail schema decoding are treated as
   context failures, not as unknown-token evidence; Ceird logs sanitized
   `auth_security_audit_token_context_failure` telemetry and skips the token audit

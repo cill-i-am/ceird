@@ -939,7 +939,20 @@ describe("organization security activity boundary", () => {
       })
     ).toStrictEqual({
       fromDate: "2026-06-12",
+      limit: 50,
       toDate: "2026-06-13",
+    });
+    expect(
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({})
+    ).toStrictEqual({
+      limit: 50,
+    });
+    expect(
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        limit: 25,
+      })
+    ).toStrictEqual({
+      limit: 25,
     });
     expect(() =>
       Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({

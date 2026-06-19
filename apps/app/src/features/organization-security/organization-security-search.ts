@@ -6,7 +6,7 @@ import type {
   IsoDateString,
   OrganizationSecurityActivityCursor,
   OrganizationSecurityActivityEventType,
-  OrganizationSecurityActivityQuery,
+  OrganizationSecurityActivityQueryInput,
   OrganizationSecurityActivityTargetType,
   UserId,
 } from "@ceird/identity-core";
@@ -47,7 +47,7 @@ export function decodeOrganizationSecurityActivitySearch(
 
 export function toOrganizationSecurityActivityQuery(
   search: OrganizationSecurityActivitySearch
-): OrganizationSecurityActivityQuery {
+): OrganizationSecurityActivityQueryInput {
   return {
     actorUserId: search.actorUserId,
     cursor: search.cursor,

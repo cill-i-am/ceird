@@ -6,6 +6,7 @@ import {
   OrganizationSecurityActivityCursorInvalidError,
   OrganizationSecurityActivityItemSchema,
   OrganizationSecurityActivityListResponseSchema,
+  OrganizationSecurityActivityQuerySchema,
   OrganizationSecurityActivityStorageError,
 } from "@ceird/identity-core";
 import type {
@@ -60,8 +61,6 @@ import type {
   OrganizationSecurityActivityRow,
 } from "./persistence-schemas.js";
 
-const DEFAULT_SECURITY_ACTIVITY_LIMIT = 50;
-const MAX_SECURITY_ACTIVITY_LIMIT = 100;
 const ORGANIZATION_SECURITY_ACTIVITY_VISIBLE_EVENT_TYPES =
   ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES;
 
@@ -76,6 +75,9 @@ const decodeSecurityActivityCursor = Schema.decodeUnknownSync(
 );
 const decodeSecurityActivityCursorState = Schema.decodeUnknownSync(
   OrganizationSecurityActivityCursorStateSchema
+);
+const decodeSecurityActivityQuery = Schema.decodeUnknownSync(
+  OrganizationSecurityActivityQuerySchema
 );
 const decodeSecurityActivityRows = Schema.decodeUnknownSync(
   OrganizationSecurityActivityRowsSchema
@@ -100,9 +102,7 @@ export class OrganizationSecurityActivityRepository extends Context.Service<Orga
           organizationId: OrganizationIdType,
           query: OrganizationSecurityActivityQuery
         ) {
-          const limit = clampSecurityActivityLimit(
-            query.limit ?? DEFAULT_SECURITY_ACTIVITY_LIMIT
-          );
+          const { limit } = query;
           const clauses = [
             sql`auth_security_audit_event.organization_id = ${organizationId}`,
             sql`auth_security_audit_event.event_type in ${sql.in(
@@ -267,8 +267,10 @@ export class OrganizationSecurityActivityService extends Context.Service<Organiz
             .ensureCanViewOrganizationSecurityActivity(actor)
             .pipe(mapAuthorizationErrorToSecurityActivityAccessDenied);
 
+          const decodedQuery = decodeSecurityActivityQuery(query);
+
           return yield* repository
-            .list(actor.organizationId, query)
+            .list(actor.organizationId, decodedQuery)
             .pipe(
               Effect.catchTag(
                 "SqlError",
@@ -493,10 +495,6 @@ export function decodeOrganizationSecurityActivityCursor(
   cursor: OrganizationSecurityActivityCursor
 ) {
   return decodeJsonCursor(cursor, decodeSecurityActivityCursorState);
-}
-
-function clampSecurityActivityLimit(limit: number) {
-  return Math.min(Math.max(Math.floor(limit), 1), MAX_SECURITY_ACTIVITY_LIMIT);
 }
 
 function isoDateToUtcStartDate(value: string) {
