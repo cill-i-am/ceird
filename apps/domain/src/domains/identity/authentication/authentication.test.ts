@@ -1550,6 +1550,39 @@ describe("createAuthentication()", () => {
     expect(decoded.user.updatedAt).toBeInstanceOf(Date);
   }, 10_000);
 
+  it.each(["createdAt", "expiresAt", "updatedAt"] as const)(
+    "rejects invalid Better Auth session %s date strings at the session schema boundary",
+    (field) => {
+      expect(() =>
+        Schema.decodeUnknownSync(AuthenticationSessionResultSchema)({
+          session: {
+            activeOrganizationId: null,
+            createdAt: "2026-06-19T08:00:00.000Z",
+            expiresAt: "2026-06-20T08:00:00.000Z",
+            id: "session_123",
+            ipAddress: null,
+            token: "session-token",
+            updatedAt: "2026-06-19T08:10:00.000Z",
+            userAgent: null,
+            userId: "user_123",
+            [field]: "2026-99-99T99:99:99.999Z",
+          },
+          user: {
+            createdAt: "2026-06-19T08:00:00.000Z",
+            email: "owner@example.com",
+            emailVerified: true,
+            id: "user_123",
+            image: null,
+            name: "Owner",
+            twoFactorEnabled: false,
+            updatedAt: "2026-06-19T08:10:00.000Z",
+          },
+        })
+      ).toThrow(/Expected a valid date/);
+    },
+    10_000
+  );
+
   it("rejects null Better Auth two-factor session flags at the session schema boundary", () => {
     expect(() =>
       Schema.decodeUnknownSync(AuthenticationSessionResultSchema)({
@@ -4463,6 +4496,21 @@ describe("createAuthentication()", () => {
       sourceIp: "203.0.113.10",
       userAgent: "Ceird Test",
     };
+    const invalidAuditScopeWrite = {
+      actorUserId: "user_123",
+      eventType: "oauth_token_refreshed",
+      metadata: {
+        grantType: "refresh_token",
+        matchedStoredToken: true,
+        tokenKind: "refresh_token",
+      },
+      oauthClientId: "client_123",
+      organizationId: "org_123",
+      scopes: ["openid", "ceird:superadmin"],
+      sessionId: "session_123",
+      sourceIp: "203.0.113.10",
+      userAgent: "Ceird Test",
+    };
     const malformedMetadataAuditWrite = {
       actorUserId: "user_123",
       eventType: "oauth_token_refreshed",
@@ -4485,6 +4533,12 @@ describe("createAuthentication()", () => {
         writeAuthSecurityAuditEvent(
           { database, runtimeContext },
           invalidAuditIdsAndScopes
+        )
+      );
+      yield* Effect.promise(() =>
+        writeAuthSecurityAuditEvent(
+          { database, runtimeContext },
+          invalidAuditScopeWrite
         )
       );
       return yield* Effect.promise(() =>

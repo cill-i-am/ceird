@@ -27,6 +27,7 @@ import type {
   AuthEffectRuntimeContext,
   AuthenticationSessionResult,
 } from "./auth-boundary-utils.js";
+import { CEIRD_OAUTH_SCOPES } from "./config.js";
 import type { AuthenticationConfig } from "./config.js";
 import {
   AUTH_SECURITY_AUDIT_EVENT_TYPES,
@@ -228,49 +229,237 @@ const AuthSecurityAuditEventTypeSchema = Schema.Literals(
 const AuthSecurityAuditEventTelemetrySchema = Schema.Struct({
   eventType: AuthSecurityAuditEventTypeSchema,
 });
-const AuthSecurityAuditMetadataSchema = AuthBoundaryRecordSchema;
-export const AuthSecurityAuditEventWriteSchema = Schema.Struct({
-  actorUserId: Schema.NullOr(UserId).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null))
-  ),
-  eventType: AuthSecurityAuditEventTypeSchema,
-  metadata: AuthSecurityAuditMetadataSchema.pipe(
-    Schema.withDecodingDefault(Effect.succeed({}))
-  ),
-  oauthClientId: Schema.NullOr(OAuthClientId).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null))
-  ),
-  organizationId: Schema.NullOr(OrganizationId).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null))
-  ),
-  scopes: Schema.NullOr(Schema.Array(Schema.NonEmptyString)).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null))
-  ),
-  sessionId: Schema.NullOr(SessionId).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null))
-  ),
-  sourceIp: Schema.NullOr(Schema.String).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null))
-  ),
-  userAgent: Schema.NullOr(Schema.String).pipe(
-    Schema.withDecodingDefault(Effect.succeed(null))
-  ),
+const AuthSecurityAuditNullableStringSchema = Schema.NullOr(Schema.String);
+const AuthSecurityAuditOrganizationSourceSchema = Schema.Literals([
+  "better_auth_organization_endpoint",
+  "better_auth_organization_plugin",
+]);
+const AuthSecurityAuditTokenKindSchema = Schema.Literals([
+  "access_token",
+  "refresh_token",
+]);
+const AuthSecurityAuditTokenTypeHintSchema = Schema.NullOr(
+  Schema.String.pipe(Schema.check(Schema.isMaxLength(64)))
+);
+const AuthSecurityAuditScopeSchema = Schema.Literals(CEIRD_OAUTH_SCOPES).pipe(
+  Schema.brand("AuthSecurityAuditScope")
+);
+const AuthSecurityAuditScopesSchema = Schema.Array(
+  AuthSecurityAuditScopeSchema
+).pipe(Schema.check(Schema.isMaxLength(OAUTH_SECURITY_AUDIT_MAX_SCOPES)));
+const AuthSecurityAuditCommonWriteFields = {
+  actorUserId: Schema.NullOr(UserId),
+  oauthClientId: Schema.NullOr(OAuthClientId),
+  organizationId: Schema.NullOr(OrganizationId),
+  scopes: AuthSecurityAuditScopesSchema,
+  sessionId: Schema.NullOr(SessionId),
+  sourceIp: AuthSecurityAuditNullableStringSchema,
+  userAgent: AuthSecurityAuditNullableStringSchema,
+} as const;
+const OAuthClientRegistrationSucceededAuditMetadataSchema = Schema.Struct({
+  dynamicRegistration: Schema.Literal(true),
+  oauthError: Schema.Null,
+  outcome: Schema.Literal("succeeded"),
 });
+const OAuthClientRegistrationRejectedAuditMetadataSchema = Schema.Struct({
+  dynamicRegistration: Schema.Literal(true),
+  oauthError: AuthSecurityAuditNullableStringSchema,
+  outcome: Schema.Literal("rejected"),
+});
+const OAuthConsentAuditMetadataSchema = Schema.Struct({
+  accepted: Schema.Boolean,
+  containsAdminScope: Schema.Boolean,
+  containsWriteScope: Schema.Boolean,
+});
+const OAuthTokenRefreshedAuditMetadataSchema = Schema.Struct({
+  grantType: Schema.Literal("refresh_token"),
+  matchedStoredToken: Schema.Boolean,
+  tokenKind: AuthSecurityAuditTokenKindSchema,
+});
+const OAuthTokenRevokedAuditMetadataSchema = Schema.Struct({
+  matchedStoredToken: Schema.Boolean,
+  tokenKind: Schema.NullOr(AuthSecurityAuditTokenKindSchema),
+  tokenTypeHint: AuthSecurityAuditTokenTypeHintSchema,
+});
+const OrganizationInvitationAuditMetadataSchema = Schema.Struct({
+  invitationEmailMasked: AuthSecurityAuditNullableStringSchema,
+  outcome: Schema.Literal("succeeded"),
+  role: AuthSecurityAuditNullableStringSchema,
+  source: AuthSecurityAuditOrganizationSourceSchema,
+  targetUserId: Schema.NullOr(UserId),
+});
+const OrganizationInvitationAcceptedAuditMetadataSchema = Schema.Struct({
+  invitationEmailMasked: AuthSecurityAuditNullableStringSchema,
+  memberId: AuthSecurityAuditNullableStringSchema,
+  outcome: Schema.Literal("succeeded"),
+  role: AuthSecurityAuditNullableStringSchema,
+  source: AuthSecurityAuditOrganizationSourceSchema,
+  targetUserId: Schema.NullOr(UserId),
+});
+const OrganizationActiveChangedAuditMetadataSchema = Schema.Struct({
+  activeOrganizationId: Schema.NullOr(OrganizationId),
+  outcome: Schema.Literal("succeeded"),
+  previousOrganizationId: Schema.NullOr(OrganizationId),
+  source: AuthSecurityAuditOrganizationSourceSchema,
+});
+const OrganizationMemberRoleUpdatedAuditMetadataSchema = Schema.Struct({
+  memberId: AuthSecurityAuditNullableStringSchema,
+  outcome: Schema.Literal("succeeded"),
+  previousRole: AuthSecurityAuditNullableStringSchema,
+  role: AuthSecurityAuditNullableStringSchema,
+  source: AuthSecurityAuditOrganizationSourceSchema,
+  targetUserId: Schema.NullOr(UserId),
+});
+const OrganizationMemberRemovedAuditMetadataSchema = Schema.Struct({
+  memberId: AuthSecurityAuditNullableStringSchema,
+  outcome: Schema.Literal("succeeded"),
+  role: AuthSecurityAuditNullableStringSchema,
+  source: AuthSecurityAuditOrganizationSourceSchema,
+  targetUserId: Schema.NullOr(UserId),
+});
+const OrganizationUpdatedAuditMetadataSchema = Schema.Struct({
+  outcome: Schema.Literal("succeeded"),
+  source: AuthSecurityAuditOrganizationSourceSchema,
+  updatedFields: Schema.Array(Schema.String),
+});
+export const AuthSecurityAuditEventWriteSchema = Schema.Union([
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literal("oauth_client_registration_succeeded"),
+    metadata: OAuthClientRegistrationSucceededAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literal("oauth_client_registration_rejected"),
+    metadata: OAuthClientRegistrationRejectedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literals([
+      "oauth_consent_granted",
+      "oauth_consent_denied",
+    ]),
+    metadata: OAuthConsentAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literal("oauth_token_refreshed"),
+    metadata: OAuthTokenRefreshedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literal("oauth_token_revoked"),
+    metadata: OAuthTokenRevokedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literal("organization_created"),
+    metadata: OrganizationMemberRoleUpdatedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literal("organization_updated"),
+    metadata: OrganizationUpdatedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literals([
+      "organization_invitation_created",
+      "organization_invitation_canceled",
+      "organization_invitation_resent",
+    ]),
+    metadata: OrganizationInvitationAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literal("organization_invitation_accepted"),
+    metadata: OrganizationInvitationAcceptedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literal("organization_active_changed"),
+    metadata: OrganizationActiveChangedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literal("organization_member_role_updated"),
+    metadata: OrganizationMemberRoleUpdatedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...AuthSecurityAuditCommonWriteFields,
+    eventType: Schema.Literal("organization_member_removed"),
+    metadata: OrganizationMemberRemovedAuditMetadataSchema,
+  }),
+]);
 export type AuthSecurityAuditEventWrite = Schema.Schema.Type<
   typeof AuthSecurityAuditEventWriteSchema
 >;
 type AuthSecurityAuditEventInput =
   (typeof AuthSecurityAuditEventWriteSchema)["Encoded"];
-type OrganizationSecurityAuditEventInput = Pick<
+type OrganizationSecurityAuditEventInputBase = Pick<
   AuthSecurityAuditEventInput,
-  | "actorUserId"
-  | "eventType"
-  | "metadata"
-  | "organizationId"
-  | "sessionId"
-  | "sourceIp"
-  | "userAgent"
->;
+  "actorUserId" | "organizationId"
+> &
+  Partial<
+    Pick<AuthSecurityAuditEventInput, "sessionId" | "sourceIp" | "userAgent">
+  > & {
+    readonly source?:
+      | "better_auth_organization_endpoint"
+      | "better_auth_organization_plugin"
+      | undefined;
+  };
+type OrganizationAuditMetadataBeforeProvenance<
+  S extends { readonly Encoded: unknown },
+> = Omit<S["Encoded"], "outcome" | "source">;
+type OrganizationSecurityAuditEventInput =
+  OrganizationSecurityAuditEventInputBase &
+    (
+      | {
+          readonly eventType: "organization_created";
+          readonly metadata: OrganizationAuditMetadataBeforeProvenance<
+            typeof OrganizationMemberRoleUpdatedAuditMetadataSchema
+          >;
+        }
+      | {
+          readonly eventType: "organization_updated";
+          readonly metadata: OrganizationAuditMetadataBeforeProvenance<
+            typeof OrganizationUpdatedAuditMetadataSchema
+          >;
+        }
+      | {
+          readonly eventType:
+            | "organization_invitation_created"
+            | "organization_invitation_canceled"
+            | "organization_invitation_resent";
+          readonly metadata: OrganizationAuditMetadataBeforeProvenance<
+            typeof OrganizationInvitationAuditMetadataSchema
+          >;
+        }
+      | {
+          readonly eventType: "organization_invitation_accepted";
+          readonly metadata: OrganizationAuditMetadataBeforeProvenance<
+            typeof OrganizationInvitationAcceptedAuditMetadataSchema
+          >;
+        }
+      | {
+          readonly eventType: "organization_active_changed";
+          readonly metadata: OrganizationAuditMetadataBeforeProvenance<
+            typeof OrganizationActiveChangedAuditMetadataSchema
+          >;
+        }
+      | {
+          readonly eventType: "organization_member_role_updated";
+          readonly metadata: OrganizationAuditMetadataBeforeProvenance<
+            typeof OrganizationMemberRoleUpdatedAuditMetadataSchema
+          >;
+        }
+      | {
+          readonly eventType: "organization_member_removed";
+          readonly metadata: OrganizationAuditMetadataBeforeProvenance<
+            typeof OrganizationMemberRemovedAuditMetadataSchema
+          >;
+        }
+    );
 
 interface OrganizationSecurityAuditRequestContext {
   readonly session: AuthenticationSessionResult | null;
@@ -286,17 +475,20 @@ export async function recordOrganizationSecurityAuditEvent(
   input: OrganizationSecurityAuditEventInput
 ) {
   const requestContext = organizationSecurityAuditRequestContext.getStore();
+  const { source, ...writeInput } = input;
 
   await writeAuthSecurityAuditEvent(options, {
-    ...input,
+    ...writeInput,
     metadata: {
       outcome: "succeeded",
-      source: "better_auth_organization_plugin",
+      source: source ?? "better_auth_organization_plugin",
       ...input.metadata,
     },
-    sessionId: input.sessionId ?? requestContext?.session?.session.id,
-    sourceIp: input.sourceIp ?? requestContext?.sourceIp,
-    userAgent: input.userAgent ?? requestContext?.userAgent,
+    oauthClientId: null,
+    scopes: [],
+    sessionId: input.sessionId ?? requestContext?.session?.session.id ?? null,
+    sourceIp: input.sourceIp ?? requestContext?.sourceIp ?? null,
+    userAgent: input.userAgent ?? requestContext?.userAgent ?? null,
   });
 }
 
@@ -543,6 +735,39 @@ interface OAuthSecurityAuditTokenContext {
   readonly sessionId?: string | null | undefined;
   readonly tokenKind: "access_token" | "refresh_token";
   readonly userId?: string | null | undefined;
+}
+
+function resolveAuthenticationSessionAuditContext(
+  session: AuthenticationSessionResult | null
+) {
+  if (session === null) {
+    return {
+      activeOrganizationId: null,
+      actorUserId: null,
+      sessionId: null,
+    };
+  }
+
+  return {
+    activeOrganizationId: session.session.activeOrganizationId,
+    actorUserId: session.user.id,
+    sessionId: session.session.id,
+  };
+}
+
+function resolveOAuthTokenAuditContext(
+  snapshot: OAuthSecurityAuditRequestSnapshot,
+  fallbackScopes: readonly string[]
+) {
+  const tokenContext = snapshot.tokenContext ?? null;
+
+  return {
+    actorUserId: tokenContext?.userId ?? null,
+    oauthClientId: tokenContext?.clientId ?? snapshot.body?.client_id ?? null,
+    organizationId: tokenContext?.organizationId ?? null,
+    scopes: tokenContext?.scopes ?? fallbackScopes,
+    sessionId: tokenContext?.sessionId ?? null,
+  };
 }
 
 export function withOAuthSecurityAuditEventRecorder(
@@ -852,23 +1077,23 @@ async function recordOrganizationInvitationResentSecurityAuditEvent(options: {
   );
 
   await recordOrganizationSecurityAuditEvent(options.options, {
-    actorUserId: options.snapshot.session?.user.id,
+    actorUserId: options.snapshot.session?.user.id ?? null,
     eventType: "organization_invitation_resent",
     metadata: {
       ...makeOrganizationInvitationAuditMetadata({
         email: responseBody?.email ?? options.snapshot.invitationBefore.email,
         role: responseBody?.role ?? options.snapshot.invitationBefore.role,
       }),
-      outcome: "succeeded",
-      source: "better_auth_organization_endpoint",
     },
     organizationId:
       responseBody?.organizationId ??
       options.snapshot.invitationBefore.organizationId ??
-      options.snapshot.session?.session.activeOrganizationId,
-    sessionId: options.snapshot.session?.session.id,
-    sourceIp: options.snapshot.sourceIp,
-    userAgent: options.snapshot.userAgent,
+      options.snapshot.session?.session.activeOrganizationId ??
+      null,
+    sessionId: options.snapshot.session?.session.id ?? null,
+    source: "better_auth_organization_endpoint",
+    sourceIp: options.snapshot.sourceIp ?? null,
+    userAgent: options.snapshot.userAgent ?? null,
   });
 }
 
@@ -895,18 +1120,17 @@ async function recordOrganizationActiveChangedSecurityAuditEvent(options: {
   }
 
   await recordOrganizationSecurityAuditEvent(options.options, {
-    actorUserId: options.snapshot.session?.user.id,
+    actorUserId: options.snapshot.session?.user.id ?? null,
     eventType: "organization_active_changed",
     metadata: {
       activeOrganizationId,
-      outcome: "succeeded",
       previousOrganizationId,
-      source: "better_auth_organization_endpoint",
     },
     organizationId: activeOrganizationId ?? previousOrganizationId,
-    sessionId: options.snapshot.session?.session.id,
-    sourceIp: options.snapshot.sourceIp,
-    userAgent: options.snapshot.userAgent,
+    sessionId: options.snapshot.session?.session.id ?? null,
+    source: "better_auth_organization_endpoint",
+    sourceIp: options.snapshot.sourceIp ?? null,
+    userAgent: options.snapshot.userAgent ?? null,
   });
 }
 
@@ -932,13 +1156,16 @@ async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
   );
   const member = responseBody?.member ?? responseBody ?? null;
   const memberId = member?.id ?? options.snapshot.body?.memberId;
+  const sessionAuditContext = resolveAuthenticationSessionAuditContext(
+    options.snapshot.session
+  );
   const organizationId =
     member?.organizationId ??
     options.snapshot.memberBefore?.organizationId ??
-    options.snapshot.session?.session.activeOrganizationId;
+    sessionAuditContext.activeOrganizationId;
 
   await recordOrganizationSecurityAuditEvent(options.options, {
-    actorUserId: options.snapshot.session?.user.id,
+    actorUserId: sessionAuditContext.actorUserId,
     eventType: "organization_member_role_updated",
     metadata: {
       ...makeOrganizationMemberAuditMetadata({
@@ -947,13 +1174,12 @@ async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
         role: member?.role,
         targetUserId: member?.userId ?? options.snapshot.memberBefore?.userId,
       }),
-      outcome: "succeeded",
-      source: "better_auth_organization_endpoint",
     },
-    organizationId,
-    sessionId: options.snapshot.session?.session.id,
-    sourceIp: options.snapshot.sourceIp,
-    userAgent: options.snapshot.userAgent,
+    organizationId: organizationId ?? null,
+    sessionId: sessionAuditContext.sessionId,
+    source: "better_auth_organization_endpoint",
+    sourceIp: options.snapshot.sourceIp ?? null,
+    userAgent: options.snapshot.userAgent ?? null,
   });
 }
 
@@ -967,9 +1193,12 @@ async function recordOrganizationMemberRemovedSecurityAuditEvent(options: {
     OrganizationAuditResponseBodySchema
   );
   const member = responseBody?.member ?? options.snapshot.memberBefore ?? null;
+  const sessionAuditContext = resolveAuthenticationSessionAuditContext(
+    options.snapshot.session
+  );
 
   await recordOrganizationSecurityAuditEvent(options.options, {
-    actorUserId: options.snapshot.session?.user.id,
+    actorUserId: sessionAuditContext.actorUserId,
     eventType: "organization_member_removed",
     metadata: {
       ...makeOrganizationMemberAuditMetadata({
@@ -977,16 +1206,16 @@ async function recordOrganizationMemberRemovedSecurityAuditEvent(options: {
         role: member?.role ?? options.snapshot.memberBefore?.role,
         targetUserId: member?.userId ?? options.snapshot.memberBefore?.userId,
       }),
-      outcome: "succeeded",
-      source: "better_auth_organization_endpoint",
     },
     organizationId:
       member?.organizationId ??
       options.snapshot.memberBefore?.organizationId ??
-      options.snapshot.session?.session.activeOrganizationId,
-    sessionId: options.snapshot.session?.session.id,
-    sourceIp: options.snapshot.sourceIp,
-    userAgent: options.snapshot.userAgent,
+      sessionAuditContext.activeOrganizationId ??
+      null,
+    sessionId: sessionAuditContext.sessionId,
+    source: "better_auth_organization_endpoint",
+    sourceIp: options.snapshot.sourceIp ?? null,
+    userAgent: options.snapshot.userAgent ?? null,
   });
 }
 
@@ -1209,17 +1438,19 @@ async function recordOAuthClientRegistrationSecurityAuditEvent(options: {
   );
 
   await writeAuthSecurityAuditEvent(options.options, {
-    actorUserId: responseBody?.user_id,
+    actorUserId: responseBody?.user_id ?? null,
     eventType: succeeded
       ? "oauth_client_registration_succeeded"
       : "oauth_client_registration_rejected",
     metadata: {
       dynamicRegistration: true,
-      oauthError: succeeded ? null : responseBody?.error,
+      oauthError: succeeded ? null : (responseBody?.error ?? null),
       outcome: succeeded ? "succeeded" : "rejected",
     },
-    oauthClientId: responseBody?.client_id,
+    oauthClientId: responseBody?.client_id ?? null,
+    organizationId: null,
     scopes,
+    sessionId: null,
     sourceIp: options.snapshot.sourceIp,
     userAgent: options.snapshot.userAgent,
   });
@@ -1253,17 +1484,17 @@ async function recordOAuthConsentSecurityAuditEvent(options: {
   );
 
   await writeAuthSecurityAuditEvent(options.options, {
-    actorUserId: session?.user?.id,
+    actorUserId: session?.user?.id ?? null,
     eventType: accepted ? "oauth_consent_granted" : "oauth_consent_denied",
     metadata: {
       accepted,
       containsAdminScope: scopes.includes("ceird:admin"),
       containsWriteScope: scopes.includes("ceird:write"),
     },
-    oauthClientId: oauthQuery?.get("client_id"),
-    organizationId: session?.session?.activeOrganizationId,
+    oauthClientId: oauthQuery?.get("client_id") ?? null,
+    organizationId: session?.session?.activeOrganizationId ?? null,
     scopes,
-    sessionId: session?.session?.id,
+    sessionId: session?.session?.id ?? null,
     sourceIp: options.snapshot.sourceIp,
     userAgent: options.snapshot.userAgent,
   });
@@ -1286,9 +1517,13 @@ async function recordOAuthTokenSecurityAuditEvent(options: {
     options.response,
     OAuthAuditResponseBodySchema
   );
+  const tokenAuditContext = resolveOAuthTokenAuditContext(
+    options.snapshot,
+    resolveOAuthAuditScopes(responseBody?.scope, options.snapshot.body?.scope)
+  );
 
   await writeAuthSecurityAuditEvent(options.options, {
-    actorUserId: options.snapshot.tokenContext?.userId,
+    actorUserId: tokenAuditContext.actorUserId,
     eventType: "oauth_token_refreshed",
     metadata: {
       grantType: "refresh_token",
@@ -1297,17 +1532,10 @@ async function recordOAuthTokenSecurityAuditEvent(options: {
         options.snapshot.tokenContext !== null,
       tokenKind: options.snapshot.tokenContext?.tokenKind ?? "refresh_token",
     },
-    oauthClientId:
-      options.snapshot.tokenContext?.clientId ??
-      options.snapshot.body?.client_id,
-    organizationId: options.snapshot.tokenContext?.organizationId,
-    scopes:
-      options.snapshot.tokenContext?.scopes ??
-      resolveOAuthAuditScopes(
-        responseBody?.scope,
-        options.snapshot.body?.scope
-      ),
-    sessionId: options.snapshot.tokenContext?.sessionId,
+    oauthClientId: tokenAuditContext.oauthClientId,
+    organizationId: tokenAuditContext.organizationId,
+    scopes: tokenAuditContext.scopes,
+    sessionId: tokenAuditContext.sessionId,
     sourceIp: options.snapshot.sourceIp,
     userAgent: options.snapshot.userAgent,
   });
@@ -1322,8 +1550,10 @@ async function recordOAuthRevocationSecurityAuditEvent(options: {
     return;
   }
 
+  const tokenAuditContext = resolveOAuthTokenAuditContext(options.snapshot, []);
+
   await writeAuthSecurityAuditEvent(options.options, {
-    actorUserId: options.snapshot.tokenContext?.userId,
+    actorUserId: tokenAuditContext.actorUserId,
     eventType: "oauth_token_revoked",
     metadata: {
       matchedStoredToken:
@@ -1332,12 +1562,10 @@ async function recordOAuthRevocationSecurityAuditEvent(options: {
       tokenKind: options.snapshot.tokenContext?.tokenKind ?? null,
       tokenTypeHint: options.snapshot.body?.token_type_hint ?? null,
     },
-    oauthClientId:
-      options.snapshot.tokenContext?.clientId ??
-      options.snapshot.body?.client_id,
-    organizationId: options.snapshot.tokenContext?.organizationId,
-    scopes: options.snapshot.tokenContext?.scopes,
-    sessionId: options.snapshot.tokenContext?.sessionId,
+    oauthClientId: tokenAuditContext.oauthClientId,
+    organizationId: tokenAuditContext.organizationId,
+    scopes: tokenAuditContext.scopes,
+    sessionId: tokenAuditContext.sessionId,
     sourceIp: options.snapshot.sourceIp,
     userAgent: options.snapshot.userAgent,
   });

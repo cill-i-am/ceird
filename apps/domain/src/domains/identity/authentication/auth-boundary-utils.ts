@@ -11,9 +11,12 @@ export const DEFAULT_BETTER_AUTH_COOKIE_PREFIX = "better-auth";
 
 export type AuthEffectRuntimeContext = Context.Context<never>;
 
+const AuthenticationDateFromString = Schema.DateFromString.pipe(
+  Schema.check(Schema.isDateValid())
+);
 const AuthenticationDate = Schema.Union([
   Schema.DateValid,
-  Schema.DateFromString,
+  AuthenticationDateFromString,
 ]);
 const NullableString = Schema.NullOr(Schema.String).pipe(
   Schema.withDecodingDefault(Effect.succeed(null))
