@@ -535,7 +535,9 @@ actor, organization, session, and OAuth-client review paths.
 Organization audit metadata stores target user/member IDs and role
 before/after values when available. Invitation audit metadata stores masked
 recipient email addresses only; raw invitation URLs and invitation IDs are not
-written to the audit table.
+written to the audit table. Remove-member requests that identify a member by
+email resolve audit context through a decoded email plus decoded organization id
+lookup; only branded member ids enter member-id persistence lookups.
 
 Organization audit writes decode through the domain identity persistence schemas
 before insert. The write schema is a finite event-type union that pairs each
@@ -552,9 +554,10 @@ or persisting unverifiable metadata.
 OAuth audit writes use the same schema-owned insert boundary. Successful client
 registration and consent rows require a decoded OAuth client id before insert.
 Token refresh/revoke rows split matched stored-token evidence from unmatched
-endpoint evidence: matched rows require the decoded stored-token client and scope
-context, while malformed stored-token rows emit token-context telemetry and skip
-the audit write instead of being downgraded to `matchedStoredToken: false`.
+endpoint evidence: every refresh row requires a decoded OAuth client id, matched
+rows require the decoded stored-token client and scope context, and malformed
+stored-token rows emit token-context telemetry and skip the audit write instead
+of being downgraded to `matchedStoredToken: false`.
 Optional source IP and user-agent provenance is decoded by the schema and empty
 values normalize to `null`; empty optional provenance does not suppress an
 otherwise trustworthy audit row.
@@ -656,7 +659,8 @@ Reliability notes:
   Better Auth rotates it, so matching rows can include user, session, active
   organization, client, and scope context; Ceird also checks the matching live
   consent row and covering consent scopes before allowing the refresh grant
-  through
+  through, using a schema-decoded token request projection for `grant_type` and
+  `refresh_token` before enforcement
 - revoke events pre-read stored refresh or opaque access-token rows when
   possible; JWT access-token revocation and unknown-token revocation cannot
   prove a stored row mutation from the endpoint response alone, so those rows

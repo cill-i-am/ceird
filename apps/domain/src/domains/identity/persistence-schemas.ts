@@ -319,6 +319,13 @@ const OAuthAuditSuccessfulClientDbColumns = {
   scopes: OAuthAuditScopesDbColumn,
   ...OAuthAuditProvenanceFields,
 };
+const OAuthAuditUnmatchedRefreshDbColumns = {
+  ...OAuthAuditNullableActorField,
+  oauthClientId: OAuthClientId,
+  ...OAuthAuditNullableContextFields,
+  scopes: OAuthAuditScopesDbColumn,
+  ...OAuthAuditProvenanceFields,
+};
 const OAuthAuditMatchedStoredTokenDbColumns = {
   ...OAuthAuditNullableActorField,
   oauthClientId: OAuthClientId,
@@ -422,7 +429,7 @@ export const OAuthSecurityAuditWriteSchema = Schema.Union([
     metadata: OAuthMatchedStoredTokenRefreshedAuditMetadataSchema,
   }),
   Schema.Struct({
-    ...OAuthAuditRejectedOrUnmatchedDbColumns,
+    ...OAuthAuditUnmatchedRefreshDbColumns,
     eventType: Schema.Literal("oauth_token_refreshed"),
     metadata: OAuthTokenRefreshedAuditMetadataSchema,
   }),

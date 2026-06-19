@@ -10,7 +10,7 @@ import {
 import { getIp } from "better-auth/api";
 import { and, eq, gt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Context, Effect, Schema } from "effect";
+import { Context, Effect, Schema, SchemaGetter } from "effect";
 
 import {
   OrganizationInvitationAuditContextRowSchema,
@@ -35,7 +35,6 @@ import {
   readBoundedJsonRecordRequestBody,
   readLimitedRequestText,
   readRequestContentLength,
-  readStringField,
   resolveAuthenticationEndpointPath,
   sanitizeAuthFailureLogValue,
 } from "./auth-boundary-utils.js";
@@ -52,6 +51,7 @@ import {
   oauthAccessToken as oauthAccessTokenTable,
   oauthConsent as oauthConsentTable,
   oauthRefreshToken as oauthRefreshTokenTable,
+  user as userTable,
 } from "./schema.js";
 import type { AuthSecurityAuditEventType } from "./schema.js";
 
@@ -143,6 +143,52 @@ const AUTH_SECURITY_AUDIT_EVENT_TYPE_SET = new Set<string>(
 const OAUTH_SECURITY_AUDIT_MAX_SCOPES = 16;
 const OAUTH_SECURITY_AUDIT_MAX_SCOPE_LENGTH = 128;
 
+const OrganizationMemberEmail = Schema.String.pipe(
+  Schema.refine((value): value is string => isOrganizationMemberEmail(value), {
+    message: "Expected an organization member email",
+  }),
+  Schema.brand("@ceird/domains/identity/OrganizationMemberEmail")
+);
+const decodeOrganizationMemberId =
+  Schema.decodeUnknownSync(OrganizationMemberId);
+const decodeOrganizationMemberEmail = Schema.decodeUnknownSync(
+  OrganizationMemberEmail
+);
+const OrganizationMemberIdOrEmailSchema = Schema.NonEmptyString.pipe(
+  Schema.decodeTo(
+    Schema.Union([
+      Schema.Struct({
+        kind: Schema.Literal("member_id"),
+        memberId: OrganizationMemberId,
+      }),
+      Schema.Struct({
+        email: OrganizationMemberEmail,
+        kind: Schema.Literal("email"),
+      }),
+    ]),
+    {
+      decode: SchemaGetter.transform((value) =>
+        isOrganizationMemberEmail(value)
+          ? ({
+              email: decodeOrganizationMemberEmail(value),
+              kind: "email",
+            } as const)
+          : ({
+              kind: "member_id",
+              memberId: decodeOrganizationMemberId(value),
+            } as const)
+      ),
+      encode: SchemaGetter.transform((value) =>
+        value.kind === "email" ? value.email : value.memberId
+      ),
+    }
+  )
+);
+const OAuthRefreshTokenConsentGuardRequestBodySchema = Schema.Struct({
+  grant_type: Schema.optional(Schema.NonEmptyString),
+  refresh_token: Schema.optional(Schema.NonEmptyString),
+});
+
 interface OrganizationSecurityAuditRequestContext {
   readonly session: AuthenticationSessionResult | null;
   readonly sourceIp: string | null;
@@ -159,6 +205,9 @@ const decodeOAuthSecurityAuditWrite = Schema.decodeUnknownSync(
 );
 const decodeOAuthRefreshTokenConsentGuardRow = Schema.decodeUnknownSync(
   OAuthRefreshTokenConsentGuardRowSchema
+);
+const decodeOAuthRefreshTokenConsentGuardRequestBody = Schema.decodeUnknownSync(
+  OAuthRefreshTokenConsentGuardRequestBodySchema
 );
 const decodeOAuthTokenAuditContextRow = Schema.decodeUnknownSync(
   OAuthTokenAuditContextRowSchema
@@ -204,7 +253,8 @@ const OrganizationSetActiveRequestBodySchema = Schema.Struct({
 });
 const OrganizationMemberRequestBodySchema = Schema.Struct({
   memberId: Schema.optional(OrganizationMemberId),
-  memberIdOrEmail: Schema.optional(Schema.NonEmptyString),
+  memberIdOrEmail: Schema.optional(OrganizationMemberIdOrEmailSchema),
+  organizationId: Schema.optional(OrganizationId),
   role: Schema.optional(OrganizationRole),
 });
 const OAuthRegistrationResponseBodySchema = Schema.Struct({
@@ -421,11 +471,11 @@ export function withOAuthRefreshTokenConsentGuard(
       });
     }
 
-    if (readStringField(body.value, "grant_type") !== "refresh_token") {
+    if (body.value.grant_type !== "refresh_token") {
       return await handler(request);
     }
 
-    const refreshToken = readStringField(body.value, "refresh_token");
+    const refreshToken = body.value.refresh_token;
 
     if (!refreshToken) {
       return await handler(request);
@@ -464,7 +514,9 @@ export function withOAuthRefreshTokenConsentGuard(
 type OAuthRefreshTokenConsentGuardRequestBody =
   | {
       readonly status: "inspectable";
-      readonly value: Record<string, unknown>;
+      readonly value: Schema.Schema.Type<
+        typeof OAuthRefreshTokenConsentGuardRequestBodySchema
+      >;
     }
   | {
       readonly status: "uninspectable";
@@ -502,13 +554,19 @@ async function readOAuthRefreshTokenConsentGuardRequestBody(
     }
 
     if (bodyText.length === 0) {
-      return { status: "inspectable", value: {} };
+      return {
+        status: "inspectable",
+        value: decodeOAuthRefreshTokenConsentGuardRequestBody({}),
+      };
     }
 
     if (contentType.includes("application/json")) {
       const body = JSON.parse(bodyText);
       return isRecord(body)
-        ? { status: "inspectable", value: body }
+        ? {
+            status: "inspectable",
+            value: decodeOAuthRefreshTokenConsentGuardRequestBody(body),
+          }
         : { status: "uninspectable" };
     }
 
@@ -521,7 +579,12 @@ async function readOAuthRefreshTokenConsentGuardRequestBody(
       return { status: "uninspectable" };
     }
 
-    return { status: "inspectable", value: Object.fromEntries(params) };
+    return {
+      status: "inspectable",
+      value: decodeOAuthRefreshTokenConsentGuardRequestBody(
+        Object.fromEntries(params)
+      ),
+    };
   } catch {
     return { status: "uninspectable" };
   }
@@ -737,6 +800,7 @@ async function makeOrganizationSecurityAuditRequestSnapshot(
       body,
       database: options.database,
       runtimeContext: options.runtimeContext ?? Context.empty(),
+      session,
     }),
     session,
     sourceIp: getIp(request, {
@@ -823,24 +887,35 @@ function readSessionActiveOrganizationId(
     : decodeSessionActiveOrganizationId(organizationId);
 }
 
+function isOrganizationMemberEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
+}
+
 async function resolveOrganizationMemberAuditContext(options: {
   readonly body: OrganizationSecurityAuditRequestBody | null;
   readonly database: NodePgDatabase;
   readonly runtimeContext: AuthEffectRuntimeContext;
+  readonly session: AuthenticationSessionResult | null;
 }) {
-  const memberId =
-    options.body?.endpointPath ===
-      ORGANIZATION_UPDATE_MEMBER_ROLE_ENDPOINT_PATH ||
-    options.body?.endpointPath === ORGANIZATION_REMOVE_MEMBER_ENDPOINT_PATH
-      ? (options.body.value.memberId ?? options.body.value.memberIdOrEmail)
-      : undefined;
-
-  if (!memberId) {
-    return null;
-  }
-
   try {
-    return await findOrganizationMemberAuditContext(options.database, memberId);
+    const lookup = resolveOrganizationMemberAuditContextLookup({
+      body: options.body,
+      session: options.session,
+    });
+
+    if (lookup === null) {
+      return null;
+    }
+
+    return lookup.kind === "email"
+      ? await findOrganizationMemberAuditContextByEmail(options.database, {
+          email: lookup.email,
+          organizationId: lookup.organizationId,
+        })
+      : await findOrganizationMemberAuditContext(
+          options.database,
+          lookup.memberId
+        );
   } catch (error) {
     await reportAuthSecurityAuditOrganizationContextFailure(
       "organization_member",
@@ -851,9 +926,67 @@ async function resolveOrganizationMemberAuditContext(options: {
   }
 }
 
+function resolveOrganizationMemberAuditContextLookup(options: {
+  readonly body: OrganizationSecurityAuditRequestBody | null;
+  readonly session: AuthenticationSessionResult | null;
+}):
+  | {
+      readonly kind: "email";
+      readonly email: Schema.Schema.Type<typeof OrganizationMemberEmail>;
+      readonly organizationId: Schema.Schema.Type<typeof OrganizationId>;
+    }
+  | {
+      readonly kind: "member_id";
+      readonly memberId: Schema.Schema.Type<typeof OrganizationMemberId>;
+    }
+  | null {
+  if (
+    options.body?.endpointPath !==
+      ORGANIZATION_UPDATE_MEMBER_ROLE_ENDPOINT_PATH &&
+    options.body?.endpointPath !== ORGANIZATION_REMOVE_MEMBER_ENDPOINT_PATH
+  ) {
+    return null;
+  }
+
+  const {
+    memberId,
+    memberIdOrEmail,
+    organizationId: requestedOrganizationId,
+  } = options.body.value;
+
+  if (memberId) {
+    return {
+      kind: "member_id",
+      memberId,
+    };
+  }
+
+  if (!memberIdOrEmail) {
+    return null;
+  }
+
+  if (memberIdOrEmail.kind === "member_id") {
+    return memberIdOrEmail;
+  }
+
+  const organizationId =
+    requestedOrganizationId ??
+    readSessionActiveOrganizationId(
+      options.session?.session.activeOrganizationId
+    );
+
+  return organizationId === null
+    ? null
+    : {
+        email: memberIdOrEmail.email,
+        kind: "email",
+        organizationId,
+      };
+}
+
 async function findOrganizationMemberAuditContext(
   database: NodePgDatabase,
-  memberId: string
+  memberId: Schema.Schema.Type<typeof OrganizationMemberId>
 ) {
   const [row] = await database
     .select({
@@ -864,6 +997,33 @@ async function findOrganizationMemberAuditContext(
     })
     .from(memberTable)
     .where(eq(memberTable.id, memberId))
+    .limit(1);
+
+  return row ? decodeOrganizationMemberAuditContextRow(row) : null;
+}
+
+async function findOrganizationMemberAuditContextByEmail(
+  database: NodePgDatabase,
+  options: {
+    readonly email: Schema.Schema.Type<typeof OrganizationMemberEmail>;
+    readonly organizationId: Schema.Schema.Type<typeof OrganizationId>;
+  }
+) {
+  const [row] = await database
+    .select({
+      id: memberTable.id,
+      organizationId: memberTable.organizationId,
+      role: memberTable.role,
+      userId: memberTable.userId,
+    })
+    .from(memberTable)
+    .innerJoin(userTable, eq(memberTable.userId, userTable.id))
+    .where(
+      and(
+        eq(userTable.email, options.email),
+        eq(memberTable.organizationId, options.organizationId)
+      )
+    )
     .limit(1);
 
   return row ? decodeOrganizationMemberAuditContextRow(row) : null;
