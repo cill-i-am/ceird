@@ -90,6 +90,41 @@ describe("organization member identity mapping", () => {
     });
   });
 
+  it("builds native organization handler URLs from web request original URLs", async () => {
+    const requests: CapturedOrganizationAuthRequest[] = [];
+    await runInviteMemberServiceWithHandler(
+      async (request) => {
+        requests.push({
+          body: await request.json(),
+          headers: {
+            authorization: request.headers.get("authorization"),
+            "cf-connecting-ip": request.headers.get("cf-connecting-ip"),
+            cookie: request.headers.get("cookie"),
+            origin: request.headers.get("origin"),
+            "user-agent": request.headers.get("user-agent"),
+            "x-forwarded-for": request.headers.get("x-forwarded-for"),
+            "x-forwarded-host": request.headers.get("x-forwarded-host"),
+          },
+          method: request.method,
+          pathname: new URL(request.url).pathname,
+        });
+
+        return Response.json(makeNativeInvitationPayload());
+      },
+      {
+        originalUrl: "https://api.ceird.example/organization/invitations",
+        requestUrl: "/organization/invitations",
+      }
+    );
+
+    expect(requests).toStrictEqual([
+      expect.objectContaining({
+        method: "POST",
+        pathname: "/api/auth/organization/invite-member",
+      }),
+    ]);
+  });
+
   it("propagates invite rate-limit failures from the Better Auth handler path", async () => {
     await expect(
       runInviteMemberServiceWithHandler(() =>
@@ -397,6 +432,8 @@ function makeOrganizationActor(): OrganizationActor {
 async function runInviteMemberServiceWithHandler(
   handler: (request: Request) => Promise<Response>,
   options: {
+    readonly originalUrl?: string;
+    readonly requestUrl?: string;
     readonly resend?: boolean;
   } = {}
 ) {
@@ -446,7 +483,7 @@ async function runInviteMemberServiceWithHandler(
     ),
     Layer.succeed(
       HttpServerRequest.HttpServerRequest,
-      makeTestHttpServerRequest()
+      makeTestHttpServerRequest(options)
     )
   );
 
@@ -463,7 +500,10 @@ async function runInviteMemberServiceWithHandler(
   );
 }
 
-function makeTestHttpServerRequest(): HttpServerRequest.HttpServerRequest {
+function makeTestHttpServerRequest(options: {
+  readonly originalUrl?: string;
+  readonly requestUrl?: string;
+}): HttpServerRequest.HttpServerRequest {
   const request = new Request(
     "https://api.ceird.example/organization/invitations",
     {
@@ -479,7 +519,8 @@ function makeTestHttpServerRequest(): HttpServerRequest.HttpServerRequest {
 
   return {
     headers: request.headers,
-    url: request.url,
+    originalUrl: options.originalUrl ?? request.url,
+    url: options.requestUrl ?? request.url,
   } as unknown as HttpServerRequest.HttpServerRequest;
 }
 

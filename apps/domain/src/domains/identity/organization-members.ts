@@ -641,7 +641,7 @@ function dispatchOrganizationAuthRequest(
 ) {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const url = new URL(`/api/auth${path}`, request.url);
+    const url = yield* makeOrganizationAuthRequestUrl(request, path);
     const headers = makeOrganizationAuthRequestHeaders(request.headers);
 
     const response = yield* Effect.tryPromise({
@@ -668,6 +668,106 @@ function dispatchOrganizationAuthRequest(
 
     return body;
   });
+}
+
+function makeOrganizationAuthRequestUrl(
+  request: HttpServerRequest.HttpServerRequest,
+  path: string
+) {
+  return Effect.try({
+    catch: (cause) =>
+      new OrganizationIdentityStorageError({
+        cause: formatUnknownCause(cause),
+        message: "Organization identity request URL was invalid",
+      }),
+    try: () => {
+      const baseUrl = resolveOrganizationAuthRequestBaseUrl(request);
+
+      return new URL(`/api/auth${path}`, baseUrl);
+    },
+  });
+}
+
+function resolveOrganizationAuthRequestBaseUrl(
+  request: HttpServerRequest.HttpServerRequest
+) {
+  const headers = new Headers(request.headers);
+  const originalUrl = parseAbsoluteHttpUrl(request.originalUrl);
+
+  if (originalUrl !== null) {
+    return originalUrl;
+  }
+
+  const requestUrl = parseAbsoluteHttpUrl(request.url);
+
+  if (requestUrl !== null) {
+    return requestUrl;
+  }
+
+  const host =
+    readNonEmptyHeader(headers, "x-forwarded-host") ??
+    readNonEmptyHeader(headers, "host");
+
+  if (host === null) {
+    throw new TypeError("Organization identity request host was unavailable.");
+  }
+
+  const protocol = resolveOrganizationAuthRequestProtocol(headers);
+
+  if (protocol === null) {
+    throw new TypeError(
+      "Organization identity request protocol was unavailable."
+    );
+  }
+
+  return new URL(`${protocol}//${host}`);
+}
+
+function resolveOrganizationAuthRequestProtocol(headers: Headers) {
+  const forwardedProtocol = parseHttpProtocol(
+    readNonEmptyHeader(headers, "x-forwarded-proto")
+  );
+
+  if (forwardedProtocol !== null) {
+    return forwardedProtocol;
+  }
+
+  return (
+    parseAbsoluteHttpUrl(readNonEmptyHeader(headers, "origin"))?.protocol ??
+    null
+  );
+}
+
+function parseAbsoluteHttpUrl(value: string | null | undefined) {
+  if (value === null || value === undefined || value.length === 0) {
+    return null;
+  }
+
+  if (!isAbsoluteHttpUrlInput(value)) {
+    return null;
+  }
+
+  const url = new URL(value);
+
+  return isHttpProtocol(url.protocol) ? url : null;
+}
+
+function isAbsoluteHttpUrlInput(value: string) {
+  return value.startsWith("http://") || value.startsWith("https://");
+}
+
+function parseHttpProtocol(value: string | null) {
+  if (value === null) {
+    return null;
+  }
+
+  const protocol = value.endsWith(":") ? value : `${value}:`;
+
+  return isHttpProtocol(protocol) ? protocol : null;
+}
+
+function isHttpProtocol(protocol: string) {
+  return protocol === "http:" || protocol === "https:";
 }
 
 function readResponseBody(response: Response) {
