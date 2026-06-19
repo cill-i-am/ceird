@@ -1489,6 +1489,14 @@ export function decodeOptionalOrganizationSecurityActivityTargetType(
   );
 }
 
+export function decodeOptionalOrganizationSecurityActivityTargetSearch(
+  input: unknown
+): string | undefined {
+  return Option.getOrUndefined(
+    Schema.decodeUnknownOption(NonEmptyTrimmedString)(input)
+  );
+}
+
 export function decodeOptionalIsoDateString(
   input: unknown
 ): IsoDateString | undefined {

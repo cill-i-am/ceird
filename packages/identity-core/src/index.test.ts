@@ -11,6 +11,7 @@ import {
   decodeProductMemberActorSummaryElectricRow,
   decodeOrganizationSummary,
   decodeOrganizationSecurityActivityListResponse,
+  decodeOptionalOrganizationSecurityActivityTargetSearch,
   decodeOrganizationRole,
   decodeOrganizationSlug,
   decodeSessionId,
@@ -931,6 +932,18 @@ describe("organization member identity boundary", () => {
 });
 
 describe("organization security activity boundary", () => {
+  it("decodes optional target search through the shared schema", () => {
+    expect(
+      decodeOptionalOrganizationSecurityActivityTargetSearch(" Taylor ")
+    ).toBe("Taylor");
+    expect(
+      decodeOptionalOrganizationSecurityActivityTargetSearch("   ")
+    ).toBeUndefined();
+    expect(
+      decodeOptionalOrganizationSecurityActivityTargetSearch(42)
+    ).toBeUndefined();
+  }, 1000);
+
   it("rejects malformed organization security activity date filters", () => {
     expect(
       Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({

@@ -2,7 +2,10 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { OrganizationSecurityActivityPage } from "#/features/organization-security/organization-security-activity-page";
 import { loadOrganizationSecurityActivityRouteData } from "#/features/organization-security/organization-security-route-loader";
-import { decodeOrganizationSecurityActivitySearch } from "#/features/organization-security/organization-security-search";
+import {
+  decodeOrganizationSecurityActivitySearch,
+  decodeOrganizationSecurityActivityTargetSearch,
+} from "#/features/organization-security/organization-security-search";
 import type { OrganizationSecurityActivitySearch } from "#/features/organization-security/organization-security-search";
 import type { WorkspaceSheetSearch } from "#/features/workspace-sheets/workspace-sheet-search";
 
@@ -83,7 +86,9 @@ export function omitEmptyOrganizationSecurityActivitySearch(
     cursor: search.cursor || undefined,
     eventType: search.eventType || undefined,
     fromDate: search.fromDate || undefined,
-    targetSearch: search.targetSearch?.trim() || undefined,
+    targetSearch: decodeOrganizationSecurityActivityTargetSearch(
+      search.targetSearch
+    ),
     targetType: search.targetType || undefined,
     toDate: search.toDate || undefined,
   } satisfies OrganizationSecurityActivitySearch;

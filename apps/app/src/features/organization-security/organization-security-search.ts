@@ -2,6 +2,7 @@ import {
   decodeOptionalIsoDateString,
   decodeOptionalOrganizationSecurityActivityCursor,
   decodeOptionalOrganizationSecurityActivityEventType,
+  decodeOptionalOrganizationSecurityActivityTargetSearch,
   decodeOptionalOrganizationSecurityActivityTargetType,
   decodeOptionalUserId,
 } from "@ceird/identity-core";
@@ -32,7 +33,9 @@ export function decodeOrganizationSecurityActivitySearch(
     cursor: decodeCursor(input.cursor),
     eventType: decodeOrganizationSecurityActivityEventType(input.eventType),
     fromDate: decodeIsoDate(input.fromDate),
-    targetSearch: decodeTargetSearch(input.targetSearch),
+    targetSearch: decodeOrganizationSecurityActivityTargetSearch(
+      input.targetSearch
+    ),
     targetType: decodeOrganizationSecurityActivityTargetType(input.targetType),
     toDate: decodeIsoDate(input.toDate),
   } satisfies OrganizationSecurityActivitySearch;
@@ -72,12 +75,6 @@ export function decodeIsoDate(value: unknown) {
   return decodeOptionalIsoDateString(value);
 }
 
-function decodeTargetSearch(value: unknown) {
-  if (typeof value !== "string") {
-    return;
-  }
-
-  const trimmed = value.trim();
-
-  return trimmed.length > 0 ? trimmed : undefined;
+export function decodeOrganizationSecurityActivityTargetSearch(value: unknown) {
+  return decodeOptionalOrganizationSecurityActivityTargetSearch(value);
 }

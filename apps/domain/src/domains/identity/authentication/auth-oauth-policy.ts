@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 
 import {
   CeirdOAuthScopeSchema,
+  IsoDateTimeString,
   OAuthClientId,
   OrganizationId,
   OrganizationMemberId,
@@ -262,16 +263,24 @@ const OrganizationMemberIdOrEmail = Schema.Union([
   OrganizationAuditEmail,
   OrganizationMemberId,
 ]);
-const OrganizationAuditMemberSnapshotSchema = Schema.Struct({
-  id: Schema.optional(OrganizationMemberId),
-  organizationId: Schema.optional(OrganizationId),
-  role: Schema.optional(OrganizationRole),
-  userId: Schema.optional(UserId),
-}).annotate({
-  parseOptions: { onExcessProperty: "error" },
+const BetterAuthOrganizationAuditResponseBodySchema = Schema.Struct({
+  createdAt: IsoDateTimeString,
+  id: OrganizationId,
+  logo: Schema.optional(Schema.NullOr(Schema.String)),
+  metadata: Schema.optional(Schema.NullOr(Schema.String)),
+  name: Schema.NonEmptyString,
+  slug: Schema.NonEmptyString,
+  updatedAt: Schema.optional(Schema.NullOr(IsoDateTimeString)),
 });
-type OrganizationAuditMemberSnapshot = Schema.Schema.Type<
-  typeof OrganizationAuditMemberSnapshotSchema
+const BetterAuthOrganizationMemberAuditResponseMemberSchema = Schema.Struct({
+  createdAt: IsoDateTimeString,
+  id: OrganizationMemberId,
+  organizationId: OrganizationId,
+  role: OrganizationRole,
+  userId: UserId,
+});
+type BetterAuthOrganizationMemberAuditResponseMember = Schema.Schema.Type<
+  typeof BetterAuthOrganizationMemberAuditResponseMemberSchema
 >;
 const OrganizationGenericAuditRequestBodySchema = Schema.Struct({});
 const OrganizationInviteMemberAuditRequestBodySchema = Schema.Struct({
@@ -306,21 +315,12 @@ const OrganizationInvitationAuditResponseBodySchema = Schema.Struct({
   role: Schema.optional(OrganizationRole),
 });
 const OrganizationActiveAuditResponseBodySchema = Schema.Union([
-  Schema.Struct({
-    id: OrganizationId,
-  }).annotate({
-    parseOptions: { onExcessProperty: "error" },
-  }),
+  BetterAuthOrganizationAuditResponseBodySchema,
   Schema.Null,
 ]);
-const OrganizationMemberAuditResponseBodySchema = Schema.Union([
-  OrganizationAuditMemberSnapshotSchema,
-  Schema.Struct({
-    member: OrganizationAuditMemberSnapshotSchema,
-  }).annotate({
-    parseOptions: { onExcessProperty: "error" },
-  }),
-]);
+const OrganizationMemberAuditResponseBodySchema = Schema.Struct({
+  member: BetterAuthOrganizationMemberAuditResponseMemberSchema,
+});
 const OrganizationInvitationAuditContextRowSchema = Schema.Struct({
   email: OrganizationAuditEmail,
   organizationId: OrganizationId,
@@ -507,10 +507,10 @@ const decodeOAuthSecurityAuditWrite = Schema.decodeUnknownSync(
 );
 
 const OrganizationMemberResponseBodySchema = Schema.Struct({
-  id: Schema.optional(OrganizationMemberId),
-  organizationId: Schema.optional(OrganizationId),
-  role: Schema.optional(OrganizationRole),
-  userId: Schema.optional(UserId),
+  id: OrganizationMemberId,
+  organizationId: OrganizationId,
+  role: OrganizationRole,
+  userId: UserId,
 });
 type OrganizationMemberResponseBody = Schema.Schema.Type<
   typeof OrganizationMemberResponseBodySchema
@@ -1462,13 +1462,20 @@ function resolveOrganizationMemberAuditLookup(
 function resolveOrganizationMemberAuditResponseBody(
   responseBody: Schema.Schema.Type<
     typeof OrganizationMemberAuditResponseBodySchema
-  > | null
-): OrganizationAuditMemberSnapshot | null {
-  if (responseBody === null) {
-    return null;
-  }
+  >
+): BetterAuthOrganizationMemberAuditResponseMember {
+  return responseBody.member;
+}
 
-  return "member" in responseBody ? responseBody.member : responseBody;
+function makeOrganizationMemberResponseBody(
+  member: BetterAuthOrganizationMemberAuditResponseMember
+): OrganizationMemberResponseBody {
+  return decodeOrganizationMemberResponseBody({
+    id: member.id,
+    organizationId: member.organizationId,
+    role: member.role,
+    userId: member.userId,
+  });
 }
 
 async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
@@ -1622,28 +1629,8 @@ async function readOrganizationMemberResponseBody(
 
   const member = resolveOrganizationMemberAuditResponseBody(result.body);
 
-  if (member === null) {
-    return { status: "malformed" };
-  }
-
-  if (
-    member.id === undefined &&
-    member.organizationId === undefined &&
-    member.role === undefined &&
-    member.userId === undefined
-  ) {
-    await reportAuthSecurityAuditParseFailure(
-      options.eventType,
-      new Error(
-        "Auth security audit member response body is missing member fields."
-      ),
-      options.runtimeContext
-    );
-    return { status: "malformed" };
-  }
-
   return {
-    member: decodeOrganizationMemberResponseBody(member),
+    member: makeOrganizationMemberResponseBody(member),
     status: "decoded",
   };
 }

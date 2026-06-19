@@ -39,6 +39,7 @@ import { cn } from "#/lib/utils";
 import {
   decodeIsoDate,
   decodeOrganizationSecurityActivityEventType,
+  decodeOrganizationSecurityActivityTargetSearch,
   decodeOrganizationSecurityActivityTargetType,
 } from "./organization-security-search";
 import type { OrganizationSecurityActivitySearch } from "./organization-security-search";
@@ -363,7 +364,8 @@ function TargetSearchFilter({
   );
 
   function commitTargetSearchFilter() {
-    const targetSearch = targetSearchDraft.trim() || undefined;
+    const targetSearch =
+      decodeOrganizationSecurityActivityTargetSearch(targetSearchDraft);
 
     if (targetSearch === search.targetSearch) {
       return;
