@@ -3,7 +3,10 @@ import {
   isAdministrativeOrganizationRole,
 } from "@ceird/identity-core";
 import type {
+  InvitationId,
   IsoDateTimeString as IsoDateTimeStringType,
+  OrganizationInvitation,
+  OrganizationMember,
   OrganizationRole as OrganizationRoleType,
 } from "@ceird/identity-core";
 import {
@@ -42,14 +45,13 @@ import {
 } from "#/components/ui/responsive-dialog";
 
 import {
-  formatRoleLabel,
+  formatInvitationStatusLabel,
+  formatOrganizationRoleLabel,
   getMemberDisplayName,
 } from "./organization-member-display";
 import type {
   InvitationAction,
-  InvitationSummary,
   MemberAction,
-  OrganizationMemberSummary,
 } from "./organization-member-display";
 
 const invitationExpiryFormatter = new Intl.DateTimeFormat("en-IE", {
@@ -63,8 +65,8 @@ function formatInvitationExpiry(expiresAt: IsoDateTimeStringType) {
   return `Expires ${invitationExpiryFormatter.format(new Date(expiresAt))}`;
 }
 
-function getOrganizationMemberInitial(member: OrganizationMemberSummary) {
-  return (member.name || member.email).trim().charAt(0).toUpperCase() || "U";
+function getOrganizationMemberInitial(member: OrganizationMember) {
+  return member.name.charAt(0).toUpperCase();
 }
 
 export function CurrentMemberRow({
@@ -83,11 +85,11 @@ export function CurrentMemberRow({
   readonly currentViewerRole: OrganizationRoleType;
   readonly errorMessage?: string | undefined;
   readonly isCurrentUser: boolean;
-  readonly member: OrganizationMemberSummary;
+  readonly member: OrganizationMember;
   readonly ownerCount: number;
-  readonly onRemove: (member: OrganizationMemberSummary) => Promise<void>;
+  readonly onRemove: (member: OrganizationMember) => Promise<void>;
   readonly onRoleChange: (
-    member: OrganizationMemberSummary,
+    member: OrganizationMember,
     role: OrganizationRoleType
   ) => Promise<void>;
 }) {
@@ -125,7 +127,9 @@ export function CurrentMemberRow({
         ) : null}
       </AppRowListBody>
       <AppRowListMeta>
-        <Badge variant="secondary">{formatRoleLabel(member.role)}</Badge>
+        <Badge variant="secondary">
+          {formatOrganizationRoleLabel(member.role)}
+        </Badge>
         {isCurrentUser ? <Badge variant="outline">You</Badge> : null}
       </AppRowListMeta>
       {hasActions ? (
@@ -158,7 +162,9 @@ export function CurrentMemberRow({
                         void onRoleChange(member, role);
                       }}
                     >
-                      <span>Make {formatRoleLabel(role).toLowerCase()}</span>
+                      <span>
+                        Make {formatOrganizationRoleLabel(role).toLowerCase()}
+                      </span>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuGroup>
@@ -230,13 +236,13 @@ export function PendingInvitationRow({
   onInvitationAction,
 }: {
   readonly activeAction: {
-    readonly invitationId: string;
+    readonly invitationId: InvitationId;
     readonly type: InvitationAction;
   } | null;
   readonly actionsDisabled: boolean;
-  readonly invitation: InvitationSummary;
+  readonly invitation: OrganizationInvitation;
   readonly onInvitationAction: (
-    invitation: InvitationSummary,
+    invitation: OrganizationInvitation,
     action: InvitationAction
   ) => Promise<void>;
 }) {
@@ -264,8 +270,12 @@ export function PendingInvitationRow({
         </p>
       </AppRowListBody>
       <AppRowListMeta>
-        <Badge variant="secondary">{formatRoleLabel(invitation.role)}</Badge>
-        <Badge variant="outline">{formatRoleLabel(invitation.status)}</Badge>
+        <Badge variant="secondary">
+          {formatOrganizationRoleLabel(invitation.role)}
+        </Badge>
+        <Badge variant="outline">
+          {formatInvitationStatusLabel(invitation.status)}
+        </Badge>
       </AppRowListMeta>
       <AppRowListActions>
         <DropdownMenu>
@@ -327,7 +337,7 @@ function getManageableRoleOptions({
 }: {
   readonly currentViewerRole: OrganizationRoleType;
   readonly isCurrentUser: boolean;
-  readonly member: OrganizationMemberSummary;
+  readonly member: OrganizationMember;
   readonly ownerCount: number;
 }) {
   if (isCurrentUser) {
@@ -368,7 +378,7 @@ function canRemoveMember({
 }: {
   readonly currentViewerRole: OrganizationRoleType;
   readonly isCurrentUser: boolean;
-  readonly member: OrganizationMemberSummary;
+  readonly member: OrganizationMember;
   readonly ownerCount: number;
 }) {
   if (isCurrentUser) {

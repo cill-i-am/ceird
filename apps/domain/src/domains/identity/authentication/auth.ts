@@ -5,18 +5,24 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import {
   decodeInvitationId,
   decodeCreateOrganizationInput,
+  decodeInvitableOrganizationRole,
   decodeOrganizationRole,
   decodePublicInvitationPreview,
   decodeSessionId,
   decodeUpdateOrganizationInput,
   decodeUserId,
+  InvitationId,
+  InvitableOrganizationRole,
+  NonNegativeInteger,
+  OrganizationEmailAddress,
   OrganizationId,
+  OrganizationMemberId,
+  OrganizationNameSchema,
+  UserId,
 } from "@ceird/identity-core";
 import type {
-  InvitationId,
   OrganizationRole,
   PublicInvitationPreview,
-  UserId,
 } from "@ceird/identity-core";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -55,9 +61,9 @@ import {
   AuthenticationEmailScheduler,
   AuthenticationEmailSchedulerLive,
 } from "./auth-email-scheduler.js";
+import { OrganizationInvitationEmailInput } from "./auth-email.js";
 import type {
   EmailVerificationEmailInput,
-  OrganizationInvitationEmailInput,
   PasswordResetEmailInput,
 } from "./auth-email.js";
 import {
@@ -139,6 +145,157 @@ interface AuthenticationPluginOption {
   readonly options?: unknown;
 }
 
+const PublicInvitationPreviewRowSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  organizationName: OrganizationNameSchema,
+  role: InvitableOrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const OrganizationMembershipCountRowSchema = Schema.Struct({
+  count: NonNegativeInteger,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const NativeInvitationHookOrganizationSchema = Schema.Struct({
+  id: OrganizationId,
+  name: OrganizationNameSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeInvitationHookUserSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  id: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeCreateInvitationInviterSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  emailVerified: Schema.Boolean,
+  id: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeCreateInvitationPayloadInvitationSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  inviterId: UserId,
+  organizationId: OrganizationId,
+  role: InvitableOrganizationRole,
+  teamId: Schema.optional(Schema.String),
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeCreateInvitationPayloadRoleProbeSchema = Schema.Struct({
+  invitation: Schema.Struct({
+    role: Schema.String,
+  }).annotate({
+    parseOptions: { onExcessProperty: "ignore" },
+  }),
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeCreateInvitationPayloadSchema = Schema.Struct({
+  invitation: NativeCreateInvitationPayloadInvitationSchema,
+  inviter: NativeCreateInvitationInviterSchema,
+  organization: NativeInvitationHookOrganizationSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeInvitationAuditInvitationSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  organizationId: OrganizationId,
+  role: InvitableOrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeAfterCreateInvitationPayloadSchema = Schema.Struct({
+  invitation: NativeInvitationAuditInvitationSchema,
+  inviter: NativeInvitationHookUserSchema,
+  organization: NativeInvitationHookOrganizationSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeAfterCancelInvitationPayloadSchema = Schema.Struct({
+  cancelledBy: NativeInvitationHookUserSchema,
+  invitation: NativeInvitationAuditInvitationSchema,
+  organization: NativeInvitationHookOrganizationSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeSendInvitationEmailPayloadSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  id: InvitationId,
+  inviter: Schema.Struct({
+    user: NativeInvitationHookUserSchema,
+  }).annotate({
+    parseOptions: { onExcessProperty: "ignore" },
+  }),
+  organization: NativeInvitationHookOrganizationSchema,
+  role: InvitableOrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeAcceptInvitationUserSchema = Schema.Struct({
+  id: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeAcceptInvitationMemberSchema = Schema.Struct({
+  id: OrganizationMemberId,
+  userId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeAcceptInvitationInvitationSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  organizationId: OrganizationId,
+  role: InvitableOrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeAcceptInvitationBeforeHookPayloadSchema = Schema.Struct({
+  user: NativeAcceptInvitationUserSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeAcceptInvitationAfterHookPayloadSchema = Schema.Struct({
+  invitation: NativeAcceptInvitationInvitationSchema,
+  member: NativeAcceptInvitationMemberSchema,
+  user: NativeAcceptInvitationUserSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const decodePublicInvitationPreviewRow = Schema.decodeUnknownSync(
+  PublicInvitationPreviewRowSchema
+);
+const decodeOrganizationMembershipCountRow = Schema.decodeUnknownSync(
+  OrganizationMembershipCountRowSchema
+);
+const decodeNativeCreateInvitationHookPayload = Schema.decodeUnknownSync(
+  NativeCreateInvitationPayloadSchema
+);
+const decodeNativeCreateInvitationPayloadRoleProbe = Schema.decodeUnknownSync(
+  NativeCreateInvitationPayloadRoleProbeSchema
+);
+const decodeNativeAfterCreateInvitationHookPayload = Schema.decodeUnknownSync(
+  NativeAfterCreateInvitationPayloadSchema
+);
+const decodeNativeAfterCancelInvitationHookPayload = Schema.decodeUnknownSync(
+  NativeAfterCancelInvitationPayloadSchema
+);
+const decodeNativeSendInvitationEmailPayload = Schema.decodeUnknownSync(
+  NativeSendInvitationEmailPayloadSchema
+);
+const decodeNativeAcceptInvitationBeforeHookPayload = Schema.decodeUnknownSync(
+  NativeAcceptInvitationBeforeHookPayloadSchema
+);
+const decodeNativeAcceptInvitationAfterHookPayload = Schema.decodeUnknownSync(
+  NativeAcceptInvitationAfterHookPayloadSchema
+);
+const decodeOrganizationInvitationEmailInput = Schema.decodeUnknownSync(
+  OrganizationInvitationEmailInput
+);
+
 export interface CeirdAuthentication {
   api: {
     readonly getSession: (options: {
@@ -184,26 +341,29 @@ export async function findPublicInvitationPreview(options: {
     return null;
   }
 
+  const decodedPreview = decodePublicInvitationPreviewRow(preview);
+
   return decodePublicInvitationPreview({
-    email: maskInvitationEmail(preview.email),
-    organizationName: preview.organizationName,
-    role: preview.role,
+    email: maskInvitationEmail(decodedPreview.email),
+    organizationName: decodedPreview.organizationName,
+    role: decodedPreview.role,
   });
 }
 
 export async function assertUserCanAcceptOrganizationInvitation(options: {
   readonly database: NodePgDatabase;
-  readonly userId: string;
+  readonly userId: UserId;
 }) {
-  const [membershipCount] = await options.database
+  const [membershipCountRow] = await options.database
     .select({
       count: sql<number>`count(*)::int`,
     })
     .from(memberTable)
     .where(eq(memberTable.userId, options.userId))
     .limit(1);
+  const membershipCount = decodeOrganizationMembershipCount(membershipCountRow);
 
-  if ((membershipCount?.count ?? 0) >= ORGANIZATION_LIMIT_PER_USER) {
+  if (membershipCount.count >= ORGANIZATION_LIMIT_PER_USER) {
     throwOrganizationLimitReached();
   }
 }
@@ -278,6 +438,98 @@ function throwOrganizationLimitReached(): never {
     code: ORGANIZATION_LIMIT_REACHED_ERROR_CODE,
     message: "You have reached the maximum number of organizations.",
   });
+}
+
+function throwInvalidOrganizationInvitationHookPayload(): never {
+  throw APIError.from("BAD_REQUEST", {
+    code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
+    message: "Organization invitation hook payload was invalid.",
+  });
+}
+
+function throwInvalidOrganizationMembershipCount(): never {
+  throw APIError.from("BAD_REQUEST", {
+    code: "INVALID_ORGANIZATION_MEMBERSHIP_COUNT",
+    message: "Organization membership count was invalid.",
+  });
+}
+
+function decodeOrganizationMembershipCount(input: unknown) {
+  try {
+    return decodeOrganizationMembershipCountRow(input);
+  } catch {
+    throwInvalidOrganizationMembershipCount();
+  }
+}
+
+export function decodeCreateInvitationHookPayload(input: unknown) {
+  try {
+    return decodeNativeCreateInvitationHookPayload(input);
+  } catch {
+    if (isCreateInvitationRolePolicyFailure(input)) {
+      throwInvalidOrganizationRole();
+    }
+
+    throwInvalidOrganizationInvitationHookPayload();
+  }
+}
+
+function isCreateInvitationRolePolicyFailure(input: unknown) {
+  let payload;
+
+  try {
+    payload = decodeNativeCreateInvitationPayloadRoleProbe(input);
+  } catch {
+    return false;
+  }
+
+  try {
+    decodeInvitableOrganizationRole(payload.invitation.role);
+
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+export function decodeAfterCreateInvitationHookPayload(input: unknown) {
+  try {
+    return decodeNativeAfterCreateInvitationHookPayload(input);
+  } catch {
+    throwInvalidOrganizationInvitationHookPayload();
+  }
+}
+
+export function decodeAfterCancelInvitationHookPayload(input: unknown) {
+  try {
+    return decodeNativeAfterCancelInvitationHookPayload(input);
+  } catch {
+    throwInvalidOrganizationInvitationHookPayload();
+  }
+}
+
+export function decodeSendInvitationEmailPayload(input: unknown) {
+  try {
+    return decodeNativeSendInvitationEmailPayload(input);
+  } catch {
+    throwInvalidOrganizationInvitationHookPayload();
+  }
+}
+
+export function decodeAcceptInvitationBeforeHookPayload(input: unknown) {
+  try {
+    return decodeNativeAcceptInvitationBeforeHookPayload(input);
+  } catch {
+    throwInvalidOrganizationInvitationHookPayload();
+  }
+}
+
+export function decodeAcceptInvitationAfterHookPayload(input: unknown) {
+  try {
+    return decodeNativeAcceptInvitationAfterHookPayload(input);
+  } catch {
+    throwInvalidOrganizationInvitationHookPayload();
+  }
 }
 
 function decodeWritableOrganizationRole(input: unknown) {
@@ -649,7 +901,10 @@ export function createAuthentication(options: {
                 role: decodeWritableOrganizationRole(newRole),
               },
             }),
-          beforeCreateInvitation: ({ invitation: nextInvitation, inviter }) => {
+          beforeCreateInvitation: (payload) => {
+            const { invitation: nextInvitation, inviter } =
+              decodeCreateInvitationHookPayload(payload);
+
             if (inviter.emailVerified !== true) {
               throwEmailNotVerified(
                 "Verify your email before inviting organization members."
@@ -659,14 +914,14 @@ export function createAuthentication(options: {
             return Promise.resolve({
               data: {
                 ...nextInvitation,
-                role: decodeWritableOrganizationRole(nextInvitation.role),
+                role: nextInvitation.role,
               },
             });
           },
-          afterCreateInvitation: async ({
-            invitation: nextInvitation,
-            inviter,
-          }) => {
+          afterCreateInvitation: async (payload) => {
+            const { invitation: nextInvitation, inviter } =
+              decodeAfterCreateInvitationHookPayload(payload);
+
             await recordOrganizationSecurityAuditEvent(
               {
                 database,
@@ -683,17 +938,22 @@ export function createAuthentication(options: {
               }
             );
           },
-          beforeAcceptInvitation: async ({ user }) => {
+          beforeAcceptInvitation: async (payload) => {
+            const decodedPayload =
+              decodeAcceptInvitationBeforeHookPayload(payload);
+
             await assertUserCanAcceptOrganizationInvitation({
               database,
-              userId: user.id,
+              userId: decodedPayload.user.id,
             });
           },
-          afterAcceptInvitation: async ({
-            invitation: acceptedInvitation,
-            member,
-            user,
-          }) => {
+          afterAcceptInvitation: async (payload) => {
+            const {
+              invitation: acceptedInvitation,
+              member,
+              user,
+            } = decodeAcceptInvitationAfterHookPayload(payload);
+
             await recordOrganizationSecurityAuditEvent(
               {
                 database,
@@ -714,10 +974,10 @@ export function createAuthentication(options: {
               }
             );
           },
-          afterCancelInvitation: async ({
-            cancelledBy,
-            invitation: canceledInvitation,
-          }) => {
+          afterCancelInvitation: async (payload) => {
+            const { cancelledBy, invitation: canceledInvitation } =
+              decodeAfterCancelInvitationHookPayload(payload);
+
             await recordOrganizationSecurityAuditEvent(
               {
                 database,
@@ -735,26 +995,30 @@ export function createAuthentication(options: {
             );
           },
         },
-        sendInvitationEmail: async (organizationInvitation) => {
+        sendInvitationEmail: async (rawOrganizationInvitation) => {
+          const organizationInvitation = decodeSendInvitationEmailPayload(
+            rawOrganizationInvitation
+          );
           const invitationId = decodeInvitationId(organizationInvitation.id);
+          const emailInput = decodeOrganizationInvitationEmailInput({
+            deliveryKey: `organization-invitation/${invitationId}`,
+            invitationUrl: new URL(
+              `/accept-invitation/${invitationId}`,
+              options.appOrigin
+            ).toString(),
+            inviterEmail: organizationInvitation.inviter.user.email,
+            organizationName: organizationInvitation.organization.name,
+            recipientEmail: organizationInvitation.email,
+            recipientName: organizationInvitation.email,
+            role: organizationInvitation.role,
+          });
 
           await deliverAuthEmail({
             reportFailure:
               options.reportOrganizationInvitationEmailFailure ??
               options.reportVerificationEmailFailure,
             send: sendOrganizationInvitationEmail,
-            input: {
-              deliveryKey: `organization-invitation/${invitationId}`,
-              invitationUrl: new URL(
-                `/accept-invitation/${invitationId}`,
-                options.appOrigin
-              ).toString(),
-              inviterEmail: organizationInvitation.inviter.user.email,
-              organizationName: organizationInvitation.organization.name,
-              recipientEmail: organizationInvitation.email,
-              recipientName: organizationInvitation.email,
-              role: decodeOrganizationRole(organizationInvitation.role),
-            } as const satisfies OrganizationInvitationEmailInput,
+            input: emailInput,
           });
         },
       }),

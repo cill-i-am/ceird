@@ -1,8 +1,15 @@
 import {
-  decodeOrganizationId,
-  decodeOrganizationRole,
+  decodeAcceptedOrganizationId,
+  decodeNativeAuthClientSessionResult,
+  decodeOrganizationInvitationDetails,
 } from "@ceird/identity-core";
-import type { OrganizationRole } from "@ceird/identity-core";
+import type {
+  InvitationId,
+  InvitableOrganizationRole,
+  OrganizationId,
+  OrganizationInvitationDetails,
+  PublicInvitationPreview,
+} from "@ceird/identity-core";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
@@ -12,7 +19,6 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { authClient, getPublicInvitationPreview } from "#/lib/auth-client";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
-import { getCachedClientAppContext } from "../auth/app-context-client-cache";
 import {
   getLoginNavigationTarget,
   getSignupNavigationTarget,
@@ -28,17 +34,8 @@ import { clearOrganizationAccessClientCache } from "./organization-access-cache"
 import { getAcceptInvitationFailureMessage } from "./organization-auth-errors";
 import { INVITE_ROLE_LABELS } from "./organization-invite-role-options";
 
-interface InvitationPreviewDetails {
-  readonly email: string;
-  readonly organizationName: string;
-  readonly role: OrganizationRole;
-}
-
-interface InvitationDetails extends InvitationPreviewDetails {
-  readonly id: string;
-  readonly inviterEmail: string;
-}
-
+type InvitationPreviewDetails = PublicInvitationPreview;
+type InvitationDetails = OrganizationInvitationDetails;
 type InvitationDisplayDetails = InvitationPreviewDetails | InvitationDetails;
 
 type InvitationPageState =
@@ -73,8 +70,8 @@ const INVITATION_LOOKUP_ERROR_MESSAGE =
 const INVITATION_ACCEPT_ERROR_MESSAGE =
   "We couldn't accept this invitation. Please try again.";
 
-function formatInvitationRole(role: OrganizationRole) {
-  return role === "owner" ? "Owner" : INVITE_ROLE_LABELS[role];
+function formatInvitationRole(role: InvitableOrganizationRole) {
+  return INVITE_ROLE_LABELS[role];
 }
 
 function getInvitationShellCopy(
@@ -235,7 +232,7 @@ interface AcceptInvitationPageModel {
 }
 
 function useAcceptInvitationPageModel(
-  invitationId: string
+  invitationId: InvitationId
 ): AcceptInvitationPageModel {
   const navigate = useNavigate({ from: "/accept-invitation/$invitationId" });
   const [state, setState] = React.useState<InvitationPageState>({
@@ -262,13 +259,13 @@ function useAcceptInvitationPageModel(
 
       // The cancellation guard above avoids calling Better Auth after cleanup.
       // react-doctor-disable-next-line
-      const session = await getInvitationClientSession();
+      const hasSession = await hasInvitationClientSession();
 
       if (cancelled) {
         return;
       }
 
-      const isSignedOut = !session;
+      const isSignedOut = !hasSession;
 
       if (isSignedOut) {
         const preview = await loadPublicPreview();
@@ -336,12 +333,23 @@ function useAcceptInvitationPageModel(
         return;
       }
 
+      let decodedInvitation: OrganizationInvitationDetails;
+      try {
+        decodedInvitation = decodeOrganizationInvitationDetails(
+          invitation.data
+        );
+      } catch {
+        setState({
+          status: "error",
+          canSwitchAccount: true,
+          message: INVITATION_LOOKUP_ERROR_MESSAGE,
+        });
+        return;
+      }
+
       setState({
         status: "ready",
-        invitation: {
-          ...invitation.data,
-          role: decodeOrganizationRole(invitation.data.role),
-        },
+        invitation: decodedInvitation,
       });
     }
 
@@ -383,24 +391,31 @@ function useAcceptInvitationPageModel(
       return;
     }
 
-    const acceptedOrganizationId = result.data?.member.organizationId
-      ? decodeOrganizationId(result.data.member.organizationId)
-      : undefined;
+    let acceptedOrganizationId: OrganizationId;
+    try {
+      acceptedOrganizationId = decodeAcceptedOrganizationId(result.data);
+    } catch {
+      setState({
+        status: "error",
+        invitation: state.invitation,
+        message: INVITATION_ACCEPT_ERROR_MESSAGE,
+      });
+      return;
+    }
+
     clearOrganizationAccessClientCache();
 
-    if (acceptedOrganizationId) {
-      const activeOrganizationResult = await authClient.organization.setActive({
-        organizationId: acceptedOrganizationId,
-      });
+    const activeOrganizationResult = await authClient.organization.setActive({
+      organizationId: acceptedOrganizationId,
+    });
 
-      if (activeOrganizationResult.error) {
-        setState({
-          status: "error",
-          invitation: state.invitation,
-          message: INVITATION_ACCEPT_ERROR_MESSAGE,
-        });
-        return;
-      }
+    if (activeOrganizationResult.error) {
+      setState({
+        status: "error",
+        invitation: state.invitation,
+        message: INVITATION_ACCEPT_ERROR_MESSAGE,
+      });
+      return;
     }
 
     await mutationFeedback.waitForSuccess();
@@ -474,13 +489,13 @@ function useAcceptInvitationPageModel(
   };
 }
 
-async function getInvitationClientSession() {
+async function hasInvitationClientSession() {
   try {
-    const appContext = await getCachedClientAppContext();
+    const sessionResult = await authClient.getSession();
 
-    return appContext.session;
+    return decodeNativeAuthClientSessionResult(sessionResult).data !== null;
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -496,7 +511,7 @@ function AcceptInvitationView({
   showsAcceptInvitationCta,
   state,
 }: AcceptInvitationPageModel & {
-  readonly invitationId: string;
+  readonly invitationId: InvitationId;
 }) {
   const footer = showsAcceptInvitationCta ? (
     <Button
@@ -549,7 +564,7 @@ function AcceptInvitationCardBody({
   onSwitchAccount,
   state,
 }: {
-  readonly invitationId: string;
+  readonly invitationId: InvitationId;
   readonly isSwitchingAccount: boolean;
   readonly onSwitchAccount: () => Promise<void>;
   readonly state: InvitationPageState;
@@ -609,7 +624,7 @@ function InvitationLoadingState() {
 function InvitationSignedOutActions({
   invitationId,
 }: {
-  readonly invitationId: string;
+  readonly invitationId: InvitationId;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -640,7 +655,7 @@ function InvitationSignedOutActions({
 export function AcceptInvitationPage({
   invitationId,
 }: {
-  readonly invitationId: string;
+  readonly invitationId: InvitationId;
 }) {
   const model = useAcceptInvitationPageModel(invitationId);
 

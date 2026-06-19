@@ -1,64 +1,61 @@
-import { decodeOrganizationId } from "@ceird/identity-core";
+import {
+  decodeInvitationId,
+  decodeOrganizationId,
+  decodeOrganizationMemberId,
+  decodeUserId,
+} from "@ceird/identity-core";
+import type {
+  CancelOrganizationInvitationResponse,
+  CanceledOrganizationInvitation,
+  InviteOrganizationMemberResponse,
+  OrganizationInvitationListResponse,
+  OrganizationMember,
+  OrganizationMemberListResponse,
+  PendingOrganizationInvitation,
+  RemoveOrganizationMemberResponse,
+  UpdateOrganizationMemberRoleResponse,
+} from "@ceird/identity-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 
 import {
   CommandBarProvider,
   useCommandActions,
 } from "#/features/command-bar/command-bar";
 import { ShortcutHelpOverlay } from "#/hotkeys/shortcut-help-overlay";
-import type { authClient as AuthClient } from "#/lib/auth-client";
 
-import { OrganizationMembersPage } from "./organization-members-page";
-import { decodeOrganizationViewerUserId } from "./organization-viewer";
+import type * as OrganizationMembersApi from "./organization-members-api";
+import { OrganizationMembersPage as BaseOrganizationMembersPage } from "./organization-members-page";
 
 type ListMembersResult = Awaited<ReturnType<typeof mockedListMembers>>;
 type ListInvitationsResult = Awaited<ReturnType<typeof mockedListInvitations>>;
 type UpdateMemberRoleResult = Awaited<
   ReturnType<typeof mockedUpdateMemberRole>
 >;
-type CancelInvitationInput = Parameters<
-  typeof AuthClient.organization.cancelInvitation
->[0];
-type InviteMemberInput = Parameters<
-  typeof AuthClient.organization.inviteMember
->[0];
-type ListMembersInput = Parameters<
-  typeof AuthClient.organization.listMembers
->[0];
-type RemoveMemberInput = Parameters<
-  typeof AuthClient.organization.removeMember
->[0];
-type UpdateMemberRoleInput = Parameters<
-  typeof AuthClient.organization.updateMemberRole
->[0];
-interface InvitationPayload {
-  readonly email: string;
-  readonly expiresAt: Date | string;
-  readonly id: string;
-  readonly role: string;
-  readonly status: string;
-}
-interface MemberPayload {
-  readonly createdAt: Date | string;
-  readonly id: string;
-  readonly organizationId: string;
-  readonly role: string;
-  readonly user: {
-    readonly email: string;
-    readonly id: string;
-    readonly image?: string | null;
-    readonly name: string;
-  };
-  readonly userId: string;
-}
 
 const organizationId = decodeOrganizationId("org_123");
 const organizationOneId = decodeOrganizationId("org_1");
 const organizationTwoId = decodeOrganizationId("org_2");
-const currentUserId = decodeOrganizationViewerUserId("user_owner");
+const currentUserId = decodeUserId("user_owner");
 const defaultInvitationExpiresAt = "2026-04-12T09:30:00.000Z";
+
+type InvitationFixtureOverrides = Partial<
+  Omit<PendingOrganizationInvitation, "id" | "organizationId">
+> & {
+  readonly id?: string | PendingOrganizationInvitation["id"];
+  readonly organizationId?:
+    | string
+    | PendingOrganizationInvitation["organizationId"];
+};
+type MemberFixtureOverrides = Partial<
+  Omit<OrganizationMember, "id" | "organizationId" | "userId">
+> & {
+  readonly id?: string | OrganizationMember["id"];
+  readonly organizationId?: string | OrganizationMember["organizationId"];
+  readonly userId?: string | OrganizationMember["userId"];
+};
 
 const {
   mockedCancelInvitation,
@@ -68,99 +65,27 @@ const {
   mockedRemoveMember,
   mockedUpdateMemberRole,
 } = vi.hoisted(() => ({
-  mockedCancelInvitation: vi.fn<
-    (input: CancelInvitationInput) => Promise<{
-      data: {
-        id: string;
-      } | null;
-      error: {
-        code?: string;
-        message: string;
-        status: number;
-        statusText: string;
-      } | null;
-    }>
-  >(),
-  mockedInviteMember: vi.fn<
-    (input: InviteMemberInput) => Promise<{
-      data: {
-        id: string;
-      } | null;
-      error: {
-        code?: string;
-        message: string;
-        status: number;
-        statusText: string;
-      } | null;
-    }>
-  >(),
-  mockedListInvitations: vi.fn<
-    (input: { query: { organizationId: string } }) => Promise<{
-      data: InvitationPayload[] | null;
-      error: {
-        code?: string;
-        message: string;
-        status: number;
-        statusText: string;
-      } | null;
-    }>
-  >(),
-  mockedListMembers: vi.fn<
-    (input: ListMembersInput) => Promise<{
-      data: {
-        members: MemberPayload[];
-        total: number;
-      } | null;
-      error: {
-        code?: string;
-        message: string;
-        status: number;
-        statusText: string;
-      } | null;
-    }>
-  >(),
-  mockedRemoveMember: vi.fn<
-    (input: RemoveMemberInput) => Promise<{
-      data: {
-        member: Pick<
-          MemberPayload,
-          "id" | "organizationId" | "role" | "userId"
-        >;
-      } | null;
-      error: {
-        code?: string;
-        message: string;
-        status: number;
-        statusText: string;
-      } | null;
-    }>
-  >(),
-  mockedUpdateMemberRole: vi.fn<
-    (input: UpdateMemberRoleInput) => Promise<{
-      data: Pick<
-        MemberPayload,
-        "id" | "organizationId" | "role" | "userId"
-      > | null;
-      error: {
-        message: string;
-        status: number;
-        statusText: string;
-      } | null;
-    }>
-  >(),
+  mockedCancelInvitation:
+    vi.fn<typeof OrganizationMembersApi.cancelOrganizationInvitation>(),
+  mockedInviteMember:
+    vi.fn<typeof OrganizationMembersApi.inviteOrganizationMember>(),
+  mockedListInvitations:
+    vi.fn<typeof OrganizationMembersApi.listOrganizationInvitations>(),
+  mockedListMembers:
+    vi.fn<typeof OrganizationMembersApi.listOrganizationMembers>(),
+  mockedRemoveMember:
+    vi.fn<typeof OrganizationMembersApi.removeOrganizationMember>(),
+  mockedUpdateMemberRole:
+    vi.fn<typeof OrganizationMembersApi.updateOrganizationMemberRole>(),
 }));
 
-vi.mock(import("#/lib/auth-client"), () => ({
-  authClient: {
-    organization: {
-      cancelInvitation: mockedCancelInvitation,
-      inviteMember: mockedInviteMember,
-      listInvitations: mockedListInvitations,
-      listMembers: mockedListMembers,
-      removeMember: mockedRemoveMember,
-      updateMemberRole: mockedUpdateMemberRole,
-    },
-  } as unknown as typeof AuthClient,
+vi.mock(import("./organization-members-api"), () => ({
+  cancelOrganizationInvitation: mockedCancelInvitation,
+  inviteOrganizationMember: mockedInviteMember,
+  listOrganizationInvitations: mockedListInvitations,
+  listOrganizationMembers: mockedListMembers,
+  removeOrganizationMember: mockedRemoveMember,
+  updateOrganizationMemberRole: mockedUpdateMemberRole,
 }));
 
 async function chooseCommandOption(
@@ -201,58 +126,138 @@ function createDeferredResult<Value>() {
 }
 
 function createInvitation(
-  overrides: Partial<InvitationPayload> = {}
-): InvitationPayload {
+  overrides: InvitationFixtureOverrides = {}
+): PendingOrganizationInvitation {
+  const {
+    id = "inv_123",
+    organizationId: orgId = organizationId,
+    ...rest
+  } = overrides;
+
   return {
+    createdAt: "2026-04-01T09:30:00.000Z",
     email: "pending@example.com",
     expiresAt: defaultInvitationExpiresAt,
-    id: "inv_123",
+    id: decodeInvitationId(id),
+    organizationId: decodeOrganizationId(orgId),
     role: "member",
     status: "pending",
-    ...overrides,
+    ...rest,
   };
 }
 
-function createMember(overrides: Partial<MemberPayload> = {}): MemberPayload {
+function createMember(
+  overrides: MemberFixtureOverrides = {}
+): OrganizationMember {
+  const {
+    id = "mem_owner",
+    organizationId: orgId = organizationId,
+    userId = currentUserId,
+    ...rest
+  } = overrides;
+
   return {
     createdAt: "2026-04-01T09:30:00.000Z",
-    id: "mem_owner",
-    organizationId: "org_123",
+    email: "owner@example.com",
+    id: decodeOrganizationMemberId(id),
+    name: "Owner Example",
+    organizationId: decodeOrganizationId(orgId),
     role: "owner",
-    user: {
-      email: "owner@example.com",
-      id: "user_owner",
-      image: null,
-      name: "Owner Example",
-    },
-    userId: "user_owner",
-    ...overrides,
+    userId: decodeUserId(userId),
+    ...rest,
   };
 }
 
 function createMemberList(
-  members: MemberPayload[] = [
+  members: OrganizationMember[] = [
     createMember(),
     createMember({
-      id: "mem_member",
+      email: "apprentice@example.com",
+      id: decodeOrganizationMemberId("mem_member"),
+      name: "Apprentice Example",
       role: "member",
-      user: {
-        email: "apprentice@example.com",
-        id: "user_member",
-        image: null,
-        name: "Apprentice Example",
-      },
-      userId: "user_member",
+      userId: decodeUserId("user_member"),
     }),
   ]
-) {
+): OrganizationMemberListResponse {
   return {
-    data: {
-      members,
-      total: members.length,
-    },
-    error: null,
+    members,
+    total: members.length,
   };
+}
+
+function createInvitationList(
+  invitations: PendingOrganizationInvitation[] = [createInvitation()]
+): OrganizationInvitationListResponse {
+  return { invitations };
+}
+
+function createInviteResponse(
+  invitation: PendingOrganizationInvitation = createInvitation({
+    id: "inv_456",
+  })
+): InviteOrganizationMemberResponse {
+  return { invitation };
+}
+
+function createCanceledInvitation(): CanceledOrganizationInvitation {
+  return {
+    ...createInvitation(),
+    status: "canceled",
+  };
+}
+
+function createCancelInvitationResponse(
+  invitation: CanceledOrganizationInvitation = createCanceledInvitation()
+): CancelOrganizationInvitationResponse {
+  return { invitation };
+}
+
+function createUpdateRoleResponse(
+  member: OrganizationMember = createMember({
+    id: "mem_member",
+    role: "admin",
+    userId: decodeUserId("user_member"),
+  })
+): UpdateOrganizationMemberRoleResponse {
+  return { member };
+}
+
+function createRemoveMemberResponse(): RemoveOrganizationMemberResponse {
+  return { removedMemberId: decodeOrganizationMemberId("mem_member") };
+}
+
+function createApiError(input: {
+  readonly code?: string;
+  readonly message: string;
+  readonly status: number;
+  readonly statusText: string;
+}) {
+  return input;
+}
+
+type OrganizationMembersPageProps = ComponentProps<
+  typeof BaseOrganizationMembersPage
+>;
+
+function OrganizationMembersPage({
+  activeOrganizationId: activeOrgId = organizationId,
+  currentMember = {
+    email: "owner@example.com",
+    name: "Owner Example",
+    role: "owner",
+  },
+  currentUserId: viewerUserId = currentUserId,
+  ...props
+}: Partial<OrganizationMembersPageProps>) {
+  return (
+    <BaseOrganizationMembersPage
+      activeOrganizationId={activeOrgId}
+      currentMember={currentMember}
+      currentUserId={viewerUserId}
+      {...props}
+    />
+  );
 }
 
 function RegisteredActionTitles() {
@@ -281,42 +286,11 @@ describe("organization members page", () => {
     mockedUpdateMemberRole.mockReset();
 
     mockedListMembers.mockResolvedValue(createMemberList());
-    mockedListInvitations.mockResolvedValue({
-      data: [createInvitation()],
-      error: null,
-    });
-    mockedInviteMember.mockResolvedValue({
-      data: {
-        id: "inv_456",
-      },
-      error: null,
-    });
-    mockedCancelInvitation.mockResolvedValue({
-      data: {
-        id: "inv_123",
-      },
-      error: null,
-    });
-    mockedRemoveMember.mockResolvedValue({
-      data: {
-        member: {
-          id: "mem_member",
-          organizationId: "org_123",
-          role: "member",
-          userId: "user_member",
-        },
-      },
-      error: null,
-    });
-    mockedUpdateMemberRole.mockResolvedValue({
-      data: {
-        id: "mem_member",
-        organizationId: "org_123",
-        role: "admin",
-        userId: "user_member",
-      },
-      error: null,
-    });
+    mockedListInvitations.mockResolvedValue(createInvitationList());
+    mockedInviteMember.mockResolvedValue(createInviteResponse());
+    mockedCancelInvitation.mockResolvedValue(createCancelInvitationResponse());
+    mockedRemoveMember.mockResolvedValue(createRemoveMemberResponse());
+    mockedUpdateMemberRole.mockResolvedValue(createUpdateRoleResponse());
   });
 
   afterEach(() => {
@@ -327,19 +301,13 @@ describe("organization members page", () => {
     const longEmail =
       "very.long.project.supervisor.address@exampleconstructioncompany.com";
 
-    mockedListInvitations.mockResolvedValue({
-      data: [
-        createInvitation({
-          email: "accepted@example.com",
-          id: "inv_accepted",
-          status: "accepted",
-        }),
+    mockedListInvitations.mockResolvedValue(
+      createInvitationList([
         createInvitation({
           email: longEmail,
         }),
-      ],
-      error: null,
-    });
+      ])
+    );
 
     render(
       <OrganizationMembersPage
@@ -378,11 +346,7 @@ describe("organization members page", () => {
         name: `Resend invitation to ${longEmail}`,
       })
     ).not.toBeInTheDocument();
-    expect(mockedListInvitations).toHaveBeenCalledWith({
-      query: {
-        organizationId: "org_123",
-      },
-    });
+    expect(mockedListInvitations).toHaveBeenCalledWith();
   }, 10_000);
 
   it("loads current organization members for the active organization", async () => {
@@ -390,14 +354,10 @@ describe("organization members page", () => {
       createMemberList([
         createMember(),
         createMember({
+          email: "foreperson@example.com",
           id: "mem_admin",
+          name: "Foreperson Example",
           role: "admin",
-          user: {
-            email: "foreperson@example.com",
-            id: "user_admin",
-            image: null,
-            name: "Foreperson Example",
-          },
           userId: "user_admin",
         }),
       ])
@@ -420,11 +380,8 @@ describe("organization members page", () => {
     expect(within(members).getByText("foreperson@example.com")).toBeVisible();
     expect(screen.getByText("2 active")).toBeVisible();
     expect(mockedListMembers).toHaveBeenCalledWith({
-      query: {
-        limit: 100,
-        offset: 0,
-        organizationId: "org_123",
-      },
+      limit: 100,
+      offset: 0,
     });
   }, 10_000);
 
@@ -454,22 +411,15 @@ describe("organization members page", () => {
     mockedListMembers.mockResolvedValue(
       createMemberList([
         createMember({
+          email: "owner@example.com",
           id: "mem_owner",
+          name: "Owner Example",
           role: "owner",
-          user: {
-            email: "owner@example.com",
-            id: "user_owner",
-            image: null,
-            name: "Owner Example",
-          },
           userId: "user_owner",
         }),
       ])
     );
-    mockedListInvitations.mockResolvedValue({
-      data: [],
-      error: null,
-    });
+    mockedListInvitations.mockResolvedValue(createInvitationList([]));
 
     render(
       <OrganizationMembersPage
@@ -492,10 +442,7 @@ describe("organization members page", () => {
     const membersResult = createDeferredResult<ListMembersResult>();
 
     mockedListMembers.mockReturnValue(membersResult.promise);
-    mockedListInvitations.mockResolvedValue({
-      data: [],
-      error: null,
-    });
+    mockedListInvitations.mockResolvedValue(createInvitationList([]));
 
     render(
       <OrganizationMembersPage
@@ -520,14 +467,10 @@ describe("organization members page", () => {
       membersResult.resolve(
         createMemberList([
           createMember({
+            email: "owner@example.com",
             id: "mem_owner",
+            name: "Owner Example",
             role: "owner",
-            user: {
-              email: "owner@example.com",
-              id: "user_owner",
-              image: null,
-              name: "Owner Example",
-            },
             userId: "user_owner",
           }),
         ])
@@ -570,41 +513,27 @@ describe("organization members page", () => {
       createMember({
         id: `mem_${index}`,
         role: index === 0 ? "owner" : "member",
-        user: {
-          email: `member-${index}@example.com`,
-          id: index === 0 ? "user_owner" : `user_${index}`,
-          image: null,
-          name: `Member ${index}`,
-        },
+        email: `member-${index}@example.com`,
+        name: `Member ${index}`,
         userId: index === 0 ? "user_owner" : `user_${index}`,
       })
     );
     const lastMember = createMember({
       id: "mem_100",
       role: "member",
-      user: {
-        email: "member-100@example.com",
-        id: "user_100",
-        image: null,
-        name: "Member 100",
-      },
+      email: "member-100@example.com",
+      name: "Member 100",
       userId: "user_100",
     });
 
     mockedListMembers
       .mockResolvedValueOnce({
-        data: {
-          members: firstPageMembers,
-          total: 101,
-        },
-        error: null,
+        members: firstPageMembers,
+        total: 101,
       })
       .mockResolvedValueOnce({
-        data: {
-          members: [lastMember],
-          total: 101,
-        },
-        error: null,
+        members: [lastMember],
+        total: 101,
       });
 
     render(
@@ -617,58 +546,22 @@ describe("organization members page", () => {
     await expect(screen.findByText("Member 100")).resolves.toBeVisible();
     expect(screen.getByText("101 active")).toBeVisible();
     expect(mockedListMembers).toHaveBeenNthCalledWith(1, {
-      query: {
-        limit: 100,
-        offset: 0,
-        organizationId: "org_123",
-      },
+      limit: 100,
+      offset: 0,
     });
     expect(mockedListMembers).toHaveBeenNthCalledWith(2, {
-      query: {
-        limit: 100,
-        offset: 100,
-        organizationId: "org_123",
-      },
+      limit: 100,
+      offset: 100,
     });
   }, 10_000);
 
   it("shows a load error when active members cannot be loaded", async () => {
-    mockedListMembers.mockResolvedValue({
-      data: null,
-      error: {
+    mockedListMembers.mockRejectedValue(
+      createApiError({
         message: "Forbidden",
         status: 403,
         statusText: "Forbidden",
-      },
-    });
-
-    render(
-      <OrganizationMembersPage
-        activeOrganizationId={organizationId}
-        currentUserId={currentUserId}
-      />
-    );
-
-    await expect(
-      screen.findByText("We couldn't load members right now. Please try again.")
-    ).resolves.toBeVisible();
-  }, 10_000);
-
-  it("shows a load error when member payload roles violate the app contract", async () => {
-    mockedListMembers.mockResolvedValue(
-      createMemberList([
-        createMember({
-          id: "mem_bad_role",
-          role: "billing-manager",
-          user: {
-            email: "bad-role@example.com",
-            id: "user_bad_role",
-            image: null,
-            name: "Bad Role Example",
-          },
-          userId: "user_bad_role",
-        }),
-      ])
+      })
     );
 
     render(
@@ -681,7 +574,6 @@ describe("organization members page", () => {
     await expect(
       screen.findByText("We couldn't load members right now. Please try again.")
     ).resolves.toBeVisible();
-    expect(screen.queryByText("Bad Role Example")).not.toBeInTheDocument();
   }, 10_000);
 
   it("updates a member role and reloads members after success", async () => {
@@ -691,14 +583,10 @@ describe("organization members page", () => {
         createMemberList([
           createMember(),
           createMember({
+            email: "apprentice@example.com",
             id: "mem_member",
+            name: "Apprentice Example",
             role: "admin",
-            user: {
-              email: "apprentice@example.com",
-              id: "user_member",
-              image: null,
-              name: "Apprentice Example",
-            },
             userId: "user_member",
           }),
         ])
@@ -728,7 +616,6 @@ describe("organization members page", () => {
     await waitFor(() => {
       expect(mockedUpdateMemberRole).toHaveBeenCalledWith({
         memberId: "mem_member",
-        organizationId: "org_123",
         role: "admin",
       });
     });
@@ -742,14 +629,13 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("shows a per-row error when a member role update fails", async () => {
-    mockedUpdateMemberRole.mockResolvedValue({
-      data: null,
-      error: {
+    mockedUpdateMemberRole.mockRejectedValue(
+      createApiError({
         message: "Forbidden",
         status: 403,
         statusText: "Forbidden",
-      },
-    });
+      })
+    );
 
     const user = userEvent.setup();
 
@@ -781,14 +667,13 @@ describe("organization members page", () => {
   it("keeps the updated role visible when the success refresh fails", async () => {
     mockedListMembers
       .mockResolvedValueOnce(createMemberList())
-      .mockResolvedValueOnce({
-        data: null,
-        error: {
+      .mockRejectedValueOnce(
+        createApiError({
           message: "Member refresh failed",
           status: 500,
           statusText: "Internal Server Error",
-        },
-      });
+        })
+      );
 
     const user = userEvent.setup();
 
@@ -852,8 +737,7 @@ describe("organization members page", () => {
 
     await waitFor(() => {
       expect(mockedRemoveMember).toHaveBeenCalledWith({
-        memberIdOrEmail: "mem_member",
-        organizationId: "org_123",
+        memberId: "mem_member",
       });
     });
     await expect(
@@ -865,14 +749,13 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("shows a per-row error when member removal fails", async () => {
-    mockedRemoveMember.mockResolvedValue({
-      data: null,
-      error: {
+    mockedRemoveMember.mockRejectedValue(
+      createApiError({
         message: "Forbidden",
         status: 403,
         statusText: "Forbidden",
-      },
-    });
+      })
+    );
 
     const user = userEvent.setup();
 
@@ -950,23 +833,15 @@ describe("organization members page", () => {
     mockedListMembers.mockResolvedValue(
       createMemberList([
         createMember({
-          user: {
-            email: "owner@example.com",
-            id: "stale_joined_user",
-            image: null,
-            name: "Owner Example",
-          },
+          email: "owner@example.com",
+          name: "Owner Example",
           userId: "user_owner",
         }),
         createMember({
           id: "mem_member",
           role: "member",
-          user: {
-            email: "apprentice@example.com",
-            id: "user_member",
-            image: null,
-            name: "Apprentice Example",
-          },
+          email: "apprentice@example.com",
+          name: "Apprentice Example",
           userId: "user_member",
         }),
       ])
@@ -996,12 +871,8 @@ describe("organization members page", () => {
         createMemberList([
           createMember({
             organizationId: "org_1",
-            user: {
-              email: "old-org@example.com",
-              id: "user_old_owner",
-              image: null,
-              name: "Old Org Owner",
-            },
+            email: "old-org@example.com",
+            name: "Old Org Owner",
             userId: "user_old_owner",
           }),
         ])
@@ -1032,12 +903,8 @@ describe("organization members page", () => {
       createMemberList([
         createMember({
           organizationId: "org_2",
-          user: {
-            email: "new-org@example.com",
-            id: "user_new_owner",
-            image: null,
-            name: "New Org Owner",
-          },
+          email: "new-org@example.com",
+          name: "New Org Owner",
           userId: "user_new_owner",
         }),
       ])
@@ -1072,12 +939,8 @@ describe("organization members page", () => {
       createMemberList([
         createMember({
           organizationId: "org_2",
-          user: {
-            email: "new-org@example.com",
-            id: "user_new_owner",
-            image: null,
-            name: "New Org Owner",
-          },
+          email: "new-org@example.com",
+          name: "New Org Owner",
           userId: "user_new_owner",
         }),
       ])
@@ -1089,12 +952,8 @@ describe("organization members page", () => {
       createMemberList([
         createMember({
           organizationId: "org_1",
-          user: {
-            email: "old-org@example.com",
-            id: "user_old_owner",
-            image: null,
-            name: "Old Org Owner",
-          },
+          email: "old-org@example.com",
+          name: "Old Org Owner",
           userId: "user_old_owner",
         }),
       ])
@@ -1115,12 +974,8 @@ describe("organization members page", () => {
         createMemberList([
           createMember({
             organizationId: "org_2",
-            user: {
-              email: "new-org@example.com",
-              id: "user_new_owner",
-              image: null,
-              name: "New Org Owner",
-            },
+            email: "new-org@example.com",
+            name: "New Org Owner",
             userId: "user_new_owner",
           }),
         ])
@@ -1158,13 +1013,12 @@ describe("organization members page", () => {
     await expect(screen.findByText("New Org Owner")).resolves.toBeVisible();
 
     updateRole.resolve({
-      data: {
-        id: "mem_member",
+      member: createMember({
         organizationId: "org_1",
+        id: "mem_member",
         role: "admin",
         userId: "user_member",
-      },
-      error: null,
+      }),
     });
 
     await waitFor(() => {
@@ -1187,12 +1041,8 @@ describe("organization members page", () => {
         createMemberList([
           createMember({
             organizationId: "org_2",
-            user: {
-              email: "new-org@example.com",
-              id: "user_new_owner",
-              image: null,
-              name: "New Org Owner",
-            },
+            email: "new-org@example.com",
+            name: "New Org Owner",
             userId: "user_new_owner",
           }),
         ])
@@ -1232,14 +1082,13 @@ describe("organization members page", () => {
 
     await expect(screen.findByText("New Org Owner")).resolves.toBeVisible();
 
-    removeMember.resolve({
-      data: null,
-      error: {
+    removeMember.reject(
+      createApiError({
         message: "Forbidden",
         status: 403,
         statusText: "Forbidden",
-      },
-    });
+      })
+    );
 
     await waitFor(() => {
       expect(mockedRemoveMember).toHaveBeenCalledOnce();
@@ -1250,43 +1099,18 @@ describe("organization members page", () => {
     expect(screen.getByText("New Org Owner")).toBeVisible();
   }, 10_000);
 
-  it("loads pending invitations when the auth client returns Date expiry values", async () => {
-    mockedListInvitations.mockResolvedValue({
-      data: [
-        createInvitation({
-          email: "date-expiry@example.com",
-          expiresAt: new Date(defaultInvitationExpiresAt),
-        }),
-      ],
-      error: null,
-    });
-
-    render(
-      <OrganizationMembersPage
-        activeOrganizationId={organizationId}
-        currentUserId={currentUserId}
-      />
-    );
-
-    await expect(
-      screen.findByTitle("date-expiry@example.com")
-    ).resolves.toBeVisible();
-    expect(screen.getByText("Expires 12 Apr 2026")).toBeVisible();
-  }, 10_000);
-
   it("submits invites for the active organization", async () => {
     mockedListInvitations
-      .mockResolvedValueOnce({
-        data: [
+      .mockResolvedValueOnce(
+        createInvitationList([
           createInvitation({
             email: "ops@example.com",
             id: "inv_existing",
           }),
-        ],
-        error: null,
-      })
-      .mockResolvedValueOnce({
-        data: [
+        ])
+      )
+      .mockResolvedValueOnce(
+        createInvitationList([
           createInvitation({
             email: "ops@example.com",
             id: "inv_existing",
@@ -1297,9 +1121,8 @@ describe("organization members page", () => {
             id: "inv_456",
             role: "admin",
           }),
-        ],
-        error: null,
-      });
+        ])
+      );
 
     const user = userEvent.setup();
 
@@ -1327,7 +1150,6 @@ describe("organization members page", () => {
     await waitFor(() => {
       expect(mockedInviteMember).toHaveBeenCalledWith({
         email: "member@example.com",
-        organizationId: "org_123",
         role: "admin",
       });
     });
@@ -1337,16 +1159,8 @@ describe("organization members page", () => {
     await waitFor(() => {
       expect(mockedListInvitations).toHaveBeenCalledTimes(2);
     });
-    expect(mockedListInvitations).toHaveBeenNthCalledWith(1, {
-      query: {
-        organizationId: "org_123",
-      },
-    });
-    expect(mockedListInvitations).toHaveBeenNthCalledWith(2, {
-      query: {
-        organizationId: "org_123",
-      },
-    });
+    expect(mockedListInvitations).toHaveBeenNthCalledWith(1);
+    expect(mockedListInvitations).toHaveBeenNthCalledWith(2);
     await expect(
       screen.findByTitle("member@example.com")
     ).resolves.toBeVisible();
@@ -1372,7 +1186,6 @@ describe("organization members page", () => {
     await waitFor(() => {
       expect(mockedInviteMember).toHaveBeenCalledWith({
         email: "member@example.com",
-        organizationId: "org_123",
         role: "member",
       });
     });
@@ -1451,7 +1264,6 @@ describe("organization members page", () => {
     await waitFor(() => {
       expect(mockedInviteMember).toHaveBeenCalledWith({
         email: "vendor@example.com",
-        organizationId: "org_123",
         role: "external",
       });
     });
@@ -1461,14 +1273,13 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("resends pending invitations from the pending list", async () => {
-    mockedListInvitations.mockResolvedValueOnce({
-      data: [
+    mockedListInvitations.mockResolvedValueOnce(
+      createInvitationList([
         createInvitation({
           role: "admin",
         }),
-      ],
-      error: null,
-    });
+      ])
+    );
 
     const user = userEvent.setup();
 
@@ -1490,7 +1301,6 @@ describe("organization members page", () => {
     await waitFor(() => {
       expect(mockedInviteMember).toHaveBeenCalledWith({
         email: "pending@example.com",
-        organizationId: "org_123",
         resend: true,
         role: "admin",
       });
@@ -1502,14 +1312,13 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("shows a safe error when resending a pending invitation fails", async () => {
-    mockedInviteMember.mockResolvedValue({
-      data: null,
-      error: {
+    mockedInviteMember.mockRejectedValue(
+      createApiError({
         message: "Invitation email failed",
         status: 500,
         statusText: "Internal Server Error",
-      },
-    });
+      })
+    );
 
     const user = userEvent.setup();
 
@@ -1535,15 +1344,14 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("shows email-verification copy when pending invitation resend is blocked", async () => {
-    mockedInviteMember.mockResolvedValue({
-      data: null,
-      error: {
+    mockedInviteMember.mockRejectedValue(
+      createApiError({
         code: "EMAIL_NOT_VERIFIED",
         message: "Verify your email before inviting organization members.",
         status: 403,
         statusText: "Forbidden",
-      },
-    });
+      })
+    );
 
     const user = userEvent.setup();
 
@@ -1571,10 +1379,7 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("cancels pending invitations from the pending list", async () => {
-    mockedListInvitations.mockResolvedValueOnce({
-      data: [createInvitation()],
-      error: null,
-    });
+    mockedListInvitations.mockResolvedValueOnce(createInvitationList());
 
     const user = userEvent.setup();
 
@@ -1609,14 +1414,13 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("shows a safe error when canceling a pending invitation fails", async () => {
-    mockedCancelInvitation.mockResolvedValue({
-      data: null,
-      error: {
+    mockedCancelInvitation.mockRejectedValue(
+      createApiError({
         message: "Forbidden",
         status: 403,
         statusText: "Forbidden",
-      },
-    });
+      })
+    );
 
     const user = userEvent.setup();
 
@@ -1681,14 +1485,13 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("shows a safe error when an invite fails", async () => {
-    mockedInviteMember.mockResolvedValue({
-      data: null,
-      error: {
+    mockedInviteMember.mockRejectedValue(
+      createApiError({
         message: "You are not allowed to invite members",
         status: 403,
         statusText: "Forbidden",
-      },
-    });
+      })
+    );
 
     const user = userEvent.setup();
 
@@ -1717,15 +1520,14 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("shows targeted email verification copy when inviting requires verification", async () => {
-    mockedInviteMember.mockResolvedValue({
-      data: null,
-      error: {
+    mockedInviteMember.mockRejectedValue(
+      createApiError({
         code: "EMAIL_NOT_VERIFIED",
         message: "Verify your email before inviting organization members.",
         status: 403,
         statusText: "Forbidden",
-      },
-    });
+      })
+    );
 
     const user = userEvent.setup();
 
@@ -1754,14 +1556,13 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("shows a load error instead of an empty-state fallback when invitation loading fails", async () => {
-    mockedListInvitations.mockResolvedValue({
-      data: null,
-      error: {
+    mockedListInvitations.mockRejectedValue(
+      createApiError({
         message: "Forbidden",
         status: 403,
         statusText: "Forbidden",
-      },
-    });
+      })
+    );
 
     render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
 
@@ -1775,41 +1576,18 @@ describe("organization members page", () => {
     ).not.toBeInTheDocument();
   }, 10_000);
 
-  it("shows a load error when invitation payload roles violate the app contract", async () => {
-    mockedListInvitations.mockResolvedValue({
-      data: [
-        createInvitation({
-          email: "bad-role@example.com",
-          id: "inv_bad_role",
-          role: "owner",
-        }),
-      ],
-      error: null,
-    });
-
-    render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
-
-    await expect(
-      screen.findByText(
-        "We couldn't load invitations right now. Please try again."
-      )
-    ).resolves.toBeInTheDocument();
-    expect(screen.queryByText("bad-role@example.com")).not.toBeInTheDocument();
-  }, 10_000);
-
   it("clears stale pending invitations while another organization loads", async () => {
     const orgTwoInvitations = createDeferredResult<ListInvitationsResult>();
 
     mockedListInvitations
-      .mockResolvedValueOnce({
-        data: [
+      .mockResolvedValueOnce(
+        createInvitationList([
           createInvitation({
             email: "old-org@example.com",
             id: "inv_old",
           }),
-        ],
-        error: null,
-      })
+        ])
+      )
       .mockReturnValueOnce(orgTwoInvitations.promise);
 
     const { rerender } = render(
@@ -1828,16 +1606,15 @@ describe("organization members page", () => {
       expect(screen.queryByText("old-org@example.com")).not.toBeInTheDocument();
     });
 
-    orgTwoInvitations.resolve({
-      data: [
+    orgTwoInvitations.resolve(
+      createInvitationList([
         createInvitation({
           email: "new-org@example.com",
           id: "inv_new",
           role: "admin",
         }),
-      ],
-      error: null,
-    });
+      ])
+    );
 
     await expect(
       screen.findByText("new-org@example.com")
@@ -1845,16 +1622,7 @@ describe("organization members page", () => {
   }, 10_000);
 
   it("hides the pending invitations section when there are no pending invitations", async () => {
-    mockedListInvitations.mockResolvedValue({
-      data: [
-        createInvitation({
-          email: "accepted@example.com",
-          id: "inv_accepted",
-          status: "accepted",
-        }),
-      ],
-      error: null,
-    });
+    mockedListInvitations.mockResolvedValue(createInvitationList([]));
 
     render(<OrganizationMembersPage activeOrganizationId={organizationId} />);
 

@@ -2,23 +2,22 @@ import {
   INVITABLE_ORGANIZATION_ROLES,
   InvitableOrganizationRole,
 } from "@ceird/identity-core";
+import type { InviteOrganizationMemberInput } from "@ceird/identity-core";
 import { Schema } from "effect";
 
 import type { CommandSelectGroup } from "#/components/ui/command-select";
-
-import type { OrganizationMemberInviteInput } from "./organization-member-invite-schemas";
 
 export const INVITE_ROLE_LABELS = {
   admin: "Admin",
   external: "External collaborator",
   member: "Member",
-} satisfies Record<OrganizationMemberInviteInput["role"], string>;
+} satisfies Record<InviteOrganizationMemberInput["role"], string>;
 
 const INVITE_ROLE_DESCRIPTIONS = {
   admin: "Can manage members, settings, jobs, and sites.",
   external: "For subcontractors or partners with scoped access.",
   member: "For teammates working day to day in the workspace.",
-} satisfies Record<OrganizationMemberInviteInput["role"], string>;
+} satisfies Record<InviteOrganizationMemberInput["role"], string>;
 
 export const INVITE_ROLE_SELECTION_GROUPS = [
   {

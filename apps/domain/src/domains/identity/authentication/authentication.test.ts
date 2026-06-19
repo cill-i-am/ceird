@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { decodeInvitationId, decodeUserId } from "@ceird/identity-core";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
@@ -40,6 +41,7 @@ import {
   assertUserCanAcceptOrganizationInvitation,
   createAuthentication,
   extractBetterAuthSessionToken,
+  findPublicInvitationPreview,
   hashOAuthStoredToken,
   makeEmailFailureReporter,
   makeAuthenticationWebHandler,
@@ -1375,6 +1377,19 @@ describe("createAuthentication()", () => {
     expect(maskInvitationEmail("member@example.com")).toBe("m***@e***.com");
     expect(maskInvitationEmail("a@b.co")).toBe("a***@b***.co");
     expect(maskInvitationEmail("invalid-email")).toBe("***");
+  }, 10_000);
+
+  it("decodes public invitation preview rows before masking the public DTO", async () => {
+    await expect(
+      findPublicInvitationPreview({
+        database: makePublicInvitationPreviewDatabase({
+          email: "not-an-email",
+          organizationName: "Acme Field Ops",
+          role: "member",
+        }),
+        invitationId: decodeInvitationId("inv_123"),
+      })
+    ).rejects.toThrow(/Expected/);
   }, 10_000);
 
   it("serves mounted session lookups through the typed auth API", async () => {
@@ -5115,17 +5130,26 @@ describe("createAuthentication()", () => {
                 readonly organizationId: string;
                 readonly userId: string;
               };
-              readonly organization: { readonly id: string };
+              readonly organization: {
+                readonly id: string;
+                readonly name: string;
+              };
               readonly user: { readonly id: string };
             }) => Promise<void>;
             readonly afterCancelInvitation?: (data: {
-              readonly cancelledBy: { readonly id: string };
+              readonly cancelledBy: {
+                readonly email: string;
+                readonly id: string;
+              };
               readonly invitation: {
                 readonly email: string;
                 readonly organizationId: string;
                 readonly role: string;
               };
-              readonly organization: { readonly id: string };
+              readonly organization: {
+                readonly id: string;
+                readonly name: string;
+              };
             }) => Promise<void>;
             readonly afterCreateInvitation?: (data: {
               readonly invitation: {
@@ -5133,8 +5157,14 @@ describe("createAuthentication()", () => {
                 readonly organizationId: string;
                 readonly role: string;
               };
-              readonly inviter: { readonly id: string };
-              readonly organization: { readonly id: string };
+              readonly inviter: {
+                readonly email: string;
+                readonly id: string;
+              };
+              readonly organization: {
+                readonly id: string;
+                readonly name: string;
+              };
             }) => Promise<void>;
             readonly afterCreateOrganization?: (data: {
               readonly member: {
@@ -5186,10 +5216,12 @@ describe("createAuthentication()", () => {
           role: "member",
         },
         inviter: {
+          email: "owner@example.com",
           id: "user_owner",
         },
         organization: {
           id: "org_123",
+          name: "Acme Field Ops",
         },
       });
       await hooks?.afterAcceptInvitation?.({
@@ -5205,6 +5237,7 @@ describe("createAuthentication()", () => {
         },
         organization: {
           id: "org_123",
+          name: "Acme Field Ops",
         },
         user: {
           id: "user_member",
@@ -5212,6 +5245,7 @@ describe("createAuthentication()", () => {
       });
       await hooks?.afterCancelInvitation?.({
         cancelledBy: {
+          email: "owner@example.com",
           id: "user_owner",
         },
         invitation: {
@@ -5221,6 +5255,7 @@ describe("createAuthentication()", () => {
         },
         organization: {
           id: "org_123",
+          name: "Acme Field Ops",
         },
       });
 
@@ -5283,7 +5318,7 @@ describe("createAuthentication()", () => {
     }
   }, 10_000);
 
-  it("fails open when Better Auth hook metadata contains malformed organization member IDs", async () => {
+  it("fails closed when Better Auth hook metadata contains malformed organization member IDs", async () => {
     const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
     const { logger, logs } = captureLogs();
     const runtimeContext = await Effect.context<never>().pipe(
@@ -5319,29 +5354,33 @@ describe("createAuthentication()", () => {
           }
         | undefined;
 
-      await hooks?.afterAcceptInvitation?.({
-        invitation: {
-          email: "member@example.com",
-          organizationId: "org_123",
-          role: "member",
-        },
-        member: {
-          id: "",
-          organizationId: "org_123",
-          userId: "user_member",
-        },
-        organization: {
-          id: "org_123",
-        },
-        user: {
-          id: "user_member",
+      await expect(
+        hooks?.afterAcceptInvitation?.({
+          invitation: {
+            email: "member@example.com",
+            organizationId: "org_123",
+            role: "member",
+          },
+          member: {
+            id: "",
+            organizationId: "org_123",
+            userId: "user_member",
+          },
+          organization: {
+            id: "org_123",
+          },
+          user: {
+            id: "user_member",
+          },
+        })
+      ).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
         },
       });
 
       expect(auditEvents).toStrictEqual([]);
-      expect(JSON.stringify(logs)).toContain(
-        "auth_security_audit_write_failure"
-      );
       expect(JSON.stringify(logs)).not.toContain("member@example.com");
     } finally {
       await cleanup();
@@ -6989,9 +7028,11 @@ describe("createAuthentication()", () => {
                 readonly inviter: {
                   readonly user: {
                     readonly email: string;
+                    readonly id: string;
                   };
                 };
                 readonly organization: {
+                  readonly id: string;
                   readonly name: string;
                 };
                 readonly role: string;
@@ -7019,9 +7060,11 @@ describe("createAuthentication()", () => {
         inviter: {
           user: {
             email: "owner@example.com",
+            id: "user_owner",
           },
         },
         organization: {
+          id: "org_123",
           name: "Acme Field Ops",
         },
         role: "member",
@@ -7040,6 +7083,71 @@ describe("createAuthentication()", () => {
       ]);
     } finally {
       await pool.end();
+    }
+  }, 10_000);
+
+  it("fails closed on malformed native invitation email payloads before delivery", async () => {
+    const sentInvitationEmails: unknown[] = [];
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        sendOrganizationInvitationEmail: (input) => {
+          sentInvitationEmails.push(input);
+          return Promise.resolve();
+        },
+      }
+    );
+
+    try {
+      const organizationPlugin = auth.options.plugins.find(
+        (plugin) => plugin.id === "organization"
+      ) as
+        | {
+            readonly options?: {
+              readonly sendInvitationEmail?: (data: {
+                readonly email: unknown;
+                readonly id: unknown;
+                readonly inviter: {
+                  readonly user: {
+                    readonly email: unknown;
+                    readonly id: unknown;
+                  };
+                };
+                readonly organization: {
+                  readonly id: unknown;
+                  readonly name: unknown;
+                };
+                readonly role: unknown;
+              }) => Promise<void>;
+            };
+          }
+        | undefined;
+
+      await expect(
+        organizationPlugin?.options?.sendInvitationEmail?.({
+          email: "not-an-email",
+          id: "inv_123",
+          inviter: {
+            user: {
+              email: "owner@example.com",
+              id: "user_owner",
+            },
+          },
+          organization: {
+            id: "org_123",
+            name: "Acme Field Ops",
+          },
+          role: "member",
+        })
+      ).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
+        },
+      });
+      expect(sentInvitationEmails).toStrictEqual([]);
+    } finally {
+      await cleanup();
     }
   }, 10_000);
 
@@ -7087,8 +7195,8 @@ describe("createAuthentication()", () => {
   it("allows organization invitation acceptance below the per-user organization limit", async () => {
     await expect(
       assertUserCanAcceptOrganizationInvitation({
-        database: makeOrganizationMembershipCountDatabase(9),
-        userId: "user_123",
+        database: makeOrganizationMembershipCountDatabase({ count: 9 }),
+        userId: decodeUserId("user_123"),
       })
     ).resolves.toBeUndefined();
   }, 10_000);
@@ -7096,8 +7204,8 @@ describe("createAuthentication()", () => {
   it("rejects organization invitation acceptance at the per-user organization limit", async () => {
     await expect(
       assertUserCanAcceptOrganizationInvitation({
-        database: makeOrganizationMembershipCountDatabase(10),
-        userId: "user_123",
+        database: makeOrganizationMembershipCountDatabase({ count: 10 }),
+        userId: decodeUserId("user_123"),
       })
     ).rejects.toMatchObject({
       status: "FORBIDDEN",
@@ -7105,6 +7213,277 @@ describe("createAuthentication()", () => {
         code: "YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS",
       },
     });
+  }, 10_000);
+
+  it("fails closed on missing organization membership count rows", async () => {
+    await expect(
+      assertUserCanAcceptOrganizationInvitation({
+        database: makeOrganizationMembershipCountDatabase(),
+        userId: decodeUserId("user_123"),
+      })
+    ).rejects.toMatchObject({
+      status: "BAD_REQUEST",
+      body: {
+        code: "INVALID_ORGANIZATION_MEMBERSHIP_COUNT",
+      },
+    });
+  }, 10_000);
+
+  it("fails closed on malformed organization membership count rows", async () => {
+    await expect(
+      assertUserCanAcceptOrganizationInvitation({
+        database: makeOrganizationMembershipCountDatabase({ count: -1 }),
+        userId: decodeUserId("user_123"),
+      })
+    ).rejects.toMatchObject({
+      status: "BAD_REQUEST",
+      body: {
+        code: "INVALID_ORGANIZATION_MEMBERSHIP_COUNT",
+      },
+    });
+  }, 10_000);
+
+  it("fails closed on malformed accept-invitation before-hook payloads before membership queries", async () => {
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        database: makeFailingOrganizationAcceptHookDatabase(
+          "membership query should not run for malformed accept hook payloads"
+        ),
+      }
+    );
+
+    try {
+      const beforeAcceptInvitation =
+        getOrganizationPluginOptions(auth).organizationHooks
+          ?.beforeAcceptInvitation;
+
+      if (!beforeAcceptInvitation) {
+        throw new Error("Expected beforeAcceptInvitation hook.");
+      }
+
+      await expect(
+        beforeAcceptInvitation({
+          user: {
+            id: "",
+          },
+        })
+      ).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
+        },
+      });
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("fails closed on malformed accept-invitation after-hook payloads before audit writes", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+      }
+    );
+
+    try {
+      const afterAcceptInvitation =
+        getOrganizationPluginOptions(auth).organizationHooks
+          ?.afterAcceptInvitation;
+
+      if (!afterAcceptInvitation) {
+        throw new Error("Expected afterAcceptInvitation hook.");
+      }
+
+      await expect(
+        afterAcceptInvitation({
+          invitation: {
+            email: "not-an-email",
+            organizationId: "org_123",
+            role: "member",
+          },
+          member: {
+            id: "member_accepted",
+            userId: "user_member",
+          },
+          user: {
+            id: "user_member",
+          },
+        })
+      ).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
+        },
+      });
+      expect(auditEvents).toStrictEqual([]);
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("fails closed on malformed create-invitation before-hook payloads", async () => {
+    const { auth, cleanup } = createAuthenticationForPluginInspection();
+
+    try {
+      const beforeCreateInvitation =
+        getOrganizationPluginOptions(auth).organizationHooks
+          ?.beforeCreateInvitation;
+
+      if (!beforeCreateInvitation) {
+        throw new Error("Expected beforeCreateInvitation hook.");
+      }
+
+      let caughtError: unknown;
+
+      try {
+        beforeCreateInvitation({
+          invitation: {
+            email: "not-an-email",
+            organizationId: "org_123",
+            inviterId: "user_123",
+            role: "member",
+          },
+          inviter: makeOrganizationPluginUser(false),
+          organization: {
+            createdAt: new Date(),
+            id: "org_123",
+            metadata: null,
+            name: "Acme Field Ops",
+            slug: "acme-field-ops",
+          },
+        });
+      } catch (error) {
+        caughtError = error;
+      }
+
+      expect(caughtError).toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
+        },
+      });
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("fails closed on malformed create-invitation after-hook payloads before audit writes", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+      }
+    );
+
+    try {
+      const hooks = getOrganizationPluginOptions(auth).organizationHooks as
+        | {
+            readonly afterCreateInvitation?: (data: {
+              readonly invitation: {
+                readonly email: unknown;
+                readonly organizationId: unknown;
+                readonly role: unknown;
+              };
+              readonly inviter: {
+                readonly email: unknown;
+                readonly id: unknown;
+              };
+              readonly organization: {
+                readonly id: unknown;
+                readonly name: unknown;
+              };
+            }) => Promise<void>;
+          }
+        | undefined;
+
+      await expect(
+        hooks?.afterCreateInvitation?.({
+          invitation: {
+            email: "not-an-email",
+            organizationId: "org_123",
+            role: "member",
+          },
+          inviter: {
+            email: "owner@example.com",
+            id: "user_owner",
+          },
+          organization: {
+            id: "org_123",
+            name: "Acme Field Ops",
+          },
+        })
+      ).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
+        },
+      });
+      expect(auditEvents).toStrictEqual([]);
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("fails closed on malformed cancel-invitation after-hook payloads before audit writes", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+      }
+    );
+
+    try {
+      const hooks = getOrganizationPluginOptions(auth).organizationHooks as
+        | {
+            readonly afterCancelInvitation?: (data: {
+              readonly cancelledBy: {
+                readonly email: unknown;
+                readonly id: unknown;
+              };
+              readonly invitation: {
+                readonly email: unknown;
+                readonly organizationId: unknown;
+                readonly role: unknown;
+              };
+              readonly organization: {
+                readonly id: unknown;
+                readonly name: unknown;
+              };
+            }) => Promise<void>;
+          }
+        | undefined;
+
+      await expect(
+        hooks?.afterCancelInvitation?.({
+          cancelledBy: {
+            email: "owner@example.com",
+            id: "",
+          },
+          invitation: {
+            email: "member@example.com",
+            organizationId: "org_123",
+            role: "member",
+          },
+          organization: {
+            id: "org_123",
+            name: "Acme Field Ops",
+          },
+        })
+      ).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
+        },
+      });
+      expect(auditEvents).toStrictEqual([]);
+    } finally {
+      await cleanup();
+    }
   }, 10_000);
 
   it("requires verified email before organization invitations", async () => {
@@ -7157,6 +7536,40 @@ describe("createAuthentication()", () => {
       ).resolves.toMatchObject({
         data: {
           role: "member",
+        },
+      });
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("rejects owner organization invitations through the Better Auth hook", async () => {
+    const { auth, cleanup } = createAuthenticationForPluginInspection();
+
+    try {
+      const organizationPlugin = getOrganizationPluginOptions(auth);
+
+      await expect(async () => {
+        await organizationPlugin.organizationHooks?.beforeCreateInvitation?.({
+          invitation: {
+            email: "owner@example.com",
+            organizationId: "org_123",
+            inviterId: "user_123",
+            role: "owner",
+          },
+          inviter: makeOrganizationPluginUser(true),
+          organization: {
+            id: "org_123",
+            name: "Acme Field Ops",
+            slug: "acme-field-ops",
+            createdAt: new Date(),
+            metadata: null,
+          },
+        });
+      }).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_ROLE",
         },
       });
     } finally {
@@ -8489,9 +8902,11 @@ describe("createAuthentication()", () => {
                 readonly inviter: {
                   readonly user: {
                     readonly email: string;
+                    readonly id: string;
                   };
                 };
                 readonly organization: {
+                  readonly id: string;
                   readonly name: string;
                 };
                 readonly role: string;
@@ -8507,9 +8922,11 @@ describe("createAuthentication()", () => {
           inviter: {
             user: {
               email: "owner@example.com",
+              id: "user_owner",
             },
           },
           organization: {
+            id: "org_123",
             name: "Acme Field Ops",
           },
           role: "member",
@@ -8561,9 +8978,11 @@ describe("createAuthentication()", () => {
                 readonly inviter: {
                   readonly user: {
                     readonly email: string;
+                    readonly id: string;
                   };
                 };
                 readonly organization: {
+                  readonly id: string;
                   readonly name: string;
                 };
                 readonly role: string;
@@ -8579,9 +8998,11 @@ describe("createAuthentication()", () => {
           inviter: {
             user: {
               email: "owner@example.com",
+              id: "user_owner",
             },
           },
           organization: {
+            id: "org_123",
             name: "Acme Field Ops",
           },
           role: "member",
@@ -8869,6 +9290,9 @@ function createAuthenticationForPluginInspection(
     readonly runtimeContext?: Parameters<
       typeof createAuthentication
     >[0]["runtimeContext"];
+    readonly sendOrganizationInvitationEmail?: Parameters<
+      typeof createAuthentication
+    >[0]["sendOrganizationInvitationEmail"];
   } = {}
 ) {
   const pool = options.database
@@ -8893,7 +9317,8 @@ function createAuthenticationForPluginInspection(
     reportPasswordResetEmailFailure: () => {},
     reportVerificationEmailFailure: () => {},
     runtimeContext: options.runtimeContext,
-    sendOrganizationInvitationEmail: async () => {},
+    sendOrganizationInvitationEmail:
+      options.sendOrganizationInvitationEmail ?? (async () => {}),
     sendPasswordResetEmail: async () => {},
     sendVerificationEmail: async () => {},
   });
@@ -8942,6 +9367,25 @@ function getOrganizationPluginOptions(
                 readonly metadata: null;
               };
             }) => Promise<unknown>;
+            readonly beforeAcceptInvitation?: (data: {
+              readonly user: {
+                readonly id: unknown;
+              };
+            }) => Promise<unknown>;
+            readonly afterAcceptInvitation?: (data: {
+              readonly invitation: {
+                readonly email: unknown;
+                readonly organizationId: unknown;
+                readonly role: unknown;
+              };
+              readonly member: {
+                readonly id: unknown;
+                readonly userId: unknown;
+              };
+              readonly user: {
+                readonly id: unknown;
+              };
+            }) => Promise<void>;
             readonly beforeUpdateOrganization?: (data: {
               readonly member: {
                 readonly id: string;
@@ -9522,15 +9966,43 @@ function makeRateLimitReservationFailureDatabase(error: unknown) {
   } as unknown as Parameters<typeof withAuthenticationAbuseRateLimitGuard>[1];
 }
 
-function makeOrganizationMembershipCountDatabase(count: number) {
+function makeOrganizationMembershipCountDatabase(row?: unknown) {
   return {
     select: () => ({
       from: () => ({
         where: () => ({
-          limit: () => Promise.resolve([{ count }]),
+          limit: () => Promise.resolve(row === undefined ? [] : [row]),
         }),
       }),
     }),
+  } as unknown as Parameters<
+    typeof assertUserCanAcceptOrganizationInvitation
+  >[0]["database"];
+}
+
+function makePublicInvitationPreviewDatabase(row: {
+  readonly email: string;
+  readonly organizationName: string;
+  readonly role: string;
+}) {
+  return {
+    select: () => ({
+      from: () => ({
+        innerJoin: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([row]),
+          }),
+        }),
+      }),
+    }),
+  } as unknown as Parameters<typeof findPublicInvitationPreview>[0]["database"];
+}
+
+function makeFailingOrganizationAcceptHookDatabase(message: string) {
+  return {
+    select: () => {
+      throw new Error(message);
+    },
   } as unknown as Parameters<
     typeof assertUserCanAcceptOrganizationInvitation
   >[0]["database"];

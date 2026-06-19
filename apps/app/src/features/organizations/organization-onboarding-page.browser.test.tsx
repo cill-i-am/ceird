@@ -1,3 +1,4 @@
+import type { InviteOrganizationMemberInput } from "@ceird/identity-core";
 import {
   act,
   fireEvent,
@@ -8,14 +9,9 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type { authClient as AuthClient } from "#/lib/auth-client";
-
+import type * as OrganizationMembersApiModule from "./organization-members-api";
 import { OrganizationOnboardingPage } from "./organization-onboarding-page";
 import type * as OrganizationServerModule from "./organization-server";
-
-type InviteMemberInput = Parameters<
-  typeof AuthClient.organization.inviteMember
->[0];
 
 const {
   mockedClearAppContextClientCache,
@@ -37,16 +33,10 @@ const {
   >(),
   mockedGetBrowserLocationHref: vi.fn<() => string>(),
   mockedInviteMember: vi.fn<
-    (input: InviteMemberInput) => Promise<{
-      data: {
+    (input: InviteOrganizationMemberInput) => Promise<{
+      invitation: {
         id: string;
-      } | null;
-      error: {
-        code?: string;
-        message: string;
-        status: number;
-        statusText: string;
-      } | null;
+      };
     }>
   >(),
   mockedNavigateBrowserTo: vi.fn<(url: string) => void>(),
@@ -87,12 +77,9 @@ vi.mock(import("./organization-server"), () => ({
     mockedCreateOrganization as unknown as typeof OrganizationServerModule.createCurrentServerOrganization,
 }));
 
-vi.mock(import("#/lib/auth-client"), () => ({
-  authClient: {
-    organization: {
-      inviteMember: mockedInviteMember,
-    },
-  } as unknown as typeof AuthClient,
+vi.mock(import("./organization-members-api"), () => ({
+  inviteOrganizationMember:
+    mockedInviteMember as unknown as typeof OrganizationMembersApiModule.inviteOrganizationMember,
 }));
 
 vi.mock(import("sonner"), async (importActual) => {
@@ -121,10 +108,9 @@ describe("organization onboarding page", () => {
       slug: "acme-field-ops",
     });
     mockedInviteMember.mockResolvedValue({
-      data: {
+      invitation: {
         id: "inv_123",
       },
-      error: null,
     });
     mockedToastSuccess.mockClear();
     mockedUpdateUserPreferences.mockResolvedValue({
@@ -281,7 +267,6 @@ describe("organization onboarding page", () => {
     await waitFor(() => {
       expect(mockedInviteMember).toHaveBeenCalledWith({
         email: "foreman@example.com",
-        organizationId: "org_123",
         role: "member",
       });
     });
@@ -422,13 +407,10 @@ describe("organization onboarding page", () => {
   }, 10_000);
 
   it("shows an inline error when sending an invite fails", async () => {
-    mockedInviteMember.mockResolvedValue({
-      data: null,
-      error: {
-        message: "Invite failed",
-        status: 400,
-        statusText: "Bad Request",
-      },
+    mockedInviteMember.mockRejectedValue({
+      message: "Invite failed",
+      status: 400,
+      statusText: "Bad Request",
     });
 
     const user = userEvent.setup();
@@ -455,14 +437,11 @@ describe("organization onboarding page", () => {
   }, 10_000);
 
   it("shows targeted email verification copy when sending an invite is blocked", async () => {
-    mockedInviteMember.mockResolvedValue({
-      data: null,
-      error: {
-        code: "EMAIL_NOT_VERIFIED",
-        message: "Verify your email before inviting organization members.",
-        status: 403,
-        statusText: "Forbidden",
-      },
+    mockedInviteMember.mockRejectedValue({
+      code: "EMAIL_NOT_VERIFIED",
+      message: "Verify your email before inviting organization members.",
+      status: 403,
+      statusText: "Forbidden",
     });
 
     const user = userEvent.setup();

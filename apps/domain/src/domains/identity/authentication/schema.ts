@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  INVITABLE_ORGANIZATION_ROLES,
+  ORGANIZATION_INVITATION_STATUSES,
   ORGANIZATION_ROLES,
   ORGANIZATION_SLUG_MAX_LENGTH,
   RESERVED_ORGANIZATION_SLUGS,
@@ -21,6 +23,12 @@ import {
 
 const organizationRoleValuesSql = sql.raw(
   ORGANIZATION_ROLES.map((value) => `'${value}'`).join(", ")
+);
+const invitableOrganizationRoleValuesSql = sql.raw(
+  INVITABLE_ORGANIZATION_ROLES.map((value) => `'${value}'`).join(", ")
+);
+const organizationInvitationStatusValuesSql = sql.raw(
+  ORGANIZATION_INVITATION_STATUSES.map((value) => `'${value}'`).join(", ")
 );
 const reservedOrganizationSlugValuesSql = sql.raw(
   RESERVED_ORGANIZATION_SLUGS.map((value) => `'${value}'`).join(", ")
@@ -132,8 +140,10 @@ export const invitation = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     email: text("email").notNull(),
-    role: text("role", { enum: ORGANIZATION_ROLES }).notNull(),
-    status: text("status").notNull().default("pending"),
+    role: text("role", { enum: INVITABLE_ORGANIZATION_ROLES }).notNull(),
+    status: text("status", { enum: ORGANIZATION_INVITATION_STATUSES })
+      .notNull()
+      .default("pending"),
     expiresAt: timestamp("expires_at").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     inviterId: text("inviter_id")
@@ -143,7 +153,11 @@ export const invitation = pgTable(
   (table) => [
     check(
       "invitation_role_chk",
-      sql`${table.role} in (${organizationRoleValuesSql})`
+      sql`${table.role} in (${invitableOrganizationRoleValuesSql})`
+    ),
+    check(
+      "invitation_status_chk",
+      sql`${table.status} in (${organizationInvitationStatusValuesSql})`
     ),
     index("invitation_organization_id_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),

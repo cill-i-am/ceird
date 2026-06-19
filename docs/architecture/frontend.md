@@ -369,18 +369,22 @@ Better Auth accepts the sync, decodes the created organization summary, and
 returns that summary to the client. The same onboarding page then offers an
 optional invite-members step before navigating into the app. Skipping or
 completing this step enters the active workspace; invite creation uses Better
-Auth's `authClient.organization.inviteMember` with the newly created
-organization ID.
+Auth under the hood only through the Ceird identity contract:
+`features/organizations/organization-members-api.ts` posts to the domain
+`/organization/invitations` endpoint, whose handler owns active-organization
+resolution, admin authorization, Better Auth organization policy traversal, and
+Effect Schema decoding before returning a Ceird invitation DTO.
 
-The `/members` route uses Better Auth organization client methods directly for
-both active members and pending invitations. It loads current members with
-`authClient.organization.listMembers`, keeps pending invitation management on
-`listInvitations`, `inviteMember`, and `cancelInvitation`, and uses
-`updateMemberRole` and `removeMember` for member row actions. The route remains
-owner/admin gated through organization route context; row actions stay
-menu-driven instead of hotkey-driven because role changes and removals are
-per-row administrative actions that benefit from explicit focus, labels, and
-disabled/pending states over global shortcuts.
+The `/members` route consumes Ceird identity DTOs for both active members and
+pending invitations. It loads members and invitations through
+`features/organizations/organization-members-api.ts`, which decodes the domain
+identity API responses from `@ceird/identity-core` schemas. Invite, resend,
+cancel, role-update, and remove actions all cross the same Ceird identity API
+boundary; browser code does not interpret raw Better Auth member or invitation
+payloads. The route remains owner/admin gated through organization route
+context; row actions stay menu-driven instead of hotkey-driven because role
+changes and removals are per-row administrative actions that benefit from
+explicit focus, labels, and disabled/pending states over global shortcuts.
 
 Use `lib/server-api-forwarded-headers.ts` when server-side calls need the API to
 preserve the original browser host/protocol for trusted proxy and cookie logic.
@@ -428,8 +432,11 @@ example:
 - `features/auth/password-reset-search.ts`
 - `features/auth/email-verification-search.ts`
 - `features/organizations/organization-schemas.ts`
-- `features/organizations/organization-member-invite-schemas.ts`
 - `features/settings/user-settings-schemas.ts`
+
+Organization member/invitation forms do not own feature-local schema wrappers.
+They import the shared `@ceird/identity-core` invite schema and decoder directly
+so the browser boundary matches the Ceird identity contract.
 
 UI state for API-backed feature workflows is kept in focused state modules such
 as `jobs-state.ts`, `jobs-detail-state.ts`, and `sites-state.ts`.

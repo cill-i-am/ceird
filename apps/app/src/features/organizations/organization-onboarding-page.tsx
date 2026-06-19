@@ -1,4 +1,11 @@
-import type { OrganizationSummary } from "@ceird/identity-core";
+import {
+  decodeInviteOrganizationMemberInput,
+  InviteOrganizationMemberInputSchema,
+} from "@ceird/identity-core";
+import type {
+  InvitableOrganizationRole,
+  OrganizationSummary,
+} from "@ceird/identity-core";
 import { CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useForm } from "@tanstack/react-form";
@@ -23,7 +30,6 @@ import {
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { EntryShell, EntrySurfaceCard } from "#/features/auth/entry-shell";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
-import { authClient } from "#/lib/auth-client";
 import {
   getBrowserLocationHref,
   navigateBrowserTo,
@@ -45,11 +51,7 @@ import {
   INVITE_ROLE_SELECTION_GROUPS,
   isInviteRole,
 } from "./organization-invite-role-options";
-import {
-  decodeOrganizationMemberInviteInput,
-  organizationMemberInviteSchema,
-} from "./organization-member-invite-schemas";
-import type { OrganizationMemberInviteInput } from "./organization-member-invite-schemas";
+import { inviteOrganizationMember } from "./organization-members-api";
 import {
   decodeCreateOrganizationNameInput,
   organizationOnboardingSchema,
@@ -60,7 +62,11 @@ const CREATE_ORGANIZATION_FAILURE_MESSAGE =
   "We couldn't create your team. Please try again.";
 const INVITE_FAILURE_MESSAGE =
   "We couldn't send that invitation. Please check the email and try again.";
-const DEFAULT_INVITE_VALUES: OrganizationMemberInviteInput = {
+interface OrganizationMemberInviteDraft {
+  readonly email: string;
+  readonly role: InvitableOrganizationRole;
+}
+const DEFAULT_INVITE_VALUES: OrganizationMemberInviteDraft = {
   email: "",
   role: "member",
 };
@@ -115,7 +121,6 @@ export function OrganizationOnboardingPage() {
       <EntryShell atmosphere="setup">
         {createdOrganization ? (
           <InviteMembersStep
-            organization={createdOrganization}
             isHydrated={isHydrated}
             onContinue={() =>
               continueToCreatedOrganization({
@@ -220,18 +225,16 @@ async function continueToCreatedOrganization({
 function InviteMembersStep({
   isHydrated,
   onContinue,
-  organization,
 }: {
   readonly isHydrated: boolean;
   readonly onContinue: () => Promise<void>;
-  readonly organization: OrganizationSummary;
 }) {
   const [hasSentInvite, setHasSentInvite] = React.useState(false);
   const [roleSelectOpen, setRoleSelectOpen] = React.useState(false);
   const form = useForm({
     defaultValues: DEFAULT_INVITE_VALUES,
     validators: {
-      onSubmit: Schema.toStandardSchemaV1(organizationMemberInviteSchema),
+      onSubmit: Schema.toStandardSchemaV1(InviteOrganizationMemberInputSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({
@@ -241,20 +244,14 @@ function InviteMembersStep({
       const mutationFeedback = beginMutationFeedback({
         minimumDurationMs: 500,
       });
-      const invite = decodeOrganizationMemberInviteInput(value);
-      const result = await authClient.organization.inviteMember({
-        email: invite.email,
-        organizationId: organization.id,
-        role: invite.role,
-      });
+      const invite = decodeInviteOrganizationMemberInput(value);
 
-      if (result.error) {
+      try {
+        await inviteOrganizationMember(invite);
+      } catch (error) {
         formApi.setErrorMap({
           onSubmit: {
-            form: getInviteMemberFailureMessage(
-              result.error,
-              INVITE_FAILURE_MESSAGE
-            ),
+            form: getInviteMemberFailureMessage(error, INVITE_FAILURE_MESSAGE),
             fields: {},
           },
         });
