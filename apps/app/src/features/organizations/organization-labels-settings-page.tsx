@@ -191,11 +191,6 @@ const INVALID_LABEL_DESCRIPTION_MESSAGE =
 const RESTORE_CONFLICT_MESSAGE =
   "Restore blocked because an active label already uses that name.";
 const USAGE_PLACEHOLDER = "Coming next";
-const LABEL_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-});
 
 const decodeCreateLabelInput = Schema.decodeUnknownSync(CreateLabelInputSchema);
 const decodeUpdateLabelInput = Schema.decodeUnknownSync(UpdateLabelInputSchema);
@@ -1024,32 +1019,33 @@ function LabelsTable({
       className="overflow-x-auto rounded-lg border border-border/70"
       data-testid="labels-table-scroll"
     >
-      <Table className="min-w-[760px]">
-        <TableHeader>
-          <TableRow className="bg-muted/40 hover:bg-muted/40">
-            <TableHead className="w-[32%]">Label</TableHead>
-            <TableHead className="w-[30%]">Description</TableHead>
-            <TableHead>Jobs</TableHead>
-            <TableHead>Sites</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead className="w-12 text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {labels.map((label) => (
-            <LabelTableRow
-              canWriteLabels={canWriteLabels}
-              key={label.id}
-              label={label}
-              pendingMutation={pendingMutation}
-              view={view}
-              onArchive={onArchive}
-              onEdit={onEdit}
-              onRestore={onRestore}
-            />
-          ))}
-        </TableBody>
-      </Table>
+      <div style={{ width: "max(100%, 680px)" }}>
+        <Table className="table-fixed">
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead className="w-[36%]">Label</TableHead>
+              <TableHead className="w-[32%]">Description</TableHead>
+              <TableHead className="w-28">Jobs</TableHead>
+              <TableHead className="w-28">Sites</TableHead>
+              <TableHead className="w-12 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {labels.map((label) => (
+              <LabelTableRow
+                canWriteLabels={canWriteLabels}
+                key={label.id}
+                label={label}
+                pendingMutation={pendingMutation}
+                view={view}
+                onArchive={onArchive}
+                onEdit={onEdit}
+                onRestore={onRestore}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
@@ -1096,19 +1092,14 @@ function LabelTableRow({
           </div>
         </div>
       </TableCell>
-      <TableCell className="max-w-[18rem] text-muted-foreground">
-        <span className="block truncate">
-          {label.description ?? "No description"}
-        </span>
+      <TableCell className="max-w-0 text-muted-foreground">
+        <LabelDescriptionText description={label.description} />
       </TableCell>
       <TableCell>
         <UsagePlaceholder />
       </TableCell>
       <TableCell>
         <UsagePlaceholder />
-      </TableCell>
-      <TableCell className="text-muted-foreground">
-        {formatLabelDate(label.createdAt)}
       </TableCell>
       <TableCell className="text-right">
         {rowPending ? (
@@ -1128,6 +1119,40 @@ function LabelTableRow({
         )}
       </TableCell>
     </TableRow>
+  );
+}
+
+function LabelDescriptionText({
+  description,
+}: {
+  readonly description: string | null | undefined;
+}) {
+  const text = description ?? "No description";
+
+  if (!description) {
+    return (
+      <span className="block w-full truncate text-left text-muted-foreground">
+        {text}
+      </span>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            className="block w-full truncate rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
+            type="button"
+          />
+        }
+      >
+        {text}
+      </TooltipTrigger>
+      <TooltipContent align="start" className="max-w-sm whitespace-normal">
+        {description}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -1751,8 +1776,4 @@ function ensureArchivedLabel(label: Label): Label {
   return label.archivedAt === null
     ? { ...label, archivedAt: new Date().toISOString() }
     : label;
-}
-
-function formatLabelDate(value: string) {
-  return LABEL_DATE_FORMATTER.format(new Date(value));
 }

@@ -72,7 +72,9 @@ describe("organization labels settings page", () => {
     );
     expect(screen.getByRole("columnheader", { name: "Jobs" })).toBeVisible();
     expect(screen.getByRole("columnheader", { name: "Sites" })).toBeVisible();
-    expect(screen.getByRole("columnheader", { name: "Created" })).toBeVisible();
+    expect(
+      screen.queryByRole("columnheader", { name: "Created" })
+    ).not.toBeInTheDocument();
     expect(screen.getAllByText("Coming next")).toHaveLength(4);
     expect(screen.getByText("2 active labels")).toBeVisible();
     await expect(
@@ -140,6 +142,32 @@ describe("organization labels settings page", () => {
     expect(screen.getByText("Electrical")).toBeVisible();
     expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
     expect(screen.getByText("1 of 2 labels")).toBeVisible();
+  });
+
+  it("keeps long descriptions constrained and exposes the full text in a tooltip", async () => {
+    const user = userEvent.setup();
+    const longDescription =
+      "High-priority environmental access constraints that should remain readable on demand without taking over the row.";
+    const longDescriptionLabel = makeLabel({
+      description: longDescription,
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Environmental access review",
+    });
+
+    const { container } = renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [longDescriptionLabel],
+        status: "ready",
+      }),
+    });
+    container.style.width = "360px";
+
+    expect(screen.getByRole("button", { name: longDescription })).toBeVisible();
+    await user.hover(screen.getByRole("button", { name: longDescription }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(longDescription)).toHaveLength(2);
+    });
   });
 
   it("creates labels from the responsive drawer with description and color", async () => {

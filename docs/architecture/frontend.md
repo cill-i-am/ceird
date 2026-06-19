@@ -501,7 +501,8 @@ an explicit SSR strategy. The current migrated slices are:
   actions that need explicit target selection and confirmation. The route
   exposes connecting/ready/empty/unavailable/permission states, registers
   search, create, submit, and cancel through the shared hotkey layer, and keeps
-  Jobs and Sites usage columns as placeholders until the usage slice owns them.
+  the table focused on label, constrained admin description, Jobs/Sites usage
+  placeholders, and row actions until the usage slice owns deeper reporting.
   General
   organization settings links to this route instead of loading or rendering the
   old API-backed labels panel.
