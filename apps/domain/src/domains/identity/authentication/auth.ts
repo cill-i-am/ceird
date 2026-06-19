@@ -881,11 +881,7 @@ export function createAuthentication(options: {
                 actorUserId: user.id,
                 eventType: "organization_updated",
                 metadata: makeOrganizationUpdatedAuditMetadata({
-                  updatedFields: updatedOrganization
-                    ? Object.keys(updatedOrganization).filter(
-                        (field) => field !== "id"
-                      )
-                    : [],
+                  updatedFields: updatedOrganization ? ["name"] : [],
                 }),
                 organizationId: updatedOrganization?.id ?? null,
               }

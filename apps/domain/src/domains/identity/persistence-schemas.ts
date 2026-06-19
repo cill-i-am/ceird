@@ -7,15 +7,19 @@ import {
   OrganizationId,
   OrganizationRole,
   OrganizationSecurityActivityEventId,
+  SessionId,
   UserId,
 } from "@ceird/identity-core";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, SchemaGetter } from "effect";
 
 import { AUTH_SECURITY_AUDIT_EVENT_TYPES } from "./authentication/schema.js";
 
 const NullableNonEmptyString = Schema.NullOr(Schema.NonEmptyString);
 const NullableDate = Schema.NullOr(Schema.DateValid);
 const ConnectedAppScopesSchema = Schema.Array(ConnectedAppScopeSchema);
+const ConnectedAppMutableScopesSchema = Schema.mutable(
+  ConnectedAppScopesSchema
+);
 
 const ConnectedAppGrantListRowFields = {
   active_access_token_count: ConnectedAppGrantActiveTokenCountSchema,
@@ -143,6 +147,7 @@ const AuthSecurityAuditMetadataBaseFields = {
 const OrganizationMemberId = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/domains/identity/OrganizationMemberId")
 );
+const OrganizationUpdatedFieldSchema = Schema.Literal("name");
 const RequiredOrganizationAuditWriteBaseFields = {
   actorUserId: UserId,
   organizationId: OrganizationId,
@@ -159,7 +164,10 @@ const OrganizationAuditOptionalDbColumns = {
     Schema.optional,
     Schema.withDecodingDefault(Effect.succeed(null))
   ),
-  sessionId: NullableOrganizationAuditTextDbColumn,
+  sessionId: Schema.NullOr(SessionId).pipe(
+    Schema.optional,
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
   sourceIp: NullableOrganizationAuditTextDbColumn,
   userAgent: NullableOrganizationAuditTextDbColumn,
 };
@@ -176,7 +184,7 @@ export type MaskedInvitationEmail = Schema.Schema.Type<
 
 export const OrganizationUpdatedAuditMetadataSchema = Schema.Struct({
   ...AuthSecurityAuditMetadataBaseFields,
-  updatedFields: Schema.Array(Schema.NonEmptyString),
+  updatedFields: Schema.NonEmptyArray(OrganizationUpdatedFieldSchema),
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -186,9 +194,9 @@ export type OrganizationUpdatedAuditMetadata = Schema.Schema.Type<
 
 export const OrganizationInvitationAuditMetadataSchema = Schema.Struct({
   ...AuthSecurityAuditMetadataBaseFields,
-  invitationEmailMasked: Schema.NullOr(MaskedInvitationEmailSchema),
-  role: Schema.NullOr(OrganizationRole),
-  targetUserId: Schema.NullOr(UserId),
+  invitationEmailMasked: MaskedInvitationEmailSchema,
+  role: OrganizationRole,
+  targetUserId: Schema.Null,
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -198,10 +206,10 @@ export type OrganizationInvitationAuditMetadata = Schema.Schema.Type<
 
 export const OrganizationInvitationAcceptedAuditMetadataSchema = Schema.Struct({
   ...AuthSecurityAuditMetadataBaseFields,
-  invitationEmailMasked: Schema.NullOr(MaskedInvitationEmailSchema),
-  memberId: Schema.NullOr(Schema.NonEmptyString),
-  role: Schema.NullOr(OrganizationRole),
-  targetUserId: Schema.NullOr(UserId),
+  invitationEmailMasked: MaskedInvitationEmailSchema,
+  memberId: OrganizationMemberId,
+  role: OrganizationRole,
+  targetUserId: UserId,
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -209,17 +217,182 @@ export type OrganizationInvitationAcceptedAuditMetadata = Schema.Schema.Type<
   typeof OrganizationInvitationAcceptedAuditMetadataSchema
 >;
 
-export const OrganizationMemberAuditMetadataSchema = Schema.Struct({
+export const OrganizationCreatedAuditMetadataSchema = Schema.Struct({
   ...AuthSecurityAuditMetadataBaseFields,
-  memberId: Schema.NullOr(Schema.NonEmptyString),
-  previousRole: Schema.NullOr(OrganizationRole),
-  role: Schema.NullOr(OrganizationRole),
-  targetUserId: Schema.NullOr(UserId),
+  memberId: OrganizationMemberId,
+  previousRole: Schema.Null,
+  role: OrganizationRole,
+  targetUserId: UserId,
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
-export type OrganizationMemberAuditMetadata = Schema.Schema.Type<
-  typeof OrganizationMemberAuditMetadataSchema
+export type OrganizationCreatedAuditMetadata = Schema.Schema.Type<
+  typeof OrganizationCreatedAuditMetadataSchema
+>;
+
+export const OrganizationMemberRoleUpdatedAuditMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  memberId: OrganizationMemberId,
+  previousRole: OrganizationRole,
+  role: OrganizationRole,
+  targetUserId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationMemberRoleUpdatedAuditMetadata = Schema.Schema.Type<
+  typeof OrganizationMemberRoleUpdatedAuditMetadataSchema
+>;
+
+export const OrganizationMemberRemovedAuditMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  memberId: OrganizationMemberId,
+  previousRole: Schema.Null,
+  role: OrganizationRole,
+  targetUserId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationMemberAuditMetadata =
+  | Schema.Schema.Type<typeof OrganizationMemberRoleUpdatedAuditMetadataSchema>
+  | Schema.Schema.Type<typeof OrganizationMemberRemovedAuditMetadataSchema>;
+
+const OAuthAuditSourceFields = {
+  source: Schema.Literal("better_auth_oauth_endpoint"),
+};
+const OAuthAuditScopesDbColumn = Schema.NullOr(ConnectedAppScopesSchema).pipe(
+  Schema.decodeTo(Schema.NullOr(ConnectedAppMutableScopesSchema), {
+    decode: SchemaGetter.transform((value) =>
+      value === null || value.length === 0 ? null : [...value]
+    ),
+    encode: SchemaGetter.transform((value) => value),
+  }),
+  Schema.optional,
+  Schema.withDecodingDefault(Effect.succeed(null))
+);
+const OAuthAuditNullableTextDbColumn = Schema.NullOr(
+  Schema.NonEmptyString
+).pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(null)));
+const OAuthAuditOptionalDbColumns = {
+  actorUserId: Schema.NullOr(UserId).pipe(
+    Schema.optional,
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  oauthClientId: Schema.NullOr(OAuthClientId).pipe(
+    Schema.optional,
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  organizationId: Schema.NullOr(OrganizationId).pipe(
+    Schema.optional,
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  scopes: OAuthAuditScopesDbColumn,
+  sessionId: Schema.NullOr(SessionId).pipe(
+    Schema.optional,
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  sourceIp: OAuthAuditNullableTextDbColumn,
+  userAgent: OAuthAuditNullableTextDbColumn,
+};
+const OAuthRegistrationAuditMetadataSchema = Schema.Union([
+  Schema.Struct({
+    ...OAuthAuditSourceFields,
+    dynamicRegistration: Schema.Literal(true),
+    oauthError: Schema.Null,
+    outcome: Schema.Literal("succeeded"),
+  }),
+  Schema.Struct({
+    ...OAuthAuditSourceFields,
+    dynamicRegistration: Schema.Literal(true),
+    oauthError: Schema.NullOr(Schema.NonEmptyString),
+    outcome: Schema.Literal("rejected"),
+  }),
+]).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const OAuthConsentAuditMetadataSchema = Schema.Struct({
+  ...OAuthAuditSourceFields,
+  accepted: Schema.Boolean,
+  containsAdminScope: Schema.Boolean,
+  containsWriteScope: Schema.Boolean,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const OAuthTokenKindSchema = Schema.Literals([
+  "access_token",
+  "refresh_token",
+] as const);
+const OAuthTokenRefreshedAuditMetadataSchema = Schema.Struct({
+  ...OAuthAuditSourceFields,
+  grantType: Schema.Literal("refresh_token"),
+  matchedStoredToken: Schema.Boolean,
+  tokenKind: OAuthTokenKindSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const OAuthTokenRevokedAuditMetadataSchema = Schema.Struct({
+  ...OAuthAuditSourceFields,
+  matchedStoredToken: Schema.Boolean,
+  tokenKind: Schema.NullOr(OAuthTokenKindSchema),
+  tokenTypeHint: Schema.NullOr(OAuthTokenKindSchema),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+export const OAuthSecurityAuditWriteSchema = Schema.Union([
+  Schema.Struct({
+    ...OAuthAuditOptionalDbColumns,
+    eventType: Schema.Literals([
+      "oauth_client_registration_succeeded",
+      "oauth_client_registration_rejected",
+    ] as const),
+    metadata: OAuthRegistrationAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OAuthAuditOptionalDbColumns,
+    eventType: Schema.Literals([
+      "oauth_consent_granted",
+      "oauth_consent_denied",
+    ] as const),
+    metadata: OAuthConsentAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OAuthAuditOptionalDbColumns,
+    eventType: Schema.Literal("oauth_token_refreshed"),
+    metadata: OAuthTokenRefreshedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OAuthAuditOptionalDbColumns,
+    eventType: Schema.Literal("oauth_token_revoked"),
+    metadata: OAuthTokenRevokedAuditMetadataSchema,
+  }),
+]).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OAuthSecurityAuditWrite = Schema.Schema.Type<
+  typeof OAuthSecurityAuditWriteSchema
+>;
+
+export const OAuthRefreshTokenConsentGuardRowSchema = Schema.Struct({
+  consentScopes: Schema.NullOr(ConnectedAppScopesSchema),
+  refreshTokenScopes: ConnectedAppScopesSchema,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OAuthRefreshTokenConsentGuardRow = Schema.Schema.Type<
+  typeof OAuthRefreshTokenConsentGuardRowSchema
+>;
+
+export const OAuthTokenAuditContextRowSchema = Schema.Struct({
+  clientId: OAuthClientId,
+  referenceId: Schema.NullOr(OrganizationId),
+  scopes: ConnectedAppScopesSchema,
+  sessionId: Schema.NullOr(SessionId),
+  userId: Schema.NullOr(UserId),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OAuthTokenAuditContextRow = Schema.Schema.Type<
+  typeof OAuthTokenAuditContextRowSchema
 >;
 
 export const OrganizationActiveChangedAuditMetadataSchema = Schema.Struct({
@@ -248,7 +421,7 @@ const OrganizationCreatedAuditWriteMetadataSchema = Schema.Struct({
 
 const OrganizationUpdatedAuditWriteMetadataSchema = Schema.Struct({
   ...AuthSecurityAuditMetadataBaseFields,
-  updatedFields: Schema.NonEmptyArray(Schema.NonEmptyString),
+  updatedFields: Schema.NonEmptyArray(OrganizationUpdatedFieldSchema),
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -392,7 +565,7 @@ const OrganizationSecurityActivityBaseRowFields = {
 const OrganizationSecurityActivityOrganizationCreatedRowSchema = Schema.Struct({
   ...OrganizationSecurityActivityBaseRowFields,
   event_type: Schema.Literal("organization_created"),
-  metadata: OrganizationMemberAuditMetadataSchema,
+  metadata: OrganizationCreatedAuditMetadataSchema,
   organization_name: Schema.NonEmptyString,
   target_email: Schema.Null,
   target_member_id: Schema.Null,
@@ -434,13 +607,18 @@ const OrganizationSecurityActivityInvitationAcceptedRowSchema = Schema.Struct({
   ...OrganizationSecurityActivityMemberTargetFields,
 });
 
-const OrganizationSecurityActivityMemberRowSchema = Schema.Struct({
+const OrganizationSecurityActivityMemberRoleUpdatedRowSchema = Schema.Struct({
   ...OrganizationSecurityActivityBaseRowFields,
-  event_type: Schema.Literals([
-    "organization_member_role_updated",
-    "organization_member_removed",
-  ] as const),
-  metadata: OrganizationMemberAuditMetadataSchema,
+  event_type: Schema.Literal("organization_member_role_updated"),
+  metadata: OrganizationMemberRoleUpdatedAuditMetadataSchema,
+  organization_name: Schema.NonEmptyString,
+  ...OrganizationSecurityActivityMemberTargetFields,
+});
+
+const OrganizationSecurityActivityMemberRemovedRowSchema = Schema.Struct({
+  ...OrganizationSecurityActivityBaseRowFields,
+  event_type: Schema.Literal("organization_member_removed"),
+  metadata: OrganizationMemberRemovedAuditMetadataSchema,
   organization_name: Schema.NonEmptyString,
   ...OrganizationSecurityActivityMemberTargetFields,
 });
@@ -450,7 +628,8 @@ export const OrganizationSecurityActivityRowSchema = Schema.Union([
   OrganizationSecurityActivityOrganizationUpdatedRowSchema,
   OrganizationSecurityActivityInvitationRowSchema,
   OrganizationSecurityActivityInvitationAcceptedRowSchema,
-  OrganizationSecurityActivityMemberRowSchema,
+  OrganizationSecurityActivityMemberRoleUpdatedRowSchema,
+  OrganizationSecurityActivityMemberRemovedRowSchema,
 ]).annotate({
   parseOptions: { onExcessProperty: "error" },
 });

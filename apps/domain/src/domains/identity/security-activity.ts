@@ -355,22 +355,20 @@ function makeOrganizationSecurityActivityTarget(
     case "organization_invitation_canceled":
     case "organization_invitation_accepted": {
       return {
-        label: row.metadata.invitationEmailMasked ?? undefined,
+        label: row.metadata.invitationEmailMasked,
         type: "invitation",
       } as const;
     }
     case "organization_member_role_updated":
     case "organization_member_removed": {
-      const memberId =
-        row.target_member_id ?? row.metadata.memberId ?? undefined;
       const scopedTargetLabel =
         row.target_user_id === null
           ? undefined
           : (row.target_name ?? row.target_email ?? undefined);
 
       return {
-        label: scopedTargetLabel ?? memberId,
-        memberId,
+        label: scopedTargetLabel ?? row.metadata.memberId,
+        memberId: row.metadata.memberId,
         type: "member",
         userId: row.target_user_id ?? undefined,
       } as const;

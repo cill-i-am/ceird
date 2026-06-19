@@ -584,6 +584,89 @@ describe("organization security activity repository", () => {
       "Organization security activity row decode failed"
     );
   });
+
+  it.each([
+    [
+      "invitation metadata with a null masked email",
+      {
+        actor_email: "owner@example.com",
+        actor_name: "Owner User",
+        actor_user_id: "user_owner",
+        created_at: new Date("2026-06-07T12:00:00.000Z"),
+        created_at_cursor: "2026-06-07T12:00:00.000000Z",
+        event_type: "organization_invitation_created",
+        id: "audit_bad_invitation",
+        metadata: {
+          ...auditMetadataSource,
+          invitationEmailMasked: null,
+          role: "member",
+          targetUserId: null,
+        },
+        organization_id: "org_123",
+        organization_name: "Acme Field Ops",
+        target_email: null,
+        target_member_id: null,
+        target_name: null,
+        target_user_id: null,
+      },
+    ],
+    [
+      "role update metadata with a null previous role",
+      {
+        actor_email: "owner@example.com",
+        actor_name: "Owner User",
+        actor_user_id: "user_owner",
+        created_at: new Date("2026-06-07T12:00:00.000Z"),
+        created_at_cursor: "2026-06-07T12:00:00.000000Z",
+        event_type: "organization_member_role_updated",
+        id: "audit_bad_role_update",
+        metadata: {
+          ...auditMetadataSource,
+          memberId: "member_123",
+          previousRole: null,
+          role: "admin",
+          targetUserId: "user_member",
+        },
+        organization_id: "org_123",
+        organization_name: "Acme Field Ops",
+        target_email: "member@example.com",
+        target_member_id: "member_123",
+        target_name: "Taylor Member",
+        target_user_id: "user_member",
+      },
+    ],
+    [
+      "organization update metadata with an arbitrary field",
+      {
+        actor_email: "owner@example.com",
+        actor_name: "Owner User",
+        actor_user_id: "user_owner",
+        created_at: new Date("2026-06-07T12:00:00.000Z"),
+        created_at_cursor: "2026-06-07T12:00:00.000000Z",
+        event_type: "organization_updated",
+        id: "audit_bad_updated_field",
+        metadata: {
+          ...auditMetadataSource,
+          updatedFields: ["slug"],
+        },
+        organization_id: "org_123",
+        organization_name: "Acme Field Ops",
+        target_email: null,
+        target_member_id: null,
+        target_name: null,
+        target_user_id: null,
+      },
+    ],
+  ])("fails %s through repository decode", async (_label, row) => {
+    const error = await Effect.runPromise(
+      Effect.flip(runRepositoryList([row]))
+    );
+
+    expect(error).toBeInstanceOf(OrganizationSecurityActivityStorageError);
+    expect(error.message).toBe(
+      "Organization security activity row decode failed"
+    );
+  });
 });
 
 function runRepositoryList(rows: readonly Record<string, unknown>[]) {
