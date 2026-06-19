@@ -1230,6 +1230,7 @@ describe("authentication integration", () => {
           dynamicRegistration?: boolean;
           oauthError?: string;
           outcome?: string;
+          requestedUnknownScope?: boolean;
         };
         oauth_client_id: string | null;
         scopes: string[] | null;
@@ -1252,6 +1253,7 @@ describe("authentication integration", () => {
           dynamicRegistration: true,
           oauthError: "invalid_scope",
           outcome: "rejected",
+          requestedUnknownScope: false,
         },
         oauth_client_id: null,
         scopes: ["openid", "ceird:write"],
