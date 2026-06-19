@@ -275,7 +275,10 @@ describe("organization labels settings page", () => {
       createLabelWithConfirmation,
     });
 
-    await user.click(screen.getByRole("radio", { name: /blue/i }));
+    await user.click(
+      screen.getByRole("button", { name: /choose new label color/i })
+    );
+    await user.click(await screen.findByRole("radio", { name: /blue/i }));
     await user.type(
       screen.getByRole("textbox", { name: /new label name/i }),
       "Customer visit"

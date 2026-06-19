@@ -18,7 +18,12 @@ describe("label color picker", () => {
 
     renderColorPicker({ onChange });
 
-    const bank = screen.getByRole("radiogroup", {
+    await user.tab();
+    const trigger = screen.getByRole("button", { name: /choose label color/i });
+    expect(trigger).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    const bank = await screen.findByRole("radiogroup", {
       name: /curated label colors/i,
     });
     const mutedRed = within(bank).getByRole("radio", {
@@ -28,9 +33,8 @@ describe("label color picker", () => {
 
     expect(mutedRed).toHaveAttribute("aria-checked", "true");
     expect(blue).toHaveAttribute("aria-checked", "false");
-
-    await user.tab();
     expect(mutedRed).toHaveFocus();
+
     await user.tab();
     await user.tab();
     await user.tab();
@@ -48,10 +52,9 @@ describe("label color picker", () => {
     renderColorPicker({ onChange });
 
     await user.click(
-      screen.getByRole("button", {
-        name: /open advanced label color picker/i,
-      })
+      screen.getByRole("button", { name: /choose label color/i })
     );
+    await user.click(screen.getByRole("button", { name: /advanced/i }));
 
     await expect(
       screen.findByText("Custom label color")
@@ -83,10 +86,9 @@ describe("label color picker", () => {
 
     renderColorPicker({ onChange });
     await user.click(
-      screen.getByRole("button", {
-        name: /open advanced label color picker/i,
-      })
+      screen.getByRole("button", { name: /choose label color/i })
     );
+    await user.click(screen.getByRole("button", { name: /advanced/i }));
     const input = await screen.findByRole("textbox", {
       name: /oklch or hex/i,
     });

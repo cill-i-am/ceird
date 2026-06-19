@@ -41,62 +41,90 @@ const OKLCH_HUE_DIGITS = 3;
 
 export function LabelColorPicker({
   disabled = false,
-  id,
   label = "Label color",
   value,
   onChange,
 }: {
   readonly disabled?: boolean;
-  readonly id?: string | undefined;
   readonly label?: string | undefined;
   readonly onChange: (color: LabelColor) => void;
   readonly value: LabelColor;
 }) {
+  const selectedOption = getLabelColorOption(value);
   const [open, setOpen] = React.useState(false);
+  const [mode, setMode] = React.useState<"advanced" | "bank">("bank");
   const [draftColor, setDraftColor] = React.useState<LabelColor>(value);
 
   React.useEffect(() => {
     if (!open) {
       setDraftColor(value);
+      setMode("bank");
     }
   }, [open, value]);
 
   return (
-    <div className="grid gap-2" id={id}>
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <div className="flex flex-wrap items-center gap-2">
-        <LabelColorBank disabled={disabled} value={value} onChange={onChange} />
-        <Popover open={open} onOpenChange={setOpen}>
-          <Tooltip>
-            <TooltipTrigger
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <PopoverTrigger
               render={
-                <PopoverTrigger
-                  render={
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={disabled}
-                      aria-label="Open advanced label color picker"
-                    />
-                  }
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  disabled={disabled}
+                  aria-label={`Choose ${label.toLowerCase()}`}
                 />
               }
+            />
+          }
+        >
+          <span
+            className="size-5 rounded-full border border-black/15 shadow-inner"
+            style={{ backgroundColor: value }}
+            aria-hidden="true"
+          />
+        </TooltipTrigger>
+        <TooltipContent>
+          {selectedOption?.name ?? "Custom color"}
+        </TooltipContent>
+      </Tooltip>
+      <PopoverContent
+        align="start"
+        className="w-[min(calc(100vw-2rem),22rem)] gap-3"
+      >
+        {mode === "bank" ? (
+          <div className="grid gap-3">
+            <p className="text-sm font-medium">{label}</p>
+            <LabelColorBank
+              disabled={disabled}
+              value={value}
+              onChange={(color) => {
+                onChange(color);
+                setOpen(false);
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="justify-start"
+              onClick={() => {
+                setDraftColor(value);
+                setMode("advanced");
+              }}
             >
-              <Palette aria-hidden="true" />
+              <Palette data-icon="inline-start" aria-hidden="true" />
               Advanced
-            </TooltipTrigger>
-            <TooltipContent>Choose a custom label color</TooltipContent>
-          </Tooltip>
-          <PopoverContent
-            align="start"
-            className="w-[min(calc(100vw-2rem),22rem)] gap-3"
-          >
+            </Button>
+          </div>
+        ) : (
+          <div className="animate-in duration-100 fade-in-0 zoom-in-95">
             <AdvancedLabelColorPicker
               value={draftColor}
               onCancel={() => {
                 setDraftColor(value);
-                setOpen(false);
+                setMode("bank");
               }}
               onCommit={(color) => {
                 onChange(color);
@@ -104,10 +132,10 @@ export function LabelColorPicker({
               }}
               onDraftChange={setDraftColor}
             />
-          </PopoverContent>
-        </Popover>
-      </div>
-    </div>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 

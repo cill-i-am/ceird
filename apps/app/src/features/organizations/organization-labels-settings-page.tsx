@@ -44,7 +44,6 @@ import { Button, buttonVariants } from "#/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuHeader,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -740,7 +739,13 @@ function CreateLabelForm({
         onSubmit();
       }}
     >
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+        <LabelColorPicker
+          disabled={!canWriteLabels || disabled}
+          label="New label color"
+          value={createColor}
+          onChange={onCreateColorChange}
+        />
         <div className="relative min-w-0">
           <label className="sr-only" htmlFor="organization-labels-create">
             New label name
@@ -761,7 +766,11 @@ function CreateLabelForm({
             />
           </span>
         </div>
-        <Button type="submit" disabled={!canWriteLabels || disabled}>
+        <Button
+          type="submit"
+          className="col-span-2 sm:col-span-1"
+          disabled={!canWriteLabels || disabled}
+        >
           {pending ? (
             <Loader2 className="animate-spin" aria-hidden="true" />
           ) : (
@@ -787,13 +796,6 @@ function CreateLabelForm({
         onChange={(event) =>
           onCreateDescriptionChange(event.currentTarget.value)
         }
-      />
-      <LabelColorPicker
-        disabled={!canWriteLabels || disabled}
-        id="organization-labels-create-color"
-        label="New label color"
-        value={createColor}
-        onChange={onCreateColorChange}
       />
     </form>
   );
@@ -1234,7 +1236,6 @@ function LabelRowActions({
         <TooltipContent>Label actions</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuHeader>{label.name}</DropdownMenuHeader>
         <DropdownMenuItem
           disabled={actionsDisabled}
           onClick={() => onStartEdit(label)}
