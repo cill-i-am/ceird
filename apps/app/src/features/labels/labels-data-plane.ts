@@ -113,6 +113,22 @@ const decodeCreateLabelInput = Schema.decodeUnknownSync(CreateLabelInputSchema);
 const decodeUpdateLabelInput = Schema.decodeUnknownSync(UpdateLabelInputSchema);
 const decodeLabelId = Schema.decodeUnknownSync(LabelId);
 const LabelStandardSchema = Schema.toStandardSchemaV1(LabelSchema);
+const LabelUsageJobAssignmentSchema = Schema.Struct({
+  createdAt: Schema.optional(Schema.String),
+  labelId: LabelId,
+  workItemId: Schema.String,
+});
+const LabelUsageSiteAssignmentSchema = Schema.Struct({
+  createdAt: Schema.optional(Schema.String),
+  labelId: LabelId,
+  siteId: Schema.String,
+});
+const LabelUsageJobAssignmentStandardSchema = Schema.toStandardSchemaV1(
+  LabelUsageJobAssignmentSchema
+);
+const LabelUsageSiteAssignmentStandardSchema = Schema.toStandardSchemaV1(
+  LabelUsageSiteAssignmentSchema
+);
 const defaultLabelElectricMutationHandlerDependencies = {
   archiveLabel: archiveBrowserLabelWithConfirmation,
   createLabel: createBrowserLabelWithConfirmation,
@@ -128,6 +144,47 @@ export interface LabelsCollectionState {
 export interface SettingsLabelsCollectionState {
   readonly collection: LabelsCollection | null;
   readonly health: DataPlaneCollectionHealth;
+}
+
+export interface LabelUsageCounts {
+  readonly jobs: number;
+  readonly sites: number;
+}
+
+export interface LabelUsageAssignment {
+  readonly labelId: Label["id"];
+  readonly targetId: string;
+}
+
+export interface LabelUsageJobAssignmentRow {
+  readonly createdAt?: string | undefined;
+  readonly labelId: Label["id"];
+  readonly workItemId: string;
+}
+
+export interface LabelUsageSiteAssignmentRow {
+  readonly createdAt?: string | undefined;
+  readonly labelId: Label["id"];
+  readonly siteId: string;
+}
+
+interface LabelUsageCollectionLike<Item extends object> {
+  readonly status: string;
+  entries: () => IterableIterator<[string | number, Item]>;
+  subscribeChanges: (callback: () => void) => {
+    requestSnapshot?: (options?: { readonly optimizedOnly?: boolean }) => void;
+    unsubscribe: () => void;
+  };
+}
+
+interface LabelUsageCollectionState<Item extends object> {
+  readonly collection: LabelUsageCollectionLike<Item> | null;
+  readonly health: DataPlaneCollectionHealth;
+}
+
+export interface SettingsLabelUsageCollectionState {
+  readonly jobLabelAssignments: LabelUsageCollectionState<LabelUsageJobAssignmentRow>;
+  readonly siteLabelAssignments: LabelUsageCollectionState<LabelUsageSiteAssignmentRow>;
 }
 
 interface LabelMutationTransaction {
@@ -211,6 +268,34 @@ export async function upsertLabelCollectionItem(
   });
 }
 
+export function deriveLabelUsageCounts({
+  jobAssignments,
+  labels,
+  siteAssignments,
+}: {
+  readonly jobAssignments: readonly LabelUsageAssignment[];
+  readonly labels: readonly Label[];
+  readonly siteAssignments: readonly LabelUsageAssignment[];
+}): ReadonlyMap<Label["id"], LabelUsageCounts> {
+  const countsByLabelId = new Map<Label["id"], LabelUsageCounts>();
+  const jobTargetIdsByLabelId = groupUniqueTargetsByLabelId(jobAssignments);
+  const siteTargetIdsByLabelId = groupUniqueTargetsByLabelId(siteAssignments);
+  const labelIds = new Set<Label["id"]>([
+    ...labels.map((label) => label.id),
+    ...jobTargetIdsByLabelId.keys(),
+    ...siteTargetIdsByLabelId.keys(),
+  ]);
+
+  for (const labelId of labelIds) {
+    countsByLabelId.set(labelId, {
+      jobs: jobTargetIdsByLabelId.get(labelId)?.size ?? 0,
+      sites: siteTargetIdsByLabelId.get(labelId)?.size ?? 0,
+    });
+  }
+
+  return countsByLabelId;
+}
+
 export function getOrCreateSettingsLabelsCollectionState({
   scope,
   session,
@@ -240,6 +325,93 @@ export function getOrCreateSettingsLabelsCollectionState({
   session?.registry.set(registryKey, created);
 
   return created;
+}
+
+export function getOrCreateSettingsLabelUsageCollectionState({
+  scope,
+  session,
+  sync,
+}: {
+  readonly scope: OrganizationDataScope;
+  readonly session?: DataPlaneSession | undefined;
+  readonly sync?: CreateDataPlaneElectricCollectionOptions | undefined;
+}): SettingsLabelUsageCollectionState {
+  const registryKey = `${settingsLabelsCollectionId(scope)}:usage`;
+  const existing = session?.registry.get(registryKey);
+
+  if (existing) {
+    return existing as SettingsLabelUsageCollectionState;
+  }
+
+  const created = {
+    jobLabelAssignments: createElectricCollectionFromContract(
+      createLabelUsageJobAssignmentsElectricContract(scope),
+      sync
+    ),
+    siteLabelAssignments: createElectricCollectionFromContract(
+      createLabelUsageSiteAssignmentsElectricContract(scope),
+      sync
+    ),
+  } satisfies SettingsLabelUsageCollectionState;
+
+  session?.registry.set(registryKey, created);
+
+  return created;
+}
+
+function groupUniqueTargetsByLabelId(
+  assignments: readonly LabelUsageAssignment[]
+) {
+  const targetIdsByLabelId = new Map<Label["id"], Set<string>>();
+
+  for (const assignment of assignments) {
+    const targetIds =
+      targetIdsByLabelId.get(assignment.labelId) ?? new Set<string>();
+    targetIds.add(assignment.targetId);
+    targetIdsByLabelId.set(assignment.labelId, targetIds);
+  }
+
+  return targetIdsByLabelId;
+}
+
+function createLabelUsageJobAssignmentsElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "job-label-assignments",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "work-item-labels",
+    }),
+    getKey: (assignment) => `${assignment.workItemId}:${assignment.labelId}`,
+    id: `${settingsLabelsCollectionId(scope)}:usage:job-label-assignments`,
+    schema: LabelUsageJobAssignmentStandardSchema,
+    shapeName: "work-item-labels",
+    shapeOptions: {
+      transformer: toLabelUsageJobAssignmentElectricRow,
+    },
+  });
+}
+
+function createLabelUsageSiteAssignmentsElectricContract(
+  scope: OrganizationDataScope
+) {
+  return defineElectricCollectionContract({
+    collection: "site-label-assignments",
+    completeness: syncBackedCollectionCompleteness({
+      covers: COMPLETE_TENANT_COLLECTION,
+      source: "electric",
+      subscriptionName: "site-labels",
+    }),
+    getKey: (assignment) => `${assignment.siteId}:${assignment.labelId}`,
+    id: `${settingsLabelsCollectionId(scope)}:usage:site-label-assignments`,
+    schema: LabelUsageSiteAssignmentStandardSchema,
+    shapeName: "site-labels",
+    shapeOptions: {
+      transformer: toLabelUsageSiteAssignmentElectricRow,
+    },
+  });
 }
 
 function createLabelsCollection({
@@ -414,6 +586,34 @@ export function toLabelElectricRow(row: Record<string, unknown>) {
     id: electricValue(row, "id"),
     name: electricValue(row, "name"),
     updatedAt: normalizeLabelElectricDateTime(electricValue(row, "updatedAt")),
+  });
+}
+
+export function toLabelUsageJobAssignmentElectricRow(
+  row: Record<string, unknown>
+) {
+  const createdAt = electricValue(row, "createdAt");
+
+  return Schema.decodeUnknownSync(LabelUsageJobAssignmentSchema)({
+    ...(createdAt === undefined
+      ? {}
+      : { createdAt: normalizeLabelElectricDateTime(createdAt) }),
+    labelId: electricValue(row, "labelId"),
+    workItemId: electricValue(row, "workItemId"),
+  });
+}
+
+export function toLabelUsageSiteAssignmentElectricRow(
+  row: Record<string, unknown>
+) {
+  const createdAt = electricValue(row, "createdAt");
+
+  return Schema.decodeUnknownSync(LabelUsageSiteAssignmentSchema)({
+    ...(createdAt === undefined
+      ? {}
+      : { createdAt: normalizeLabelElectricDateTime(createdAt) }),
+    labelId: electricValue(row, "labelId"),
+    siteId: electricValue(row, "siteId"),
   });
 }
 

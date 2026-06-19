@@ -437,6 +437,7 @@ export function deriveSitesWorkspaceVisibleRows({
   actors,
   commentBodies,
   filter,
+  labelId,
   labels,
   query,
   relatedJobs,
@@ -446,6 +447,7 @@ export function deriveSitesWorkspaceVisibleRows({
   sort,
 }: SitesWorkspaceReadModelRows & {
   readonly filter: SitesWorkspaceFilter;
+  readonly labelId?: string | undefined;
   readonly query: string;
   readonly sort: SitesWorkspaceSort;
 }): readonly SitesWorkspaceVisibleRow[] {
@@ -463,6 +465,7 @@ export function deriveSitesWorkspaceVisibleRows({
 
   return joinedSites
     .filter((site) => matchesSitesWorkspaceFilter(site, filter))
+    .filter((site) => matchesSitesWorkspaceLabel(site, labelId))
     .filter((site) => matchesSitesWorkspaceQuery(site, normalizedQuery))
     .toSorted((left, right) => compareSitesWorkspaceRows(left, right, sort))
     .map((site) => ({
@@ -475,6 +478,15 @@ export function deriveSitesWorkspaceVisibleRows({
       relatedJobs: selectSiteRelatedJobs(relatedJobs, site.id),
       site,
     }));
+}
+
+function matchesSitesWorkspaceLabel(
+  site: SiteOption,
+  labelId: string | undefined
+) {
+  return labelId === undefined
+    ? true
+    : site.labels.some((label) => label.id === labelId);
 }
 
 function createSitesWorkspaceReadModelCollections(

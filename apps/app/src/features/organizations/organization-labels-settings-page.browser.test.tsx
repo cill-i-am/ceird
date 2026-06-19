@@ -49,6 +49,17 @@ const archivedLabel = makeLabel({
   id: "33333333-3333-4333-8333-333333333333",
   name: "Plumbing",
 });
+const DEFAULT_LABEL_USAGE_COUNTS = new Map<
+  Label["id"],
+  {
+    readonly jobs: number;
+    readonly sites: number;
+  }
+>([
+  [urgentLabel.id, { jobs: 2, sites: 1 }],
+  [electricalLabel.id, { jobs: 0, sites: 0 }],
+  [archivedLabel.id, { jobs: 3, sites: 0 }],
+]);
 
 describe("organization labels settings page", () => {
   afterEach(() => {
@@ -75,7 +86,19 @@ describe("organization labels settings page", () => {
     expect(
       screen.queryByRole("columnheader", { name: "Created" })
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText("Coming next")).toHaveLength(4);
+    expect(
+      screen.getByRole("link", { name: /view 2 jobs using urgent/i })
+    ).toHaveAttribute(
+      "href",
+      "/jobs?labelId=11111111-1111-4111-8111-111111111111"
+    );
+    expect(
+      screen.getByRole("link", { name: /view 1 sites using urgent/i })
+    ).toHaveAttribute(
+      "href",
+      "/sites?labelId=11111111-1111-4111-8111-111111111111"
+    );
+    expect(screen.getAllByText("0")).toHaveLength(2);
     expect(screen.getByText("2 active labels")).toBeVisible();
     await expect(
       screen.findByRole("button", {
@@ -118,6 +141,12 @@ describe("organization labels settings page", () => {
     expect(listLabels).toHaveBeenCalledWith({ status: "archived" });
     await expect(screen.findByText("Plumbing")).resolves.toBeVisible();
     expect(screen.getByText("Legacy plumbing category")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /view 3 jobs using plumbing/i })
+    ).toHaveAttribute(
+      "href",
+      "/jobs?labelId=33333333-3333-4333-8333-333333333333"
+    );
     expect(screen.getByText("1 archived labels")).toBeVisible();
     expect(
       screen.getByRole("button", { name: /open actions for plumbing/i })
@@ -621,6 +650,7 @@ function renderLabelsPage({
   collectionState,
   createLabelWithConfirmation,
   listLabels,
+  labelUsageCounts = DEFAULT_LABEL_USAGE_COUNTS,
   mutationJournal,
   organizationRole = "owner",
   restoreLabelWithConfirmation,
@@ -636,6 +666,12 @@ function renderLabelsPage({
     | undefined;
   readonly listLabels?:
     | ((query: ListLabelsQuery) => Promise<LabelsResponse>)
+    | undefined;
+  readonly labelUsageCounts?:
+    | ReadonlyMap<
+        Label["id"],
+        { readonly jobs: number; readonly sites: number }
+      >
     | undefined;
   readonly mutationJournal?:
     | ReturnType<typeof createDataPlaneMutationJournal>
@@ -658,6 +694,7 @@ function renderLabelsPage({
       collectionState={collectionState}
       createLabelWithConfirmation={createLabelWithConfirmation}
       listLabels={listLabels}
+      labelUsageCounts={labelUsageCounts}
       mutationJournal={mutationJournal}
       organizationRole={organizationRole}
       restoreLabelWithConfirmation={restoreLabelWithConfirmation}
@@ -672,6 +709,7 @@ function LabelsPageHarness({
   collectionState,
   createLabelWithConfirmation,
   listLabels = () => Promise.resolve({ labels: [] }),
+  labelUsageCounts = DEFAULT_LABEL_USAGE_COUNTS,
   mutationJournal,
   organizationRole = "owner",
   restoreLabelWithConfirmation,
@@ -686,6 +724,10 @@ function LabelsPageHarness({
     | ((input: CreateLabelInput) => Promise<LabelWriteResponse>)
     | undefined;
   readonly listLabels?: (query: ListLabelsQuery) => Promise<LabelsResponse>;
+  readonly labelUsageCounts?: ReadonlyMap<
+    Label["id"],
+    { readonly jobs: number; readonly sites: number }
+  >;
   readonly mutationJournal?:
     | ReturnType<typeof createDataPlaneMutationJournal>
     | undefined;
@@ -714,6 +756,7 @@ function LabelsPageHarness({
             createLabelWithConfirmation ?? createDefaultLabelWithConfirmation
           }
           listLabels={listLabels}
+          labelUsageCounts={labelUsageCounts}
           mutationJournal={mutationJournal}
           organization={TEST_ORGANIZATION}
           organizationRole={organizationRole}

@@ -87,6 +87,7 @@ import { useHydratedCollectionItems } from "#/data-plane/hydrated-collection";
 import type { DataPlaneMutationJournal } from "#/data-plane/mutation-journal";
 import { LabelColorPicker } from "#/features/labels/label-color-picker";
 import { validateLabelName } from "#/features/labels/label-name-validation";
+import type { LabelUsageCounts } from "#/features/labels/labels-data-plane";
 import { searchSettingsLabels } from "#/features/labels/labels-search";
 import {
   archiveBrowserLabelWithConfirmation,
@@ -131,6 +132,9 @@ export interface OrganizationLabelsSettingsPageProps {
     | undefined;
   readonly createLabelWithConfirmation?:
     | ((input: CreateLabelInput) => Promise<LabelWriteResponse>)
+    | undefined;
+  readonly labelUsageCounts?:
+    | ReadonlyMap<Label["id"], LabelUsageCounts>
     | undefined;
   readonly listLabels?:
     | ((query: ListLabelsQuery) => Promise<LabelsResponse>)
@@ -190,7 +194,7 @@ const INVALID_LABEL_DESCRIPTION_MESSAGE =
   "Descriptions must be 280 characters or fewer.";
 const RESTORE_CONFLICT_MESSAGE =
   "Restore blocked because an active label already uses that name.";
-const USAGE_PLACEHOLDER = "Coming next";
+const EMPTY_LABEL_USAGE_COUNTS = new Map<Label["id"], LabelUsageCounts>();
 
 const decodeCreateLabelInput = Schema.decodeUnknownSync(CreateLabelInputSchema);
 const decodeUpdateLabelInput = Schema.decodeUnknownSync(UpdateLabelInputSchema);
@@ -200,6 +204,7 @@ export function OrganizationLabelsSettingsPage({
   archiveLabelWithConfirmation = archiveDefaultLabelWithConfirmation,
   collectionState,
   createLabelWithConfirmation = createDefaultLabelWithConfirmation,
+  labelUsageCounts = EMPTY_LABEL_USAGE_COUNTS,
   listLabels = listDefaultLabels,
   mutationJournal,
   organization,
@@ -708,6 +713,7 @@ export function OrganizationLabelsSettingsPage({
                 canWriteLabels={canWriteActiveLabels}
                 hasCommandReflection={hasCommandReflection}
                 hasSearch={hasSearch}
+                labelUsageCounts={labelUsageCounts}
                 labels={activeView === "active" ? visibleLabels : []}
                 pendingMutation={pendingMutation}
                 searchQuery={searchQuery}
@@ -721,6 +727,7 @@ export function OrganizationLabelsSettingsPage({
               <ArchivedLabelsStateView
                 canManageLabels={canManageLabels}
                 hasSearch={hasSearch}
+                labelUsageCounts={labelUsageCounts}
                 labels={activeView === "archived" ? visibleLabels : []}
                 pendingMutation={pendingMutation}
                 searchQuery={searchQuery}
@@ -855,6 +862,7 @@ function LabelsStateView({
   canWriteLabels,
   hasCommandReflection,
   hasSearch,
+  labelUsageCounts,
   labels,
   onArchive,
   onEdit,
@@ -866,6 +874,7 @@ function LabelsStateView({
   readonly canWriteLabels: boolean;
   readonly hasCommandReflection: boolean;
   readonly hasSearch: boolean;
+  readonly labelUsageCounts: ReadonlyMap<Label["id"], LabelUsageCounts>;
   readonly labels: readonly Label[];
   readonly onArchive: (label: Label) => void;
   readonly onEdit: (label: Label) => void;
@@ -915,6 +924,7 @@ function LabelsStateView({
       return (
         <LabelsTable
           canWriteLabels={canWriteLabels}
+          labelUsageCounts={labelUsageCounts}
           labels={labels}
           pendingMutation={pendingMutation}
           view="active"
@@ -933,6 +943,7 @@ function LabelsStateView({
 function ArchivedLabelsStateView({
   canManageLabels,
   hasSearch,
+  labelUsageCounts,
   labels,
   onRefresh,
   onRestore,
@@ -942,6 +953,7 @@ function ArchivedLabelsStateView({
 }: {
   readonly canManageLabels: boolean;
   readonly hasSearch: boolean;
+  readonly labelUsageCounts: ReadonlyMap<Label["id"], LabelUsageCounts>;
   readonly labels: readonly Label[];
   readonly onRefresh: () => void;
   readonly onRestore: (label: Label) => void;
@@ -989,6 +1001,7 @@ function ArchivedLabelsStateView({
   return (
     <LabelsTable
       canWriteLabels
+      labelUsageCounts={labelUsageCounts}
       labels={labels}
       pendingMutation={pendingMutation}
       view="archived"
@@ -999,6 +1012,7 @@ function ArchivedLabelsStateView({
 
 function LabelsTable({
   canWriteLabels,
+  labelUsageCounts,
   labels,
   onArchive,
   onEdit,
@@ -1007,6 +1021,7 @@ function LabelsTable({
   view,
 }: {
   readonly canWriteLabels: boolean;
+  readonly labelUsageCounts: ReadonlyMap<Label["id"], LabelUsageCounts>;
   readonly labels: readonly Label[];
   readonly onArchive?: ((label: Label) => void) | undefined;
   readonly onEdit?: ((label: Label) => void) | undefined;
@@ -1036,6 +1051,12 @@ function LabelsTable({
                 canWriteLabels={canWriteLabels}
                 key={label.id}
                 label={label}
+                usageCounts={
+                  labelUsageCounts.get(label.id) ?? {
+                    jobs: 0,
+                    sites: 0,
+                  }
+                }
                 pendingMutation={pendingMutation}
                 view={view}
                 onArchive={onArchive}
@@ -1057,6 +1078,7 @@ function LabelTableRow({
   onEdit,
   onRestore,
   pendingMutation,
+  usageCounts,
   view,
 }: {
   readonly canWriteLabels: boolean;
@@ -1065,6 +1087,7 @@ function LabelTableRow({
   readonly onEdit?: ((label: Label) => void) | undefined;
   readonly onRestore?: ((label: Label) => void) | undefined;
   readonly pendingMutation: PendingLabelMutation | null;
+  readonly usageCounts: LabelUsageCounts;
   readonly view: LabelsView;
 }) {
   const rowPending = pendingMutation?.labelId === label.id;
@@ -1096,10 +1119,22 @@ function LabelTableRow({
         <LabelDescriptionText description={label.description} />
       </TableCell>
       <TableCell>
-        <UsagePlaceholder />
+        <UsageCountLink
+          count={usageCounts.jobs}
+          labelName={label.name}
+          target="jobs"
+          to="/jobs"
+          labelId={label.id}
+        />
       </TableCell>
       <TableCell>
-        <UsagePlaceholder />
+        <UsageCountLink
+          count={usageCounts.sites}
+          labelName={label.name}
+          target="sites"
+          to="/sites"
+          labelId={label.id}
+        />
       </TableCell>
       <TableCell className="text-right">
         {rowPending ? (
@@ -1361,11 +1396,35 @@ function LabelFormDrawer({
   );
 }
 
-function UsagePlaceholder() {
+function UsageCountLink({
+  count,
+  labelId,
+  labelName,
+  target,
+  to,
+}: {
+  readonly count: number;
+  readonly labelId: Label["id"];
+  readonly labelName: string;
+  readonly target: "jobs" | "sites";
+  readonly to: "/jobs" | "/sites";
+}) {
+  if (count === 0) {
+    return <span className="text-sm text-muted-foreground">0</span>;
+  }
+
   return (
-    <Badge variant="outline" className="text-muted-foreground">
-      {USAGE_PLACEHOLDER}
-    </Badge>
+    <a
+      aria-label={`View ${count} ${target} using ${labelName}`}
+      className={cn(
+        buttonVariants({ size: "sm", variant: "ghost" }),
+        "h-8 px-2 font-medium"
+      )}
+      href={`${to}?labelId=${encodeURIComponent(labelId)}`}
+    >
+      {count}
+      <ArrowRight aria-hidden="true" className="size-3.5" />
+    </a>
   );
 }
 

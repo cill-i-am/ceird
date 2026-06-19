@@ -14,10 +14,14 @@ import { createOrganizationDataScope } from "#/data-plane/query-scope";
 
 import {
   createLabelElectricMutationHandlers,
+  deriveLabelUsageCounts,
   getOrCreateLabelsCollectionState,
+  getOrCreateSettingsLabelUsageCollectionState,
   getOrCreateSettingsLabelsCollectionState,
   searchSettingsLabels,
   toLabelElectricRow,
+  toLabelUsageJobAssignmentElectricRow,
+  toLabelUsageSiteAssignmentElectricRow,
 } from "./labels-data-plane";
 
 type LabelWriteEffect = Effect.Effect<LabelWriteResponse, unknown>;
@@ -202,6 +206,58 @@ describe("labels data plane", () => {
     );
   });
 
+  it("creates Settings label usage collections from assignment-only Electric shapes", () => {
+    vi.stubEnv("VITE_SYNC_ORIGIN", "https://sync.codex.ceird.localhost");
+
+    const state = getOrCreateSettingsLabelUsageCollectionState({
+      scope,
+      sync: {
+        runtime: {
+          fetch: makeTestFetch(new Response("ok")),
+          isBrowser: true,
+        },
+      },
+    });
+
+    expect(state.jobLabelAssignments.health.current).toMatchObject({
+      collection: "job-label-assignments",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "work-item-labels",
+    });
+    expect(state.siteLabelAssignments.health.current).toMatchObject({
+      collection: "site-label-assignments",
+      source: "electric",
+      status: "connecting",
+      subscriptionName: "site-labels",
+    });
+  });
+
+  it("normalizes deployed Electric assignment rows for label usage counts", () => {
+    expect(
+      toLabelUsageJobAssignmentElectricRow({
+        created_at: "2026-06-14 00:00:00+00",
+        label_id: label.id,
+        work_item_id: "job_123",
+      })
+    ).toStrictEqual({
+      createdAt: "2026-06-14T00:00:00.000Z",
+      labelId: label.id,
+      workItemId: "job_123",
+    });
+    expect(
+      toLabelUsageSiteAssignmentElectricRow({
+        created_at: "2026-06-15 00:00:00+00",
+        label_id: label.id,
+        site_id: "site_123",
+      })
+    ).toStrictEqual({
+      createdAt: "2026-06-15T00:00:00.000Z",
+      labelId: label.id,
+      siteId: "site_123",
+    });
+  });
+
   it("filters Settings labels from the local synced label set", () => {
     const urgentLabel = {
       ...label,
@@ -224,6 +280,35 @@ describe("labels data plane", () => {
     expect(
       searchSettingsLabels([label, urgentLabel, electricalLabel], "lighting")
     ).toStrictEqual([electricalLabel]);
+  });
+
+  it("derives job and site usage counts for active and archived labels", () => {
+    const archivedLabel = {
+      ...label,
+      archivedAt: "2026-06-18T10:00:00.000Z",
+      id: "22222222-2222-4222-8222-222222222222" as Label["id"],
+      name: "Archived Plumbing",
+    } satisfies Label;
+
+    const counts = deriveLabelUsageCounts({
+      jobAssignments: [
+        { labelId: label.id, targetId: "job_1" },
+        { labelId: label.id, targetId: "job_1" },
+        { labelId: archivedLabel.id, targetId: "job_2" },
+      ],
+      labels: [label, archivedLabel],
+      siteAssignments: [
+        { labelId: label.id, targetId: "site_1" },
+        { labelId: archivedLabel.id, targetId: "site_2" },
+        { labelId: archivedLabel.id, targetId: "site_3" },
+      ],
+    });
+
+    expect(counts.get(label.id)).toStrictEqual({ jobs: 1, sites: 1 });
+    expect(counts.get(archivedLabel.id)).toStrictEqual({
+      jobs: 1,
+      sites: 2,
+    });
   });
 
   it("normalizes deployed Electric label rows before decoding the label contract", () => {

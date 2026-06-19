@@ -445,6 +445,38 @@ describe("sites workspace data plane", () => {
     expect(rows.map((row) => row.site.name)).toStrictEqual(["Cork Yard"]);
   });
 
+  it("filters visible rows by route-backed label id", () => {
+    const rows = deriveSitesWorkspaceVisibleRows({
+      activeJobSummaries: [],
+      actors: [],
+      commentBodies: [],
+      filter: "all",
+      labelId: urgentLabel.id,
+      labels: [maintenanceLabel, urgentLabel],
+      query: "",
+      relatedJobs: [corkJob, dublinJob],
+      siteCommentEdges: [],
+      siteLabelAssignments: [
+        {
+          createdAt: "2026-05-30T00:00:00.000Z",
+          labelId: urgentLabel.id,
+          organizationId: "org_123",
+          siteId: dublinSite.id,
+        },
+        {
+          createdAt: "2026-05-30T00:00:00.000Z",
+          labelId: maintenanceLabel.id,
+          organizationId: "org_123",
+          siteId: corkSite.id,
+        },
+      ],
+      sites: [dublinSite, corkSite],
+      sort: "name",
+    });
+
+    expect(rows.map((row) => row.site.name)).toStrictEqual(["Dublin Port"]);
+  });
+
   it("keeps create pending until the sites collection observes the server row state", async () => {
     const sites = createFakeCollection<SiteOption>((site) => site.id);
     const journal = createDataPlaneMutationJournal({
