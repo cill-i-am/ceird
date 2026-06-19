@@ -57,6 +57,10 @@ import {
   decodeUpdateOrganizationMemberRoleInput,
   IdentityApi,
   ORGANIZATION_INVITATION_STATUSES,
+  OrganizationIdentityRateLimitError,
+  OrganizationIdentityRejectedError,
+  OrganizationInvitationNotFoundError,
+  OrganizationMemberNotFoundError,
   ProductMemberActorSummaryElectricRowSchema,
   ProductMemberActorSummarySchema,
   ProductActorSchema,
@@ -574,6 +578,47 @@ describe("organization member identity boundary", () => {
         invitation,
       })
     ).toThrow(/Expected/);
+  }, 1000);
+
+  it("uses context-rich organization member and invitation identity errors", () => {
+    const invitationError = new OrganizationInvitationNotFoundError({
+      invitationId: decodeInvitationId("inv_123"),
+      message: "Organization invitation was not found",
+    });
+    const memberError = new OrganizationMemberNotFoundError({
+      memberId: decodeOrganizationMemberId("mem_member"),
+      message: "Organization member was not found",
+    });
+    const rateLimitError = new OrganizationIdentityRateLimitError({
+      code: "AUTH_RATE_LIMIT_EXCEEDED",
+      message: "Too many organization invitations.",
+      operation: "inviteOrganizationMember",
+      statusText: "Too Many Requests",
+    });
+    const rejectedError = new OrganizationIdentityRejectedError({
+      code: "BAD_REQUEST",
+      message: "Organization member update was rejected.",
+      operation: "updateOrganizationMemberRole",
+      status: 400,
+      statusText: "Bad Request",
+    });
+
+    expect(invitationError._tag).toBe(
+      "@ceird/identity-core/OrganizationInvitationNotFoundError"
+    );
+    expect(invitationError.invitationId).toBe("inv_123");
+    expect(memberError._tag).toBe(
+      "@ceird/identity-core/OrganizationMemberNotFoundError"
+    );
+    expect(memberError.memberId).toBe("mem_member");
+    expect(rateLimitError._tag).toBe(
+      "@ceird/identity-core/OrganizationIdentityRateLimitError"
+    );
+    expect(
+      OpenApi.fromApi(IdentityApi).paths["/organization/invitations"]?.post
+        ?.responses["429"]
+    ).toBeDefined();
+    expect(rejectedError.operation).toBe("updateOrganizationMemberRole");
   }, 1000);
 
   it("projects native signed-in invitation details into the Ceird DTO", () => {

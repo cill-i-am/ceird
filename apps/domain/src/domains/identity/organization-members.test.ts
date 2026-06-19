@@ -1,8 +1,11 @@
 import {
+  decodeInvitationId,
   decodeOrganizationId,
   decodeSessionId,
   decodeUserId,
+  OrganizationInvitationNotFoundError,
 } from "@ceird/identity-core";
+import type { OrganizationInvitation } from "@ceird/identity-core";
 import { Effect, Layer } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
@@ -148,7 +151,67 @@ describe("organization member identity mapping", () => {
     ).rejects.toMatchObject({
       code: "AUTH_RATE_LIMIT_EXCEEDED",
       message: "Too many organization invitations.",
-      status: 429,
+      operation: "inviteOrganizationMember",
+      _tag: "@ceird/identity-core/OrganizationIdentityRateLimitError",
+    });
+  });
+
+  it("rejects cross-organization invitation cancel before calling Better Auth", async () => {
+    const requests: CapturedOrganizationAuthRequest[] = [];
+    const invitationId = decodeInvitationId("inv_other");
+    const getInvitationCalls: {
+      readonly invitationId: string;
+      readonly organizationId: string;
+    }[] = [];
+
+    await expect(
+      runCancelInvitationServiceWithHandler(
+        async (request) => {
+          requests.push({
+            body: await request.json(),
+            headers: {},
+            method: request.method,
+            pathname: new URL(request.url).pathname,
+          });
+
+          return Response.json(makeNativeInvitationPayload());
+        },
+        {
+          getInvitationCalls,
+          invitationId,
+          repositoryInvitation: null,
+        }
+      )
+    ).rejects.toMatchObject({
+      invitationId,
+      _tag: "@ceird/identity-core/OrganizationInvitationNotFoundError",
+    });
+
+    expect(getInvitationCalls).toStrictEqual([
+      {
+        invitationId: "inv_other",
+        organizationId: "org_123",
+      },
+    ]);
+    expect(requests).toStrictEqual([]);
+  });
+
+  it("fails closed when Better Auth cancels an invitation outside the active organization", async () => {
+    await expect(
+      runCancelInvitationServiceWithHandler(() =>
+        Promise.resolve(
+          Response.json(
+            makeNativeInvitationPayload({
+              organizationId: "org_other",
+              status: "canceled",
+            })
+          )
+        )
+      )
+    ).rejects.toMatchObject({
+      message:
+        "Organization invitation cancel response belonged to a different organization",
+      _tag: "@ceird/identity-core/OrganizationIdentityStorageError",
     });
   });
 
@@ -411,7 +474,7 @@ describe("organization member identity mapping", () => {
   });
 });
 
-function makeNativeInvitationPayload() {
+function makeNativeInvitationPayload(overrides: Record<string, unknown> = {}) {
   return {
     createdAt: "2026-04-01T09:30:00.000Z",
     email: "pending@example.com",
@@ -422,7 +485,16 @@ function makeNativeInvitationPayload() {
     role: "member",
     status: "pending",
     teamId: null,
+    ...overrides,
   };
+}
+
+function makeOrganizationInvitationDto(
+  overrides: Record<string, unknown> = {}
+): OrganizationInvitation {
+  return mapOrganizationInvitationPayload(
+    makeNativeInvitationPayload(overrides)
+  );
 }
 
 function makeOrganizationActor(): OrganizationActor {
@@ -473,6 +545,8 @@ async function runInviteMemberServiceWithHandler(
     Layer.succeed(
       OrganizationMembersRepository,
       OrganizationMembersRepository.of({
+        getInvitation: () =>
+          Effect.die(new Error("getInvitation was not expected")),
         getMember: () => Effect.die(new Error("getMember was not expected")),
         listInvitations: () =>
           Effect.die(new Error("listInvitations was not expected")),
@@ -499,6 +573,101 @@ async function runInviteMemberServiceWithHandler(
         email: "pending@example.com",
         ...(options.resend === undefined ? {} : { resend: options.resend }),
         role: "member",
+      });
+    }).pipe(Effect.provide(layer))
+  );
+}
+
+async function runCancelInvitationServiceWithHandler(
+  handler: (request: Request) => Promise<Response>,
+  options: {
+    readonly getInvitationCalls?: {
+      readonly invitationId: string;
+      readonly organizationId: string;
+    }[];
+    readonly invitationId?: ReturnType<typeof decodeInvitationId>;
+    readonly repositoryInvitation?: OrganizationInvitation | null;
+  } = {}
+) {
+  const invitationId = options.invitationId ?? decodeInvitationId("inv_123");
+  const dependenciesLayer = Layer.mergeAll(
+    Layer.succeed(
+      Authentication,
+      Authentication.of({
+        api: {
+          getSession: () => Promise.resolve(null),
+        },
+        handler,
+        options: {
+          plugins: [],
+        },
+      })
+    ),
+    Layer.succeed(
+      CurrentOrganizationActor,
+      CurrentOrganizationActor.of({
+        get: () => Effect.succeed(makeOrganizationActor()),
+      })
+    ),
+    Layer.succeed(
+      OrganizationAuthorization,
+      OrganizationAuthorization.of({
+        ensureCanCreateSite: () => Effect.void,
+        ensureCanManageConfiguration: () => Effect.void,
+        ensureCanManageLabels: () => Effect.void,
+        ensureCanViewOrganizationData: () => Effect.void,
+        ensureCanViewOrganizationSecurityActivity: () => Effect.void,
+      })
+    ),
+    Layer.succeed(
+      OrganizationMembersRepository,
+      OrganizationMembersRepository.of({
+        getInvitation: (organizationId, requestedInvitationId) => {
+          options.getInvitationCalls?.push({
+            invitationId: requestedInvitationId,
+            organizationId,
+          });
+
+          if (options.repositoryInvitation === null) {
+            return Effect.fail(
+              new OrganizationInvitationNotFoundError({
+                invitationId: requestedInvitationId,
+                message: "Organization invitation was not found",
+              })
+            );
+          }
+
+          return Effect.succeed(
+            options.repositoryInvitation ??
+              makeOrganizationInvitationDto({
+                status: "pending",
+              })
+          );
+        },
+        getMember: () => Effect.die(new Error("getMember was not expected")),
+        listInvitations: () =>
+          Effect.die(new Error("listInvitations was not expected")),
+        listMembers: () =>
+          Effect.die(new Error("listMembers was not expected")),
+      })
+    )
+  );
+  const layer = Layer.merge(
+    OrganizationMembersService.DefaultWithoutDependencies.pipe(
+      Layer.provide(dependenciesLayer)
+    ),
+    Layer.succeed(
+      HttpServerRequest.HttpServerRequest,
+      makeTestHttpServerRequest({})
+    )
+  );
+
+  return await Effect.runPromise(
+    Effect.gen(function* () {
+      const service = yield* OrganizationMembersService;
+
+      return yield* service.cancelInvitation({
+        invitationId,
       });
     }).pipe(Effect.provide(layer))
   );

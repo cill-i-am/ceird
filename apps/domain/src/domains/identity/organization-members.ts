@@ -8,12 +8,15 @@ import {
   NonNegativeInteger,
   OrganizationIdentityAccessDeniedError,
   OrganizationIdentityNotFoundError,
+  OrganizationIdentityRateLimitError,
   OrganizationIdentityRejectedError,
   OrganizationIdentityStorageError,
   OrganizationId,
+  OrganizationInvitationNotFoundError,
   OrganizationInvitationListResponseSchema,
   OrganizationInvitationSchema,
   OrganizationInvitationStatus,
+  OrganizationMemberNotFoundError,
   OrganizationMemberId as OrganizationMemberIdSchema,
   OrganizationMemberListResponseSchema,
   OrganizationMemberSchema,
@@ -30,6 +33,7 @@ import type {
   OrganizationMember,
   OrganizationMemberId as OrganizationMemberIdType,
   OrganizationMemberListQuery,
+  OrganizationIdentityMutationOperation,
   RemoveOrganizationMemberInput,
   UpdateOrganizationMemberRoleInput,
 } from "@ceird/identity-core";
@@ -283,7 +287,8 @@ export class OrganizationMembersRepository extends Context.Service<OrganizationM
 
             if (row === undefined) {
               return yield* Effect.fail(
-                new OrganizationIdentityNotFoundError({
+                new OrganizationMemberNotFoundError({
+                  memberId,
                   message: "Organization member was not found",
                 })
               );
@@ -336,7 +341,46 @@ export class OrganizationMembersRepository extends Context.Service<OrganizationM
         }).pipe(Effect.catchTag("SqlError", failOrganizationIdentityStorage));
       });
 
-      return { getMember, listInvitations, listMembers };
+      const getInvitation = Effect.fn(
+        "OrganizationMembersRepository.getInvitation"
+      )(function* (
+        organizationId: OrganizationIdType,
+        invitationId: InvitationId
+      ) {
+        return yield* Effect.gen(function* () {
+          const rows = yield* sql<OrganizationInvitationRow>`
+            select
+              id,
+              organization_id,
+              email,
+              role,
+              status,
+              expires_at,
+              created_at
+            from invitation
+            where organization_id = ${organizationId}
+              and id = ${invitationId}
+            limit 1
+          `;
+          const [row] = rows;
+
+          if (row === undefined) {
+            return yield* Effect.fail(
+              new OrganizationInvitationNotFoundError({
+                invitationId,
+                message: "Organization invitation was not found",
+              })
+            );
+          }
+
+          return yield* decodeStorageBoundary(
+            () => mapOrganizationInvitationRow(row),
+            "Organization invitation row was invalid"
+          );
+        }).pipe(Effect.catchTag("SqlError", failOrganizationIdentityStorage));
+      });
+
+      return { getInvitation, getMember, listInvitations, listMembers };
     }),
   }
 ) {
@@ -399,7 +443,14 @@ export class OrganizationMembersService extends Context.Service<OrganizationMemb
             organizationId: actor.organizationId,
             ...(input.resend === undefined ? {} : { resend: input.resend }),
             role: input.role,
-          }
+          },
+          (failureResponse, body) =>
+            mapAuthenticationFailure(
+              failureResponse,
+              body,
+              "inviteOrganizationMember",
+              (message) => new OrganizationIdentityNotFoundError({ message })
+            )
         );
 
         const invitation = yield* decodeStorageBoundary(
@@ -416,19 +467,44 @@ export class OrganizationMembersService extends Context.Service<OrganizationMemb
       const cancelInvitation = Effect.fn(
         "OrganizationMembersService.cancelInvitation"
       )(function* (input: CancelOrganizationInvitationInput) {
-        yield* getAdministrativeActor();
+        const actor = yield* getAdministrativeActor();
+
+        yield* repository.getInvitation(
+          actor.organizationId,
+          input.invitationId
+        );
         const response = yield* dispatchOrganizationAuthRequest(
           auth.handler,
           "/organization/cancel-invitation",
           {
             invitationId: input.invitationId,
-          }
+          },
+          (failureResponse, body) =>
+            mapAuthenticationFailure(
+              failureResponse,
+              body,
+              "cancelOrganizationInvitation",
+              (message) =>
+                new OrganizationInvitationNotFoundError({
+                  invitationId: input.invitationId,
+                  message,
+                })
+            )
         );
 
         const invitation = yield* decodeStorageBoundary(
           () => mapOrganizationInvitationPayload(response),
           "Organization invitation response was invalid"
         );
+
+        if (invitation.organizationId !== actor.organizationId) {
+          return yield* Effect.fail(
+            new OrganizationIdentityStorageError({
+              message:
+                "Organization invitation cancel response belonged to a different organization",
+            })
+          );
+        }
 
         return yield* decodeStorageBoundary(
           () => decodeCancelOrganizationInvitationResponse({ invitation }),
@@ -447,7 +523,18 @@ export class OrganizationMembersService extends Context.Service<OrganizationMemb
           {
             memberId: input.memberId,
             role: input.role,
-          }
+          },
+          (failureResponse, body) =>
+            mapAuthenticationFailure(
+              failureResponse,
+              body,
+              "updateOrganizationMemberRole",
+              (message) =>
+                new OrganizationMemberNotFoundError({
+                  memberId: input.memberId,
+                  message,
+                })
+            )
         );
 
         const member = yield* repository.getMember(
@@ -469,7 +556,18 @@ export class OrganizationMembersService extends Context.Service<OrganizationMemb
             "/organization/remove-member",
             {
               memberIdOrEmail: input.memberId,
-            }
+            },
+            (failureResponse, body) =>
+              mapAuthenticationFailure(
+                failureResponse,
+                body,
+                "removeOrganizationMember",
+                (message) =>
+                  new OrganizationMemberNotFoundError({
+                    memberId: input.memberId,
+                    message,
+                  })
+              )
           );
           const removedMemberId = yield* decodeStorageBoundary(
             () => mapOrganizationMemberRemovalPayload(response),
@@ -634,10 +732,11 @@ function readNonEmptyHeader(headers: Headers, name: string) {
   return value === null || value.length === 0 ? null : value;
 }
 
-function dispatchOrganizationAuthRequest(
+function dispatchOrganizationAuthRequest<AuthenticationFailure>(
   handler: (request: Request) => Promise<Response>,
   path: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  mapFailure: (response: Response, body: unknown) => AuthenticationFailure
 ) {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
@@ -663,7 +762,7 @@ function dispatchOrganizationAuthRequest(
     const body = yield* readResponseBody(response);
 
     if (!response.ok) {
-      return yield* Effect.fail(mapAuthenticationFailure(response, body));
+      return yield* Effect.fail(mapFailure(response, body));
     }
 
     return body;
@@ -791,7 +890,12 @@ function readResponseBody(response: Response) {
   });
 }
 
-function mapAuthenticationFailure(response: Response, body: unknown) {
+function mapAuthenticationFailure<NotFoundError>(
+  response: Response,
+  body: unknown,
+  operation: OrganizationIdentityMutationOperation,
+  makeNotFoundError: (message: string) => NotFoundError
+) {
   const parsedBody = isAuthenticationFailureBody(body) ? body : undefined;
   const message =
     parsedBody?.message ??
@@ -803,8 +907,17 @@ function mapAuthenticationFailure(response: Response, body: unknown) {
     return new OrganizationIdentityAccessDeniedError({ message });
   }
 
+  if (response.status === 429) {
+    return new OrganizationIdentityRateLimitError({
+      ...(code === undefined ? {} : { code }),
+      message,
+      operation,
+      ...(statusText === undefined ? {} : { statusText }),
+    });
+  }
+
   if (response.status === 404) {
-    return new OrganizationIdentityNotFoundError({ message });
+    return makeNotFoundError(message);
   }
 
   if (response.status >= 500) {
@@ -816,6 +929,7 @@ function mapAuthenticationFailure(response: Response, body: unknown) {
   return new OrganizationIdentityRejectedError({
     ...(code === undefined ? {} : { code }),
     message,
+    operation,
     status: response.status,
     ...(statusText === undefined ? {} : { statusText }),
   });

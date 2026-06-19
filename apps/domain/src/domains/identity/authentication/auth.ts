@@ -180,8 +180,17 @@ const NativeCreateInvitationPayloadInvitationSchema = Schema.Struct({
   email: OrganizationEmailAddress,
   inviterId: UserId,
   organizationId: OrganizationId,
-  role: Schema.String,
+  role: InvitableOrganizationRole,
   teamId: Schema.optional(Schema.String),
+}).annotate({
+  parseOptions: { onExcessProperty: "ignore" },
+});
+const NativeCreateInvitationPayloadRoleProbeSchema = Schema.Struct({
+  invitation: Schema.Struct({
+    role: Schema.String,
+  }).annotate({
+    parseOptions: { onExcessProperty: "ignore" },
+  }),
 }).annotate({
   parseOptions: { onExcessProperty: "ignore" },
 });
@@ -264,6 +273,9 @@ const decodeOrganizationMembershipCountRow = Schema.decodeUnknownSync(
 );
 const decodeNativeCreateInvitationHookPayload = Schema.decodeUnknownSync(
   NativeCreateInvitationPayloadSchema
+);
+const decodeNativeCreateInvitationPayloadRoleProbe = Schema.decodeUnknownSync(
+  NativeCreateInvitationPayloadRoleProbeSchema
 );
 const decodeNativeAfterCreateInvitationHookPayload = Schema.decodeUnknownSync(
   NativeAfterCreateInvitationPayloadSchema
@@ -454,7 +466,29 @@ export function decodeCreateInvitationHookPayload(input: unknown) {
   try {
     return decodeNativeCreateInvitationHookPayload(input);
   } catch {
+    if (isCreateInvitationRolePolicyFailure(input)) {
+      throwInvalidOrganizationRole();
+    }
+
     throwInvalidOrganizationInvitationHookPayload();
+  }
+}
+
+function isCreateInvitationRolePolicyFailure(input: unknown) {
+  let payload;
+
+  try {
+    payload = decodeNativeCreateInvitationPayloadRoleProbe(input);
+  } catch {
+    return false;
+  }
+
+  try {
+    decodeInvitableOrganizationRole(payload.invitation.role);
+
+    return false;
+  } catch {
+    return true;
   }
 }
 
@@ -501,14 +535,6 @@ export function decodeAcceptInvitationAfterHookPayload(input: unknown) {
 function decodeWritableOrganizationRole(input: unknown) {
   try {
     return decodeOrganizationRole(input);
-  } catch {
-    throwInvalidOrganizationRole();
-  }
-}
-
-function decodeWritableOrganizationInvitationRole(input: unknown) {
-  try {
-    return decodeInvitableOrganizationRole(input);
   } catch {
     throwInvalidOrganizationRole();
   }
@@ -888,9 +914,7 @@ export function createAuthentication(options: {
             return Promise.resolve({
               data: {
                 ...nextInvitation,
-                role: decodeWritableOrganizationInvitationRole(
-                  nextInvitation.role
-                ),
+                role: nextInvitation.role,
               },
             });
           },

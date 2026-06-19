@@ -846,6 +846,38 @@ export class OrganizationIdentityNotFoundError extends Schema.TaggedErrorClass<O
   { httpApiStatus: 404 }
 ) {}
 
+export const ORGANIZATION_INVITATION_NOT_FOUND_ERROR_TAG =
+  "@ceird/identity-core/OrganizationInvitationNotFoundError" as const;
+export class OrganizationInvitationNotFoundError extends Schema.TaggedErrorClass<OrganizationInvitationNotFoundError>()(
+  ORGANIZATION_INVITATION_NOT_FOUND_ERROR_TAG,
+  {
+    invitationId: InvitationId,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 }
+) {}
+
+export const ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG =
+  "@ceird/identity-core/OrganizationMemberNotFoundError" as const;
+export class OrganizationMemberNotFoundError extends Schema.TaggedErrorClass<OrganizationMemberNotFoundError>()(
+  ORGANIZATION_MEMBER_NOT_FOUND_ERROR_TAG,
+  {
+    memberId: OrganizationMemberId,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 }
+) {}
+
+export const OrganizationIdentityMutationOperation = Schema.Literals([
+  "inviteOrganizationMember",
+  "cancelOrganizationInvitation",
+  "updateOrganizationMemberRole",
+  "removeOrganizationMember",
+] as const);
+export type OrganizationIdentityMutationOperation = Schema.Schema.Type<
+  typeof OrganizationIdentityMutationOperation
+>;
+
 export const ORGANIZATION_IDENTITY_REJECTED_ERROR_TAG =
   "@ceird/identity-core/OrganizationIdentityRejectedError" as const;
 export class OrganizationIdentityRejectedError extends Schema.TaggedErrorClass<OrganizationIdentityRejectedError>()(
@@ -853,10 +885,24 @@ export class OrganizationIdentityRejectedError extends Schema.TaggedErrorClass<O
   {
     code: Schema.optional(Schema.String),
     message: Schema.String,
+    operation: OrganizationIdentityMutationOperation,
     status: Schema.optional(Schema.Number),
     statusText: Schema.optional(Schema.String),
   },
   { httpApiStatus: 400 }
+) {}
+
+export const ORGANIZATION_IDENTITY_RATE_LIMIT_ERROR_TAG =
+  "@ceird/identity-core/OrganizationIdentityRateLimitError" as const;
+export class OrganizationIdentityRateLimitError extends Schema.TaggedErrorClass<OrganizationIdentityRateLimitError>()(
+  ORGANIZATION_IDENTITY_RATE_LIMIT_ERROR_TAG,
+  {
+    code: Schema.optional(Schema.String),
+    message: Schema.String,
+    operation: OrganizationIdentityMutationOperation,
+    statusText: Schema.optional(Schema.String),
+  },
+  { httpApiStatus: 429 }
 ) {}
 
 export const ORGANIZATION_IDENTITY_STORAGE_ERROR_TAG =
@@ -1188,8 +1234,11 @@ export type IdentityError =
   | ConnectedAppGrantStorageError
   | OrganizationIdentityAccessDeniedError
   | OrganizationIdentityNotFoundError
+  | OrganizationIdentityRateLimitError
   | OrganizationIdentityRejectedError
   | OrganizationIdentityStorageError
+  | OrganizationInvitationNotFoundError
+  | OrganizationMemberNotFoundError
   | OrganizationSecurityActivityAccessDeniedError
   | OrganizationSecurityActivityCursorInvalidError
   | OrganizationSecurityActivityStorageError
@@ -1267,6 +1316,7 @@ export const IdentityApiGroup = HttpApiGroup.make("identity")
         error: [
           OrganizationIdentityAccessDeniedError,
           OrganizationIdentityNotFoundError,
+          OrganizationIdentityRateLimitError,
           OrganizationIdentityRejectedError,
           OrganizationIdentityStorageError,
         ],
@@ -1282,9 +1332,10 @@ export const IdentityApiGroup = HttpApiGroup.make("identity")
       {
         error: [
           OrganizationIdentityAccessDeniedError,
-          OrganizationIdentityNotFoundError,
+          OrganizationIdentityRateLimitError,
           OrganizationIdentityRejectedError,
           OrganizationIdentityStorageError,
+          OrganizationInvitationNotFoundError,
         ],
         params: { invitationId: InvitationId },
         success: CancelOrganizationInvitationResponseSchema,
@@ -1298,9 +1349,10 @@ export const IdentityApiGroup = HttpApiGroup.make("identity")
       {
         error: [
           OrganizationIdentityAccessDeniedError,
-          OrganizationIdentityNotFoundError,
+          OrganizationIdentityRateLimitError,
           OrganizationIdentityRejectedError,
           OrganizationIdentityStorageError,
+          OrganizationMemberNotFoundError,
         ],
         params: { memberId: OrganizationMemberId },
         payload: UpdateOrganizationMemberRolePayloadSchema,
@@ -1315,9 +1367,10 @@ export const IdentityApiGroup = HttpApiGroup.make("identity")
       {
         error: [
           OrganizationIdentityAccessDeniedError,
-          OrganizationIdentityNotFoundError,
+          OrganizationIdentityRateLimitError,
           OrganizationIdentityRejectedError,
           OrganizationIdentityStorageError,
+          OrganizationMemberNotFoundError,
         ],
         params: { memberId: OrganizationMemberId },
         success: RemoveOrganizationMemberResponseSchema,
