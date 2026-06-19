@@ -152,9 +152,16 @@ const RequiredOrganizationAuditWriteBaseFields = {
   actorUserId: UserId,
   organizationId: OrganizationId,
 };
-const NullableOrganizationAuditTextDbColumn = Schema.NullOr(
-  Schema.NonEmptyString
-).pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(null)));
+const OptionalAuditProvenanceTextDbColumn = Schema.NullOr(Schema.String).pipe(
+  Schema.decodeTo(Schema.NullOr(Schema.NonEmptyString), {
+    decode: SchemaGetter.transform((value) =>
+      value === null || value.trim().length === 0 ? null : value
+    ),
+    encode: SchemaGetter.transform((value) => value),
+  }),
+  Schema.optional,
+  Schema.withDecodingDefault(Effect.succeed(null))
+);
 const OrganizationAuditOptionalDbColumns = {
   oauthClientId: Schema.Null.pipe(
     Schema.optional,
@@ -168,8 +175,8 @@ const OrganizationAuditOptionalDbColumns = {
     Schema.optional,
     Schema.withDecodingDefault(Effect.succeed(null))
   ),
-  sourceIp: NullableOrganizationAuditTextDbColumn,
-  userAgent: NullableOrganizationAuditTextDbColumn,
+  sourceIp: OptionalAuditProvenanceTextDbColumn,
+  userAgent: OptionalAuditProvenanceTextDbColumn,
 };
 
 export const MaskedInvitationEmailSchema = Schema.String.pipe(
@@ -269,29 +276,55 @@ const OAuthAuditScopesDbColumn = Schema.NullOr(ConnectedAppScopesSchema).pipe(
   Schema.optional,
   Schema.withDecodingDefault(Effect.succeed(null))
 );
-const OAuthAuditNullableTextDbColumn = Schema.NullOr(
-  Schema.NonEmptyString
-).pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(null)));
-const OAuthAuditOptionalDbColumns = {
+const OAuthAuditRequiredScopesDbColumn = ConnectedAppScopesSchema.pipe(
+  Schema.decodeTo(ConnectedAppMutableScopesSchema, {
+    decode: SchemaGetter.transform((value) => [...value]),
+    encode: SchemaGetter.transform((value) => value),
+  })
+);
+const OAuthAuditNullableActorField = {
   actorUserId: Schema.NullOr(UserId).pipe(
     Schema.optional,
     Schema.withDecodingDefault(Effect.succeed(null))
   ),
-  oauthClientId: Schema.NullOr(OAuthClientId).pipe(
-    Schema.optional,
-    Schema.withDecodingDefault(Effect.succeed(null))
-  ),
+};
+const OAuthAuditNullableContextFields = {
   organizationId: Schema.NullOr(OrganizationId).pipe(
     Schema.optional,
     Schema.withDecodingDefault(Effect.succeed(null))
   ),
-  scopes: OAuthAuditScopesDbColumn,
   sessionId: Schema.NullOr(SessionId).pipe(
     Schema.optional,
     Schema.withDecodingDefault(Effect.succeed(null))
   ),
-  sourceIp: OAuthAuditNullableTextDbColumn,
-  userAgent: OAuthAuditNullableTextDbColumn,
+};
+const OAuthAuditProvenanceFields = {
+  sourceIp: OptionalAuditProvenanceTextDbColumn,
+  userAgent: OptionalAuditProvenanceTextDbColumn,
+};
+const OAuthAuditRejectedOrUnmatchedDbColumns = {
+  ...OAuthAuditNullableActorField,
+  oauthClientId: Schema.NullOr(OAuthClientId).pipe(
+    Schema.optional,
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  ...OAuthAuditNullableContextFields,
+  scopes: OAuthAuditScopesDbColumn,
+  ...OAuthAuditProvenanceFields,
+};
+const OAuthAuditSuccessfulClientDbColumns = {
+  ...OAuthAuditNullableActorField,
+  oauthClientId: OAuthClientId,
+  ...OAuthAuditNullableContextFields,
+  scopes: OAuthAuditScopesDbColumn,
+  ...OAuthAuditProvenanceFields,
+};
+const OAuthAuditMatchedStoredTokenDbColumns = {
+  ...OAuthAuditNullableActorField,
+  oauthClientId: OAuthClientId,
+  ...OAuthAuditNullableContextFields,
+  scopes: OAuthAuditRequiredScopesDbColumn,
+  ...OAuthAuditProvenanceFields,
 };
 const OAuthClientRegistrationSucceededAuditMetadataSchema = Schema.Struct({
   ...OAuthAuditSourceFields,
@@ -332,15 +365,31 @@ const OAuthTokenKindSchema = Schema.Literals([
 const OAuthTokenRefreshedAuditMetadataSchema = Schema.Struct({
   ...OAuthAuditSourceFields,
   grantType: Schema.Literal("refresh_token"),
-  matchedStoredToken: Schema.Boolean,
-  tokenKind: OAuthTokenKindSchema,
+  matchedStoredToken: Schema.Literal(false),
+  tokenKind: Schema.Literal("refresh_token"),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const OAuthMatchedStoredTokenRefreshedAuditMetadataSchema = Schema.Struct({
+  ...OAuthAuditSourceFields,
+  grantType: Schema.Literal("refresh_token"),
+  matchedStoredToken: Schema.Literal(true),
+  tokenKind: Schema.Literal("refresh_token"),
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
 const OAuthTokenRevokedAuditMetadataSchema = Schema.Struct({
   ...OAuthAuditSourceFields,
-  matchedStoredToken: Schema.Boolean,
-  tokenKind: Schema.NullOr(OAuthTokenKindSchema),
+  matchedStoredToken: Schema.Literal(false),
+  tokenKind: Schema.Null,
+  tokenTypeHint: Schema.NullOr(OAuthTokenKindSchema),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const OAuthMatchedStoredTokenRevokedAuditMetadataSchema = Schema.Struct({
+  ...OAuthAuditSourceFields,
+  matchedStoredToken: Schema.Literal(true),
+  tokenKind: OAuthTokenKindSchema,
   tokenTypeHint: Schema.NullOr(OAuthTokenKindSchema),
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
@@ -348,32 +397,42 @@ const OAuthTokenRevokedAuditMetadataSchema = Schema.Struct({
 
 export const OAuthSecurityAuditWriteSchema = Schema.Union([
   Schema.Struct({
-    ...OAuthAuditOptionalDbColumns,
+    ...OAuthAuditSuccessfulClientDbColumns,
     eventType: Schema.Literal("oauth_client_registration_succeeded"),
     metadata: OAuthClientRegistrationSucceededAuditMetadataSchema,
   }),
   Schema.Struct({
-    ...OAuthAuditOptionalDbColumns,
+    ...OAuthAuditRejectedOrUnmatchedDbColumns,
     eventType: Schema.Literal("oauth_client_registration_rejected"),
     metadata: OAuthClientRegistrationRejectedAuditMetadataSchema,
   }),
   Schema.Struct({
-    ...OAuthAuditOptionalDbColumns,
+    ...OAuthAuditSuccessfulClientDbColumns,
     eventType: Schema.Literal("oauth_consent_granted"),
     metadata: OAuthConsentGrantedAuditMetadataSchema,
   }),
   Schema.Struct({
-    ...OAuthAuditOptionalDbColumns,
+    ...OAuthAuditSuccessfulClientDbColumns,
     eventType: Schema.Literal("oauth_consent_denied"),
     metadata: OAuthConsentDeniedAuditMetadataSchema,
   }),
   Schema.Struct({
-    ...OAuthAuditOptionalDbColumns,
+    ...OAuthAuditMatchedStoredTokenDbColumns,
+    eventType: Schema.Literal("oauth_token_refreshed"),
+    metadata: OAuthMatchedStoredTokenRefreshedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OAuthAuditRejectedOrUnmatchedDbColumns,
     eventType: Schema.Literal("oauth_token_refreshed"),
     metadata: OAuthTokenRefreshedAuditMetadataSchema,
   }),
   Schema.Struct({
-    ...OAuthAuditOptionalDbColumns,
+    ...OAuthAuditMatchedStoredTokenDbColumns,
+    eventType: Schema.Literal("oauth_token_revoked"),
+    metadata: OAuthMatchedStoredTokenRevokedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OAuthAuditRejectedOrUnmatchedDbColumns,
     eventType: Schema.Literal("oauth_token_revoked"),
     metadata: OAuthTokenRevokedAuditMetadataSchema,
   }),
@@ -582,7 +641,7 @@ export type OrganizationSecurityAuditWrite = Schema.Schema.Type<
 
 const OrganizationSecurityActivityMemberTargetFields = {
   target_email: NullableNonEmptyString,
-  target_member_id: Schema.NullOr(Schema.NonEmptyString),
+  target_member_id: Schema.NullOr(OrganizationMemberId),
   target_name: NullableNonEmptyString,
   target_user_id: Schema.NullOr(UserId),
 };

@@ -549,6 +549,16 @@ insert failures are non-blocking for already-successful Better Auth organization
 mutations; they emit typed telemetry and skip the audit row instead of repairing
 or persisting unverifiable metadata.
 
+OAuth audit writes use the same schema-owned insert boundary. Successful client
+registration and consent rows require a decoded OAuth client id before insert.
+Token refresh/revoke rows split matched stored-token evidence from unmatched
+endpoint evidence: matched rows require the decoded stored-token client and scope
+context, while malformed stored-token rows emit token-context telemetry and skip
+the audit write instead of being downgraded to `matchedStoredToken: false`.
+Optional source IP and user-agent provenance is decoded by the schema and empty
+values normalize to `null`; empty optional provenance does not suppress an
+otherwise trustworthy audit row.
+
 Organization audit rows are success-only for this stage: Ceird records events
 after Better Auth accepts and applies the lifecycle mutation. Failed
 organization mutation attempts remain covered by abuse/rate-limit telemetry and
@@ -651,6 +661,10 @@ Reliability notes:
   possible; JWT access-token revocation and unknown-token revocation cannot
   prove a stored row mutation from the endpoint response alone, so those rows
   remain redacted endpoint audit evidence with `matchedStoredToken: false`
+- stored OAuth token rows that are found but fail schema decoding are treated as
+  context failures, not as unknown-token evidence; Ceird logs sanitized
+  `auth_security_audit_token_context_failure` telemetry and skips the token audit
+  row
 - audit writes are scheduled through the auth background-task handler when the
   runtime provides one; write failures fail open with high-severity telemetry
   (`auth_security_audit_write_failure`) so an audit storage outage does not

@@ -11,6 +11,7 @@ import {
   OrganizationSecurityActivityRowSchema,
   OrganizationSecurityAuditWriteSchema,
 } from "./persistence-schemas.js";
+import type { OrganizationMemberId } from "./persistence-schemas.js";
 import {
   decodeOrganizationSecurityActivityCursor,
   encodeOrganizationSecurityActivityCursor,
@@ -31,32 +32,34 @@ const auditMetadataSource = {
 
 describe("organization security activity mapping", () => {
   it("maps role-change audit rows into safe read-model items", () => {
-    expect(
-      mapOrganizationSecurityActivityRow(
-        decodeActivityRow({
-          actor_email: "owner@example.com",
-          actor_name: "Owner User",
-          actor_user_id: "user_owner",
-          created_at: new Date("2026-06-07T10:30:00.000Z"),
-          created_at_cursor: "2026-06-07T10:30:00.000000Z",
-          event_type: "organization_member_role_updated",
-          id: "audit_123",
-          metadata: {
-            ...auditMetadataSource,
-            memberId: "member_123",
-            previousRole: "member",
-            role: "admin",
-            targetUserId: "user_member",
-          },
-          organization_id: "org_123",
-          organization_name: "Acme Field Ops",
-          target_email: "member@example.com",
-          target_member_id: "member_123",
-          target_name: "Taylor Member",
-          target_user_id: "user_member",
-        })
-      )
-    ).toStrictEqual({
+    const row = decodeActivityRow({
+      actor_email: "owner@example.com",
+      actor_name: "Owner User",
+      actor_user_id: "user_owner",
+      created_at: new Date("2026-06-07T10:30:00.000Z"),
+      created_at_cursor: "2026-06-07T10:30:00.000000Z",
+      event_type: "organization_member_role_updated",
+      id: "audit_123",
+      metadata: {
+        ...auditMetadataSource,
+        memberId: "member_123",
+        previousRole: "member",
+        role: "admin",
+        targetUserId: "user_member",
+      },
+      organization_id: "org_123",
+      organization_name: "Acme Field Ops",
+      target_email: "member@example.com",
+      target_member_id: "member_123",
+      target_name: "Taylor Member",
+      target_user_id: "user_member",
+    });
+    const targetMemberId: Schema.Schema.Type<
+      typeof OrganizationMemberId
+    > | null = row.target_member_id;
+
+    expect(targetMemberId).toBe("member_123");
+    expect(mapOrganizationSecurityActivityRow(row)).toStrictEqual({
       actor: {
         email: "owner@example.com",
         id: "user_owner",

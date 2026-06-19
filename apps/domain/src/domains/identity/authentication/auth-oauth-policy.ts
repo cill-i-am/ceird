@@ -169,6 +169,8 @@ const decodeOrganizationInvitationAuditContextRow = Schema.decodeUnknownSync(
 const decodeOrganizationMemberAuditContextRow = Schema.decodeUnknownSync(
   OrganizationMemberAuditContextRowSchema
 );
+const decodeSessionActiveOrganizationId =
+  Schema.decodeUnknownSync(OrganizationId);
 
 const OAuthRegistrationRequestBodySchema = Schema.Struct({
   scope: Schema.optional(Schema.NonEmptyString),
@@ -600,7 +602,7 @@ interface OAuthSecurityAuditRequestSnapshot {
   readonly body: OAuthSecurityAuditRequestBody | null;
   readonly endpointPath: string;
   readonly sourceIp: string | null;
-  readonly tokenContext?: OAuthSecurityAuditTokenContext | null | undefined;
+  readonly tokenContext: OAuthSecurityAuditTokenContextResolution;
   readonly userAgent: string | null;
 }
 interface OAuthSecurityAuditTokenContext {
@@ -611,6 +613,17 @@ interface OAuthSecurityAuditTokenContext {
   readonly tokenKind: "access_token" | "refresh_token";
   readonly userId: OAuthTokenAuditContextRow["userId"];
 }
+type OAuthSecurityAuditTokenContextResolution =
+  | {
+      readonly status: "matched";
+      readonly value: OAuthSecurityAuditTokenContext;
+    }
+  | {
+      readonly status: "not_found";
+    }
+  | {
+      readonly status: "failed";
+    };
 
 export function withOAuthSecurityAuditEventRecorder(
   handler: (request: Request) => Promise<Response>,
@@ -751,10 +764,11 @@ async function resolveOrganizationInvitationResendAuditContext(options: {
     }
 
     const email = options.body.value.email?.toLowerCase() ?? null;
-    const organizationId =
+    const organizationId: Schema.Schema.Type<typeof OrganizationId> | null =
       options.body.value.organizationId ??
-      options.session.session.activeOrganizationId ??
-      null;
+      readSessionActiveOrganizationId(
+        options.session.session.activeOrganizationId
+      );
 
     if (email === null || organizationId === null) {
       return null;
@@ -778,7 +792,7 @@ async function findOrganizationInvitationAuditContext(
   database: NodePgDatabase,
   options: {
     readonly email: string;
-    readonly organizationId: string;
+    readonly organizationId: Schema.Schema.Type<typeof OrganizationId>;
   }
 ) {
   const [row] = await database
@@ -799,6 +813,14 @@ async function findOrganizationInvitationAuditContext(
     .limit(1);
 
   return row ? decodeOrganizationInvitationAuditContextRow(row) : null;
+}
+
+function readSessionActiveOrganizationId(
+  organizationId: string | null | undefined
+) {
+  return organizationId === null || organizationId === undefined
+    ? null
+    : decodeSessionActiveOrganizationId(organizationId);
 }
 
 async function resolveOrganizationMemberAuditContext(options: {
@@ -1273,7 +1295,7 @@ async function resolveOAuthSecurityAuditTokenContext(options: {
   readonly database: NodePgDatabase;
   readonly endpointPath: string;
   readonly runtimeContext: AuthEffectRuntimeContext;
-}): Promise<OAuthSecurityAuditTokenContext | null> {
+}): Promise<OAuthSecurityAuditTokenContextResolution> {
   try {
     if (
       options.endpointPath === OAUTH_TOKEN_ENDPOINT_PATH &&
@@ -1282,15 +1304,17 @@ async function resolveOAuthSecurityAuditTokenContext(options: {
     ) {
       const refreshToken = options.body.value.refresh_token;
       return refreshToken
-        ? await findOAuthRefreshTokenAuditContext(
-            options.database,
-            refreshToken
+        ? makeOAuthTokenContextResolution(
+            await findOAuthRefreshTokenAuditContext(
+              options.database,
+              refreshToken
+            )
           )
-        : null;
+        : { status: "not_found" };
     }
 
     if (options.endpointPath !== OAUTH_REVOKE_ENDPOINT_PATH) {
-      return null;
+      return { status: "not_found" };
     }
 
     const token =
@@ -1298,7 +1322,7 @@ async function resolveOAuthSecurityAuditTokenContext(options: {
         ? options.body.value.token
         : undefined;
     if (!token) {
-      return null;
+      return { status: "not_found" };
     }
 
     const tokenTypeHint =
@@ -1307,16 +1331,20 @@ async function resolveOAuthSecurityAuditTokenContext(options: {
         : undefined;
 
     if (tokenTypeHint === "access_token") {
-      return await findOAuthAccessTokenAuditContext(options.database, token);
+      return makeOAuthTokenContextResolution(
+        await findOAuthAccessTokenAuditContext(options.database, token)
+      );
     }
 
     if (tokenTypeHint === "refresh_token") {
-      return await findOAuthRefreshTokenAuditContext(options.database, token);
+      return makeOAuthTokenContextResolution(
+        await findOAuthRefreshTokenAuditContext(options.database, token)
+      );
     }
 
-    return (
+    return makeOAuthTokenContextResolution(
       (await findOAuthRefreshTokenAuditContext(options.database, token)) ??
-      (await findOAuthAccessTokenAuditContext(options.database, token))
+        (await findOAuthAccessTokenAuditContext(options.database, token))
     );
   } catch (error) {
     await reportAuthSecurityAuditTokenContextFailure(
@@ -1324,8 +1352,16 @@ async function resolveOAuthSecurityAuditTokenContext(options: {
       error,
       options.runtimeContext
     );
-    return null;
+    return { status: "failed" };
   }
+}
+
+function makeOAuthTokenContextResolution(
+  tokenContext: OAuthSecurityAuditTokenContext | null
+): OAuthSecurityAuditTokenContextResolution {
+  return tokenContext === null
+    ? { status: "not_found" }
+    : { status: "matched", value: tokenContext };
 }
 
 async function findOAuthRefreshTokenAuditContext(
@@ -1519,33 +1555,38 @@ async function recordOAuthTokenSecurityAuditEvent(options: {
     return;
   }
 
+  if (options.snapshot.tokenContext.status === "failed") {
+    return;
+  }
+
+  const tokenContext =
+    options.snapshot.tokenContext.status === "matched"
+      ? options.snapshot.tokenContext.value
+      : null;
   const responseBody = await readSchemaOwnedResponseBody(
     options.response,
     Schema.decodeUnknownSync(OAuthTokenResponseBodySchema)
   );
 
   await writeOAuthSecurityAuditEvent(options.options, {
-    actorUserId: options.snapshot.tokenContext?.userId,
+    actorUserId: tokenContext?.userId,
     eventType: "oauth_token_refreshed",
     metadata: {
       grantType: "refresh_token",
-      matchedStoredToken:
-        options.snapshot.tokenContext !== undefined &&
-        options.snapshot.tokenContext !== null,
+      matchedStoredToken: tokenContext !== null,
       source: "better_auth_oauth_endpoint",
-      tokenKind: options.snapshot.tokenContext?.tokenKind ?? "refresh_token",
+      tokenKind: "refresh_token",
     },
     oauthClientId:
-      options.snapshot.tokenContext?.clientId ??
-      options.snapshot.body.value.client_id,
-    organizationId: options.snapshot.tokenContext?.organizationId,
+      tokenContext?.clientId ?? options.snapshot.body.value.client_id,
+    organizationId: tokenContext?.organizationId,
     scopes:
-      options.snapshot.tokenContext?.scopes ??
+      tokenContext?.scopes ??
       resolveOAuthAuditScopes(
         responseBody?.scope,
         options.snapshot.body.value.scope
       ),
-    sessionId: options.snapshot.tokenContext?.sessionId,
+    sessionId: tokenContext?.sessionId,
     sourceIp: options.snapshot.sourceIp,
     userAgent: options.snapshot.userAgent,
   });
@@ -1559,29 +1600,35 @@ async function recordOAuthRevocationSecurityAuditEvent(options: {
   if (options.response.status < 200 || options.response.status >= 300) {
     return;
   }
+  const tokenContext =
+    options.snapshot.tokenContext.status === "matched"
+      ? options.snapshot.tokenContext.value
+      : null;
+
+  if (options.snapshot.tokenContext.status === "failed") {
+    return;
+  }
 
   await writeOAuthSecurityAuditEvent(options.options, {
-    actorUserId: options.snapshot.tokenContext?.userId,
+    actorUserId: tokenContext?.userId,
     eventType: "oauth_token_revoked",
     metadata: {
-      matchedStoredToken:
-        options.snapshot.tokenContext !== undefined &&
-        options.snapshot.tokenContext !== null,
+      matchedStoredToken: tokenContext !== null,
       source: "better_auth_oauth_endpoint",
-      tokenKind: options.snapshot.tokenContext?.tokenKind ?? null,
+      tokenKind: tokenContext?.tokenKind ?? null,
       tokenTypeHint:
         options.snapshot.body?.endpointPath === OAUTH_REVOKE_ENDPOINT_PATH
           ? (options.snapshot.body.value.token_type_hint ?? null)
           : null,
     },
     oauthClientId:
-      options.snapshot.tokenContext?.clientId ??
+      tokenContext?.clientId ??
       (options.snapshot.body?.endpointPath === OAUTH_REVOKE_ENDPOINT_PATH
         ? options.snapshot.body.value.client_id
         : undefined),
-    organizationId: options.snapshot.tokenContext?.organizationId,
-    scopes: options.snapshot.tokenContext?.scopes,
-    sessionId: options.snapshot.tokenContext?.sessionId,
+    organizationId: tokenContext?.organizationId,
+    scopes: tokenContext?.scopes,
+    sessionId: tokenContext?.sessionId,
     sourceIp: options.snapshot.sourceIp,
     userAgent: options.snapshot.userAgent,
   });
