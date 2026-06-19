@@ -236,6 +236,7 @@ describe("jobs proximity panel", () => {
           siteId,
         }}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="list"
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
@@ -278,6 +279,7 @@ describe("jobs proximity panel", () => {
           status: "completed",
         }}
         limit={15}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="list"
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
@@ -408,6 +410,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={defaultFilters}
         limit={25}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="map"
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
@@ -436,6 +439,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="map"
         onClearFilters={onClearFilters}
         onLimitChange={onLimitChange}
@@ -456,6 +460,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="list"
         onClearFilters={onClearFilters}
         onLimitChange={onLimitChange}
@@ -478,6 +483,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="list"
         onClearFilters={onClearFilters}
         onLimitChange={onLimitChange}
@@ -498,6 +504,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="map"
         onClearFilters={onClearFilters}
         onLimitChange={onLimitChange}
@@ -522,6 +529,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="list"
         onClearFilters={onClearFilters}
         onLimitChange={onLimitChange}
@@ -538,6 +546,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={{ ...defaultFilters, query: "sink" }}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="list"
         onClearFilters={onClearFilters}
         onLimitChange={onLimitChange}
@@ -564,6 +573,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="list"
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
@@ -599,6 +609,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="list"
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
@@ -629,6 +640,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="list"
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
@@ -673,6 +685,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="list"
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
@@ -814,6 +827,7 @@ describe("jobs proximity panel", () => {
         Component={JobsProximityPanel}
         filters={defaultFilters}
         limit={10}
+        routeProximityLocationPreferenceStatus="enabled"
         viewMode="list"
         onClearFilters={vi.fn<() => void>()}
         onLimitChange={vi.fn<(limit: 10 | 15 | 20 | 25) => void>()}
@@ -859,14 +873,14 @@ type JobsProximityPanelComponent = React.ComponentType<JobsProximityPanelProps>;
 
 function ControlledJobsProximityPanel({
   Component,
-  routeProximityLocationPreferenceStatus = "enabled",
+  routeProximityLocationPreferenceStatus,
   ...props
 }: Omit<
   JobsProximityPanelProps,
   "active" | "onActiveChange" | "routeProximityLocationPreferenceStatus"
 > & {
   readonly Component: JobsProximityPanelComponent;
-  readonly routeProximityLocationPreferenceStatus?: JobsProximityPanelProps["routeProximityLocationPreferenceStatus"];
+  readonly routeProximityLocationPreferenceStatus: JobsProximityPanelProps["routeProximityLocationPreferenceStatus"];
 }) {
   const [active, setActive] = React.useState(false);
 

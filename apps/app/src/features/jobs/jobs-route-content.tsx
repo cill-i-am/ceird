@@ -63,7 +63,7 @@ export function JobsRouteContent({
   readonly listScope?: JobsListScope | undefined;
   readonly queryClient?: QueryClient | undefined;
   readonly routeLimit?: ComponentProps<typeof JobsPage>["routeLimit"];
-  readonly routeProximityLocationPreferenceStatus?: RouteProximityLocationPreferenceStatus;
+  readonly routeProximityLocationPreferenceStatus: RouteProximityLocationPreferenceStatus;
   readonly stack?: readonly WorkspaceSheet[] | undefined;
   readonly sync?: JobsCollectionSyncOptions | undefined;
   readonly viewMode?: ComponentProps<typeof JobsPage>["viewMode"];

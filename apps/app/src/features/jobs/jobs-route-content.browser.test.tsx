@@ -59,6 +59,7 @@ describe("JobsRouteContent", () => {
         activeOrganizationId={organizationId}
         list={list}
         options={options}
+        routeProximityLocationPreferenceStatus="unavailable"
         viewer={{ role: "owner", userId }}
       />
     );
@@ -70,6 +71,7 @@ describe("JobsRouteContent", () => {
         activeOrganizationId={organizationId}
         list={list}
         options={options}
+        routeProximityLocationPreferenceStatus="unavailable"
         viewer={{ role: "external", userId }}
       />
     );

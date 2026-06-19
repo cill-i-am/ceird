@@ -246,7 +246,7 @@ export function JobsPage({
   onRouteLimitChange,
   onViewModeChange,
   routeLimit: controlledRouteLimit,
-  routeProximityLocationPreferenceStatus = "unavailable",
+  routeProximityLocationPreferenceStatus,
   viewMode: controlledViewMode,
   viewer,
 }: {
@@ -258,9 +258,7 @@ export function JobsPage({
   readonly onRouteLimitChange?: (value: ProximityLimit) => void;
   readonly onViewModeChange?: (value: JobsViewMode) => void;
   readonly routeLimit?: ProximityLimit | undefined;
-  readonly routeProximityLocationPreferenceStatus?:
-    | RouteProximityLocationPreferenceStatus
-    | undefined;
+  readonly routeProximityLocationPreferenceStatus: RouteProximityLocationPreferenceStatus;
   readonly viewMode?: JobsViewMode;
   readonly viewer: JobsViewer;
 }) {
