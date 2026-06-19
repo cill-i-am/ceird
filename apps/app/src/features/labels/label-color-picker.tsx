@@ -11,7 +11,12 @@ import { Check, Palette, Pipette } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
+import { Field, FieldError, FieldLabel } from "#/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "#/components/ui/input-group";
 import {
   Popover,
   PopoverContent,
@@ -247,66 +252,71 @@ function AdvancedLabelColorPicker({
           style={{ backgroundColor: value }}
           aria-hidden="true"
         />
-        <label
-          className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground"
-          htmlFor={textInputId}
+        <Field
+          data-invalid={error !== null || undefined}
+          className="min-w-0 flex-1 gap-1"
         >
-          <span className="shrink-0 font-medium">HEX</span>
-          <Input
-            id={textInputId}
-            value={textValue}
-            spellCheck={false}
-            aria-invalid={error !== null}
-            aria-label="Label color value"
-            className="h-8 min-w-0 border-0 bg-transparent px-0 text-sm text-foreground shadow-none focus-visible:ring-0"
-            onChange={(event) => {
-              const nextValue = event.currentTarget.value;
-              setTextValue(nextValue);
-              const normalized = normalizeLabelColorInput(nextValue);
+          <FieldLabel className="sr-only" htmlFor={textInputId}>
+            Label color value
+          </FieldLabel>
+          <InputGroup>
+            <InputGroupAddon>HEX</InputGroupAddon>
+            <InputGroupInput
+              id={textInputId}
+              value={textValue}
+              spellCheck={false}
+              aria-invalid={error !== null}
+              onChange={(event) => {
+                const nextValue = event.currentTarget.value;
+                setTextValue(nextValue);
+                const normalized = normalizeLabelColorInput(nextValue);
 
-              if (normalized.kind === "valid") {
-                setError(null);
-                onChange(normalized.color);
-              } else {
-                setError(normalized.message);
-              }
-            }}
-          />
-        </label>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="shrink-0 rounded-full"
-                disabled={!canUseEyeDropper}
-                aria-label="Pick a label color from the screen"
-                onClick={() => {
-                  void (async () => {
-                    try {
-                      const color = await pickScreenColor();
+                if (normalized.kind === "valid") {
+                  setError(null);
+                  onChange(normalized.color);
+                } else {
+                  setError(normalized.message);
+                }
+              }}
+            />
+            <InputGroupAddon align="inline-end">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={!canUseEyeDropper}
+                      aria-label="Pick a label color from the screen"
+                      onClick={() => {
+                        void (async () => {
+                          try {
+                            const color = await pickScreenColor();
 
-                      if (color) {
-                        onChange(color);
-                      }
-                    } catch {
-                      // Canceling the browser picker should leave the draft unchanged.
-                    }
-                  })();
-                }}
-              />
-            }
-          >
-            <Pipette aria-hidden="true" />
-          </TooltipTrigger>
-          <TooltipContent>
-            {canUseEyeDropper
-              ? "Pick a color from the screen"
-              : "Screen color picker is unavailable in this browser"}
-          </TooltipContent>
-        </Tooltip>
+                            if (color) {
+                              onChange(color);
+                            }
+                          } catch {
+                            // Canceling the browser picker should leave the draft unchanged.
+                          }
+                        })();
+                      }}
+                    />
+                  }
+                >
+                  <Pipette aria-hidden="true" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  {canUseEyeDropper
+                    ? "Pick a color from the screen"
+                    : "Screen color picker is unavailable in this browser"}
+                </TooltipContent>
+              </Tooltip>
+            </InputGroupAddon>
+          </InputGroup>
+          {error ? <FieldError className="text-xs">{error}</FieldError> : null}
+        </Field>
       </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)_2rem] gap-4">
@@ -398,12 +408,6 @@ function AdvancedLabelColorPicker({
           />
         </label>
       </div>
-
-      {error ? (
-        <p className="text-xs text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }
