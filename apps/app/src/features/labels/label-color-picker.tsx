@@ -119,7 +119,7 @@ export function LabelColorPicker({
             </Button>
           </div>
         ) : (
-          <div className="animate-in duration-100 fade-in-0 zoom-in-95">
+          <div className="animate-in duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] fade-in-0 slide-in-from-right-1 motion-reduce:animate-none">
             <AdvancedLabelColorPicker
               value={draftColor}
               onCancel={() => {
