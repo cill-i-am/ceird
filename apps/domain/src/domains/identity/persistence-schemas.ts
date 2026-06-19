@@ -2,9 +2,11 @@ import {
   ConnectedAppGrantActiveTokenCountSchema,
   ConnectedAppGrantId,
   ConnectedAppScopeSchema,
+  CeirdOAuthScopeSchema,
   OAuthClientId,
   ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES,
   OrganizationId,
+  OrganizationMemberId,
   OrganizationRole,
   OrganizationSecurityActivityEventId,
   SessionId,
@@ -17,9 +19,8 @@ import { AUTH_SECURITY_AUDIT_EVENT_TYPES } from "./authentication/schema.js";
 const NullableNonEmptyString = Schema.NullOr(Schema.NonEmptyString);
 const NullableDate = Schema.NullOr(Schema.DateValid);
 const ConnectedAppScopesSchema = Schema.Array(ConnectedAppScopeSchema);
-const ConnectedAppMutableScopesSchema = Schema.mutable(
-  ConnectedAppScopesSchema
-);
+const CeirdOAuthScopesSchema = Schema.Array(CeirdOAuthScopeSchema);
+const CeirdOAuthMutableScopesSchema = Schema.mutable(CeirdOAuthScopesSchema);
 
 const ConnectedAppGrantListRowFields = {
   active_access_token_count: ConnectedAppGrantActiveTokenCountSchema,
@@ -144,9 +145,6 @@ const AuthSecurityAuditMetadataBaseFields = {
   outcome: Schema.Literal("succeeded"),
   source: AuthSecurityAuditMetadataSourceSchema,
 };
-export const OrganizationMemberId = Schema.NonEmptyString.pipe(
-  Schema.brand("@ceird/domains/identity/OrganizationMemberId")
-);
 const OrganizationUpdatedFieldSchema = Schema.Literal("name");
 const RequiredOrganizationAuditWriteBaseFields = {
   actorUserId: UserId,
@@ -266,8 +264,8 @@ export type OrganizationMemberAuditMetadata =
 const OAuthAuditSourceFields = {
   source: Schema.Literal("better_auth_oauth_endpoint"),
 };
-const OAuthAuditScopesDbColumn = Schema.NullOr(ConnectedAppScopesSchema).pipe(
-  Schema.decodeTo(Schema.NullOr(ConnectedAppMutableScopesSchema), {
+const OAuthAuditScopesDbColumn = Schema.NullOr(CeirdOAuthScopesSchema).pipe(
+  Schema.decodeTo(Schema.NullOr(CeirdOAuthMutableScopesSchema), {
     decode: SchemaGetter.transform((value) =>
       value === null || value.length === 0 ? null : [...value]
     ),
@@ -276,8 +274,8 @@ const OAuthAuditScopesDbColumn = Schema.NullOr(ConnectedAppScopesSchema).pipe(
   Schema.optional,
   Schema.withDecodingDefault(Effect.succeed(null))
 );
-const OAuthAuditRequiredScopesDbColumn = ConnectedAppScopesSchema.pipe(
-  Schema.decodeTo(ConnectedAppMutableScopesSchema, {
+const OAuthAuditRequiredScopesDbColumn = CeirdOAuthScopesSchema.pipe(
+  Schema.decodeTo(CeirdOAuthMutableScopesSchema, {
     decode: SchemaGetter.transform((value) => [...value]),
     encode: SchemaGetter.transform((value) => value),
   })
@@ -458,8 +456,8 @@ export type OAuthSecurityAuditWrite = Schema.Schema.Type<
 >;
 
 export const OAuthRefreshTokenConsentGuardRowSchema = Schema.Struct({
-  consentScopes: Schema.NullOr(ConnectedAppScopesSchema),
-  refreshTokenScopes: ConnectedAppScopesSchema,
+  consentScopes: Schema.NullOr(CeirdOAuthScopesSchema),
+  refreshTokenScopes: CeirdOAuthScopesSchema,
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
@@ -470,7 +468,7 @@ export type OAuthRefreshTokenConsentGuardRow = Schema.Schema.Type<
 export const OAuthTokenAuditContextRowSchema = Schema.Struct({
   clientId: OAuthClientId,
   referenceId: Schema.NullOr(OrganizationId),
-  scopes: ConnectedAppScopesSchema,
+  scopes: CeirdOAuthScopesSchema,
   sessionId: Schema.NullOr(SessionId),
   userId: Schema.NullOr(UserId),
 }).annotate({

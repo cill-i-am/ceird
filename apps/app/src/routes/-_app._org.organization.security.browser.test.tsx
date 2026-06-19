@@ -1,11 +1,14 @@
-import { decodeOrganizationId } from "@ceird/identity-core";
+import {
+  decodeOrganizationId,
+  OrganizationSecurityActivityCursor as OrganizationSecurityActivityCursorSchema,
+} from "@ceird/identity-core";
 import type {
   OrganizationRole,
-  OrganizationSecurityActivityCursor,
   OrganizationSecurityActivityQuery,
 } from "@ceird/identity-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
+import { Schema } from "effect";
 
 import type { WorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet-search";
 
@@ -14,7 +17,9 @@ type SecurityActivityLookupMock = (
 ) => Promise<unknown>;
 
 const organizationId = decodeOrganizationId("org_123");
-const cursor = "cursor_123" as OrganizationSecurityActivityCursor;
+const cursor = Schema.decodeUnknownSync(
+  OrganizationSecurityActivityCursorSchema
+)("cursor_123");
 
 const { mockedListCurrentServerOrganizationSecurityActivity } = vi.hoisted(
   () => ({

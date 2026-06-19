@@ -1,6 +1,9 @@
 import {
-  ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES,
-  ORGANIZATION_SECURITY_ACTIVITY_TARGET_TYPES,
+  decodeOptionalIsoDateString,
+  decodeOptionalOrganizationSecurityActivityCursor,
+  decodeOptionalOrganizationSecurityActivityEventType,
+  decodeOptionalOrganizationSecurityActivityTargetType,
+  decodeOptionalUserId,
 } from "@ceird/identity-core";
 import type {
   IsoDateString,
@@ -20,16 +23,6 @@ export interface OrganizationSecurityActivitySearch {
   readonly targetType?: OrganizationSecurityActivityTargetType | undefined;
   readonly toDate?: IsoDateString | undefined;
 }
-
-const ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPE_LOOKUP = new Set<string>(
-  ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES
-);
-
-const ORGANIZATION_SECURITY_ACTIVITY_TARGET_TYPE_LOOKUP = new Set<string>(
-  ORGANIZATION_SECURITY_ACTIVITY_TARGET_TYPES
-);
-
-const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 
 export function decodeOrganizationSecurityActivitySearch(
   input: Record<string, unknown>
@@ -60,49 +53,23 @@ export function toOrganizationSecurityActivityQuery(
 }
 
 function decodeCursor(value: unknown) {
-  if (typeof value !== "string" || value.length === 0) {
-    return;
-  }
-
-  return value as OrganizationSecurityActivityCursor;
+  return decodeOptionalOrganizationSecurityActivityCursor(value);
 }
 
 function decodeActorUserId(value: unknown) {
-  if (typeof value !== "string" || value.length === 0) {
-    return;
-  }
-
-  return value as UserId;
+  return decodeOptionalUserId(value);
 }
 
 export function decodeOrganizationSecurityActivityEventType(value: unknown) {
-  if (
-    typeof value !== "string" ||
-    !ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPE_LOOKUP.has(value)
-  ) {
-    return;
-  }
-
-  return value as OrganizationSecurityActivityEventType;
+  return decodeOptionalOrganizationSecurityActivityEventType(value);
 }
 
 export function decodeOrganizationSecurityActivityTargetType(value: unknown) {
-  if (
-    typeof value !== "string" ||
-    !ORGANIZATION_SECURITY_ACTIVITY_TARGET_TYPE_LOOKUP.has(value)
-  ) {
-    return;
-  }
-
-  return value as OrganizationSecurityActivityTargetType;
+  return decodeOptionalOrganizationSecurityActivityTargetType(value);
 }
 
 export function decodeIsoDate(value: unknown) {
-  if (typeof value !== "string" || !isIsoDateString(value)) {
-    return;
-  }
-
-  return value as IsoDateString;
+  return decodeOptionalIsoDateString(value);
 }
 
 function decodeTargetSearch(value: unknown) {
@@ -113,32 +80,4 @@ function decodeTargetSearch(value: unknown) {
   const trimmed = value.trim();
 
   return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function isIsoDateString(value: string): boolean {
-  if (!ISO_DATE_PATTERN.test(value)) {
-    return false;
-  }
-
-  const segments = value.split("-");
-  const year = Number(segments[0]);
-  const month = Number(segments[1]);
-  const day = Number(segments[2]);
-  if (
-    segments.length !== 3 ||
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day)
-  ) {
-    return false;
-  }
-
-  const date = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    !Number.isNaN(date.getTime()) &&
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() + 1 === month &&
-    date.getUTCDate() === day
-  );
 }

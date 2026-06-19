@@ -5,7 +5,6 @@ import {
 } from "@ceird/identity-core";
 import type {
   OrganizationSecurityActivityActor,
-  OrganizationSecurityActivityCursor,
   OrganizationSecurityActivityEventType,
   OrganizationSecurityActivityItem,
   OrganizationSecurityActivityListResponse,
@@ -463,7 +462,7 @@ function clearSecurityActivityCursor(
 ) {
   return {
     ...search,
-    cursor: undefined as OrganizationSecurityActivityCursor | undefined,
+    cursor: undefined,
   };
 }
 

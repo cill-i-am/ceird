@@ -1,20 +1,31 @@
-import { OrganizationMemberId } from "@ceird/identity-core";
-import type {
+import {
+  OrganizationId,
+  OrganizationMemberId,
   OrganizationSecurityActivityCursor,
   OrganizationSecurityActivityEventId,
-  OrganizationSecurityActivityListResponse,
   UserId,
 } from "@ceird/identity-core";
+import type { OrganizationSecurityActivityListResponse } from "@ceird/identity-core";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Schema } from "effect";
 
 import type { OrganizationSecurityActivitySearch } from "./organization-security-search";
 
-const ownerUserId = "user_owner" as UserId;
-const memberUserId = "user_member" as UserId;
+const decodeUserId = Schema.decodeUnknownSync(UserId);
+const decodeOrganizationId = Schema.decodeUnknownSync(OrganizationId);
+const decodeAuditEventId = Schema.decodeUnknownSync(
+  OrganizationSecurityActivityEventId
+);
+const decodeCursor = Schema.decodeUnknownSync(
+  OrganizationSecurityActivityCursor
+);
+
+const ownerUserId = decodeUserId("user_owner");
+const memberUserId = decodeUserId("user_member");
 const memberId = Schema.decodeUnknownSync(OrganizationMemberId)("member_123");
-const nextCursor = "cursor_123" as OrganizationSecurityActivityCursor;
+const nextCursor = decodeCursor("cursor_123");
+const organizationId = decodeOrganizationId("org_123");
 
 const securityActivity = {
   items: [
@@ -26,8 +37,8 @@ const securityActivity = {
       },
       createdAt: "2026-06-07T10:30:00.000Z",
       eventType: "organization_member_role_updated",
-      id: "audit_role" as OrganizationSecurityActivityEventId,
-      organizationId: "org_123" as never,
+      id: decodeAuditEventId("audit_role"),
+      organizationId,
       roleChange: {
         after: "admin",
         before: "member",
@@ -48,8 +59,8 @@ const securityActivity = {
       },
       createdAt: "2026-06-07T11:00:00.000Z",
       eventType: "organization_invitation_created",
-      id: "audit_invite" as OrganizationSecurityActivityEventId,
-      organizationId: "org_123" as never,
+      id: decodeAuditEventId("audit_invite"),
+      organizationId,
       summary: "Invited m***@e***.com.",
       target: {
         label: "m***@e***.com",
@@ -113,7 +124,7 @@ describe("organization security activity page", () => {
         <OrganizationSecurityActivityPage
           activity={securityActivity}
           search={{
-            cursor: "old_cursor" as OrganizationSecurityActivityCursor,
+            cursor: decodeCursor("old_cursor"),
           }}
           onSearchChange={onSearchChange}
         />

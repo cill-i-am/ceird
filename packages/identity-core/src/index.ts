@@ -1,5 +1,5 @@
 /* oxlint-disable eslint/max-classes-per-file */
-import { Effect, Schema, SchemaTransformation } from "effect";
+import { Effect, Option, Schema, SchemaTransformation } from "effect";
 import {
   HttpApi,
   HttpApiEndpoint,
@@ -97,6 +97,19 @@ export const OAuthClientId = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/identity-core/OAuthClientId")
 );
 export type OAuthClientId = Schema.Schema.Type<typeof OAuthClientId>;
+
+export const CEIRD_OAUTH_SCOPES = [
+  "openid",
+  "profile",
+  "email",
+  "offline_access",
+  "ceird:read",
+  "ceird:write",
+  "ceird:admin",
+] as const;
+
+export const CeirdOAuthScopeSchema = Schema.Literals(CEIRD_OAUTH_SCOPES);
+export type CeirdOAuthScope = Schema.Schema.Type<typeof CeirdOAuthScopeSchema>;
 
 export const InvitationId = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/identity-core/InvitationId")
@@ -1090,7 +1103,7 @@ export type OrganizationSecurityActivityEventId = Schema.Schema.Type<
   typeof OrganizationSecurityActivityEventId
 >;
 
-export const OrganizationSecurityActivityCursor = Schema.String.pipe(
+export const OrganizationSecurityActivityCursor = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/identity-core/OrganizationSecurityActivityCursor")
 );
 export type OrganizationSecurityActivityCursor = Schema.Schema.Type<
@@ -1450,6 +1463,42 @@ export function decodeOrganizationId(input: unknown): OrganizationId {
 
 export function decodeUserId(input: unknown): UserId {
   return Schema.decodeUnknownSync(UserId)(input);
+}
+
+export function decodeOptionalOrganizationSecurityActivityCursor(
+  input: unknown
+): OrganizationSecurityActivityCursor | undefined {
+  return Option.getOrUndefined(
+    Schema.decodeUnknownOption(OrganizationSecurityActivityCursor)(input)
+  );
+}
+
+export function decodeOptionalOrganizationSecurityActivityEventType(
+  input: unknown
+): OrganizationSecurityActivityEventType | undefined {
+  return Option.getOrUndefined(
+    Schema.decodeUnknownOption(OrganizationSecurityActivityEventType)(input)
+  );
+}
+
+export function decodeOptionalOrganizationSecurityActivityTargetType(
+  input: unknown
+): OrganizationSecurityActivityTargetType | undefined {
+  return Option.getOrUndefined(
+    Schema.decodeUnknownOption(OrganizationSecurityActivityTargetType)(input)
+  );
+}
+
+export function decodeOptionalIsoDateString(
+  input: unknown
+): IsoDateString | undefined {
+  return Option.getOrUndefined(
+    Schema.decodeUnknownOption(IsoDateString)(input)
+  );
+}
+
+export function decodeOptionalUserId(input: unknown): UserId | undefined {
+  return Option.getOrUndefined(Schema.decodeUnknownOption(UserId)(input));
 }
 
 export function decodeSessionId(input: unknown): SessionId {

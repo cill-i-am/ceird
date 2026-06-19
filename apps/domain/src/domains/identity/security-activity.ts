@@ -548,7 +548,12 @@ function mapActorResolutionErrorsToSecurityActivityErrors<Value, Requirements>(
       [ORGANIZATION_ROLE_NOT_SUPPORTED_ERROR_TAG]: (error) =>
         failOrganizationSecurityActivityAccessDenied(error.message),
       [ORGANIZATION_SESSION_IDENTITY_INVALID_ERROR_TAG]: (error) =>
-        failOrganizationSecurityActivityAccessDenied(error.message),
+        Effect.fail(
+          new OrganizationSecurityActivityStorageError({
+            cause: error.cause,
+            message: error.message,
+          })
+        ),
       [ORGANIZATION_SESSION_REQUIRED_ERROR_TAG]: (error) =>
         failOrganizationSecurityActivityAccessDenied(error.message),
     })

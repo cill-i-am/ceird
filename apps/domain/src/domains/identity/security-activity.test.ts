@@ -3,21 +3,28 @@ import {
   OrganizationSecurityActivityQuerySchema,
   OrganizationSecurityActivityStorageError,
 } from "@ceird/identity-core";
-import type { OrganizationSecurityActivityCursor } from "@ceird/identity-core";
+import type {
+  OrganizationMemberId,
+  OrganizationSecurityActivityCursor,
+} from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
+import { HttpServerRequest } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 
+import { OrganizationAuthorization } from "../organizations/authorization.js";
+import { CurrentOrganizationActor } from "../organizations/current-actor.js";
+import { OrganizationSessionIdentityInvalidError } from "../organizations/errors.js";
 import {
   OrganizationSecurityActivityRowSchema,
   OrganizationSecurityAuditWriteSchema,
 } from "./persistence-schemas.js";
-import type { OrganizationMemberId } from "./persistence-schemas.js";
 import {
   decodeOrganizationSecurityActivityCursor,
   encodeOrganizationSecurityActivityCursor,
   mapOrganizationSecurityActivityRow,
   OrganizationSecurityActivityRepository,
+  OrganizationSecurityActivityService,
 } from "./security-activity.js";
 
 const decodeActivityRow = Schema.decodeUnknownSync(
@@ -679,6 +686,59 @@ describe("organization security activity repository", () => {
     expect(error.message).toBe(
       "Organization security activity row decode failed"
     );
+  });
+});
+
+describe("organization security activity service", () => {
+  it("maps malformed session identity to a storage boundary error", async () => {
+    const error = await Effect.runPromise(
+      Effect.flip(
+        Effect.gen(function* verifyMalformedSessionIdentity() {
+          const service = yield* OrganizationSecurityActivityService;
+          return yield* service.list(decodeSecurityActivityQuery({}));
+        }).pipe(
+          Effect.provide(
+            OrganizationSecurityActivityService.DefaultWithoutDependencies
+          ),
+          Effect.provide(OrganizationAuthorization.Default),
+          Effect.provide(
+            Layer.succeed(
+              CurrentOrganizationActor,
+              CurrentOrganizationActor.of({
+                get: () =>
+                  Effect.fail(
+                    new OrganizationSessionIdentityInvalidError({
+                      cause: "Expected a non-empty user id",
+                      field: "userId",
+                      message: "Session user id is invalid",
+                    })
+                  ),
+              })
+            )
+          ),
+          Effect.provide(
+            Layer.succeed(
+              OrganizationSecurityActivityRepository,
+              OrganizationSecurityActivityRepository.of({
+                list: () =>
+                  Effect.die(
+                    "Repository should not run when session identity is malformed"
+                  ),
+              })
+            )
+          ),
+          Effect.provide(
+            Layer.succeed(
+              HttpServerRequest.HttpServerRequest,
+              {} as HttpServerRequest.HttpServerRequest
+            )
+          )
+        )
+      )
+    );
+
+    expect(error).toBeInstanceOf(OrganizationSecurityActivityStorageError);
+    expect(error.message).toBe("Session user id is invalid");
   });
 });
 

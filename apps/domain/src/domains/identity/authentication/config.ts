@@ -1,3 +1,5 @@
+import { CEIRD_OAUTH_SCOPES } from "@ceird/identity-core";
+import type { CeirdOAuthScope } from "@ceird/identity-core";
 import { Layer, Context, Config, Effect, Option, Schema, pipe } from "effect";
 
 import {
@@ -11,6 +13,9 @@ import {
 } from "./auth-rate-limit-cleanup.js";
 import type { RateLimitCleanupConfig } from "./auth-rate-limit-cleanup.js";
 
+export { CEIRD_OAUTH_SCOPES };
+export type { CeirdOAuthScope };
+
 export const DEFAULT_AUTH_BASE_PATH = "/api/auth" as const;
 export const DEFAULT_AUTH_DATABASE_URL = DEFAULT_APP_DATABASE_URL;
 export const DEFAULT_MCP_RESOURCE_PATH = "/mcp" as const;
@@ -23,16 +28,6 @@ export const AUTH_CAPTCHA_PROTECTED_ENDPOINTS = [
 ] as const;
 export const AUTH_PASSWORD_MIN_LENGTH = 12 as const;
 export const AUTH_PASSWORD_MAX_LENGTH = 256 as const;
-export const CEIRD_OAUTH_SCOPES = [
-  "openid",
-  "profile",
-  "email",
-  "offline_access",
-  "ceird:read",
-  "ceird:write",
-  "ceird:admin",
-] as const;
-export type CeirdOAuthScope = (typeof CEIRD_OAUTH_SCOPES)[number];
 export const CEIRD_OAUTH_CLIENT_REGISTRATION_DEFAULT_SCOPES = [
   "openid",
   "profile",
