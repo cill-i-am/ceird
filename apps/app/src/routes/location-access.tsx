@@ -11,12 +11,7 @@ export const Route = createFileRoute("/location-access")({
 });
 
 function LocationAccessRouteComponent() {
-  const { preferences, preferencesUnavailable } = Route.useLoaderData();
+  const { preferences } = Route.useLoaderData();
 
-  return (
-    <LocationAccessOnboardingPage
-      initialPreferences={preferences}
-      preferencesUnavailable={preferencesUnavailable}
-    />
-  );
+  return <LocationAccessOnboardingPage initialPreferences={preferences} />;
 }

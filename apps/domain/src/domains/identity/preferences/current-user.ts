@@ -19,7 +19,7 @@ export const resolveCurrentUserId = Effect.fn("CurrentUser.resolve")(
     readonly headers: Headers;
     readonly getSession: (
       headers: Headers
-    ) => Promise<CurrentUserSession | null | undefined>;
+    ) => Promise<CurrentUserSession | null>;
   }) {
     const session = yield* Effect.tryPromise({
       try: () => options.getSession(options.headers),
@@ -30,7 +30,7 @@ export const resolveCurrentUserId = Effect.fn("CurrentUser.resolve")(
         }),
     });
 
-    if (session === null || session === undefined) {
+    if (session === null) {
       return yield* Effect.fail(
         new UserPreferencesAccessDeniedError({
           message: "Authentication is required to manage user preferences",
@@ -42,7 +42,7 @@ export const resolveCurrentUserId = Effect.fn("CurrentUser.resolve")(
       Effect.mapError(
         (parseError) =>
           new UserPreferencesAccessDeniedError({
-            message: `Session user id is invalid: ${String(parseError)}`,
+            message: parseError.message,
           })
       )
     );
@@ -59,7 +59,8 @@ export class CurrentUser extends Context.Service<CurrentUser>()(
         const request = yield* HttpServerRequest.HttpServerRequest;
 
         return yield* resolveCurrentUserId({
-          getSession: (headers) => auth.api.getSession({ headers }),
+          getSession: async (headers) =>
+            (await auth.api.getSession({ headers })) ?? null,
           headers: new Headers(request.headers),
         });
       });
@@ -81,5 +82,7 @@ export class CurrentUser extends Context.Service<CurrentUser>()(
 }
 
 function formatUnknownError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return error instanceof Error
+    ? error.message
+    : "Unknown session lookup error";
 }

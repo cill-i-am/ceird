@@ -30,12 +30,16 @@ vi.mock(import("@tanstack/react-router"), async (importActual) => {
 });
 
 vi.mock(import("#/features/settings/user-preferences-api"), () => ({
-  DEFAULT_USER_PREFERENCES: {
-    routeProximityLocationEnabled: false,
-    updatedAt: "1970-01-01T00:00:00.000Z",
-  },
   updateCurrentUserPreferences: mockedUpdateCurrentUserPreferences,
 }));
+
+const disabledPreferenceState = {
+  preferences: {
+    routeProximityLocationEnabled: false,
+    updatedAt: "2026-06-06T10:00:00.000Z",
+  },
+  status: "available",
+} as const;
 
 describe("location access onboarding page", () => {
   beforeEach(() => {
@@ -56,7 +60,11 @@ describe("location access onboarding page", () => {
   it("renders a skippable first-run location access screen", async () => {
     const user = userEvent.setup();
 
-    render(<LocationAccessOnboardingPage />);
+    render(
+      <LocationAccessOnboardingPage
+        initialPreferences={disabledPreferenceState}
+      />
+    );
 
     expect(
       screen.getByRole("heading", { name: "Location access" })
@@ -77,10 +85,12 @@ describe("location access onboarding page", () => {
     render(
       <LocationAccessOnboardingPage
         initialPreferences={{
-          routeProximityLocationEnabled: true,
-          updatedAt: "2026-06-06T10:00:00.000Z",
+          preferences: {
+            routeProximityLocationEnabled: true,
+            updatedAt: "2026-06-06T10:00:00.000Z",
+          },
+          status: "available",
         }}
-        preferencesUnavailable={false}
       />
     );
 
@@ -96,11 +106,7 @@ describe("location access onboarding page", () => {
   it("shows an unavailable preference state when the route loader cannot load it", () => {
     render(
       <LocationAccessOnboardingPage
-        initialPreferences={{
-          routeProximityLocationEnabled: false,
-          updatedAt: "1970-01-01T00:00:00.000Z",
-        }}
-        preferencesUnavailable
+        initialPreferences={{ status: "unavailable" }}
       />
     );
 
@@ -136,7 +142,11 @@ describe("location access onboarding page", () => {
       value: { getCurrentPosition },
     });
 
-    render(<LocationAccessOnboardingPage />);
+    render(
+      <LocationAccessOnboardingPage
+        initialPreferences={disabledPreferenceState}
+      />
+    );
 
     await user.click(
       screen.getByRole("button", { name: "Enable location access" })
@@ -177,7 +187,11 @@ describe("location access onboarding page", () => {
       value: { getCurrentPosition },
     });
 
-    render(<LocationAccessOnboardingPage />);
+    render(
+      <LocationAccessOnboardingPage
+        initialPreferences={disabledPreferenceState}
+      />
+    );
 
     await user.click(
       screen.getByRole("button", { name: "Enable location access" })
@@ -224,7 +238,11 @@ describe("location access onboarding page", () => {
       value: { getCurrentPosition },
     });
 
-    render(<LocationAccessOnboardingPage />);
+    render(
+      <LocationAccessOnboardingPage
+        initialPreferences={disabledPreferenceState}
+      />
+    );
 
     await user.click(
       screen.getByRole("button", { name: "Enable location access" })

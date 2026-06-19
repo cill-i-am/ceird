@@ -1,0 +1,199 @@
+import { decodeUserId } from "@ceird/identity-core";
+import { afterAll, describe, expect, it } from "@effect/vitest";
+import { Effect, Layer } from "effect";
+
+import {
+  makeAppDatabaseLive,
+  makeAppDatabaseRuntimeLive,
+} from "../../../platform/database/database.js";
+import {
+  applyAllMigrations,
+  canConnect,
+  createTestDatabase,
+  withPool,
+} from "../../../platform/database/test-database.js";
+import { UserPreferencesRepository } from "./repository.js";
+
+describe("user preferences repository", () => {
+  const cleanup: (() => Promise<void>)[] = [];
+
+  afterAll(async () => {
+    for (const step of cleanup.toReversed()) {
+      await step();
+    }
+  }, 30_000);
+
+  it("materializes missing rows with database-owned defaults", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "preferences_repository",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Preferences repository integration database unavailable; skipping materialization coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    const userId = decodeUserId("user_preferences_repository_1");
+
+    await withPool(testDatabase.url, async (pool) => {
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ($1, $2, $3)`,
+        [userId, "Preference Owner", "preferences-repository@example.com"]
+      );
+    });
+
+    const live = UserPreferencesRepository.Default.pipe(
+      Layer.provide(
+        makeAppDatabaseRuntimeLive(makeAppDatabaseLive(testDatabase.url))
+      )
+    );
+
+    const firstRead = await Effect.runPromise(
+      UserPreferencesRepository.get(userId).pipe(Effect.provide(live))
+    );
+    const secondRead = await Effect.runPromise(
+      UserPreferencesRepository.get(userId).pipe(Effect.provide(live))
+    );
+
+    expect(firstRead.routeProximityLocationEnabled).toBe(false);
+    expect(firstRead.updatedAt).toMatch(/^20\d{2}-/u);
+    expect(secondRead).toStrictEqual(firstRead);
+
+    await withPool(testDatabase.url, async (pool) => {
+      const rows = await pool.query<{
+        readonly route_proximity_location_enabled: boolean;
+        readonly updated_at: Date;
+      }>(
+        `select route_proximity_location_enabled, updated_at
+         from user_preferences
+         where user_id = $1`,
+        [userId]
+      );
+
+      expect(rows.rowCount).toBe(1);
+      expect(rows.rows[0]).toMatchObject({
+        route_proximity_location_enabled: false,
+      });
+      expect(rows.rows[0]?.updated_at.toISOString()).toBe(firstRead.updatedAt);
+    });
+  }, 30_000);
+
+  it("maps invalid patch decodes to storage errors", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "preferences_repository_invalid_patch",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Preferences repository integration database unavailable; skipping patch decode coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    const live = UserPreferencesRepository.Default.pipe(
+      Layer.provide(
+        makeAppDatabaseRuntimeLive(makeAppDatabaseLive(testDatabase.url))
+      )
+    );
+    const userId = decodeUserId("user_preferences_repository_invalid_patch");
+    const invalidPatch: unknown = structuredClone({
+      routeProximityLocationEnabled: "yes",
+      userId,
+    });
+
+    // Simulates an untyped caller crossing into the repository boundary.
+    const result = await Effect.runPromiseExit(
+      Reflect.apply(UserPreferencesRepository.update, undefined, [
+        invalidPatch,
+      ]).pipe(Effect.provide(live))
+    );
+
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      const error = result.cause.toJSON();
+
+      expect(JSON.stringify(error)).toContain(
+        "User preferences patch row decode failed"
+      );
+    }
+  }, 30_000);
+
+  it("maps persisted row decode failures to storage errors", async (context: {
+    skip: (note?: string) => never;
+  }) => {
+    const testDatabase = await createTestDatabase({
+      prefix: "preferences_repository_invalid_row",
+    });
+    cleanup.push(testDatabase.cleanup);
+
+    const canReachDatabase = await withPool(
+      testDatabase.url,
+      async (pool) => await canConnect(pool)
+    );
+
+    if (!canReachDatabase) {
+      context.skip(
+        "Preferences repository integration database unavailable; skipping decode failure coverage"
+      );
+    }
+
+    await applyAllMigrations(testDatabase.url);
+
+    await withPool(testDatabase.url, async (pool) => {
+      await pool.query(
+        `insert into "user" (id, name, email)
+         values ($1, $2, $3)`,
+        ["", "Invalid Preference Owner", "invalid-preferences@example.com"]
+      );
+      await pool.query(
+        `insert into user_preferences (user_id)
+         values ($1)`,
+        [""]
+      );
+    });
+
+    const live = UserPreferencesRepository.Default.pipe(
+      Layer.provide(
+        makeAppDatabaseRuntimeLive(makeAppDatabaseLive(testDatabase.url))
+      )
+    );
+
+    const invalidUserId: unknown = structuredClone("");
+    // Simulates an untyped caller crossing into the repository boundary.
+    const result = await Effect.runPromiseExit(
+      Reflect.apply(UserPreferencesRepository.get, undefined, [
+        invalidUserId,
+      ]).pipe(Effect.provide(live))
+    );
+
+    expect(result._tag).toBe("Failure");
+    if (result._tag === "Failure") {
+      const error = result.cause.toJSON();
+
+      expect(JSON.stringify(error)).toContain(
+        "User preferences selected row decode failed"
+      );
+    }
+  }, 30_000);
+});

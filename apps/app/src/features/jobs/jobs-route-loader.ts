@@ -26,7 +26,7 @@ import {
 import type { JobsViewer } from "#/features/jobs/jobs-viewer";
 import { requireOrganizationRouteContextRole } from "#/features/organizations/organization-route-access";
 import type { OrganizationProductRouteContext } from "#/features/organizations/organization-route-access";
-import { loadRouteProximityLocationPreferenceEnabled } from "#/features/settings/route-proximity-location-preference";
+import { loadRouteProximityLocationPreferenceStatus } from "#/features/settings/route-proximity-location-preference";
 
 const EMPTY_JOBS_LIST: JobListResponse = {
   items: [],
@@ -49,7 +49,7 @@ export async function loadJobsRouteData(
       list: EMPTY_JOBS_LIST,
       listScope,
       options: EMPTY_JOBS_OPTIONS,
-      routeProximityLocationEnabled: false,
+      routeProximityLocationPreferenceStatus: "unavailable",
       viewer: {
         role: "member",
         userId: decodeJobsViewerUserId(organizationAccess.currentUserId),
@@ -64,7 +64,7 @@ export async function loadJobsRouteData(
   } satisfies JobsViewer;
   const listRequestStartedAt = Date.now();
   const routeProximityLocationPreferencePromise =
-    loadRouteProximityLocationPreferenceEnabled();
+    loadRouteProximityLocationPreferenceStatus();
   const listPromise = listCurrentServerJobs(listScope.query);
   let optionsRequestStartedAt = Date.now();
   let optionsPromise: Promise<JobOptionsResponse> | undefined;
@@ -86,7 +86,7 @@ export async function loadJobsRouteData(
     options = await loadCurrentJobsOptionsForViewer(viewer);
   }
 
-  const routeProximityLocationEnabled =
+  const routeProximityLocationPreferenceStatus =
     await routeProximityLocationPreferencePromise;
   const scope = createOrganizationDataScope({
     organizationId: organizationAccess.activeOrganizationId,
@@ -124,7 +124,7 @@ export async function loadJobsRouteData(
       },
       listScope,
       options: seededOptions?.options ?? options,
-      routeProximityLocationEnabled,
+      routeProximityLocationPreferenceStatus,
       viewer,
     };
   }
@@ -134,7 +134,7 @@ export async function loadJobsRouteData(
     list,
     listScope,
     options,
-    routeProximityLocationEnabled,
+    routeProximityLocationPreferenceStatus,
     viewer,
   };
 }

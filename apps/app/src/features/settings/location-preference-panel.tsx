@@ -6,12 +6,13 @@ import * as React from "react";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 
+import type { UserPreferencesLoadState } from "./user-preferences-api";
+
 export interface LocationPreferencePanelProps {
   readonly getPreferenceChangeFailureMessage?:
     | ((error: unknown) => string | undefined)
     | undefined;
-  readonly preferences: UserPreferences;
-  readonly unavailable?: boolean | undefined;
+  readonly preferences: UserPreferencesLoadState;
   readonly onBeforeEnable?: (() => Promise<void>) | undefined;
   readonly onPreferenceChange: (enabled: boolean) => Promise<UserPreferences>;
 }
@@ -20,9 +21,9 @@ export function LocationPreferencePanel({
   getPreferenceChangeFailureMessage,
   onBeforeEnable,
   preferences,
-  unavailable = false,
   onPreferenceChange,
 }: LocationPreferencePanelProps) {
+  const unavailable = preferences.status === "unavailable";
   const [isSaving, setIsSaving] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(
     unavailable ? "Location preference could not be loaded." : null
@@ -41,7 +42,10 @@ export function LocationPreferencePanel({
     );
   }, [unavailable]);
 
-  const enabled = preferences.routeProximityLocationEnabled;
+  const enabled =
+    preferences.status === "available"
+      ? preferences.preferences.routeProximityLocationEnabled
+      : false;
   const statusLabel = getLocationPreferenceStatusLabel({
     enabled,
     unavailable,

@@ -377,7 +377,7 @@ describe("workspace sheet stack", () => {
       deferredSitesRouteData.resolve({
         dataPlaneSeeds: [],
         options: { sites: [] },
-        routeProximityLocationEnabled: true,
+        routeProximityLocationPreferenceStatus: "enabled",
         viewer: { role: "owner", userId: "user_123" as never },
       });
       await deferredSitesRouteData.promise;

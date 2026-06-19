@@ -108,7 +108,7 @@ describe("jobs route loader", () => {
     await expect(resultPromise).resolves.toMatchObject({
       list,
       options,
-      routeProximityLocationEnabled: true,
+      routeProximityLocationPreferenceStatus: "enabled",
       viewer: {
         role: "owner",
         userId: "user_123",
@@ -284,7 +284,7 @@ describe("jobs route loader", () => {
     ).resolves.toMatchObject({
       list,
       options,
-      routeProximityLocationEnabled: false,
+      routeProximityLocationPreferenceStatus: "unavailable",
     });
   });
 });

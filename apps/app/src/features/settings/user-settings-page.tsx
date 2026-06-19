@@ -25,10 +25,8 @@ import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
 import { LocationPreferencePanel } from "./location-preference-panel";
 import { UserConnectedAppsPanel } from "./user-connected-apps-panel";
-import {
-  DEFAULT_USER_PREFERENCES,
-  updateCurrentUserPreferences,
-} from "./user-preferences-api";
+import { updateCurrentUserPreferences } from "./user-preferences-api";
+import type { UserPreferencesLoadState } from "./user-preferences-api";
 import { UserSecuritySessionsPanel } from "./user-security-sessions-panel";
 import {
   changeEmailSchema,
@@ -170,14 +168,12 @@ export function UserSettingsPage({
   currentOrganizationRole,
   user,
   emailChangeStatus,
-  preferences = DEFAULT_USER_PREFERENCES,
-  preferencesUnavailable = false,
+  preferences,
 }: {
   readonly currentOrganizationRole?: OrganizationRole | undefined;
   readonly user: UserSettingsAccount;
   readonly emailChangeStatus?: EmailChangeStatus | undefined;
-  readonly preferences?: UserPreferences | undefined;
-  readonly preferencesUnavailable?: boolean | undefined;
+  readonly preferences: UserPreferencesLoadState;
 }) {
   const router = useRouter();
   const isHydrated = useIsHydrated();
@@ -195,7 +191,13 @@ export function UserSettingsPage({
   } = settingsState;
   const [updatedPreferences, setUpdatedPreferences] =
     React.useState<UserPreferences | null>(null);
-  const currentPreferences = updatedPreferences ?? preferences;
+  const currentPreferences: UserPreferencesLoadState =
+    updatedPreferences === null
+      ? preferences
+      : {
+          preferences: updatedPreferences,
+          status: "available",
+        };
   const emailStatusMessage = React.useMemo(
     () => getEmailChangeStatusMessage(emailChangeStatus),
     [emailChangeStatus]
@@ -544,7 +546,6 @@ export function UserSettingsPage({
           >
             <LocationPreferencePanel
               preferences={currentPreferences}
-              unavailable={preferencesUnavailable}
               onPreferenceChange={async (routeProximityLocationEnabled) => {
                 const response = await updateCurrentUserPreferences({
                   routeProximityLocationEnabled,

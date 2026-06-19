@@ -6,10 +6,8 @@ import * as React from "react";
 import { Button } from "#/components/ui/button";
 import { EntryShell, EntrySurfaceCard } from "#/features/auth/entry-shell";
 import { LocationPreferencePanel } from "#/features/settings/location-preference-panel";
-import {
-  DEFAULT_USER_PREFERENCES,
-  updateCurrentUserPreferences,
-} from "#/features/settings/user-preferences-api";
+import { updateCurrentUserPreferences } from "#/features/settings/user-preferences-api";
+import type { UserPreferencesLoadState } from "#/features/settings/user-preferences-api";
 import {
   formatBrowserGeolocationError,
   requestBrowserGeolocation,
@@ -18,19 +16,26 @@ import type { BrowserGeolocationError } from "#/lib/browser-geolocation";
 import { cn } from "#/lib/utils";
 
 export function LocationAccessOnboardingPage({
-  initialPreferences = DEFAULT_USER_PREFERENCES,
-  preferencesUnavailable = false,
+  initialPreferences,
 }: {
-  readonly initialPreferences?: UserPreferences | undefined;
-  readonly preferencesUnavailable?: boolean | undefined;
+  readonly initialPreferences: UserPreferencesLoadState;
 }) {
   const navigate = useNavigate({ from: "/location-access" });
   const [savedPreferences, setSavedPreferences] =
     React.useState<UserPreferences | null>(null);
   const [locationPreferenceSaving, setLocationPreferenceSaving] =
     React.useState(false);
-  const preferences = savedPreferences ?? initialPreferences;
-  const hasEnabledLocationAccess = preferences.routeProximityLocationEnabled;
+  const preferences: UserPreferencesLoadState =
+    savedPreferences === null
+      ? initialPreferences
+      : {
+          preferences: savedPreferences,
+          status: "available",
+        };
+  const hasEnabledLocationAccess =
+    preferences.status === "available"
+      ? preferences.preferences.routeProximityLocationEnabled
+      : false;
 
   return (
     <main className="flex min-h-screen">
@@ -69,7 +74,6 @@ export function LocationAccessOnboardingPage({
         >
           <LocationPreferencePanel
             preferences={preferences}
-            unavailable={preferencesUnavailable}
             getPreferenceChangeFailureMessage={(error) =>
               error instanceof Error ? error.message : undefined
             }

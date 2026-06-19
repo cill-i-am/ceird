@@ -1,13 +1,8 @@
-import type { UserPreferences } from "@ceird/identity-core";
-
-import {
-  DEFAULT_USER_PREFERENCES,
-  getCurrentUserPreferences,
-} from "./user-preferences-api";
+import { getCurrentUserPreferences } from "./user-preferences-api";
+import type { UserPreferencesLoadState } from "./user-preferences-api";
 
 export interface UserSettingsRouteData {
-  readonly preferences: UserPreferences;
-  readonly preferencesUnavailable: boolean;
+  readonly preferences: UserPreferencesLoadState;
 }
 
 export async function loadUserSettingsRouteData(): Promise<UserSettingsRouteData> {
@@ -15,13 +10,16 @@ export async function loadUserSettingsRouteData(): Promise<UserSettingsRouteData
     const response = await getCurrentUserPreferences();
 
     return {
-      preferences: response.preferences,
-      preferencesUnavailable: false,
+      preferences: {
+        preferences: response.preferences,
+        status: "available",
+      },
     };
   } catch {
     return {
-      preferences: DEFAULT_USER_PREFERENCES,
-      preferencesUnavailable: true,
+      preferences: {
+        status: "unavailable",
+      },
     };
   }
 }

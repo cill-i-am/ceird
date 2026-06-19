@@ -17,6 +17,14 @@ import type * as AuthClientModule from "#/lib/auth-client";
 
 import { UserSettingsPage } from "./user-settings-page";
 
+type UserSettingsPageProps = Parameters<typeof UserSettingsPage>[0];
+type UserSettingsPageRenderProps = Omit<
+  UserSettingsPageProps,
+  "preferences"
+> & {
+  readonly preferences?: UserSettingsPageProps["preferences"];
+};
+
 interface AuthClientError {
   readonly message?: string;
   readonly status?: number;
@@ -87,10 +95,9 @@ function isActiveBlockerOptions(
     return false;
   }
 
-  const candidate = options as Partial<UseBlockerOptionsMock>;
   return (
-    candidate.disabled === false &&
-    typeof candidate.shouldBlockFn === "function"
+    Reflect.get(options, "disabled") === false &&
+    typeof Reflect.get(options, "shouldBlockFn") === "function"
   );
 }
 
@@ -180,10 +187,6 @@ const {
 }));
 
 vi.mock(import("./user-preferences-api"), () => ({
-  DEFAULT_USER_PREFERENCES: {
-    routeProximityLocationEnabled: false,
-    updatedAt: "1970-01-01T00:00:00.000Z",
-  },
   updateCurrentUserPreferences: mockedUpdateUserPreferences,
 }));
 
@@ -247,6 +250,20 @@ describe("user settings page", () => {
     name: "Taylor Example",
     twoFactorEnabled: false,
   };
+  const persistedPreferences = {
+    preferences: {
+      routeProximityLocationEnabled: false,
+      updatedAt: "2026-06-06T10:00:00.000Z",
+    },
+    status: "available",
+  } as const;
+
+  function renderUserSettingsPage({
+    preferences = persistedPreferences,
+    ...props
+  }: UserSettingsPageRenderProps) {
+    return render(<UserSettingsPage {...props} preferences={preferences} />);
+  }
 
   beforeEach(() => {
     window.history.replaceState({}, "", "/settings");
@@ -348,7 +365,7 @@ describe("user settings page", () => {
   }
 
   it("frames account settings with direct form tabs", async () => {
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
 
     expect(
       screen.getByRole("heading", { name: "Account settings" })
@@ -404,7 +421,7 @@ describe("user settings page", () => {
   });
 
   it("loads connected apps from the security settings tab", async () => {
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
 
     await selectTab("Security");
 
@@ -420,7 +437,7 @@ describe("user settings page", () => {
   it("updates the profile and refreshes route data", async () => {
     const interaction = userEvent.setup();
 
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Profile");
 
     const nameInput = screen.getByLabelText("Display name");
@@ -449,8 +466,11 @@ describe("user settings page", () => {
       <UserSettingsPage
         user={user}
         preferences={{
-          routeProximityLocationEnabled: false,
-          updatedAt: "2026-06-06T10:00:00.000Z",
+          preferences: {
+            routeProximityLocationEnabled: false,
+            updatedAt: "2026-06-06T10:00:00.000Z",
+          },
+          status: "available",
         }}
       />
     );
@@ -491,8 +511,11 @@ describe("user settings page", () => {
       <UserSettingsPage
         user={user}
         preferences={{
-          routeProximityLocationEnabled: true,
-          updatedAt: "2026-06-06T10:00:00.000Z",
+          preferences: {
+            routeProximityLocationEnabled: true,
+            updatedAt: "2026-06-06T10:00:00.000Z",
+          },
+          status: "available",
         }}
       />
     );
@@ -518,14 +541,7 @@ describe("user settings page", () => {
 
   it("does not update location preference from an unavailable loader state", async () => {
     render(
-      <UserSettingsPage
-        user={user}
-        preferencesUnavailable
-        preferences={{
-          routeProximityLocationEnabled: false,
-          updatedAt: "1970-01-01T00:00:00.000Z",
-        }}
-      />
+      <UserSettingsPage user={user} preferences={{ status: "unavailable" }} />
     );
 
     await selectLocationTab();
@@ -541,7 +557,7 @@ describe("user settings page", () => {
   }, 10_000);
 
   it("disables unchanged profile saves", async () => {
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Profile");
 
     expect(screen.getByRole("button", { name: "Save profile" })).toBeDisabled();
@@ -552,7 +568,7 @@ describe("user settings page", () => {
   it("clears stale profile status copy when profile fields change", async () => {
     const interaction = userEvent.setup();
 
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Profile");
 
     const nameInput = screen.getByLabelText("Display name");
@@ -574,7 +590,7 @@ describe("user settings page", () => {
   it("starts a verified email change with the settings callback URL", async () => {
     const interaction = userEvent.setup();
 
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Email");
 
     await interaction.type(
@@ -597,7 +613,7 @@ describe("user settings page", () => {
   }, 10_000);
 
   it("shows a neutral completion message after an email verification callback", () => {
-    render(<UserSettingsPage user={user} emailChangeStatus="complete" />);
+    renderUserSettingsPage({ user, emailChangeStatus: "complete" });
 
     expect(
       screen.getByText(
@@ -607,7 +623,7 @@ describe("user settings page", () => {
   }, 10_000);
 
   it("shows a failure message after an invalid email verification callback", () => {
-    render(<UserSettingsPage user={user} emailChangeStatus="failed" />);
+    renderUserSettingsPage({ user, emailChangeStatus: "failed" });
 
     expect(
       screen.getByText(
@@ -618,7 +634,11 @@ describe("user settings page", () => {
 
   it("syncs the email callback message when route search changes", () => {
     const { rerender } = render(
-      <UserSettingsPage user={user} emailChangeStatus="complete" />
+      <UserSettingsPage
+        user={user}
+        emailChangeStatus="complete"
+        preferences={persistedPreferences}
+      />
     );
 
     expect(
@@ -627,7 +647,9 @@ describe("user settings page", () => {
       )
     ).toBeInTheDocument();
 
-    rerender(<UserSettingsPage user={user} />);
+    rerender(
+      <UserSettingsPage user={user} preferences={persistedPreferences} />
+    );
 
     expect(
       screen.queryByText(
@@ -637,7 +659,7 @@ describe("user settings page", () => {
   }, 10_000);
 
   it("keeps the email callback failure ahead of success copy", () => {
-    render(<UserSettingsPage user={user} emailChangeStatus="failed" />);
+    renderUserSettingsPage({ user, emailChangeStatus: "failed" });
 
     expect(
       screen.queryByText(
@@ -649,7 +671,7 @@ describe("user settings page", () => {
   it("rejects same-email changes before calling Better Auth", async () => {
     const interaction = userEvent.setup();
 
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Email");
 
     await interaction.type(
@@ -669,7 +691,7 @@ describe("user settings page", () => {
   it("changes the password and revokes other sessions", async () => {
     const interaction = userEvent.setup();
 
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Password");
 
     await interaction.type(
@@ -705,7 +727,7 @@ describe("user settings page", () => {
 
     render(
       <HotkeysProvider>
-        <UserSettingsPage user={user} />
+        <UserSettingsPage user={user} preferences={persistedPreferences} />
       </HotkeysProvider>
     );
 
@@ -772,7 +794,7 @@ describe("user settings page", () => {
 
     render(
       <HotkeysProvider>
-        <UserSettingsPage user={user} />
+        <UserSettingsPage user={user} preferences={persistedPreferences} />
       </HotkeysProvider>
     );
 
@@ -803,7 +825,7 @@ describe("user settings page", () => {
   it("rejects unchanged password submissions before calling Better Auth", async () => {
     const interaction = userEvent.setup();
 
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Password");
 
     await interaction.type(
@@ -841,7 +863,7 @@ describe("user settings page", () => {
       },
     });
 
-    render(<UserSettingsPage user={{ ...user, name: "Original Name" }} />);
+    renderUserSettingsPage({ user: { ...user, name: "Original Name" } });
     await selectTab("Profile");
 
     const nameInput = screen.getByLabelText("Display name");
@@ -868,7 +890,7 @@ describe("user settings page", () => {
       },
     });
 
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Email");
 
     await interaction.type(
@@ -895,7 +917,7 @@ describe("user settings page", () => {
       },
     });
 
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Password");
 
     await interaction.type(
@@ -924,6 +946,7 @@ describe("user settings page", () => {
       <UserSettingsPage
         user={{ ...user, emailVerified: false }}
         currentOrganizationRole="owner"
+        preferences={persistedPreferences}
       />
     );
     await selectTab("Security");
@@ -949,6 +972,7 @@ describe("user settings page", () => {
     render(
       <UserSettingsPage
         user={{ ...user, emailVerified: false, twoFactorEnabled: true }}
+        preferences={persistedPreferences}
       />
     );
     await selectTab("Security");
@@ -965,7 +989,7 @@ describe("user settings page", () => {
   it("enables two-factor authentication and requires backup-code acknowledgement", async () => {
     const interaction = userEvent.setup();
 
-    render(<UserSettingsPage user={user} currentOrganizationRole="owner" />);
+    renderUserSettingsPage({ user, currentOrganizationRole: "owner" });
     await selectTab("Security");
 
     expect(
@@ -1036,7 +1060,7 @@ describe("user settings page", () => {
   it("keeps backup codes visible while switching settings tabs before acknowledgement", async () => {
     const interaction = userEvent.setup();
 
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Security");
 
     await interaction.type(
@@ -1065,7 +1089,7 @@ describe("user settings page", () => {
   it("warns before route navigation while backup codes are unacknowledged", async () => {
     const interaction = userEvent.setup();
 
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Security");
 
     await interaction.type(
@@ -1110,7 +1134,7 @@ describe("user settings page", () => {
       Promise.withResolvers<Awaited<ReturnType<VerifyTotpMock>>>();
     mockedVerifyTotp.mockReturnValueOnce(pendingVerification.promise);
 
-    render(<UserSettingsPage user={user} />);
+    renderUserSettingsPage({ user });
     await selectTab("Security");
 
     await interaction.type(
@@ -1143,7 +1167,7 @@ describe("user settings page", () => {
   it("regenerates backup codes only after password confirmation", async () => {
     const interaction = userEvent.setup();
 
-    render(<UserSettingsPage user={{ ...user, twoFactorEnabled: true }} />);
+    renderUserSettingsPage({ user: { ...user, twoFactorEnabled: true } });
     await selectTab("Security");
 
     await interaction.click(
@@ -1180,7 +1204,7 @@ describe("user settings page", () => {
   it("disables two-factor authentication after explicit password confirmation", async () => {
     const interaction = userEvent.setup();
 
-    render(<UserSettingsPage user={{ ...user, twoFactorEnabled: true }} />);
+    renderUserSettingsPage({ user: { ...user, twoFactorEnabled: true } });
     await selectTab("Security");
 
     await interaction.click(

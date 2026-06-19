@@ -96,7 +96,7 @@ consent rows, and `oauth_consent_revoked` audit write values through Effect
 Schema before returning values to services.
 
 Current `DomainDrizzle` migrations include organization label CRUD and
-active-label reads, user preference get/upsert paths, current organization actor
+active-label reads, user preference materialize/update paths, current organization actor
 membership lookup, MCP actor session/membership lookup, straightforward agent
 thread create/list/find/archive/touch/actor-resolution reads, ordinary
 connected-app grant list/disconnect operations, connected-app consent checks for
@@ -106,6 +106,10 @@ member/contact/collaborator reads, accessible-work-item ids, selected job detail
 projections, and work-item label reads. These paths keep explicit column
 projections and continue to map Drizzle query failures into the same domain
 storage-error surfaces as their previous raw SQL implementations.
+The user preference get path is intentionally write-capable: if the row is
+missing, it inserts a row keyed by the branded user id and relies on
+`user_preferences` database defaults for the opt-in boolean and timestamps
+before decoding the persisted row.
 
 After the TSK-164 final pass, production domain repositories retain 58
 `yield* sql` raw Effect SQL call sites across eight files. The unused
