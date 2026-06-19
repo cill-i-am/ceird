@@ -102,6 +102,7 @@ function AdministratorRouteHotkeys() {
           cursor: undefined,
           eventType: undefined,
           fromDate: undefined,
+          limit: 50,
           targetSearch: undefined,
           targetType: undefined,
           toDate: undefined,

@@ -1,5 +1,5 @@
 /* oxlint-disable eslint/max-classes-per-file */
-import { Effect, Option, Schema, SchemaTransformation } from "effect";
+import { Effect, Schema, SchemaTransformation } from "effect";
 import {
   HttpApi,
   HttpApiEndpoint,
@@ -1465,50 +1465,6 @@ export function decodeUserId(input: unknown): UserId {
   return Schema.decodeUnknownSync(UserId)(input);
 }
 
-export function decodeOptionalOrganizationSecurityActivityCursor(
-  input: unknown
-): OrganizationSecurityActivityCursor | undefined {
-  return Option.getOrUndefined(
-    Schema.decodeUnknownOption(OrganizationSecurityActivityCursor)(input)
-  );
-}
-
-export function decodeOptionalOrganizationSecurityActivityEventType(
-  input: unknown
-): OrganizationSecurityActivityEventType | undefined {
-  return Option.getOrUndefined(
-    Schema.decodeUnknownOption(OrganizationSecurityActivityEventType)(input)
-  );
-}
-
-export function decodeOptionalOrganizationSecurityActivityTargetType(
-  input: unknown
-): OrganizationSecurityActivityTargetType | undefined {
-  return Option.getOrUndefined(
-    Schema.decodeUnknownOption(OrganizationSecurityActivityTargetType)(input)
-  );
-}
-
-export function decodeOptionalOrganizationSecurityActivityTargetSearch(
-  input: unknown
-): string | undefined {
-  return Option.getOrUndefined(
-    Schema.decodeUnknownOption(NonEmptyTrimmedString)(input)
-  );
-}
-
-export function decodeOptionalIsoDateString(
-  input: unknown
-): IsoDateString | undefined {
-  return Option.getOrUndefined(
-    Schema.decodeUnknownOption(IsoDateString)(input)
-  );
-}
-
-export function decodeOptionalUserId(input: unknown): UserId | undefined {
-  return Option.getOrUndefined(Schema.decodeUnknownOption(UserId)(input));
-}
-
 export function decodeSessionId(input: unknown): SessionId {
   return Schema.decodeUnknownSync(SessionId)(input);
 }
@@ -1595,6 +1551,32 @@ export function decodeOrganizationSecurityActivityListResponse(
   return Schema.decodeUnknownSync(
     OrganizationSecurityActivityListResponseSchema
   )(input);
+}
+
+export function decodeOrganizationSecurityActivityQuery(
+  input: unknown
+): OrganizationSecurityActivityQuery {
+  return Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)(
+    input
+  );
+}
+
+export function decodeOrganizationSecurityActivityEventType(
+  input: unknown
+): OrganizationSecurityActivityEventType {
+  return Schema.decodeUnknownSync(OrganizationSecurityActivityEventType)(input);
+}
+
+export function decodeOrganizationSecurityActivityTargetType(
+  input: unknown
+): OrganizationSecurityActivityTargetType {
+  return Schema.decodeUnknownSync(OrganizationSecurityActivityTargetType)(
+    input
+  );
+}
+
+export function decodeIsoDateString(input: unknown): IsoDateString {
+  return Schema.decodeUnknownSync(IsoDateString)(input);
 }
 
 export function decodeInvitationId(input: unknown): InvitationId {

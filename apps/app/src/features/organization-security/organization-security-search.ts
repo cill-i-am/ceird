@@ -1,16 +1,14 @@
 import {
-  decodeOptionalIsoDateString,
-  decodeOptionalOrganizationSecurityActivityCursor,
-  decodeOptionalOrganizationSecurityActivityEventType,
-  decodeOptionalOrganizationSecurityActivityTargetSearch,
-  decodeOptionalOrganizationSecurityActivityTargetType,
-  decodeOptionalUserId,
+  decodeIsoDateString,
+  decodeOrganizationSecurityActivityEventType as decodeActivityEventType,
+  decodeOrganizationSecurityActivityQuery,
+  decodeOrganizationSecurityActivityTargetType as decodeActivityTargetType,
 } from "@ceird/identity-core";
 import type {
   IsoDateString,
   OrganizationSecurityActivityCursor,
+  OrganizationSecurityActivityQuery,
   OrganizationSecurityActivityEventType,
-  OrganizationSecurityActivityQueryInput,
   OrganizationSecurityActivityTargetType,
   UserId,
 } from "@ceird/identity-core";
@@ -20,6 +18,7 @@ export interface OrganizationSecurityActivitySearch {
   readonly cursor?: OrganizationSecurityActivityCursor | undefined;
   readonly eventType?: OrganizationSecurityActivityEventType | undefined;
   readonly fromDate?: IsoDateString | undefined;
+  readonly limit?: number | undefined;
   readonly targetSearch?: string | undefined;
   readonly targetType?: OrganizationSecurityActivityTargetType | undefined;
   readonly toDate?: IsoDateString | undefined;
@@ -28,53 +27,35 @@ export interface OrganizationSecurityActivitySearch {
 export function decodeOrganizationSecurityActivitySearch(
   input: Record<string, unknown>
 ) {
-  return {
-    actorUserId: decodeActorUserId(input.actorUserId),
-    cursor: decodeCursor(input.cursor),
-    eventType: decodeOrganizationSecurityActivityEventType(input.eventType),
-    fromDate: decodeIsoDate(input.fromDate),
-    targetSearch: decodeOrganizationSecurityActivityTargetSearch(
-      input.targetSearch
-    ),
-    targetType: decodeOrganizationSecurityActivityTargetType(input.targetType),
-    toDate: decodeIsoDate(input.toDate),
-  } satisfies OrganizationSecurityActivitySearch;
+  return decodeOrganizationSecurityActivityQuery(
+    input
+  ) satisfies OrganizationSecurityActivityQuery;
 }
 
 export function toOrganizationSecurityActivityQuery(
   search: OrganizationSecurityActivitySearch
-): OrganizationSecurityActivityQueryInput {
-  return {
-    actorUserId: search.actorUserId,
-    cursor: search.cursor,
-    eventType: search.eventType,
-    fromDate: search.fromDate,
-    targetSearch: search.targetSearch,
-    targetType: search.targetType,
-    toDate: search.toDate,
-  };
-}
-
-function decodeCursor(value: unknown) {
-  return decodeOptionalOrganizationSecurityActivityCursor(value);
-}
-
-function decodeActorUserId(value: unknown) {
-  return decodeOptionalUserId(value);
+): OrganizationSecurityActivityQuery {
+  return decodeOrganizationSecurityActivityQuery(search);
 }
 
 export function decodeOrganizationSecurityActivityEventType(value: unknown) {
-  return decodeOptionalOrganizationSecurityActivityEventType(value);
+  return value === "" ? undefined : decodeActivityEventType(value);
 }
 
 export function decodeOrganizationSecurityActivityTargetType(value: unknown) {
-  return decodeOptionalOrganizationSecurityActivityTargetType(value);
+  return value === "" ? undefined : decodeActivityTargetType(value);
 }
 
 export function decodeIsoDate(value: unknown) {
-  return decodeOptionalIsoDateString(value);
+  return value === "" ? undefined : decodeIsoDateString(value);
 }
 
 export function decodeOrganizationSecurityActivityTargetSearch(value: unknown) {
-  return decodeOptionalOrganizationSecurityActivityTargetSearch(value);
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return;
+  }
+
+  return decodeOrganizationSecurityActivityQuery({
+    targetSearch: value,
+  }).targetSearch;
 }

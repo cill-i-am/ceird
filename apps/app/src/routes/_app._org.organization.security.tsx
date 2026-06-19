@@ -1,3 +1,4 @@
+import type { OrganizationSecurityActivityQuery } from "@ceird/identity-core";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { OrganizationSecurityActivityPage } from "#/features/organization-security/organization-security-activity-page";
@@ -12,13 +13,14 @@ import type { WorkspaceSheetSearch } from "#/features/workspace-sheets/workspace
 export { decodeOrganizationSecurityActivitySearch };
 
 export function getOrganizationSecurityActivityRouteLoaderDeps(
-  search: OrganizationSecurityActivitySearch
+  search: OrganizationSecurityActivityQuery
 ) {
   return {
     actorUserId: search.actorUserId,
     cursor: search.cursor,
     eventType: search.eventType,
     fromDate: search.fromDate,
+    limit: search.limit,
     targetSearch: search.targetSearch,
     targetType: search.targetType,
     toDate: search.toDate,
@@ -61,7 +63,7 @@ function OrganizationSecurityActivityRoute() {
 }
 
 export function mergeOrganizationSecurityActivitySearch(
-  current: OrganizationSecurityActivitySearch & WorkspaceSheetSearch,
+  current: OrganizationSecurityActivityQuery & WorkspaceSheetSearch,
   next: OrganizationSecurityActivitySearch
 ) {
   const nextSecuritySearch = omitEmptyOrganizationSecurityActivitySearch(next);
@@ -72,6 +74,7 @@ export function mergeOrganizationSecurityActivitySearch(
     cursor: nextSecuritySearch.cursor,
     eventType: nextSecuritySearch.eventType,
     fromDate: nextSecuritySearch.fromDate,
+    limit: nextSecuritySearch.limit ?? current.limit,
     targetSearch: nextSecuritySearch.targetSearch,
     targetType: nextSecuritySearch.targetType,
     toDate: nextSecuritySearch.toDate,
@@ -86,6 +89,7 @@ export function omitEmptyOrganizationSecurityActivitySearch(
     cursor: search.cursor || undefined,
     eventType: search.eventType || undefined,
     fromDate: search.fromDate || undefined,
+    limit: search.limit,
     targetSearch: decodeOrganizationSecurityActivityTargetSearch(
       search.targetSearch
     ),

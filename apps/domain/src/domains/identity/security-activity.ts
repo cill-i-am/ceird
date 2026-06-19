@@ -24,7 +24,6 @@ import {
   Effect,
   Layer,
   Match,
-  Option,
   Schema,
   pipe,
 } from "effect";

@@ -11,7 +11,6 @@ import {
   decodeProductMemberActorSummaryElectricRow,
   decodeOrganizationSummary,
   decodeOrganizationSecurityActivityListResponse,
-  decodeOptionalOrganizationSecurityActivityTargetSearch,
   decodeOrganizationRole,
   decodeOrganizationSlug,
   decodeSessionId,
@@ -932,16 +931,30 @@ describe("organization member identity boundary", () => {
 });
 
 describe("organization security activity boundary", () => {
-  it("decodes optional target search through the shared schema", () => {
+  it("decodes target search through the full shared query schema", () => {
     expect(
-      decodeOptionalOrganizationSecurityActivityTargetSearch(" Taylor ")
-    ).toBe("Taylor");
-    expect(
-      decodeOptionalOrganizationSecurityActivityTargetSearch("   ")
-    ).toBeUndefined();
-    expect(
-      decodeOptionalOrganizationSecurityActivityTargetSearch(42)
-    ).toBeUndefined();
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        targetSearch: " Taylor ",
+      })
+    ).toStrictEqual({
+      limit: 50,
+      targetSearch: "Taylor",
+    });
+    expect(() =>
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        targetSearch: "   ",
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        targetSearch: 42,
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        eventType: "organization_superadmined",
+      })
+    ).toThrow(/Expected/);
   }, 1000);
 
   it("rejects malformed organization security activity date filters", () => {

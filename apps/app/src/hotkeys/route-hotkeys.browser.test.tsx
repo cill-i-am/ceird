@@ -209,8 +209,10 @@ describe("route hotkeys", () => {
       expect(mockedNavigate).toHaveBeenNthCalledWith(5, {
         search: {
           actorUserId: undefined,
+          cursor: undefined,
           eventType: undefined,
           fromDate: undefined,
+          limit: 50,
           targetSearch: undefined,
           targetType: undefined,
           toDate: undefined,
