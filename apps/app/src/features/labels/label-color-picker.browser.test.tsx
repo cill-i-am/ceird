@@ -45,7 +45,7 @@ describe("label color picker", () => {
     expect(onChange).toHaveBeenCalledWith(LABEL_COLOR_OPTIONS[4].color);
   });
 
-  it("opens the advanced picker in a popover and applies canonical OKLCH text", async () => {
+  it("opens the advanced picker in a popover and emits canonical OKLCH text", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn<(color: LabelColor) => void>();
 
@@ -56,18 +56,14 @@ describe("label color picker", () => {
     );
     await user.click(screen.getByRole("button", { name: /advanced/i }));
 
-    await expect(
-      screen.findByText("Custom label color")
-    ).resolves.toBeVisible();
-
-    const input = screen.getByRole("textbox", { name: /oklch or hex/i });
+    const input = await screen.findByRole("textbox", {
+      name: /label color value/i,
+    });
     await user.clear(input);
     await user.type(input, "oklch(69% 0.04 250)");
-    await user.click(screen.getByRole("button", { name: /apply color/i }));
 
-    expect(onChange).toHaveBeenCalledWith("oklch(69% 0.04 250)");
     await waitFor(() => {
-      expect(screen.queryByText("Custom label color")).toBeNull();
+      expect(onChange).toHaveBeenCalledWith("oklch(69% 0.04 250)");
     });
   });
 
@@ -90,7 +86,7 @@ describe("label color picker", () => {
     );
     await user.click(screen.getByRole("button", { name: /advanced/i }));
     const input = await screen.findByRole("textbox", {
-      name: /oklch or hex/i,
+      name: /label color value/i,
     });
 
     await user.clear(input);

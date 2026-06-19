@@ -7,7 +7,7 @@ import {
   LABEL_COLOR_OPTIONS,
 } from "@ceird/labels-core";
 import { Schema } from "effect";
-import { Check, Palette, Pipette, SlidersHorizontal } from "lucide-react";
+import { Check, Palette, Pipette } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "#/components/ui/button";
@@ -53,14 +53,12 @@ export function LabelColorPicker({
   const selectedOption = getLabelColorOption(value);
   const [open, setOpen] = React.useState(false);
   const [mode, setMode] = React.useState<"advanced" | "bank">("bank");
-  const [draftColor, setDraftColor] = React.useState<LabelColor>(value);
 
   React.useEffect(() => {
     if (!open) {
-      setDraftColor(value);
       setMode("bank");
     }
-  }, [open, value]);
+  }, [open]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -92,7 +90,12 @@ export function LabelColorPicker({
       </Tooltip>
       <PopoverContent
         align="start"
-        className="w-[min(calc(100vw-2rem),22rem)] gap-3"
+        className={cn(
+          "gap-3",
+          mode === "advanced"
+            ? "w-[min(calc(100vw-2rem),34rem)]"
+            : "w-[min(calc(100vw-2rem),22rem)]"
+        )}
       >
         {mode === "bank" ? (
           <div className="grid gap-3">
@@ -110,7 +113,6 @@ export function LabelColorPicker({
               variant="outline"
               className="justify-start"
               onClick={() => {
-                setDraftColor(value);
                 setMode("advanced");
               }}
             >
@@ -120,18 +122,7 @@ export function LabelColorPicker({
           </div>
         ) : (
           <div className="animate-in duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] fade-in-0 slide-in-from-right-1 motion-reduce:animate-none">
-            <AdvancedLabelColorPicker
-              value={draftColor}
-              onCancel={() => {
-                setDraftColor(value);
-                setMode("bank");
-              }}
-              onCommit={(color) => {
-                onChange(color);
-                setOpen(false);
-              }}
-              onDraftChange={setDraftColor}
-            />
+            <AdvancedLabelColorPicker value={value} onChange={onChange} />
           </div>
         )}
       </PopoverContent>
@@ -198,18 +189,14 @@ function LabelColorBank({
 }
 
 function AdvancedLabelColorPicker({
+  onChange,
   value,
-  onCancel,
-  onCommit,
-  onDraftChange,
 }: {
-  readonly onCancel: () => void;
-  readonly onCommit: (color: LabelColor) => void;
-  readonly onDraftChange: (color: LabelColor) => void;
+  readonly onChange: (color: LabelColor) => void;
   readonly value: LabelColor;
 }) {
   const picker = parseLabelColor(value);
-  const [textValue, setTextValue] = React.useState(value);
+  const [textValue, setTextValue] = React.useState(oklchToHex(value));
   const [error, setError] = React.useState<string | null>(null);
   const visualPickerRef = React.useRef<HTMLDivElement>(null);
   const hueInputId = React.useId();
@@ -217,15 +204,15 @@ function AdvancedLabelColorPicker({
   const canUseEyeDropper = useCanUseEyeDropper();
 
   React.useEffect(() => {
-    setTextValue(value);
+    setTextValue(oklchToHex(value));
     setError(null);
   }, [value]);
 
   const commitPickerState = React.useCallback(
     (state: OklchPickerState) => {
-      onDraftChange(formatOklch(state));
+      onChange(formatOklch(state));
     },
-    [onDraftChange]
+    [onChange]
   );
 
   const setFromVisualPoint = React.useCallback(
@@ -255,117 +242,23 @@ function AdvancedLabelColorPicker({
   return (
     <div className="grid gap-3">
       <div className="flex items-center gap-3">
-        <div
-          className="size-12 rounded-lg border border-border shadow-inner"
+        <span
+          className="size-6 shrink-0 rounded-full border border-black/10 shadow-inner"
           style={{ backgroundColor: value }}
           aria-hidden="true"
         />
-        <div className="min-w-0">
-          <p className="text-sm font-medium">Custom label color</p>
-          <p className="truncate text-xs text-muted-foreground">{value}</p>
-        </div>
-      </div>
-
-      <div
-        ref={visualPickerRef}
-        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- This 2D picker exposes keyboard slider semantics over a custom pointer surface.
-        role="slider"
-        tabIndex={0}
-        aria-label="Adjust label color lightness and strength"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(picker.lightness)}
-        className="relative h-40 touch-none rounded-lg border border-border outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-        style={{
-          background: `linear-gradient(to top, oklch(${PICKER_LIGHTNESS_MIN}% 0 ${picker.hue}), oklch(${PICKER_LIGHTNESS_MAX}% 0 ${picker.hue})), linear-gradient(to right, oklch(${PICKER_CANVAS_LIGHTNESS}% 0 ${picker.hue}), oklch(${PICKER_CANVAS_LIGHTNESS}% ${PICKER_CHROMA_MAX} ${picker.hue}))`,
-          backgroundBlendMode: "multiply",
-        }}
-        onKeyDown={(event) => {
-          const lightnessDelta = getKeyboardLightnessDelta(event.key);
-          const chromaDelta = getKeyboardChromaDelta(event.key);
-
-          if (lightnessDelta === 0 && chromaDelta === 0) {
-            return;
-          }
-
-          event.preventDefault();
-          commitPickerState({
-            chroma: roundPickerNumber(
-              clamp(picker.chroma + chromaDelta, 0, PICKER_CHROMA_MAX),
-              OKLCH_CHROMA_DIGITS
-            ),
-            hue: picker.hue,
-            lightness: roundPickerNumber(
-              clamp(picker.lightness + lightnessDelta, 0, 100),
-              OKLCH_LIGHTNESS_DIGITS
-            ),
-          });
-        }}
-        onPointerDown={(event) => {
-          event.currentTarget.setPointerCapture(event.pointerId);
-          setFromVisualPoint(event.clientX, event.clientY);
-        }}
-        onPointerMove={(event) => {
-          if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
-            return;
-          }
-
-          setFromVisualPoint(event.clientX, event.clientY);
-        }}
-      >
-        <span
-          className="pointer-events-none absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow-[0_0_0_1px_var(--foreground),0_1px_4px_rgb(0_0_0/0.25)]"
-          style={{
-            backgroundColor: value,
-            left: `${clamp((picker.chroma / PICKER_CHROMA_MAX) * 100, 0, 100)}%`,
-            top: `${clamp(
-              ((PICKER_LIGHTNESS_MAX - picker.lightness) /
-                PICKER_LIGHTNESS_RANGE) *
-                100,
-              0,
-              100
-            )}%`,
-          }}
-        />
-      </div>
-
-      <label
-        className="grid gap-1.5 text-xs font-medium text-muted-foreground"
-        htmlFor={hueInputId}
-      >
-        Hue
-        <input
-          id={hueInputId}
-          type="range"
-          min={HUE_MIN}
-          max={HUE_MAX}
-          value={Math.round(picker.hue)}
-          aria-label="Label color hue"
-          className="h-8 w-full accent-primary"
-          style={{
-            background:
-              "linear-gradient(to right, red, yellow, lime, cyan, blue, magenta, red)",
-          }}
-          onChange={(event) =>
-            commitPickerState({
-              ...picker,
-              hue: Number(event.currentTarget.value),
-            })
-          }
-        />
-      </label>
-
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
         <label
-          className="grid gap-1.5 text-xs font-medium text-muted-foreground"
+          className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground"
           htmlFor={textInputId}
         >
-          OKLCH or hex
+          <span className="shrink-0 font-medium">HEX</span>
           <Input
             id={textInputId}
             value={textValue}
             spellCheck={false}
             aria-invalid={error !== null}
+            aria-label="Label color value"
+            className="h-8 min-w-0 border-0 bg-transparent px-0 text-sm text-foreground shadow-none focus-visible:ring-0"
             onChange={(event) => {
               const nextValue = event.currentTarget.value;
               setTextValue(nextValue);
@@ -373,7 +266,7 @@ function AdvancedLabelColorPicker({
 
               if (normalized.kind === "valid") {
                 setError(null);
-                onDraftChange(normalized.color);
+                onChange(normalized.color);
               } else {
                 setError(normalized.message);
               }
@@ -386,7 +279,8 @@ function AdvancedLabelColorPicker({
               <Button
                 type="button"
                 variant="outline"
-                className="self-end"
+                size="icon"
+                className="shrink-0 rounded-full"
                 disabled={!canUseEyeDropper}
                 aria-label="Pick a label color from the screen"
                 onClick={() => {
@@ -395,7 +289,7 @@ function AdvancedLabelColorPicker({
                       const color = await pickScreenColor();
 
                       if (color) {
-                        onDraftChange(color);
+                        onChange(color);
                       }
                     } catch {
                       // Canceling the browser picker should leave the draft unchanged.
@@ -415,25 +309,101 @@ function AdvancedLabelColorPicker({
         </Tooltip>
       </div>
 
+      <div className="grid grid-cols-[minmax(0,1fr)_2rem] gap-4">
+        <div
+          ref={visualPickerRef}
+          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- This 2D picker exposes keyboard slider semantics over a custom pointer surface.
+          role="slider"
+          tabIndex={0}
+          aria-label="Adjust label color lightness and strength"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(picker.lightness)}
+          className="relative h-32 touch-none rounded-md border border-border outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+          style={{
+            background: `linear-gradient(to top, oklch(${PICKER_LIGHTNESS_MIN}% 0 ${picker.hue}), oklch(${PICKER_LIGHTNESS_MAX}% 0 ${picker.hue})), linear-gradient(to right, oklch(${PICKER_CANVAS_LIGHTNESS}% 0 ${picker.hue}), oklch(${PICKER_CANVAS_LIGHTNESS}% ${PICKER_CHROMA_MAX} ${picker.hue}))`,
+            backgroundBlendMode: "multiply",
+          }}
+          onKeyDown={(event) => {
+            const lightnessDelta = getKeyboardLightnessDelta(event.key);
+            const chromaDelta = getKeyboardChromaDelta(event.key);
+
+            if (lightnessDelta === 0 && chromaDelta === 0) {
+              return;
+            }
+
+            event.preventDefault();
+            commitPickerState({
+              chroma: roundPickerNumber(
+                clamp(picker.chroma + chromaDelta, 0, PICKER_CHROMA_MAX),
+                OKLCH_CHROMA_DIGITS
+              ),
+              hue: picker.hue,
+              lightness: roundPickerNumber(
+                clamp(picker.lightness + lightnessDelta, 0, 100),
+                OKLCH_LIGHTNESS_DIGITS
+              ),
+            });
+          }}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setFromVisualPoint(event.clientX, event.clientY);
+          }}
+          onPointerMove={(event) => {
+            if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+              return;
+            }
+
+            setFromVisualPoint(event.clientX, event.clientY);
+          }}
+        >
+          <span
+            className="pointer-events-none absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow-[0_0_0_1px_var(--foreground),0_1px_4px_rgb(0_0_0/0.25)]"
+            style={{
+              backgroundColor: value,
+              left: `${clamp((picker.chroma / PICKER_CHROMA_MAX) * 100, 0, 100)}%`,
+              top: `${clamp(
+                ((PICKER_LIGHTNESS_MAX - picker.lightness) /
+                  PICKER_LIGHTNESS_RANGE) *
+                  100,
+                0,
+                100
+              )}%`,
+            }}
+          />
+        </div>
+
+        <label className="grid justify-items-center gap-1" htmlFor={hueInputId}>
+          <span className="sr-only">Hue</span>
+          <input
+            id={hueInputId}
+            type="range"
+            min={HUE_MIN}
+            max={HUE_MAX}
+            value={Math.round(picker.hue)}
+            aria-label="Label color hue"
+            className="h-32 w-7 accent-primary"
+            style={{
+              background:
+                "linear-gradient(to top, red, yellow, lime, cyan, blue, magenta, red)",
+              direction: "rtl",
+              writingMode: "vertical-lr",
+            }}
+            onChange={(event) =>
+              commitPickerState({
+                ...picker,
+                hue: Number(event.currentTarget.value),
+              })
+            }
+          />
+        </label>
+      </div>
+
       {error ? (
-        <p className="text-sm text-destructive" role="alert">
+        <p className="text-xs text-destructive" role="alert">
           {error}
         </p>
       ) : null}
-
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          disabled={error !== null}
-          onClick={() => onCommit(value)}
-        >
-          <SlidersHorizontal aria-hidden="true" />
-          Apply color
-        </Button>
-      </div>
     </div>
   );
 }
@@ -609,8 +579,48 @@ function hexToOklch(hex: string): LabelColor {
   });
 }
 
+function oklchToHex(color: LabelColor) {
+  const { chroma, hue, lightness } = parseLabelColor(color);
+  const lightnessRatio = lightness / 100;
+  const hueRadians = (moduloHue(hue) * Math.PI) / 180;
+  const a = chroma * Math.cos(hueRadians);
+  const b = chroma * Math.sin(hueRadians);
+  const lmsL = lightnessRatio + 0.396_337_777_4 * a + 0.215_803_757_3 * b;
+  const lmsM = lightnessRatio - 0.105_561_345_8 * a - 0.063_854_172_8 * b;
+  const lmsS = lightnessRatio - 0.089_484_177_5 * a - 1.291_485_548 * b;
+  const linearL = lmsL ** 3;
+  const linearM = lmsM ** 3;
+  const linearS = lmsS ** 3;
+  const red =
+    4.076_741_662_1 * linearL -
+    3.307_711_591_3 * linearM +
+    0.230_969_929_2 * linearS;
+  const green =
+    -1.268_438_004_6 * linearL +
+    2.609_757_401_1 * linearM -
+    0.341_319_396_5 * linearS;
+  const blue =
+    -0.004_196_086_3 * linearL -
+    0.703_418_614_7 * linearM +
+    1.707_614_701 * linearS;
+
+  return `#${[red, green, blue]
+    .map((channel) =>
+      Math.round(clamp(linearToSrgb(channel), 0, 1) * 255)
+        .toString(16)
+        .padStart(2, "0")
+    )
+    .join("")}`;
+}
+
 function srgbToLinear(value: number) {
   return value <= 0.040_45 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+function linearToSrgb(value: number) {
+  return value <= 0.003_130_8
+    ? value * 12.92
+    : 1.055 * value ** (1 / 2.4) - 0.055;
 }
 
 function moduloHue(hue: number) {
