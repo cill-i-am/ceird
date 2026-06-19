@@ -53,6 +53,7 @@ const archivedLabel = makeLabel({
 describe("organization labels settings page", () => {
   afterEach(() => {
     toast.dismiss();
+    vi.restoreAllMocks();
   });
 
   it("renders a first-class active labels table with settings context", async () => {
@@ -143,6 +144,7 @@ describe("organization labels settings page", () => {
 
   it("creates labels from the responsive drawer with description and color", async () => {
     const user = userEvent.setup();
+    const toastSuccess = vi.spyOn(toast, "success");
     const mutationJournal = createDataPlaneMutationJournal({
       createId: () => "mutation_create",
       now: () => 1000,
@@ -200,10 +202,12 @@ describe("organization labels settings page", () => {
     ]);
     await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
     expect(screen.getByText("Annual fire checks")).toBeVisible();
+    expect(toastSuccess).toHaveBeenCalledWith("Label created.");
   });
 
   it("edits labels from the shared drawer model", async () => {
     const user = userEvent.setup();
+    const toastSuccess = vi.spyOn(toast, "success");
     const updateLabelWithConfirmation = vi.fn<
       (
         labelId: Label["id"],
@@ -255,10 +259,12 @@ describe("organization labels settings page", () => {
     });
     await expect(screen.findByText("Emergency")).resolves.toBeVisible();
     expect(screen.getByText("Dispatch first")).toBeVisible();
+    expect(toastSuccess).toHaveBeenCalledWith("Label updated.");
   });
 
   it("archives one active label after confirmation", async () => {
     const user = userEvent.setup();
+    const toastSuccess = vi.spyOn(toast, "success");
     const mutationJournal = createDataPlaneMutationJournal({
       createId: () => "mutation_archive",
       now: () => 1000,
@@ -299,10 +305,12 @@ describe("organization labels settings page", () => {
       expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
     });
     expect(screen.getByText("No active labels yet")).toBeVisible();
+    expect(toastSuccess).toHaveBeenCalledWith("Label archived.");
   });
 
   it("restores one archived label and reflects it in Active", async () => {
     const user = userEvent.setup();
+    const toastSuccess = vi.spyOn(toast, "success");
     const mutationJournal = createDataPlaneMutationJournal({
       createId: () => "mutation_restore",
       now: () => 1000,
@@ -339,6 +347,7 @@ describe("organization labels settings page", () => {
     });
     await user.click(screen.getByRole("tab", { name: "Active" }));
     expect(screen.getByText("Plumbing")).toBeVisible();
+    expect(toastSuccess).toHaveBeenCalledWith("Label restored.");
   });
 
   it("surfaces active-name restore conflicts clearly", async () => {

@@ -157,7 +157,6 @@ interface PendingLabelMutation {
 }
 
 interface LabelMutationStatus {
-  readonly kind: "error" | "success";
   readonly message: string;
 }
 
@@ -469,18 +468,16 @@ export function OrganizationLabelsSettingsPage({
 
       reflectLabelUpsert(response.label);
       setFormState(createClosedLabelFormState());
-      setMutationStatus({
-        kind: "success",
-        message:
-          formState.mode === "create" ? "Label created." : "Label updated.",
-      });
+      toast.success(
+        formState.mode === "create" ? "Label created." : "Label updated."
+      );
     } catch (error) {
       const message = getLabelMutationFailureMessage(
         error,
         formState.mode === "create" ? "create" : "update"
       );
       setFormState((current) => ({ ...current, error: message }));
-      setMutationStatus({ kind: "error", message });
+      setMutationStatus({ message });
     } finally {
       mutationInFlightRef.current = false;
       setPendingMutation((current) =>
@@ -534,10 +531,9 @@ export function OrganizationLabelsSettingsPage({
               }
             : current
         );
-        setMutationStatus({ kind: "success", message: "Label archived." });
+        toast.success("Label archived.");
       } catch (error) {
         setMutationStatus({
-          kind: "error",
           message: getLabelMutationFailureMessage(error, "archive"),
         });
       } finally {
@@ -582,7 +578,6 @@ export function OrganizationLabelsSettingsPage({
 
       if (hasDuplicateLabelName(activeLabels, label.name)) {
         setMutationStatus({
-          kind: "error",
           message: RESTORE_CONFLICT_MESSAGE,
         });
         return;
@@ -610,10 +605,9 @@ export function OrganizationLabelsSettingsPage({
           ...current,
           labels: current.labels.filter((item) => item.id !== label.id),
         }));
-        setMutationStatus({ kind: "success", message: "Label restored." });
+        toast.success("Label restored.");
       } catch (error) {
         setMutationStatus({
-          kind: "error",
           message: getLabelMutationFailureMessage(error, "restore"),
         });
         void refreshArchivedLabels();
@@ -1395,13 +1389,8 @@ function LabelMutationStatusView({
 
   return (
     <p
-      className={cn(
-        "mt-4 rounded-lg border px-3 py-2 text-sm",
-        status.kind === "success"
-          ? "border-success/25 bg-success/10 text-success-foreground"
-          : "border-destructive/30 bg-destructive/10 text-destructive"
-      )}
-      role={status.kind === "error" ? "alert" : "status"}
+      className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+      role="alert"
     >
       {status.message}
     </p>
