@@ -1,22 +1,18 @@
 /* oxlint-disable eslint/max-classes-per-file */
 import {
   ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES,
-  OrganizationRole,
-  OrganizationMemberId,
   OrganizationSecurityActivityAccessDeniedError,
   OrganizationSecurityActivityCursor as OrganizationSecurityActivityCursorSchema,
   OrganizationSecurityActivityCursorInvalidError,
-  OrganizationSecurityActivityEventType as OrganizationSecurityActivityEventTypeSchema,
   OrganizationSecurityActivityItemSchema,
   OrganizationSecurityActivityListResponseSchema,
+  OrganizationSecurityActivityQuerySchema,
   OrganizationSecurityActivityStorageError,
-  UserId,
 } from "@ceird/identity-core";
 import type {
   OrganizationId as OrganizationIdType,
   OrganizationRole as OrganizationRoleType,
   OrganizationSecurityActivityCursor,
-  OrganizationSecurityActivityEventId,
   OrganizationSecurityActivityEventType,
   OrganizationSecurityActivityItem,
   OrganizationSecurityActivityQuery,
@@ -28,7 +24,6 @@ import {
   Effect,
   Layer,
   Match,
-  Option,
   Schema,
   pipe,
 } from "effect";
@@ -56,9 +51,15 @@ import type {
   OrganizationSessionIdentityInvalidError,
   OrganizationSessionRequiredError,
 } from "../organizations/errors.js";
+import {
+  OrganizationSecurityActivityCursorStateSchema,
+  OrganizationSecurityActivityRowsSchema,
+} from "./persistence-schemas.js";
+import type {
+  OrganizationSecurityActivityCursorState,
+  OrganizationSecurityActivityRow,
+} from "./persistence-schemas.js";
 
-const DEFAULT_SECURITY_ACTIVITY_LIMIT = 50;
-const MAX_SECURITY_ACTIVITY_LIMIT = 100;
 const ORGANIZATION_SECURITY_ACTIVITY_VISIBLE_EVENT_TYPES =
   ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES;
 
@@ -71,46 +72,15 @@ const decodeSecurityActivityListResponse = Schema.decodeUnknownSync(
 const decodeSecurityActivityCursor = Schema.decodeUnknownSync(
   OrganizationSecurityActivityCursorSchema
 );
-const decodeSecurityActivityEventType = Schema.decodeUnknownSync(
-  OrganizationSecurityActivityEventTypeSchema
-);
-const SecurityActivityCursorTimestamp = Schema.String.pipe(
-  Schema.refine((value): value is string => isUtcMicrosecondTimestamp(value), {
-    message: "Expected a UTC timestamp cursor",
-  })
-);
 const decodeSecurityActivityCursorState = Schema.decodeUnknownSync(
-  Schema.Struct({
-    createdAt: SecurityActivityCursorTimestamp,
-    id: Schema.NonEmptyString,
-  })
+  OrganizationSecurityActivityCursorStateSchema
 );
-const isOrganizationRole = Schema.is(OrganizationRole);
-const decodeOrganizationMemberIdOption =
-  Schema.decodeUnknownOption(OrganizationMemberId);
-const isUserId = Schema.is(UserId);
-
-interface OrganizationSecurityActivityRow {
-  readonly actor_email: string | null;
-  readonly actor_name: string | null;
-  readonly actor_user_id: string | null;
-  readonly created_at: Date;
-  readonly created_at_cursor: string;
-  readonly event_type: string;
-  readonly id: string;
-  readonly metadata: unknown;
-  readonly organization_id: string;
-  readonly organization_name: string | null;
-  readonly target_email: string | null;
-  readonly target_member_id: string | null;
-  readonly target_name: string | null;
-  readonly target_user_id: string | null;
-}
-
-interface OrganizationSecurityActivityCursorState {
-  readonly createdAt: string;
-  readonly id: string;
-}
+const decodeSecurityActivityQuery = Schema.decodeUnknownSync(
+  OrganizationSecurityActivityQuerySchema
+);
+const decodeSecurityActivityRows = Schema.decodeUnknownSync(
+  OrganizationSecurityActivityRowsSchema
+);
 
 type ActorResolutionError =
   | OrganizationActiveOrganizationRequiredError
@@ -131,9 +101,7 @@ export class OrganizationSecurityActivityRepository extends Context.Service<Orga
           organizationId: OrganizationIdType,
           query: OrganizationSecurityActivityQuery
         ) {
-          const limit = clampSecurityActivityLimit(
-            query.limit ?? DEFAULT_SECURITY_ACTIVITY_LIMIT
-          );
+          const { limit } = query;
           const clauses = [
             sql`auth_security_audit_event.organization_id = ${organizationId}`,
             sql`auth_security_audit_event.event_type in ${sql.in(
@@ -208,7 +176,7 @@ export class OrganizationSecurityActivityRepository extends Context.Service<Orga
           )`);
           }
 
-          const rows = yield* sql<OrganizationSecurityActivityRow>`
+          const rows = yield* sql<Record<string, unknown>>`
           select
             auth_security_audit_event.id,
             auth_security_audit_event.event_type,
@@ -235,6 +203,11 @@ export class OrganizationSecurityActivityRepository extends Context.Service<Orga
           left join member as target_member
             on target_member.id = (auth_security_audit_event.metadata ->> 'memberId')
             and target_member.organization_id = auth_security_audit_event.organization_id
+            and auth_security_audit_event.event_type in (
+              'organization_invitation_accepted',
+              'organization_member_role_updated',
+              'organization_member_removed'
+            )
           left join "user" as target_user
             on target_user.id = target_member.user_id
           where ${sql.and(clauses)}
@@ -243,13 +216,15 @@ export class OrganizationSecurityActivityRepository extends Context.Service<Orga
           limit ${limit + 1}
         `;
 
-          const pageRows = Arr.take(rows, limit);
+          const decodedRows =
+            yield* decodeOrganizationSecurityActivityRows(rows);
+          const pageRows = Arr.take(decodedRows, limit);
           const items = pipe(
             pageRows,
             Arr.map(mapOrganizationSecurityActivityRow)
           );
           const nextCursorRow =
-            rows.length > limit ? rows[limit - 1] : undefined;
+            decodedRows.length > limit ? decodedRows[limit - 1] : undefined;
 
           return decodeSecurityActivityListResponse({
             items,
@@ -291,8 +266,10 @@ export class OrganizationSecurityActivityService extends Context.Service<Organiz
             .ensureCanViewOrganizationSecurityActivity(actor)
             .pipe(mapAuthorizationErrorToSecurityActivityAccessDenied);
 
+          const decodedQuery = decodeSecurityActivityQuery(query);
+
           return yield* repository
-            .list(actor.organizationId, query)
+            .list(actor.organizationId, decodedQuery)
             .pipe(
               Effect.catchTag(
                 "SqlError",
@@ -325,24 +302,19 @@ export class OrganizationSecurityActivityService extends Context.Service<Organiz
 export function mapOrganizationSecurityActivityRow(
   row: OrganizationSecurityActivityRow
 ): OrganizationSecurityActivityItem {
-  const metadata = normalizeMetadata(row.metadata);
-  const eventType = decodeSecurityActivityEventType(row.event_type);
   const actor = makeOrganizationSecurityActivityActor(row);
-  const target = makeOrganizationSecurityActivityTarget(row, metadata);
-  const roleChange = makeOrganizationSecurityActivityRoleChange(
-    eventType,
-    metadata
-  );
+  const target = makeOrganizationSecurityActivityTarget(row);
+  const roleChange = makeOrganizationSecurityActivityRoleChange(row);
 
   return decodeSecurityActivityItem({
     actor,
     createdAt: row.created_at.toISOString(),
-    eventType,
-    id: row.id as OrganizationSecurityActivityEventId,
+    eventType: row.event_type,
+    id: row.id,
     organizationId: row.organization_id,
     roleChange,
     summary: describeOrganizationSecurityActivity(
-      eventType,
+      row.event_type,
       target,
       roleChange
     ),
@@ -353,72 +325,71 @@ export function mapOrganizationSecurityActivityRow(
 function makeOrganizationSecurityActivityActor(
   row: OrganizationSecurityActivityRow
 ) {
-  if (row.actor_user_id === null || !isUserId(row.actor_user_id)) {
+  if (
+    row.actor_user_id === null ||
+    row.actor_email === null ||
+    row.actor_name === null
+  ) {
     return;
   }
 
   return {
-    email: row.actor_email ?? "",
+    email: row.actor_email,
     id: row.actor_user_id,
-    name: row.actor_name ?? row.actor_email ?? "Unknown user",
+    name: row.actor_name,
   };
 }
 
 function makeOrganizationSecurityActivityTarget(
-  row: OrganizationSecurityActivityRow,
-  metadata: Readonly<Record<string, unknown>>
+  row: OrganizationSecurityActivityRow
 ) {
-  const eventType = row.event_type as OrganizationSecurityActivityEventType;
-  const targetType = getTargetTypeForSecurityActivityEvent(eventType);
-  const targetUserId = isUserId(row.target_user_id ?? "")
-    ? row.target_user_id
-    : undefined;
-  const memberId = Option.getOrUndefined(
-    decodeOrganizationMemberIdOption(
-      row.target_member_id ?? readStringMetadata(metadata, "memberId")
-    )
-  );
-  const invitationEmailMasked = readStringMetadata(
-    metadata,
-    "invitationEmailMasked"
-  );
+  switch (row.event_type) {
+    case "organization_created":
+    case "organization_updated": {
+      return {
+        label: row.organization_name,
+        type: "organization",
+      } as const;
+    }
+    case "organization_invitation_created":
+    case "organization_invitation_resent":
+    case "organization_invitation_canceled":
+    case "organization_invitation_accepted": {
+      return {
+        label: row.metadata.invitationEmailMasked,
+        type: "invitation",
+      } as const;
+    }
+    case "organization_member_role_updated":
+    case "organization_member_removed": {
+      const scopedTargetLabel =
+        row.target_user_id === null
+          ? undefined
+          : (row.target_name ?? row.target_email ?? undefined);
 
-  if (targetType === "organization") {
-    return {
-      label: row.organization_name ?? row.organization_id,
-      type: targetType,
-    } as const;
+      return {
+        label: scopedTargetLabel ?? row.metadata.memberId,
+        memberId: row.metadata.memberId,
+        type: "member",
+        userId: row.target_user_id ?? undefined,
+      } as const;
+    }
+    default: {
+      const exhaustive: never = row;
+      return exhaustive;
+    }
   }
-
-  if (targetType === "invitation") {
-    return {
-      label: invitationEmailMasked ?? "Invitation",
-      type: targetType,
-    } as const;
-  }
-
-  return {
-    label:
-      (targetUserId === undefined ? null : row.target_name) ??
-      (targetUserId === undefined ? null : row.target_email) ??
-      memberId ??
-      "Member",
-    memberId,
-    type: targetType,
-    userId: targetUserId,
-  } as const;
 }
 
 function makeOrganizationSecurityActivityRoleChange(
-  eventType: OrganizationSecurityActivityEventType,
-  metadata: Readonly<Record<string, unknown>>
+  row: OrganizationSecurityActivityRow
 ) {
-  if (eventType !== "organization_member_role_updated") {
+  if (row.event_type !== "organization_member_role_updated") {
     return;
   }
 
-  const previousRole = readOrganizationRoleMetadata(metadata, "previousRole");
-  const role = readOrganizationRoleMetadata(metadata, "role");
+  const previousRole = row.metadata.previousRole ?? undefined;
+  const role = row.metadata.role ?? undefined;
 
   if (previousRole === undefined && role === undefined) {
     return;
@@ -475,30 +446,6 @@ function describeOrganizationSecurityActivity(
   );
 }
 
-function getTargetTypeForSecurityActivityEvent(
-  eventType: OrganizationSecurityActivityEventType
-): OrganizationSecurityActivityTargetType {
-  switch (eventType) {
-    case "organization_created":
-    case "organization_updated": {
-      return "organization";
-    }
-    case "organization_invitation_created":
-    case "organization_invitation_resent":
-    case "organization_invitation_canceled":
-    case "organization_invitation_accepted": {
-      return "invitation";
-    }
-    case "organization_member_role_updated":
-    case "organization_member_removed": {
-      return "member";
-    }
-    default: {
-      return assertNever(eventType);
-    }
-  }
-}
-
 function makeTargetTypeClause(
   sql: SqlClient.SqlClient,
   targetType: OrganizationSecurityActivityTargetType
@@ -525,13 +472,10 @@ function makeTargetTypeClause(
       ])}`;
     }
     default: {
-      return assertNever(targetType);
+      const exhaustive: never = targetType;
+      return exhaustive;
     }
   }
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unhandled organization security activity value: ${value}`);
 }
 
 export function encodeOrganizationSecurityActivityCursor(
@@ -552,10 +496,6 @@ export function decodeOrganizationSecurityActivityCursor(
   return decodeJsonCursor(cursor, decodeSecurityActivityCursorState);
 }
 
-function clampSecurityActivityLimit(limit: number) {
-  return Math.min(Math.max(Math.floor(limit), 1), MAX_SECURITY_ACTIVITY_LIMIT);
-}
-
 function isoDateToUtcStartDate(value: string) {
   return new Date(`${value}T00:00:00.000Z`);
 }
@@ -568,70 +508,24 @@ function getExclusiveDateUpperBound(value: string) {
   return date;
 }
 
-function isUtcMicrosecondTimestamp(value: string): boolean {
-  const match =
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?Z$/u.exec(
-      value
-    );
-
-  if (match === null) {
-    return false;
-  }
-
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText] =
-    match;
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  const second = Number(secondText);
-
-  if (hour > 23 || minute > 59 || second > 59) {
-    return false;
-  }
-
-  const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-
-  return (
-    !Number.isNaN(date.getTime()) &&
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() + 1 === month &&
-    date.getUTCDate() === day &&
-    date.getUTCHours() === hour &&
-    date.getUTCMinutes() === minute &&
-    date.getUTCSeconds() === second
-  );
-}
-
-function normalizeMetadata(value: unknown): Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Readonly<Record<string, unknown>>)
-    : {};
-}
-
-function readStringMetadata(
-  metadata: Readonly<Record<string, unknown>>,
-  key: string
-) {
-  const value = metadata[key];
-
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function readOrganizationRoleMetadata(
-  metadata: Readonly<Record<string, unknown>>,
-  key: string
-): OrganizationRoleType | undefined {
-  const value = metadata[key];
-
-  return typeof value === "string" && isOrganizationRole(value)
-    ? value
-    : undefined;
-}
-
 function formatRoleLabel(role: OrganizationRoleType) {
   return role.slice(0, 1).toUpperCase() + role.slice(1);
+}
+
+function decodeOrganizationSecurityActivityRows(
+  rows: unknown
+): Effect.Effect<
+  readonly OrganizationSecurityActivityRow[],
+  OrganizationSecurityActivityStorageError
+> {
+  return Effect.try({
+    catch: (error) =>
+      makeOrganizationSecurityActivityStorageError(
+        error,
+        "Organization security activity row decode failed"
+      ),
+    try: () => decodeSecurityActivityRows(rows),
+  });
 }
 
 function mapActorResolutionErrorsToSecurityActivityErrors<Value, Requirements>(
@@ -653,7 +547,12 @@ function mapActorResolutionErrorsToSecurityActivityErrors<Value, Requirements>(
       [ORGANIZATION_ROLE_NOT_SUPPORTED_ERROR_TAG]: (error) =>
         failOrganizationSecurityActivityAccessDenied(error.message),
       [ORGANIZATION_SESSION_IDENTITY_INVALID_ERROR_TAG]: (error) =>
-        failOrganizationSecurityActivityAccessDenied(error.message),
+        Effect.fail(
+          new OrganizationSecurityActivityStorageError({
+            cause: error.cause,
+            message: error.message,
+          })
+        ),
       [ORGANIZATION_SESSION_REQUIRED_ERROR_TAG]: (error) =>
         failOrganizationSecurityActivityAccessDenied(error.message),
     })
@@ -687,9 +586,19 @@ function failOrganizationSecurityActivityStorageError(
   error: SqlError.SqlError
 ) {
   return Effect.fail(
-    new OrganizationSecurityActivityStorageError({
-      cause: error.message,
-      message: "Organization security activity lookup failed",
-    })
+    makeOrganizationSecurityActivityStorageError(
+      error,
+      "Organization security activity lookup failed"
+    )
   );
+}
+
+function makeOrganizationSecurityActivityStorageError(
+  error: unknown,
+  message: string
+) {
+  return new OrganizationSecurityActivityStorageError({
+    cause: error instanceof Error ? error.message : undefined,
+    message,
+  });
 }

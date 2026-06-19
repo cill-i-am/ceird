@@ -68,7 +68,9 @@ import type {
 } from "./auth-email.js";
 import {
   hashOAuthStoredToken,
-  makeOrganizationInvitationAuditMetadata,
+  maskOrganizationAuditEmail,
+  makeOrganizationSecurityAuditWrite,
+  readOrganizationSecurityAuditProvenance,
   recordOrganizationSecurityAuditEvent,
 } from "./auth-oauth-policy.js";
 import { measureAuthenticationPhase } from "./auth-observability.js";
@@ -835,14 +837,24 @@ export function createAuthentication(options: {
                 runtimeContext: options.runtimeContext,
               },
               {
-                actorUserId: user.id,
                 eventType: "organization_created",
-                metadata: {
-                  memberId: member.id,
-                  role: member.role,
-                  targetUserId: user.id,
-                },
-                organizationId: nextOrganization.id,
+                makeWrite: () =>
+                  makeOrganizationSecurityAuditWrite({
+                    actorUserId: user.id,
+                    eventType: "organization_created",
+                    metadata: {
+                      memberId: member.id,
+                      outcome: "succeeded",
+                      previousRole: null,
+                      role: member.role,
+                      source: "better_auth_organization_plugin",
+                      targetUserId: user.id,
+                    },
+                    oauthClientId: null,
+                    organizationId: nextOrganization.id,
+                    scopes: null,
+                    ...readOrganizationSecurityAuditProvenance(),
+                  }),
               }
             );
           },
@@ -875,16 +887,21 @@ export function createAuthentication(options: {
                 runtimeContext: options.runtimeContext,
               },
               {
-                actorUserId: user.id,
                 eventType: "organization_updated",
-                metadata: {
-                  updatedFields: updatedOrganization
-                    ? Object.keys(updatedOrganization).filter(
-                        (field) => field !== "id"
-                      )
-                    : [],
-                },
-                organizationId: updatedOrganization?.id ?? null,
+                makeWrite: () =>
+                  makeOrganizationSecurityAuditWrite({
+                    actorUserId: user.id,
+                    eventType: "organization_updated",
+                    metadata: {
+                      outcome: "succeeded",
+                      source: "better_auth_organization_plugin",
+                      updatedFields: ["name"],
+                    },
+                    oauthClientId: null,
+                    organizationId: updatedOrganization?.id,
+                    scopes: null,
+                    ...readOrganizationSecurityAuditProvenance(),
+                  }),
               }
             );
           },
@@ -928,13 +945,25 @@ export function createAuthentication(options: {
                 runtimeContext: options.runtimeContext,
               },
               {
-                actorUserId: inviter.id,
                 eventType: "organization_invitation_created",
-                metadata: makeOrganizationInvitationAuditMetadata({
-                  email: nextInvitation.email,
-                  role: nextInvitation.role,
-                }),
-                organizationId: nextInvitation.organizationId,
+                makeWrite: () =>
+                  makeOrganizationSecurityAuditWrite({
+                    actorUserId: inviter.id,
+                    eventType: "organization_invitation_created",
+                    metadata: {
+                      invitationEmailMasked: maskOrganizationAuditEmail(
+                        nextInvitation.email
+                      ),
+                      outcome: "succeeded",
+                      role: nextInvitation.role,
+                      source: "better_auth_organization_plugin",
+                      targetUserId: null,
+                    },
+                    oauthClientId: null,
+                    organizationId: nextInvitation.organizationId,
+                    scopes: null,
+                    ...readOrganizationSecurityAuditProvenance(),
+                  }),
               }
             );
           },
@@ -960,17 +989,26 @@ export function createAuthentication(options: {
                 runtimeContext: options.runtimeContext,
               },
               {
-                actorUserId: user.id,
                 eventType: "organization_invitation_accepted",
-                metadata: {
-                  ...makeOrganizationInvitationAuditMetadata({
-                    email: acceptedInvitation.email,
-                    role: acceptedInvitation.role,
-                    targetUserId: member.userId,
+                makeWrite: () =>
+                  makeOrganizationSecurityAuditWrite({
+                    actorUserId: user.id,
+                    eventType: "organization_invitation_accepted",
+                    metadata: {
+                      invitationEmailMasked: maskOrganizationAuditEmail(
+                        acceptedInvitation.email
+                      ),
+                      memberId: member.id,
+                      outcome: "succeeded",
+                      role: acceptedInvitation.role,
+                      source: "better_auth_organization_plugin",
+                      targetUserId: member.userId,
+                    },
+                    oauthClientId: null,
+                    organizationId: acceptedInvitation.organizationId,
+                    scopes: null,
+                    ...readOrganizationSecurityAuditProvenance(),
                   }),
-                  memberId: member.id,
-                },
-                organizationId: acceptedInvitation.organizationId,
               }
             );
           },
@@ -984,13 +1022,25 @@ export function createAuthentication(options: {
                 runtimeContext: options.runtimeContext,
               },
               {
-                actorUserId: cancelledBy.id,
                 eventType: "organization_invitation_canceled",
-                metadata: makeOrganizationInvitationAuditMetadata({
-                  email: canceledInvitation.email,
-                  role: canceledInvitation.role,
-                }),
-                organizationId: canceledInvitation.organizationId,
+                makeWrite: () =>
+                  makeOrganizationSecurityAuditWrite({
+                    actorUserId: cancelledBy.id,
+                    eventType: "organization_invitation_canceled",
+                    metadata: {
+                      invitationEmailMasked: maskOrganizationAuditEmail(
+                        canceledInvitation.email
+                      ),
+                      outcome: "succeeded",
+                      role: canceledInvitation.role,
+                      source: "better_auth_organization_plugin",
+                      targetUserId: null,
+                    },
+                    oauthClientId: null,
+                    organizationId: canceledInvitation.organizationId,
+                    scopes: null,
+                    ...readOrganizationSecurityAuditProvenance(),
+                  }),
               }
             );
           },

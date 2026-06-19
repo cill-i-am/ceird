@@ -22,6 +22,10 @@ import { Pool } from "pg";
 
 import { readMigrationSql } from "../../../platform/database/test-database.js";
 import {
+  OAuthSecurityAuditWriteSchema,
+  OrganizationSecurityAuditWriteSchema,
+} from "../persistence-schemas.js";
+import {
   AuthenticationSessionResultSchema,
   readAuthBoundaryJsonOrFormRequestBody,
 } from "./auth-boundary-utils.js";
@@ -86,6 +90,13 @@ import {
   user,
   verification,
 } from "./schema.js";
+
+const decodeOrganizationSecurityAuditWrite = Schema.decodeUnknownSync(
+  OrganizationSecurityAuditWriteSchema
+);
+const decodeOAuthSecurityAuditWrite = Schema.decodeUnknownSync(
+  OAuthSecurityAuditWriteSchema
+);
 
 describe("makeAuthenticationConfig()", () => {
   it("defines the Ceird OAuth scopes exposed to MCP clients", () => {
@@ -1701,7 +1712,7 @@ describe("createAuthentication()", () => {
             dynamicRegistration: true,
             oauthError: "invalid_scope",
             outcome: "rejected",
-            requestedUnknownScope: false,
+            source: "better_auth_oauth_endpoint",
           },
           scopes: ["openid", "ceird:admin"],
           sourceIp: "203.0.113.52",
@@ -4273,7 +4284,7 @@ describe("createAuthentication()", () => {
           dynamicRegistration: true,
           oauthError: "invalid_scope",
           outcome: "rejected",
-          requestedUnknownScope: false,
+          source: "better_auth_oauth_endpoint",
         },
         scopes: ["openid", "ceird:admin"],
         sourceIp: "203.0.113.52",
@@ -4330,7 +4341,7 @@ describe("createAuthentication()", () => {
           dynamicRegistration: true,
           oauthError: "invalid_scope",
           outcome: "rejected",
-          requestedUnknownScope: true,
+          source: "better_auth_oauth_endpoint",
         },
         scopes: ["openid"],
         sourceIp: "203.0.113.52",
@@ -4378,17 +4389,60 @@ describe("createAuthentication()", () => {
     );
 
     expect(response.status).toBe(201);
-    expect(auditEvents).toStrictEqual([
-      expect.objectContaining({
-        actorUserId: null,
-        eventType: "oauth_client_registration_succeeded",
-        oauthClientId: null,
-        scopes: ["openid", "ceird:read"],
-      }),
-    ]);
+    expect(auditEvents).toStrictEqual([]);
     expect(JSON.stringify(auditEvents)).not.toContain("client_id");
     expect(JSON.stringify(auditEvents)).not.toContain("user_id");
   }, 10_000);
+
+  it("rejects impossible OAuth audit event metadata combinations", () => {
+    expect(() =>
+      decodeOAuthSecurityAuditWrite({
+        eventType: "oauth_client_registration_succeeded",
+        metadata: {
+          dynamicRegistration: true,
+          oauthError: "invalid_scope",
+          outcome: "rejected",
+          source: "better_auth_oauth_endpoint",
+        },
+      })
+    ).toThrow(/Expected|Missing/);
+
+    expect(() =>
+      decodeOAuthSecurityAuditWrite({
+        eventType: "oauth_client_registration_rejected",
+        metadata: {
+          dynamicRegistration: true,
+          oauthError: null,
+          outcome: "succeeded",
+          source: "better_auth_oauth_endpoint",
+        },
+      })
+    ).toThrow(/Expected|Missing/);
+
+    expect(() =>
+      decodeOAuthSecurityAuditWrite({
+        eventType: "oauth_consent_granted",
+        metadata: {
+          accepted: false,
+          containsAdminScope: false,
+          containsWriteScope: true,
+          source: "better_auth_oauth_endpoint",
+        },
+      })
+    ).toThrow(/Expected|Missing/);
+
+    expect(() =>
+      decodeOAuthSecurityAuditWrite({
+        eventType: "oauth_consent_denied",
+        metadata: {
+          accepted: true,
+          containsAdminScope: true,
+          containsWriteScope: false,
+          source: "better_auth_oauth_endpoint",
+        },
+      })
+    ).toThrow(/Expected|Missing/);
+  });
 
   it("records admin-scope OAuth consent grants with actor and organization context", async () => {
     const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
@@ -4443,6 +4497,7 @@ describe("createAuthentication()", () => {
           accepted: true,
           containsAdminScope: true,
           containsWriteScope: false,
+          source: "better_auth_oauth_endpoint",
         },
         oauthClientId: "client_admin",
         organizationId: "org_123",
@@ -4509,6 +4564,7 @@ describe("createAuthentication()", () => {
           accepted: false,
           containsAdminScope: false,
           containsWriteScope: true,
+          source: "better_auth_oauth_endpoint",
         },
         oauthClientId: "client_denied",
         organizationId: "org_123",
@@ -4633,6 +4689,7 @@ describe("createAuthentication()", () => {
           accepted: true,
           containsAdminScope: true,
           containsWriteScope: false,
+          source: "better_auth_oauth_endpoint",
         },
         oauthClientId: "client_admin",
         organizationId: null,
@@ -4752,6 +4809,7 @@ describe("createAuthentication()", () => {
         metadata: {
           grantType: "refresh_token",
           matchedStoredToken: true,
+          source: "better_auth_oauth_endpoint",
           tokenKind: "refresh_token",
         },
         oauthClientId: "client_from_refresh_row",
@@ -4764,6 +4822,7 @@ describe("createAuthentication()", () => {
         eventType: "oauth_token_revoked",
         metadata: {
           matchedStoredToken: true,
+          source: "better_auth_oauth_endpoint",
           tokenKind: "refresh_token",
           tokenTypeHint: "refresh_token",
         },
@@ -4873,21 +4932,7 @@ describe("createAuthentication()", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(auditEvents).toStrictEqual([
-        expect.objectContaining({
-          actorUserId: null,
-          eventType: "oauth_token_refreshed",
-          metadata: {
-            grantType: "refresh_token",
-            matchedStoredToken: false,
-            tokenKind: "refresh_token",
-          },
-          oauthClientId: "client_readonly",
-          organizationId: null,
-          scopes: ["openid", "ceird:read"],
-          sessionId: null,
-        }),
-      ]);
+      expect(auditEvents).toStrictEqual([]);
       const serializedAuditEvents = JSON.stringify(auditEvents);
       const serializedLogs = JSON.stringify(logs);
 
@@ -4935,20 +4980,7 @@ describe("createAuthentication()", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(auditEvents).toStrictEqual([
-      expect.objectContaining({
-        eventType: "oauth_token_revoked",
-        metadata: {
-          matchedStoredToken: false,
-          tokenKind: null,
-          tokenTypeHint: null,
-        },
-        oauthClientId: null,
-        organizationId: null,
-        scopes: null,
-        sessionId: null,
-      }),
-    ]);
+    expect(auditEvents).toStrictEqual([]);
     expect(JSON.stringify(auditEvents)).not.toContain("raw-revoked-token");
   }, 10_000);
 
@@ -5107,6 +5139,157 @@ describe("createAuthentication()", () => {
     );
   }, 10_000);
 
+  it("fails open and logs telemetry when organization audit provenance fails decoding", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyOrganizationAuditParseFailOpen() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                id: "org_next",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_previous",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/set-active",
+              {
+                body: JSON.stringify({
+                  organizationId: "org_next",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                  "user-agent": "",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      id: "org_next",
+    });
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain("auth_security_audit_parse_failure");
+    expect(serializedLogs).toContain("organization_active_changed");
+    expect(serializedLogs).toContain("parse");
+  }, 10_000);
+
+  it("fails open and skips organization audit inserts for malformed Better Auth boundary values", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyOrganizationAuditBoundaryValueFailOpen() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                email: "member@example.com",
+                organizationId: "org_123",
+                role: "superadmin",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              invitationRows: [
+                {
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  role: "member",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/invite-member",
+              {
+                body: JSON.stringify({
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  resend: true,
+                  role: "member",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                  "user-agent": "Ceird Test Browser",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      email: "member@example.com",
+      organizationId: "org_123",
+      role: "superadmin",
+    });
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain("auth_security_audit_parse_failure");
+    expect(serializedLogs).toContain("organization_invitation_resent");
+    expect(serializedLogs).not.toContain("member@example.com");
+  }, 10_000);
+
   it("records organization security audit events through Better Auth organization hooks", async () => {
     const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
     const { auth, cleanup } = createAuthenticationForPluginInspection(
@@ -5259,52 +5442,74 @@ describe("createAuthentication()", () => {
         },
       });
 
-      expect(auditEvents.map((event) => event.eventType)).toStrictEqual([
+      const decodedAuditEvents =
+        decodeCapturedOrganizationSecurityAuditWrites(auditEvents);
+
+      expect(decodedAuditEvents.map((event) => event.eventType)).toStrictEqual([
         "organization_created",
         "organization_updated",
         "organization_invitation_created",
         "organization_invitation_accepted",
         "organization_invitation_canceled",
       ]);
-      const organizationCreatedAuditEvent = auditEvents.find(
-        (event) => event.eventType === "organization_created"
-      );
-
-      expect(organizationCreatedAuditEvent?.metadata).not.toHaveProperty(
-        "previousRole"
-      );
-      expect(auditEvents).toContainEqual(
+      expect(decodedAuditEvents).toContainEqual(
         expect.objectContaining({
           actorUserId: "user_owner",
           eventType: "organization_created",
           organizationId: "org_123",
-          metadata: expect.objectContaining({
+          metadata: {
             memberId: "member_owner",
+            outcome: "succeeded",
+            previousRole: null,
             role: "owner",
+            source: "better_auth_organization_plugin",
             targetUserId: "user_owner",
-          }),
+          },
         })
       );
-      expect(auditEvents).toContainEqual(
+      expect(decodedAuditEvents).toContainEqual(
         expect.objectContaining({
           actorUserId: "user_owner",
           eventType: "organization_invitation_created",
-          organizationId: "org_123",
-          metadata: expect.objectContaining({
+          metadata: {
             invitationEmailMasked: "m***@e***.com",
+            outcome: "succeeded",
             role: "member",
-          }),
+            source: "better_auth_organization_plugin",
+            targetUserId: null,
+          },
+          organizationId: "org_123",
         })
       );
-      expect(auditEvents).toContainEqual(
+      expect(decodedAuditEvents).toContainEqual(
+        expect.objectContaining({
+          actorUserId: "user_owner",
+          eventType: "organization_created",
+          organizationId: "org_123",
+        })
+      );
+      expect(decodedAuditEvents).toContainEqual(
         expect.objectContaining({
           actorUserId: "user_member",
           eventType: "organization_invitation_accepted",
           organizationId: "org_123",
-          metadata: expect.objectContaining({
+          metadata: {
             invitationEmailMasked: "m***@e***.com",
             memberId: "member_accepted",
-          }),
+            outcome: "succeeded",
+            role: "member",
+            source: "better_auth_organization_plugin",
+            targetUserId: "user_member",
+          },
+        })
+      );
+      expect(auditEvents[0]).toStrictEqual(
+        expect.objectContaining({
+          oauthClientId: null,
+          scopes: null,
+          sessionId: null,
+          sourceIp: null,
+          userAgent: null,
         })
       );
       const serializedAuditEvents = JSON.stringify(auditEvents);
@@ -5502,7 +5707,10 @@ describe("createAuthentication()", () => {
         })
       );
 
-      expect(auditEvents).toContainEqual(
+      const decodedAuditEvents =
+        decodeCapturedOrganizationSecurityAuditWrites(auditEvents);
+
+      expect(decodedAuditEvents).toContainEqual(
         expect.objectContaining({
           eventType: "organization_created",
           sessionId: "session_123",
@@ -5555,7 +5763,10 @@ describe("createAuthentication()", () => {
       );
 
     await makeHandler({
+      createdAt: "2026-06-07T00:00:00.000Z",
       id: "org_next",
+      name: "Next Org",
+      slug: "next-org",
     })(
       new Request(
         "https://api.ceird.example/api/auth/organization/set-active",
@@ -5565,15 +5776,14 @@ describe("createAuthentication()", () => {
           }),
           headers: {
             "content-type": "application/json",
+            "user-agent": "Ceird Test Browser",
             "x-forwarded-for": "203.0.113.10",
           },
           method: "POST",
         }
       )
     );
-    await makeHandler({
-      id: null,
-    })(
+    await makeHandler(null)(
       new Request(
         "https://api.ceird.example/api/auth/organization/set-active",
         {
@@ -5610,6 +5820,7 @@ describe("createAuthentication()", () => {
       )
     );
     await makeHandler({
+      createdAt: "2026-06-07T00:00:00.000Z",
       id: "member_123",
       organizationId: "org_123",
       role: "admin",
@@ -5632,6 +5843,7 @@ describe("createAuthentication()", () => {
     );
     await makeHandler({
       member: {
+        createdAt: "2026-06-07T00:00:00.000Z",
         id: "member_123",
         organizationId: "org_123",
         role: "admin",
@@ -5653,14 +5865,17 @@ describe("createAuthentication()", () => {
       )
     );
 
-    expect(auditEvents.map((event) => event.eventType)).toStrictEqual([
+    const decodedAuditEvents =
+      decodeCapturedOrganizationSecurityAuditWrites(auditEvents);
+
+    expect(decodedAuditEvents.map((event) => event.eventType)).toStrictEqual([
       "organization_active_changed",
       "organization_active_changed",
       "organization_invitation_resent",
       "organization_member_role_updated",
       "organization_member_removed",
     ]);
-    expect(auditEvents).toContainEqual(
+    expect(decodedAuditEvents).toContainEqual(
       expect.objectContaining({
         actorUserId: "user_123",
         eventType: "organization_active_changed",
@@ -5681,6 +5896,22 @@ describe("createAuthentication()", () => {
           targetUserId: "user_target",
         }),
         organizationId: "org_123",
+      })
+    );
+    expect(decodedAuditEvents).toContainEqual(
+      expect.objectContaining({
+        actorUserId: "user_123",
+        eventType: "organization_active_changed",
+        metadata: {
+          activeOrganizationId: "org_next",
+          outcome: "succeeded",
+          previousOrganizationId: "org_previous",
+          source: "better_auth_organization_endpoint",
+        },
+        organizationId: "org_next",
+        sessionId: "session_123",
+        sourceIp: "203.0.113.10",
+        userAgent: "Ceird Test Browser",
       })
     );
     expect(JSON.stringify(auditEvents)).not.toContain("member@example.com");
@@ -5733,6 +5964,246 @@ describe("createAuthentication()", () => {
     );
 
     expect(auditEvents).toStrictEqual([]);
+  }, 10_000);
+
+  it("fails open when organization invitation audit context rows fail schema decoding", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyInvitationContextDecodeFailOpen() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                email: "member@example.com",
+                organizationId: "org_123",
+                role: "member",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              invitationRows: [
+                {
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  role: "",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/invite-member",
+              {
+                body: JSON.stringify({
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  resend: true,
+                  role: "member",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+    expect(serializedLogs).toContain(
+      "auth_security_audit_organization_context_failure"
+    );
+    expect(serializedLogs).not.toContain("member@example.com");
+  }, 10_000);
+
+  it("fails open when organization member audit context rows fail schema decoding", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyMemberContextDecodeFailOpen() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                createdAt: "2026-06-07T00:00:00.000Z",
+                id: "member_123",
+                organizationId: "org_123",
+                role: "admin",
+                userId: "user_target",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              memberRows: [
+                {
+                  id: "member_123",
+                  organizationId: "org_123",
+                  role: "",
+                  userId: "user_target",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/update-member-role",
+              {
+                body: JSON.stringify({
+                  memberId: "member_123",
+                  organizationId: "org_123",
+                  role: "admin",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+    expect(serializedLogs).toContain(
+      "auth_security_audit_organization_context_failure"
+    );
+  }, 10_000);
+
+  it("fails open when remove-member returns a malformed member response", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyMalformedRemoveMemberResponseSkipsAudit() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                member: {
+                  id: 123,
+                  organizationId: "org_123",
+                  role: "member",
+                  userId: "user_target",
+                },
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              memberRows: [
+                {
+                  id: "member_123",
+                  organizationId: "org_123",
+                  role: "member",
+                  userId: "user_target",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/remove-member",
+              {
+                body: JSON.stringify({
+                  memberIdOrEmail: "member_123",
+                  organizationId: "org_123",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      member: {
+        id: 123,
+        organizationId: "org_123",
+        role: "member",
+        userId: "user_target",
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+    expect(serializedLogs).toContain("auth_security_audit_parse_failure");
+    expect(serializedLogs).toContain("organization_member_removed");
   }, 10_000);
 
   it("fails open when organization member audit context lookup fails", async () => {
@@ -5798,20 +6269,13 @@ describe("createAuthentication()", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(auditEvents).toContainEqual(
-      expect.objectContaining({
-        eventType: "organization_member_role_updated",
-        metadata: expect.objectContaining({
-          previousRole: null,
-          role: "admin",
-          targetUserId: "user_target",
-        }),
-      })
-    );
+    expect(auditEvents).toStrictEqual([]);
     const serializedLogs = JSON.stringify(logs);
     expect(serializedLogs).toContain(
       "auth_security_audit_organization_context_failure"
     );
+    expect(serializedLogs).toContain("auth_security_audit_parse_failure");
+    expect(serializedLogs).toContain("organization_member_role_updated");
     expect(serializedLogs).not.toContain("member@example.com");
     expect(serializedLogs).not.toContain("https://app.example");
     expect(serializedLogs).not.toContain(
@@ -5966,16 +6430,7 @@ describe("createAuthentication()", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(auditEvents).toContainEqual(
-      expect.objectContaining({
-        eventType: "organization_member_role_updated",
-        metadata: expect.objectContaining({
-          previousRole: null,
-          role: "admin",
-          targetUserId: "user_target",
-        }),
-      })
-    );
+    expect(auditEvents).toStrictEqual([]);
     expect(JSON.stringify(auditEvents)).not.toContain("superadmin");
     expect(JSON.stringify(logs)).toContain(
       "auth_security_audit_organization_context_failure"
@@ -5993,6 +6448,7 @@ describe("createAuthentication()", () => {
       () =>
         Promise.resolve(
           Response.json({
+            createdAt: "2026-06-07T00:00:00.000Z",
             id: "member_123",
             organizationId: "org_123",
             role: "superadmin",
@@ -6029,18 +6485,7 @@ describe("createAuthentication()", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(auditEvents).toContainEqual(
-      expect.objectContaining({
-        eventType: "organization_member_role_updated",
-        metadata: expect.objectContaining({
-          memberId: "member_123",
-          previousRole: null,
-          role: null,
-          targetUserId: null,
-        }),
-        organizationId: "org_123",
-      })
-    );
+    expect(auditEvents).toStrictEqual([]);
     expect(JSON.stringify(auditEvents)).not.toContain("superadmin");
   }, 10_000);
 
@@ -6180,7 +6625,18 @@ describe("createAuthentication()", () => {
       databaseUrl: DEFAULT_AUTH_DATABASE_URL,
     });
     const handler = withOrganizationSecurityAuditEventRecorder(
-      () => Promise.resolve(Response.json({})),
+      () =>
+        Promise.resolve(
+          Response.json({
+            member: {
+              createdAt: "2026-06-07T00:00:00.000Z",
+              id: "member_by_email",
+              organizationId: "org_123",
+              role: "admin",
+              userId: "user_target",
+            },
+          })
+        ),
       {
         authConfig: config,
         database: makeAuthSecurityAuditEventDatabase(auditEvents, {
@@ -6251,6 +6707,7 @@ describe("createAuthentication()", () => {
       () =>
         Promise.resolve(
           Response.json({
+            createdAt: "2026-06-07T00:00:00.000Z",
             id: "member_123",
             organizationId: "org_123",
             role: "admin",
@@ -6298,16 +6755,7 @@ describe("createAuthentication()", () => {
 
     expect(response.status).toBe(200);
     expect(memberIdLookupKeys).toStrictEqual([]);
-    expect(auditEvents).toContainEqual(
-      expect.objectContaining({
-        eventType: "organization_member_role_updated",
-        metadata: expect.objectContaining({
-          memberId: "member_123",
-          previousRole: null,
-          role: "admin",
-        }),
-      })
-    );
+    expect(auditEvents).toStrictEqual([]);
   }, 10_000);
 
   it("logs stable abuse telemetry when fail-closed reservations cannot read storage", async () => {
@@ -9552,7 +10000,7 @@ function makeThrowingGuardDatabase() {
 interface CapturedAuthSecurityAuditEvent {
   readonly actorUserId?: string | null;
   readonly eventType: string;
-  readonly metadata?: Record<string, unknown>;
+  readonly metadata: unknown;
   readonly oauthClientId?: string | null;
   readonly organizationId?: string | null;
   readonly scopes?: readonly string[] | null;
@@ -9560,6 +10008,23 @@ interface CapturedAuthSecurityAuditEvent {
   readonly sourceIp?: string | null;
   readonly userAgent?: string | null;
 }
+
+function decodeCapturedOrganizationSecurityAuditWrites(
+  events: readonly CapturedAuthSecurityAuditEvent[]
+) {
+  return events.map((event) =>
+    decodeOrganizationSecurityAuditWrite({
+      actorUserId: event.actorUserId,
+      eventType: event.eventType,
+      metadata: event.metadata,
+      organizationId: event.organizationId,
+      sessionId: event.sessionId,
+      sourceIp: event.sourceIp,
+      userAgent: event.userAgent,
+    })
+  );
+}
+
 interface CapturedOAuthTokenAuditContextRow {
   readonly clientId: string;
   readonly activeOrganizationId?: string | null;
@@ -9596,6 +10061,7 @@ function makeOAuthRefreshTokenConsentGuardDatabase(options: {
       from: () => ({
         leftJoin: () => ({
           where: (condition: unknown) => ({
+            // oxlint-disable-next-line eslint/complexity -- Test mock mirrors the selected Drizzle table branches.
             limit: () => {
               if (options.selectFailure) {
                 return Promise.reject(options.selectFailure);
@@ -9606,7 +10072,16 @@ function makeOAuthRefreshTokenConsentGuardDatabase(options: {
                 options.rows?.find((tokenRow) => tokenRow.token === token) ??
                 null;
 
-              return Promise.resolve(row ? [row] : []);
+              return Promise.resolve(
+                row
+                  ? [
+                      {
+                        consentScopes: row.consentScopes,
+                        refreshTokenScopes: row.refreshTokenScopes,
+                      },
+                    ]
+                  : []
+              );
             },
           }),
         }),
@@ -9657,7 +10132,18 @@ function makeAuthSecurityAuditEventDatabase(
                       parameters.includes(memberRow.email)
                   ) ?? null;
 
-                return Promise.resolve(row ? [row] : []);
+                return Promise.resolve(
+                  row
+                    ? [
+                        {
+                          id: row.id,
+                          organizationId: row.organizationId,
+                          role: row.role,
+                          userId: row.userId,
+                        },
+                      ]
+                    : []
+                );
               },
             }),
           }),
@@ -9674,37 +10160,26 @@ function makeAuthSecurityAuditEventDatabase(
                     (tokenRow) => tokenRow?.token === token
                   ) ?? null;
 
-                return Promise.resolve(row ? [row] : []);
+                return Promise.resolve(
+                  row
+                    ? [
+                        {
+                          clientId: row.clientId,
+                          referenceId:
+                            row.referenceId ?? row.activeOrganizationId ?? null,
+                          scopes: row.scopes,
+                          sessionId: row.sessionId ?? null,
+                          userId: row.userId ?? null,
+                        },
+                      ]
+                    : []
+                );
               },
             }),
           }),
           where: (condition: unknown) => ({
-            limit: () => {
-              if (options?.selectFailure) {
-                return Promise.reject(options.selectFailure);
-              }
-
-              if (tableName === getTableName(invitation)) {
-                return Promise.resolve(
-                  options?.invitationRows?.slice(0, 1) ?? []
-                );
-              }
-
-              const token = readDrizzleEqParameter(condition);
-              if (tableName === getTableName(member)) {
-                options?.memberIdLookupKeys?.push(token ?? "");
-              }
-              const row =
-                options?.tokenRows?.find(
-                  (tokenRow) => tokenRow?.token === token
-                ) ??
-                options?.memberRows?.find(
-                  (memberRow) => memberRow.id === token
-                ) ??
-                null;
-
-              return Promise.resolve(row ? [row] : []);
-            },
+            limit: () =>
+              readAuthSecurityAuditWhereRows({ condition, options, tableName }),
           }),
         };
       },
@@ -9712,6 +10187,93 @@ function makeAuthSecurityAuditEventDatabase(
   } as unknown as Parameters<
     typeof withOAuthSecurityAuditEventRecorder
   >[1]["database"];
+}
+
+function readAuthSecurityAuditWhereRows(input: {
+  readonly condition: unknown;
+  readonly options:
+    | Parameters<typeof makeAuthSecurityAuditEventDatabase>[1]
+    | undefined;
+  readonly tableName: string | null;
+}) {
+  const { condition, options, tableName } = input;
+
+  if (options?.selectFailure) {
+    return Promise.reject(options.selectFailure);
+  }
+
+  if (tableName === getTableName(invitation)) {
+    return Promise.resolve(readProjectedInvitationAuditRows(options));
+  }
+
+  const token = readDrizzleEqParameter(condition);
+
+  if (tableName === getTableName(member)) {
+    options?.memberIdLookupKeys?.push(token ?? "");
+  }
+
+  const tokenRows = readProjectedTokenAuditRows(options, token);
+
+  return Promise.resolve(
+    tokenRows.length > 0
+      ? tokenRows
+      : readProjectedMemberAuditRows(options, tableName, token)
+  );
+}
+
+function readProjectedInvitationAuditRows(
+  options: Parameters<typeof makeAuthSecurityAuditEventDatabase>[1] | undefined
+) {
+  return (
+    options?.invitationRows?.slice(0, 1).map((row) => ({
+      email: row.email,
+      organizationId: row.organizationId,
+      role: row.role,
+    })) ?? []
+  );
+}
+
+function readProjectedTokenAuditRows(
+  options: Parameters<typeof makeAuthSecurityAuditEventDatabase>[1] | undefined,
+  token: string | null
+) {
+  const row =
+    options?.tokenRows?.find((candidate) => candidate?.token === token) ?? null;
+
+  return row === null
+    ? []
+    : [
+        {
+          clientId: row.clientId,
+          referenceId: row.referenceId ?? row.activeOrganizationId ?? null,
+          scopes: row.scopes,
+          sessionId: row.sessionId ?? null,
+          userId: row.userId ?? null,
+        },
+      ];
+}
+
+function readProjectedMemberAuditRows(
+  options: Parameters<typeof makeAuthSecurityAuditEventDatabase>[1] | undefined,
+  tableName: string | null,
+  token: string | null
+) {
+  const row =
+    tableName === getTableName(member)
+      ? (options?.memberRows?.find((candidate) => candidate.id === token) ??
+        null)
+      : null;
+
+  return row === null
+    ? []
+    : [
+        {
+          id: row.id,
+          organizationId: row.organizationId,
+          role: row.role,
+          userId: row.userId,
+        },
+      ];
 }
 
 function makeFailingAuthSecurityAuditEventDatabase(

@@ -98,6 +98,19 @@ export const OAuthClientId = Schema.NonEmptyString.pipe(
 );
 export type OAuthClientId = Schema.Schema.Type<typeof OAuthClientId>;
 
+export const CEIRD_OAUTH_SCOPES = [
+  "openid",
+  "profile",
+  "email",
+  "offline_access",
+  "ceird:read",
+  "ceird:write",
+  "ceird:admin",
+] as const;
+
+export const CeirdOAuthScopeSchema = Schema.Literals(CEIRD_OAUTH_SCOPES);
+export type CeirdOAuthScope = Schema.Schema.Type<typeof CeirdOAuthScopeSchema>;
+
 export const InvitationId = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/identity-core/InvitationId")
 );
@@ -1090,7 +1103,7 @@ export type OrganizationSecurityActivityEventId = Schema.Schema.Type<
   typeof OrganizationSecurityActivityEventId
 >;
 
-export const OrganizationSecurityActivityCursor = Schema.String.pipe(
+export const OrganizationSecurityActivityCursor = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/identity-core/OrganizationSecurityActivityCursor")
 );
 export type OrganizationSecurityActivityCursor = Schema.Schema.Type<
@@ -1169,20 +1182,22 @@ export const OrganizationSecurityActivityQuerySchema = Schema.Struct({
   cursor: Schema.optional(OrganizationSecurityActivityCursor),
   eventType: Schema.optional(OrganizationSecurityActivityEventType),
   fromDate: Schema.optional(IsoDateString),
-  limit: Schema.optional(
-    Schema.NumberFromString.pipe(
-      Schema.check(
-        Schema.isInt(),
-        Schema.isGreaterThan(0),
-        Schema.isLessThanOrEqualTo(100)
-      )
-    )
+  limit: Schema.Union([Schema.Number, Schema.NumberFromString]).pipe(
+    Schema.check(
+      Schema.isInt(),
+      Schema.isGreaterThan(0),
+      Schema.isLessThanOrEqualTo(100)
+    ),
+    Schema.withDecodingDefaultTypeKey(Effect.succeed(50))
   ),
   targetSearch: Schema.optional(NonEmptyTrimmedString),
   targetType: Schema.optional(OrganizationSecurityActivityTargetType),
   toDate: Schema.optional(IsoDateString),
 });
 export type OrganizationSecurityActivityQuery = Schema.Schema.Type<
+  typeof OrganizationSecurityActivityQuerySchema
+>;
+export type OrganizationSecurityActivityQueryInput = Schema.Codec.Encoded<
   typeof OrganizationSecurityActivityQuerySchema
 >;
 
@@ -1536,6 +1551,32 @@ export function decodeOrganizationSecurityActivityListResponse(
   return Schema.decodeUnknownSync(
     OrganizationSecurityActivityListResponseSchema
   )(input);
+}
+
+export function decodeOrganizationSecurityActivityQuery(
+  input: unknown
+): OrganizationSecurityActivityQuery {
+  return Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)(
+    input
+  );
+}
+
+export function decodeOrganizationSecurityActivityEventType(
+  input: unknown
+): OrganizationSecurityActivityEventType {
+  return Schema.decodeUnknownSync(OrganizationSecurityActivityEventType)(input);
+}
+
+export function decodeOrganizationSecurityActivityTargetType(
+  input: unknown
+): OrganizationSecurityActivityTargetType {
+  return Schema.decodeUnknownSync(OrganizationSecurityActivityTargetType)(
+    input
+  );
+}
+
+export function decodeIsoDateString(input: unknown): IsoDateString {
+  return Schema.decodeUnknownSync(IsoDateString)(input);
 }
 
 export function decodeInvitationId(input: unknown): InvitationId {

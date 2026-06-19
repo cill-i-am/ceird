@@ -535,7 +535,35 @@ actor, organization, session, and OAuth-client review paths.
 Organization audit metadata stores target user/member IDs and role
 before/after values when available. Invitation audit metadata stores masked
 recipient email addresses only; raw invitation URLs and invitation IDs are not
-written to the audit table.
+written to the audit table. Remove-member requests that identify a member by
+email resolve audit context through a decoded email plus decoded organization id
+lookup; only branded member ids enter member-id persistence lookups.
+
+Organization audit writes decode through the domain identity persistence schemas
+before insert. The write schema is a finite event-type union that pairs each
+organization lifecycle event with its event-specific metadata contract, including
+the internal `organization_active_changed` event. Invitation email display values
+must use the schema-owned masked-email shape, so raw persisted emails fail the
+audit boundary rather than reaching security activity presentation. The decoded
+organization audit write is also the DB insert shape: nullable audit columns are
+normalized to `null` by schema decoding before persistence. Audit parse and
+insert failures are non-blocking for already-successful Better Auth organization
+mutations; they emit typed telemetry and skip the audit row instead of repairing
+or persisting unverifiable metadata.
+
+OAuth audit writes use the same schema-owned insert boundary. Successful client
+registration and consent rows require a decoded OAuth client id before insert.
+Token refresh/revoke rows split matched stored-token evidence from unmatched
+endpoint evidence: every refresh and revoke row requires a decoded OAuth client
+id, matched rows require the decoded stored-token client and scope context, and
+malformed stored-token rows emit token-context telemetry and skip the audit
+write instead of being downgraded to `matchedStoredToken: false`.
+URL-encoded OAuth audit request bodies reject duplicate form keys before schema
+decode so singleton fields cannot be normalized by `URLSearchParams`
+projection.
+Optional source IP and user-agent provenance is decoded by the schema and empty
+values normalize to `null`; empty optional provenance does not suppress an
+otherwise trustworthy audit row.
 
 Organization audit rows are success-only for this stage: Ceird records events
 after Better Auth accepts and applies the lifecycle mutation. Failed
@@ -568,14 +596,23 @@ connected-app management plus the owner/admin organization member workspace:
   `organization_member_role_updated`, and `organization_member_removed`
 - `organization_active_changed` remains in the internal audit table but is not
   returned by the owner/admin workspace view
+- member role/remove audit recorders distinguish absent Better Auth member
+  responses from malformed member response shapes; malformed shapes emit parse
+  telemetry and skip the audit write, while absent responses may use the
+  decoded pre-image context
 - response items include safe actor, target, role-change, summary, timestamp,
   organization id, and cursor fields; raw source IP and raw user-agent values
   are not part of the shared response schema
+- selected `auth_security_audit_event` rows, owner/admin-visible event types,
+  event-specific metadata, and microsecond cursor state decode through the
+  domain identity persistence schemas before the service maps them into shared
+  `@ceird/identity-core` response DTOs
 - member targets resolve display name/email only through a `member` row scoped to
   the active organization, so schemaless audit metadata cannot expose another
   user's profile details
 - filtering supports event type, actor user id, target type, date range, target
-  search, limit, and cursor parameters; cursors preserve the database timestamp
+  search, limit, and cursor parameters; the shared query schema owns the default
+  limit of 50 before repository access; cursors preserve the database timestamp
   precision used by the `(created_at desc, id desc)` ordering
 - connected-app list and disconnect resolve only the current authenticated user.
   A grant id owned by another user is treated as not found so grant existence is
@@ -630,11 +667,17 @@ Reliability notes:
   Better Auth rotates it, so matching rows can include user, session, active
   organization, client, and scope context; Ceird also checks the matching live
   consent row and covering consent scopes before allowing the refresh grant
-  through
+  through, using a schema-decoded token request projection for `grant_type` and
+  `refresh_token` before enforcement
 - revoke events pre-read stored refresh or opaque access-token rows when
   possible; JWT access-token revocation and unknown-token revocation cannot
   prove a stored row mutation from the endpoint response alone, so those rows
-  remain redacted endpoint audit evidence with `matchedStoredToken: false`
+  remain redacted endpoint audit evidence with `matchedStoredToken: false` only
+  when the decoded revoke request carries a trusted OAuth client id
+- stored OAuth token rows that are found but fail schema decoding are treated as
+  context failures, not as unknown-token evidence; Ceird logs sanitized
+  `auth_security_audit_token_context_failure` telemetry and skips the token audit
+  row
 - audit writes are scheduled through the auth background-task handler when the
   runtime provides one; write failures fail open with high-severity telemetry
   (`auth_security_audit_write_failure`) so an audit storage outage does not

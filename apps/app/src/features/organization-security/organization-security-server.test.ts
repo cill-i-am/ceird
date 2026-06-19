@@ -1,8 +1,10 @@
-import type {
+import {
+  OrganizationId,
   OrganizationSecurityActivityEventId,
-  OrganizationSecurityActivityListResponse,
   UserId,
 } from "@ceird/identity-core";
+import type { OrganizationSecurityActivityListResponse } from "@ceird/identity-core";
+import { Schema } from "effect";
 /* oxlint-disable unicorn/no-useless-undefined */
 // @vitest-environment node
 
@@ -22,13 +24,15 @@ const organizationSecurityActivityResponse: OrganizationSecurityActivityListResp
       {
         actor: {
           email: "owner@example.com",
-          id: "user_owner" as UserId,
+          id: Schema.decodeUnknownSync(UserId)("user_owner"),
           name: "Owner User",
         },
         createdAt: "2026-06-07T10:30:00.000Z",
         eventType: "organization_created",
-        id: "audit_123" as OrganizationSecurityActivityEventId,
-        organizationId: "org_123" as never,
+        id: Schema.decodeUnknownSync(OrganizationSecurityActivityEventId)(
+          "audit_123"
+        ),
+        organizationId: Schema.decodeUnknownSync(OrganizationId)("org_123"),
         summary: "Created Acme Field Ops.",
         target: {
           label: "Acme Field Ops",

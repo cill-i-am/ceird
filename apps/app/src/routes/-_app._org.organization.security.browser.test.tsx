@@ -1,11 +1,14 @@
-import { decodeOrganizationId } from "@ceird/identity-core";
+import {
+  decodeOrganizationId,
+  OrganizationSecurityActivityCursor as OrganizationSecurityActivityCursorSchema,
+} from "@ceird/identity-core";
 import type {
   OrganizationRole,
-  OrganizationSecurityActivityCursor,
   OrganizationSecurityActivityQuery,
 } from "@ceird/identity-core";
 /* oxlint-disable vitest/prefer-import-in-mock */
 import { isRedirect } from "@tanstack/react-router";
+import { Schema } from "effect";
 
 import type { WorkspaceSheet } from "#/features/workspace-sheets/workspace-sheet-search";
 
@@ -14,7 +17,9 @@ type SecurityActivityLookupMock = (
 ) => Promise<unknown>;
 
 const organizationId = decodeOrganizationId("org_123");
-const cursor = "cursor_123" as OrganizationSecurityActivityCursor;
+const cursor = Schema.decodeUnknownSync(
+  OrganizationSecurityActivityCursorSchema
+)("cursor_123");
 
 const { mockedListCurrentServerOrganizationSecurityActivity } = vi.hoisted(
   () => ({
@@ -92,6 +97,7 @@ describe("organization security activity route loader", () => {
         cursor,
         eventType: "organization_member_role_updated",
         fromDate: "2026-06-01",
+        limit: 50,
         targetSearch: "Taylor",
         targetType: "member",
         toDate: "2026-06-07",
@@ -162,7 +168,7 @@ describe("organization security activity route loader", () => {
   );
 
   it(
-    "normalizes invalid security activity search values",
+    "rejects invalid security activity search values",
     {
       timeout: 10_000,
     },
@@ -170,7 +176,7 @@ describe("organization security activity route loader", () => {
       const { decodeOrganizationSecurityActivitySearch } =
         await import("./_app._org.organization.security");
 
-      expect(
+      expect(() =>
         decodeOrganizationSecurityActivitySearch({
           actorUserId: "",
           cursor: "",
@@ -180,15 +186,7 @@ describe("organization security activity route loader", () => {
           targetType: "session",
           toDate: "tomorrow",
         })
-      ).toStrictEqual({
-        actorUserId: undefined,
-        cursor: undefined,
-        eventType: undefined,
-        fromDate: undefined,
-        targetSearch: undefined,
-        targetType: undefined,
-        toDate: undefined,
-      });
+      ).toThrow(/Expected/);
     }
   );
 
@@ -205,6 +203,7 @@ describe("organization security activity route loader", () => {
         {
           cursor,
           eventType: "organization_created",
+          limit: 50,
           sheets: [sheet],
         },
         {
@@ -216,6 +215,7 @@ describe("organization security activity route loader", () => {
       cursor: undefined,
       eventType: undefined,
       fromDate: undefined,
+      limit: 50,
       sheets: [sheet],
       targetSearch: "Taylor",
       targetType: undefined,

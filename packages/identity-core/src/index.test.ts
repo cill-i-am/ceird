@@ -931,6 +931,32 @@ describe("organization member identity boundary", () => {
 });
 
 describe("organization security activity boundary", () => {
+  it("decodes target search through the full shared query schema", () => {
+    expect(
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        targetSearch: " Taylor ",
+      })
+    ).toStrictEqual({
+      limit: 50,
+      targetSearch: "Taylor",
+    });
+    expect(() =>
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        targetSearch: "   ",
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        targetSearch: 42,
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        eventType: "organization_superadmined",
+      })
+    ).toThrow(/Expected/);
+  }, 1000);
+
   it("rejects malformed organization security activity date filters", () => {
     expect(
       Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
@@ -939,7 +965,20 @@ describe("organization security activity boundary", () => {
       })
     ).toStrictEqual({
       fromDate: "2026-06-12",
+      limit: 50,
       toDate: "2026-06-13",
+    });
+    expect(
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({})
+    ).toStrictEqual({
+      limit: 50,
+    });
+    expect(
+      Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
+        limit: 25,
+      })
+    ).toStrictEqual({
+      limit: 25,
     });
     expect(() =>
       Schema.decodeUnknownSync(OrganizationSecurityActivityQuerySchema)({
