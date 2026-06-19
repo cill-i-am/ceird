@@ -1,3 +1,4 @@
+import { OrganizationMemberId } from "@ceird/identity-core";
 import type {
   OrganizationSecurityActivityCursor,
   OrganizationSecurityActivityEventId,
@@ -6,11 +7,13 @@ import type {
 } from "@ceird/identity-core";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Schema } from "effect";
 
 import type { OrganizationSecurityActivitySearch } from "./organization-security-search";
 
 const ownerUserId = "user_owner" as UserId;
 const memberUserId = "user_member" as UserId;
+const memberId = Schema.decodeUnknownSync(OrganizationMemberId)("member_123");
 const nextCursor = "cursor_123" as OrganizationSecurityActivityCursor;
 
 const securityActivity = {
@@ -32,7 +35,7 @@ const securityActivity = {
       summary: "Changed Taylor Member from Member to Admin.",
       target: {
         label: "Taylor Member",
-        memberId: "member_123",
+        memberId,
         type: "member",
         userId: memberUserId,
       },

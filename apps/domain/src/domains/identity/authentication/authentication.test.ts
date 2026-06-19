@@ -3,7 +3,14 @@ import path from "node:path";
 
 import { getTableColumns, getTableName } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { ConfigProvider, Effect, Layer, Logger, References } from "effect";
+import {
+  ConfigProvider,
+  Effect,
+  Layer,
+  Logger,
+  References,
+  Schema,
+} from "effect";
 import {
   HttpEffect,
   HttpRouter,
@@ -13,6 +20,12 @@ import {
 import { Pool } from "pg";
 
 import { readMigrationSql } from "../../../platform/database/test-database.js";
+import {
+  AuthenticationSessionResultSchema,
+  readAuthBoundaryJsonOrFormRequestBody,
+} from "./auth-boundary-utils.js";
+import type { AuthenticationSessionResult } from "./auth-boundary-utils.js";
+import { writeAuthSecurityAuditEvent } from "./auth-oauth-policy.js";
 import {
   makeAuthenticationRequestObservation,
   runWithAuthenticationRequestObservation,
@@ -1503,6 +1516,122 @@ describe("createAuthentication()", () => {
     });
   }, 10_000);
 
+  it("normalizes Better Auth session boundary dates and absent optional fields through schema", () => {
+    const decoded = Schema.decodeUnknownSync(AuthenticationSessionResultSchema)(
+      {
+        session: {
+          createdAt: "2026-06-19T08:00:00.000Z",
+          expiresAt: "2026-06-20T08:00:00.000Z",
+          id: "session_123",
+          token: "session-token",
+          updatedAt: new Date("2026-06-19T08:10:00.000Z"),
+          userId: "user_123",
+        },
+        user: {
+          createdAt: "2026-06-19T08:00:00.000Z",
+          email: "owner@example.com",
+          emailVerified: true,
+          id: "user_123",
+          name: "Owner",
+          twoFactorEnabled: false,
+          updatedAt: "2026-06-19T08:10:00.000Z",
+        },
+      }
+    );
+
+    expect(decoded.session.activeOrganizationId).toBeNull();
+    expect(decoded.session.createdAt).toBeInstanceOf(Date);
+    expect(decoded.session.createdAt.toISOString()).toBe(
+      "2026-06-19T08:00:00.000Z"
+    );
+    expect(decoded.session.ipAddress).toBeNull();
+    expect(decoded.session.userAgent).toBeNull();
+    expect(decoded.user.image).toBeNull();
+    expect(decoded.user.twoFactorEnabled).toBeFalsy();
+    expect(decoded.user.updatedAt).toBeInstanceOf(Date);
+  }, 10_000);
+
+  it.each(["createdAt", "expiresAt", "updatedAt"] as const)(
+    "rejects invalid Better Auth session %s date strings at the session schema boundary",
+    (field) => {
+      expect(() =>
+        Schema.decodeUnknownSync(AuthenticationSessionResultSchema)({
+          session: {
+            activeOrganizationId: null,
+            createdAt: "2026-06-19T08:00:00.000Z",
+            expiresAt: "2026-06-20T08:00:00.000Z",
+            id: "session_123",
+            ipAddress: null,
+            token: "session-token",
+            updatedAt: "2026-06-19T08:10:00.000Z",
+            userAgent: null,
+            userId: "user_123",
+            [field]: "2026-99-99T99:99:99.999Z",
+          },
+          user: {
+            createdAt: "2026-06-19T08:00:00.000Z",
+            email: "owner@example.com",
+            emailVerified: true,
+            id: "user_123",
+            image: null,
+            name: "Owner",
+            twoFactorEnabled: false,
+            updatedAt: "2026-06-19T08:10:00.000Z",
+          },
+        })
+      ).toThrow(/Expected a valid date/);
+    },
+    10_000
+  );
+
+  it.each([
+    ["missing", undefined],
+    ["null", null],
+    ["non-boolean", "false"],
+  ])(
+    "rejects %s Better Auth two-factor session flags at the session schema boundary",
+    (_caseName, twoFactorEnabled) => {
+      const sessionUserInput = {
+        createdAt: "2026-06-19T08:00:00.000Z",
+        email: "owner@example.com",
+        emailVerified: true,
+        id: "user_123",
+        image: null,
+        name: "Owner",
+        updatedAt: "2026-06-19T08:10:00.000Z",
+      };
+      let decodeError: unknown;
+
+      try {
+        Schema.decodeUnknownSync(AuthenticationSessionResultSchema)({
+          session: {
+            activeOrganizationId: null,
+            createdAt: "2026-06-19T08:00:00.000Z",
+            expiresAt: "2026-06-20T08:00:00.000Z",
+            id: "session_123",
+            ipAddress: null,
+            token: "session-token",
+            updatedAt: "2026-06-19T08:10:00.000Z",
+            userAgent: null,
+            userId: "user_123",
+          },
+          user:
+            twoFactorEnabled === undefined
+              ? sessionUserInput
+              : {
+                  ...sessionUserInput,
+                  twoFactorEnabled,
+                },
+        });
+      } catch (error) {
+        decodeError = error;
+      }
+
+      expect(decodeError).toBeDefined();
+    },
+    10_000
+  );
+
   it("configures an observable database-backed auth rate-limit store", () => {
     const { auth, cleanup } = createAuthenticationForPluginInspection();
 
@@ -1516,6 +1645,80 @@ describe("createAuthentication()", () => {
       });
     } finally {
       void cleanup();
+    }
+  }, 10_000);
+
+  it("applies dynamic client registration policy and audit capture through the composed auth handler", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+      }
+    );
+
+    try {
+      const response = await makeAuthenticationWebHandler(auth)(
+        new Request("https://api.ceird.example/api/auth/oauth2/register", {
+          body: JSON.stringify({
+            redirect_uris: ["https://client.example/oauth/callback"],
+            scope: "openid ceird:admin",
+          }),
+          headers: {
+            "content-type": "application/json",
+            "user-agent": "Ceird MCP Test",
+            "x-forwarded-for": "203.0.113.52",
+          },
+          method: "POST",
+        })
+      );
+
+      await expect(response.json()).resolves.toStrictEqual({
+        error: "invalid_scope",
+        error_description:
+          "Dynamic client registration requested a restricted scope.",
+      });
+      expect(response.status).toBe(400);
+      expect(auditEvents).toStrictEqual([
+        expect.objectContaining({
+          eventType: "oauth_client_registration_rejected",
+          metadata: {
+            dynamicRegistration: true,
+            oauthError: "invalid_scope",
+            outcome: "rejected",
+            requestedUnknownScope: false,
+          },
+          scopes: ["openid", "ceird:admin"],
+          sourceIp: "203.0.113.52",
+          userAgent: "Ceird MCP Test",
+        }),
+      ]);
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("fails closed on uninspectable OAuth token requests through the composed auth handler", async () => {
+    const { auth, cleanup } = createAuthenticationForPluginInspection();
+
+    try {
+      const response = await makeAuthenticationWebHandler(auth)(
+        new Request("https://api.ceird.example/api/auth/oauth2/token", {
+          body: "",
+          headers: {
+            "content-type": "text/plain",
+          },
+          method: "POST",
+        })
+      );
+
+      await expect(response.json()).resolves.toStrictEqual({
+        error: "invalid_request",
+        error_description: "OAuth token request could not be inspected.",
+      });
+      expect(response.status).toBe(400);
+    } finally {
+      await cleanup();
     }
   }, 10_000);
 
@@ -1759,6 +1962,65 @@ describe("createAuthentication()", () => {
     expect(logText).toContain("fail_open");
   }, 10_000);
 
+  it("fails open when observed rate-limit rows fail schema decoding", async () => {
+    const { logger, logs } = captureLogs();
+
+    await Effect.gen(function* verifyRateLimitRowDecodeFailureTelemetry() {
+      const runtimeContext = yield* Effect.context<never>();
+      const storage = makeObservedDatabaseRateLimitStorage(
+        makeRateLimitFlakyReadDatabase([
+          {
+            count: -1,
+            key: "",
+            lastRequest: -1,
+          },
+        ]),
+        runtimeContext
+      );
+
+      const readResult = yield* Effect.promise(() =>
+        storage.get("127.0.0.1|/request-password-reset")
+      );
+
+      expect(readResult).toBeNull();
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    const logText = JSON.stringify(logs);
+
+    expect(logText).toContain("rate_limit_storage_read_failure");
+    expect(logText).toContain("fail_open");
+  }, 10_000);
+
+  it("fails open before reading observed rate-limit storage when Better Auth passes a malformed key", async () => {
+    const { logger, logs } = captureLogs();
+
+    await Effect.gen(function* verifyRateLimitKeyDecodeFailureTelemetry() {
+      const runtimeContext = yield* Effect.context<never>();
+      const storage = makeObservedDatabaseRateLimitStorage(
+        makeRateLimitReadFailureDatabase(new Error("raw key reached storage")),
+        runtimeContext
+      );
+
+      const readResult = yield* Effect.promise(() => storage.get(""));
+
+      expect(readResult).toBeNull();
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    const logText = JSON.stringify(logs);
+
+    expect(logText).toContain("rate_limit_storage_read_failure");
+    expect(logText).toContain("fail_open");
+    expect(logText).not.toContain("raw key reached storage");
+  }, 10_000);
+
   it.each([
     "/sign-in/email",
     "/sign-up/email",
@@ -1812,6 +2074,58 @@ describe("createAuthentication()", () => {
       expect(delegated).toBeFalsy();
     }
   );
+
+  it("fails closed when a rate-limit reservation row fails schema decoding", async () => {
+    let delegated = false;
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyMalformedReservationRowFailsClosed() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withAuthenticationRateLimitFailureResponse(
+          withAuthenticationAbuseRateLimitGuard(
+            () => {
+              delegated = true;
+              return Promise.resolve(Response.json({ delegated: true }));
+            },
+            makeRateLimitReservationDatabase({ count: -1 }),
+            config,
+            runtimeContext
+          )
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request("http://127.0.0.1:3000/api/auth/sign-in/email", {
+              body: JSON.stringify({}),
+              headers: {
+                "content-type": "application/json",
+                "x-forwarded-for": "127.0.0.1",
+              },
+              method: "POST",
+            })
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      code: "AUTH_RATE_LIMIT_UNAVAILABLE",
+      message: "Authentication protection is temporarily unavailable.",
+    });
+    expect(response.status).toBe(503);
+    expect(delegated).toBeFalsy();
+    expect(JSON.stringify(logs)).toContain("rate_limit_reservation_failure");
+  }, 10_000);
 
   it("rejects OAuth dynamic client registration bursts before Better Auth handles the request", async () => {
     let delegated = false;
@@ -2080,6 +2394,213 @@ describe("createAuthentication()", () => {
     expect(delegated).toBeFalsy();
     expect(reservationKeys).toStrictEqual([]);
   }, 10_000);
+
+  it("classifies invalid JSON and schema body failures as invalid_body", async () => {
+    const bodySchema = Schema.Struct({
+      email: Schema.String,
+    });
+
+    await expect(
+      readAuthBoundaryJsonOrFormRequestBody(
+        new Request("http://127.0.0.1:3000/api/auth/request-password-reset", {
+          body: '{"email":',
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        }),
+        1024,
+        bodySchema
+      )
+    ).resolves.toStrictEqual({
+      reason: "invalid_body",
+      status: "unavailable",
+    });
+    await expect(
+      readAuthBoundaryJsonOrFormRequestBody(
+        new Request("http://127.0.0.1:3000/api/auth/request-password-reset", {
+          body: JSON.stringify({
+            email: ["person@example.com"],
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        }),
+        1024,
+        bodySchema
+      )
+    ).resolves.toStrictEqual({
+      reason: "invalid_body",
+      status: "unavailable",
+    });
+  }, 10_000);
+
+  it("rejects malformed rate-limit endpoint bodies before reservation or delegation", async () => {
+    let delegated = false;
+    const reservationKeys: string[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withAuthenticationRateLimitFailureResponse(
+      withAuthenticationAbuseRateLimitGuard(
+        () => {
+          delegated = true;
+          return Promise.resolve(Response.json({ delegated: true }));
+        },
+        makeRateLimitReservationSequenceDatabase(
+          [{ count: 1 }, { count: 1 }],
+          reservationKeys
+        ),
+        config
+      )
+    );
+
+    const response = await handler(
+      new Request("http://127.0.0.1:3000/api/auth/request-password-reset", {
+        body: JSON.stringify({
+          email: ["person@example.com"],
+        }),
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "127.0.0.1",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      code: "AUTH_RATE_LIMIT_REQUEST_INVALID",
+      message: "Authentication request is invalid.",
+    });
+    expect(response.status).toBe(400);
+    expect(delegated).toBeFalsy();
+    expect(reservationKeys).toStrictEqual([]);
+  }, 10_000);
+
+  it("rejects malformed normalized email rate-limit subjects at the schema boundary", async () => {
+    let delegated = false;
+    const reservationKeys: string[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withAuthenticationRateLimitFailureResponse(
+      withAuthenticationAbuseRateLimitGuard(
+        () => {
+          delegated = true;
+          return Promise.resolve(Response.json({ delegated: true }));
+        },
+        makeRateLimitReservationSequenceDatabase(
+          [{ count: 1 }, { count: 1 }],
+          reservationKeys
+        ),
+        config
+      )
+    );
+
+    const response = await handler(
+      new Request("http://127.0.0.1:3000/api/auth/request-password-reset", {
+        body: JSON.stringify({
+          email: " ".repeat(4),
+        }),
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "127.0.0.1",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      code: "AUTH_RATE_LIMIT_REQUEST_INVALID",
+      message: "Authentication request is invalid.",
+    });
+    expect(response.status).toBe(400);
+    expect(delegated).toBeFalsy();
+    expect(reservationKeys).toStrictEqual([]);
+  }, 10_000);
+
+  it.each([
+    {
+      body: "email=first%40example.com&email=second%40example.com",
+      endpointPath: "/request-password-reset",
+      withSession: false,
+    },
+    {
+      body: "newEmail=first%40example.com&newEmail=second%40example.com",
+      endpointPath: "/change-email",
+      withSession: true,
+    },
+    {
+      body: "email=first%40example.com&email=second%40example.com&organizationId=org_123",
+      endpointPath: "/organization/invite-member",
+      withSession: true,
+    },
+    {
+      body: "email=member%40example.com&organizationId=org_123&organizationId=org_456",
+      endpointPath: "/organization/invite-member",
+      withSession: true,
+    },
+  ])(
+    "rejects duplicate form rate-limit subject fields for $endpointPath",
+    async ({ body, endpointPath, withSession }) => {
+      let delegated = false;
+      const reservationKeys: string[] = [];
+      const config = makeAuthenticationConfig({
+        baseUrl: "http://127.0.0.1:3000",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+      });
+      const handler = withAuthenticationRateLimitFailureResponse(
+        withAuthenticationAbuseRateLimitGuard(
+          () => {
+            delegated = true;
+            return Promise.resolve(Response.json({ delegated: true }));
+          },
+          makeRateLimitReservationSequenceDatabase(
+            [{ count: 1 }, { count: 1 }, { count: 1 }],
+            reservationKeys
+          ),
+          config,
+          undefined,
+          withSession
+            ? {
+                resolveSession: () =>
+                  Promise.resolve(
+                    makeAuthenticationSessionResult({
+                      activeOrganizationId: "org_123",
+                    })
+                  ),
+              }
+            : undefined
+        )
+      );
+
+      const response = await handler(
+        new Request(`http://127.0.0.1:3000/api/auth${endpointPath}`, {
+          body,
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            "x-forwarded-for": "127.0.0.1",
+          },
+          method: "POST",
+        })
+      );
+
+      await expect(response.json()).resolves.toStrictEqual({
+        code: "AUTH_RATE_LIMIT_REQUEST_INVALID",
+        message: "Authentication request is invalid.",
+      });
+      expect(response.status).toBe(400);
+      expect(delegated).toBeFalsy();
+      expect(reservationKeys).toStrictEqual([]);
+    },
+    10_000
+  );
 
   it("reserves verification resend limits by email and authenticated user when a session is present", async () => {
     const reservationKeys: string[] = [];
@@ -2687,8 +3208,22 @@ describe("createAuthentication()", () => {
 
     const body = {
       client_name: "Ceird MCP Client",
+      client_uri: "https://client.example",
+      contacts: ["security@client.example"],
+      grant_types: ["authorization_code", "refresh_token"],
+      logo_uri: "https://client.example/logo.png",
+      policy_uri: "https://client.example/privacy",
+      post_logout_redirect_uris: ["https://client.example/logout"],
       redirect_uris: ["https://client.example/oauth/callback"],
+      response_types: ["code"],
       scope: "openid profile email offline_access ceird:read",
+      software_id: "ceird-mcp-client",
+      software_statement: "signed-client-metadata-placeholder",
+      software_version: "1.2.3",
+      subject_type: "public",
+      token_endpoint_auth_method: "none",
+      tos_uri: "https://client.example/terms",
+      type: "native",
     };
     const response = await handler(
       new Request("https://api.ceird.example/api/auth/oauth2/register", {
@@ -2707,6 +3242,123 @@ describe("createAuthentication()", () => {
       token_endpoint_auth_method: "none",
     });
   }, 10_000);
+
+  it.each([
+    [
+      "scope array",
+      {
+        redirect_uris: ["https://client.example/oauth/callback"],
+        scope: ["ceird:admin"],
+      },
+      "scope_invalid_shape",
+    ],
+    [
+      "client URI array",
+      {
+        client_uri: [],
+        redirect_uris: ["https://client.example/oauth/callback"],
+      },
+      "client_uri_invalid_shape",
+    ],
+    [
+      "malformed client name",
+      {
+        client_name: 123,
+        redirect_uris: ["https://client.example/oauth/callback"],
+      },
+      "client_name_invalid_shape",
+    ],
+    [
+      "malformed software id",
+      {
+        redirect_uris: ["https://client.example/oauth/callback"],
+        software_id: 123,
+      },
+      "software_id_invalid_shape",
+    ],
+    [
+      "malformed software version",
+      {
+        redirect_uris: ["https://client.example/oauth/callback"],
+        software_version: [],
+      },
+      "software_version_invalid_shape",
+    ],
+    [
+      "malformed software statement",
+      {
+        redirect_uris: ["https://client.example/oauth/callback"],
+        software_statement: {},
+      },
+      "software_statement_invalid_shape",
+    ],
+    [
+      "malformed subject type",
+      {
+        redirect_uris: ["https://client.example/oauth/callback"],
+        subject_type: [],
+      },
+      "subject_type_invalid_shape",
+    ],
+  ])(
+    "rejects OAuth dynamic client registration wrong-type scalar metadata for %s before delegation",
+    async (_caseName, body, expectedTelemetryReason) => {
+      let delegated = false;
+      const { logger, logs } = captureLogs();
+      const config = makeAuthenticationConfig({
+        baseUrl: "https://api.ceird.example/api/auth",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+      });
+      const response = await Effect.gen(
+        function* verifyRegistrationRejection() {
+          const runtimeContext = yield* Effect.context<never>();
+          const handler = withOAuthClientRegistrationPolicyGuard(
+            () => {
+              delegated = true;
+              return Promise.resolve(Response.json({ delegated: true }));
+            },
+            {
+              allowLoopbackRedirects:
+                config.oauthClientRegistrationAllowLoopbackRedirects,
+              allowedScopes: config.oauthClientRegistrationAllowedScopes,
+              basePath: config.basePath,
+              runtimeContext,
+            }
+          );
+
+          return yield* Effect.promise(() =>
+            handler(
+              new Request(
+                "https://api.ceird.example/api/auth/oauth2/register",
+                {
+                  body: JSON.stringify(body),
+                  headers: {
+                    "content-type": "application/json",
+                  },
+                  method: "POST",
+                }
+              )
+            )
+          );
+        }
+      ).pipe(
+        Effect.provide(Logger.layer([logger])),
+        Effect.provideService(References.MinimumLogLevel, "Trace"),
+        Effect.runPromise
+      );
+
+      await expect(response.json()).resolves.toMatchObject({
+        error: "invalid_client_metadata",
+      });
+      expect(response.status).toBe(400);
+      expect(delegated).toBeFalsy();
+      const logText = JSON.stringify(logs);
+
+      expect(logText).toContain("oauth_dynamic_client_registration_rejected");
+      expect(logText).toContain(expectedTelemetryReason);
+    }
+  );
 
   it("rejects oversized OAuth dynamic client registration bodies before Better Auth handles the request", async () => {
     let delegated = false;
@@ -3215,6 +3867,75 @@ describe("createAuthentication()", () => {
     expect(delegated).toBeFalsy();
   }, 10_000);
 
+  it.each([
+    [
+      "consent scopes",
+      {
+        consentScopes: ["ceird:read", "ceird:superadmin"],
+        refreshTokenScopes: ["ceird:read"],
+      },
+    ],
+    [
+      "refresh-token scopes",
+      {
+        consentScopes: ["ceird:read"],
+        refreshTokenScopes: ["ceird:read", "ceird:superadmin"],
+      },
+    ],
+  ])(
+    "fails closed with a verification error when refresh-token consent rows contain malformed %s",
+    async (_caseName, scopes) => {
+      const storedRefreshToken = await hashOAuthStoredToken(
+        "raw-refresh-token",
+        "refresh_token"
+      );
+      let delegated = false;
+      const config = makeAuthenticationConfig({
+        baseUrl: "https://api.ceird.example/api/auth",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+      });
+      const handler = withOAuthRefreshTokenConsentGuard(
+        () => {
+          delegated = true;
+          return Promise.resolve(Response.json({ delegated: true }));
+        },
+        {
+          basePath: config.basePath,
+          database: makeOAuthRefreshTokenConsentGuardDatabase({
+            rows: [
+              {
+                ...scopes,
+                token: storedRefreshToken,
+              },
+            ],
+          }),
+        }
+      );
+
+      const response = await handler(
+        new Request("https://api.ceird.example/api/auth/oauth2/token", {
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token: "raw-refresh-token",
+          }),
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+          },
+          method: "POST",
+        })
+      );
+
+      await expect(response.json()).resolves.toStrictEqual({
+        error: "server_error",
+        error_description: "Refresh token consent could not be verified.",
+      });
+      expect(response.status).toBe(503);
+      expect(delegated).toBeFalsy();
+    },
+    10_000
+  );
+
   it("fails closed when refresh-token request bodies are too large to inspect", async () => {
     let delegated = false;
     const config = makeAuthenticationConfig({
@@ -3278,6 +3999,42 @@ describe("createAuthentication()", () => {
         body: '{"grant_type":',
         headers: {
           "content-type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      error: "invalid_request",
+      error_description: "OAuth token request could not be inspected.",
+    });
+    expect(response.status).toBe(400);
+    expect(delegated).toBeFalsy();
+  }, 10_000);
+
+  it("fails closed when token requests use an unsupported content type", async () => {
+    let delegated = false;
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthRefreshTokenConsentGuard(
+      () => {
+        delegated = true;
+        return Promise.resolve(Response.json({ delegated: true }));
+      },
+      {
+        basePath: config.basePath,
+        database: makeOAuthRefreshTokenConsentGuardDatabase({ rows: [] }),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/token", {
+        body: "",
+        headers: {
+          "content-type": "text/plain",
         },
         method: "POST",
       })
@@ -3501,11 +4258,121 @@ describe("createAuthentication()", () => {
           dynamicRegistration: true,
           oauthError: "invalid_scope",
           outcome: "rejected",
+          requestedUnknownScope: false,
         },
         scopes: ["openid", "ceird:admin"],
         sourceIp: "203.0.113.52",
       }),
     ]);
+  }, 10_000);
+
+  it("records rejected OAuth dynamic client registration unknown-scope evidence without raw unknown scope persistence", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthSecurityAuditEventRecorder(
+      () =>
+        Promise.resolve(
+          Response.json(
+            {
+              error: "invalid_scope",
+              error_description:
+                "Dynamic client registration requested a restricted scope.",
+            },
+            {
+              status: 400,
+            }
+          )
+        ),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/register", {
+        body: JSON.stringify({
+          redirect_uris: ["https://client.example/oauth/callback"],
+          scope: "openid ceird:superadmin",
+        }),
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.52",
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(auditEvents).toStrictEqual([
+      expect.objectContaining({
+        eventType: "oauth_client_registration_rejected",
+        metadata: {
+          dynamicRegistration: true,
+          oauthError: "invalid_scope",
+          outcome: "rejected",
+          requestedUnknownScope: true,
+        },
+        scopes: ["openid"],
+        sourceIp: "203.0.113.52",
+      }),
+    ]);
+    expect(JSON.stringify(auditEvents)).not.toContain("ceird:superadmin");
+  }, 10_000);
+
+  it("drops malformed OAuth registration response IDs before audit construction", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthSecurityAuditEventRecorder(
+      () =>
+        Promise.resolve(
+          Response.json(
+            {
+              client_id: "",
+              scope: "openid ceird:read",
+              user_id: "",
+            },
+            { status: 201 }
+          )
+        ),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/register", {
+        body: JSON.stringify({
+          redirect_uris: ["https://client.example/oauth/callback"],
+          scope: "openid ceird:read",
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(auditEvents).toStrictEqual([
+      expect.objectContaining({
+        actorUserId: null,
+        eventType: "oauth_client_registration_succeeded",
+        oauthClientId: null,
+        scopes: ["openid", "ceird:read"],
+      }),
+    ]);
+    expect(JSON.stringify(auditEvents)).not.toContain("client_id");
+    expect(JSON.stringify(auditEvents)).not.toContain("user_id");
   }, 10_000);
 
   it("records admin-scope OAuth consent grants with actor and organization context", async () => {
@@ -3638,6 +4505,52 @@ describe("createAuthentication()", () => {
     expect(JSON.stringify(auditEvents[0])).not.toContain(
       "https://client.example/callback"
     );
+  }, 10_000);
+
+  it("fails open for malformed OAuth consent audit request bodies", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthSecurityAuditEventRecorder(
+      () =>
+        Promise.resolve(
+          Response.json({
+            redirect_uri:
+              "https://client.example/callback?code=raw-code&state=state",
+          })
+        ),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+        resolveSession: () =>
+          Promise.resolve(
+            makeOAuthAuditSessionResult({
+              activeOrganizationId: "org_123",
+              sessionId: "session_123",
+              userId: "user_123",
+            })
+          ),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/consent", {
+        body: JSON.stringify({
+          accept: "true",
+          oauth_query: ["client_id=client_admin"],
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
   }, 10_000);
 
   it("logs stable telemetry when OAuth audit session resolution fails", async () => {
@@ -3854,6 +4767,176 @@ describe("createAuthentication()", () => {
     expect(serializedAuditEvents).not.toContain("raw-revoked-token");
   }, 10_000);
 
+  it.each([
+    [
+      "finite scope",
+      {
+        activeOrganizationId: "org_mutable_session",
+        clientId: "client_from_bad_scope_row",
+        referenceId: "org_from_bad_scope_row",
+        scopes: ["openid", "ceird:superadmin"],
+        sessionId: "session_from_bad_scope_row",
+        userId: "user_from_bad_scope_row",
+      },
+      ["client_from_bad_scope_row", "ceird:superadmin"],
+    ],
+    [
+      "branded ID",
+      {
+        activeOrganizationId: "org_mutable_session",
+        clientId: "client_from_bad_id_row",
+        referenceId: "org_from_bad_id_row",
+        scopes: ["openid"],
+        sessionId: "",
+        userId: "user_from_bad_id_row",
+      },
+      ["client_from_bad_id_row", "org_from_bad_id_row", "user_from_bad_id_row"],
+    ],
+  ])(
+    "fails open and logs sanitized telemetry when OAuth token audit context rows fail %s schema decode",
+    async (_caseName, row, forbiddenFragments) => {
+      const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+      const { logger, logs } = captureLogs();
+      const storedRefreshToken = await hashOAuthStoredToken(
+        "raw-refresh-token",
+        "refresh_token"
+      );
+      const config = makeAuthenticationConfig({
+        baseUrl: "https://api.ceird.example/api/auth",
+        secret: "0123456789abcdef0123456789abcdef",
+        databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+      });
+
+      const response = await Effect.gen(
+        function* verifyTokenContextDecodeFailure() {
+          const runtimeContext = yield* Effect.context<never>();
+          const handler = withOAuthSecurityAuditEventRecorder(
+            () =>
+              Promise.resolve(
+                Response.json({
+                  access_token: "raw-access-token",
+                  refresh_token: "new-raw-refresh-token",
+                  scope: "openid ceird:read",
+                  token_type: "Bearer",
+                })
+              ),
+            {
+              authConfig: config,
+              database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+                tokenRows: [
+                  {
+                    ...row,
+                    token: storedRefreshToken,
+                  },
+                ],
+              }),
+              runtimeContext,
+            }
+          );
+
+          return yield* Effect.promise(() =>
+            handler(
+              new Request("https://api.ceird.example/api/auth/oauth2/token", {
+                body: new URLSearchParams({
+                  client_id: "client_readonly",
+                  client_secret: "client-secret",
+                  grant_type: "refresh_token",
+                  refresh_token: "raw-refresh-token",
+                }),
+                headers: {
+                  "content-type": "application/x-www-form-urlencoded",
+                },
+                method: "POST",
+              })
+            )
+          );
+        }
+      ).pipe(
+        Effect.provide(Logger.layer([logger])),
+        Effect.provideService(References.MinimumLogLevel, "Trace"),
+        Effect.runPromise
+      );
+
+      expect(response.status).toBe(200);
+      expect(auditEvents).toStrictEqual([
+        expect.objectContaining({
+          actorUserId: null,
+          eventType: "oauth_token_refreshed",
+          metadata: {
+            grantType: "refresh_token",
+            matchedStoredToken: false,
+            tokenKind: "refresh_token",
+          },
+          oauthClientId: "client_readonly",
+          organizationId: null,
+          scopes: ["openid", "ceird:read"],
+          sessionId: null,
+        }),
+      ]);
+      const serializedAuditEvents = JSON.stringify(auditEvents);
+      const serializedLogs = JSON.stringify(logs);
+
+      expect(serializedLogs).toContain(
+        "auth_security_audit_token_context_failure"
+      );
+      expect(serializedLogs).not.toContain("client-secret");
+      expect(serializedLogs).not.toContain("raw-refresh-token");
+
+      for (const fragment of forbiddenFragments) {
+        expect(serializedAuditEvents).not.toContain(fragment);
+        expect(serializedLogs).not.toContain(fragment);
+      }
+    },
+    10_000
+  );
+
+  it("drops malformed OAuth request client IDs before audit fallback construction", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthSecurityAuditEventRecorder(
+      () => Promise.resolve(Response.json({})),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/revoke", {
+        body: new URLSearchParams({
+          client_id: "",
+          token: "raw-revoked-token",
+          token_type_hint: "refresh_token",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([
+      expect.objectContaining({
+        eventType: "oauth_token_revoked",
+        metadata: {
+          matchedStoredToken: false,
+          tokenKind: null,
+          tokenTypeHint: null,
+        },
+        oauthClientId: null,
+        organizationId: null,
+        scopes: null,
+        sessionId: null,
+      }),
+    ]);
+    expect(JSON.stringify(auditEvents)).not.toContain("raw-revoked-token");
+  }, 10_000);
+
   it("fails open and logs telemetry when auth security audit writes fail", async () => {
     const { logger, logs } = captureLogs();
     const config = makeAuthenticationConfig({
@@ -3920,6 +5003,90 @@ describe("createAuthentication()", () => {
     expect(serializedLogs).toContain("[redacted-token]");
     expect(serializedLogs).not.toContain("member@example.com");
     expect(serializedLogs).not.toContain("https://app.example");
+    expect(serializedLogs).not.toContain(
+      "rawtokenrawtokenrawtokenrawtoken1234"
+    );
+  }, 10_000);
+
+  it("fails open and does not insert raw rows when auth security audit write schema decoding fails", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const invalidAuditIdsAndScopes = {
+      actorUserId: "",
+      eventType: "oauth_token_refreshed",
+      metadata: {},
+      oauthClientId: "",
+      organizationId: "",
+      scopes: ["openid", 123],
+      sessionId: "",
+      sourceIp: "203.0.113.10",
+      userAgent: "Ceird Test",
+    };
+    const invalidAuditScopeWrite = {
+      actorUserId: "user_123",
+      eventType: "oauth_token_refreshed",
+      metadata: {
+        grantType: "refresh_token",
+        matchedStoredToken: true,
+        tokenKind: "refresh_token",
+      },
+      oauthClientId: "client_123",
+      organizationId: "org_123",
+      scopes: ["openid", "ceird:superadmin"],
+      sessionId: "session_123",
+      sourceIp: "203.0.113.10",
+      userAgent: "Ceird Test",
+    };
+    const malformedMetadataAuditWrite = {
+      actorUserId: "user_123",
+      eventType: "oauth_token_refreshed",
+      metadata: [
+        "member@example.com https://app.example/raw rawtokenrawtokenrawtokenrawtoken1234",
+      ],
+      oauthClientId: "client_123",
+      organizationId: "org_123",
+      scopes: ["openid", "ceird:read"],
+      sessionId: "session_123",
+      sourceIp: "203.0.113.10",
+      userAgent: "Ceird Test",
+    };
+
+    await Effect.gen(function* verifyAuditWriteSchemaFailOpen() {
+      const runtimeContext = yield* Effect.context<never>();
+      const database = makeAuthSecurityAuditEventDatabase(auditEvents);
+
+      yield* Effect.promise(() =>
+        writeAuthSecurityAuditEvent(
+          { database, runtimeContext },
+          invalidAuditIdsAndScopes
+        )
+      );
+      yield* Effect.promise(() =>
+        writeAuthSecurityAuditEvent(
+          { database, runtimeContext },
+          invalidAuditScopeWrite
+        )
+      );
+      return yield* Effect.promise(() =>
+        writeAuthSecurityAuditEvent(
+          { database, runtimeContext },
+          malformedMetadataAuditWrite
+        )
+      );
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+    expect(serializedLogs).toContain("auth_security_audit_write_failure");
+    expect(serializedLogs).toContain("[redacted-email]");
+    expect(serializedLogs).toContain("[redacted-url]");
+    expect(serializedLogs).toContain("[redacted-token]");
+    expect(serializedLogs).not.toContain("member@example.com");
+    expect(serializedLogs).not.toContain("https://app.example/raw");
     expect(serializedLogs).not.toContain(
       "rawtokenrawtokenrawtokenrawtoken1234"
     );
@@ -4014,7 +5181,7 @@ describe("createAuthentication()", () => {
       });
       await hooks?.afterCreateInvitation?.({
         invitation: {
-          email: "member@example.com",
+          email: " Member@Example.COM ",
           organizationId: "org_123",
           role: "member",
         },
@@ -4027,7 +5194,7 @@ describe("createAuthentication()", () => {
       });
       await hooks?.afterAcceptInvitation?.({
         invitation: {
-          email: "member@example.com",
+          email: " Member@Example.COM ",
           organizationId: "org_123",
           role: "member",
         },
@@ -4064,6 +5231,25 @@ describe("createAuthentication()", () => {
         "organization_invitation_accepted",
         "organization_invitation_canceled",
       ]);
+      const organizationCreatedAuditEvent = auditEvents.find(
+        (event) => event.eventType === "organization_created"
+      );
+
+      expect(organizationCreatedAuditEvent?.metadata).not.toHaveProperty(
+        "previousRole"
+      );
+      expect(auditEvents).toContainEqual(
+        expect.objectContaining({
+          actorUserId: "user_owner",
+          eventType: "organization_created",
+          organizationId: "org_123",
+          metadata: expect.objectContaining({
+            memberId: "member_owner",
+            role: "owner",
+            targetUserId: "user_owner",
+          }),
+        })
+      );
       expect(auditEvents).toContainEqual(
         expect.objectContaining({
           actorUserId: "user_owner",
@@ -4075,11 +5261,132 @@ describe("createAuthentication()", () => {
           }),
         })
       );
+      expect(auditEvents).toContainEqual(
+        expect.objectContaining({
+          actorUserId: "user_member",
+          eventType: "organization_invitation_accepted",
+          organizationId: "org_123",
+          metadata: expect.objectContaining({
+            invitationEmailMasked: "m***@e***.com",
+            memberId: "member_accepted",
+          }),
+        })
+      );
       const serializedAuditEvents = JSON.stringify(auditEvents);
 
       expect(serializedAuditEvents).not.toContain("member@example.com");
+      expect(serializedAuditEvents).not.toContain("Member@Example.COM");
       expect(serializedAuditEvents).not.toContain("accept-invitation");
       expect(serializedAuditEvents).not.toContain("inv_");
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("fails open when Better Auth hook metadata contains malformed organization member IDs", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const runtimeContext = await Effect.context<never>().pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+        runtimeContext,
+      }
+    );
+
+    try {
+      const hooks = getOrganizationPluginOptions(auth).organizationHooks as
+        | {
+            readonly afterAcceptInvitation?: (data: {
+              readonly invitation: {
+                readonly email: string;
+                readonly organizationId: string;
+                readonly role: string;
+              };
+              readonly member: {
+                readonly id: string;
+                readonly organizationId: string;
+                readonly userId: string;
+              };
+              readonly organization: { readonly id: string };
+              readonly user: { readonly id: string };
+            }) => Promise<void>;
+          }
+        | undefined;
+
+      await hooks?.afterAcceptInvitation?.({
+        invitation: {
+          email: "member@example.com",
+          organizationId: "org_123",
+          role: "member",
+        },
+        member: {
+          id: "",
+          organizationId: "org_123",
+          userId: "user_member",
+        },
+        organization: {
+          id: "org_123",
+        },
+        user: {
+          id: "user_member",
+        },
+      });
+
+      expect(auditEvents).toStrictEqual([]);
+      expect(JSON.stringify(logs)).toContain(
+        "auth_security_audit_write_failure"
+      );
+      expect(JSON.stringify(logs)).not.toContain("member@example.com");
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("keeps malformed organization-created audit roles inside the fail-open audit boundary", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+      }
+    );
+
+    try {
+      const hooks = getOrganizationPluginOptions(auth).organizationHooks as
+        | {
+            readonly afterCreateOrganization?: (data: {
+              readonly member: {
+                readonly id: string;
+                readonly role: string;
+              };
+              readonly organization: { readonly id: string };
+              readonly user: { readonly id: string };
+            }) => Promise<void>;
+          }
+        | undefined;
+
+      await expect(
+        hooks?.afterCreateOrganization?.({
+          member: {
+            id: "member_owner",
+            role: "superadmin",
+          },
+          organization: {
+            id: "org_123",
+          },
+          user: {
+            id: "user_owner",
+          },
+        })
+      ).resolves.toBeUndefined();
+
+      expect(auditEvents).toStrictEqual([]);
     } finally {
       await cleanup();
     }
@@ -4226,6 +5533,23 @@ describe("createAuthentication()", () => {
       )
     );
     await makeHandler({
+      id: null,
+    })(
+      new Request(
+        "https://api.ceird.example/api/auth/organization/set-active",
+        {
+          body: JSON.stringify({
+            organizationId: null,
+          }),
+          headers: {
+            "content-type": "application/json",
+            "x-forwarded-for": "203.0.113.10",
+          },
+          method: "POST",
+        }
+      )
+    );
+    await makeHandler({
       email: "member@example.com",
       organizationId: "org_123",
       role: "member",
@@ -4292,10 +5616,22 @@ describe("createAuthentication()", () => {
 
     expect(auditEvents.map((event) => event.eventType)).toStrictEqual([
       "organization_active_changed",
+      "organization_active_changed",
       "organization_invitation_resent",
       "organization_member_role_updated",
       "organization_member_removed",
     ]);
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        actorUserId: "user_123",
+        eventType: "organization_active_changed",
+        metadata: expect.objectContaining({
+          activeOrganizationId: null,
+          previousOrganizationId: "org_previous",
+        }),
+        organizationId: "org_previous",
+      })
+    );
     expect(auditEvents).toContainEqual(
       expect.objectContaining({
         actorUserId: "user_123",
@@ -4441,6 +5777,497 @@ describe("createAuthentication()", () => {
     expect(serializedLogs).not.toContain("https://app.example");
     expect(serializedLogs).not.toContain(
       "rawtokenrawtokenrawtokenrawtoken1234"
+    );
+  }, 10_000);
+
+  it("fails open without audit insertion when organization invitation context rows fail schema decoding", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyInvitationContextDecodeFailure() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                email: "member@example.com",
+                organizationId: "org_123",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              invitationRows: [
+                {
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  role: "superadmin",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/invite-member",
+              {
+                body: JSON.stringify({
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  resend: true,
+                }),
+                headers: {
+                  "content-type": "application/json",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain(
+      "auth_security_audit_organization_context_failure"
+    );
+    expect(serializedLogs).not.toContain("member@example.com");
+    expect(JSON.stringify(auditEvents)).not.toContain("superadmin");
+  }, 10_000);
+
+  it("fails open from malformed organization member context rows before metadata construction", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyMemberContextDecodeFailure() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                id: "member_123",
+                organizationId: "org_123",
+                role: "admin",
+                userId: "user_target",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              memberRows: [
+                {
+                  id: "member_123",
+                  organizationId: "org_123",
+                  role: "superadmin",
+                  userId: "user_target",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/update-member-role",
+              {
+                body: JSON.stringify({
+                  memberId: "member_123",
+                  organizationId: "org_123",
+                  role: "admin",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        eventType: "organization_member_role_updated",
+        metadata: expect.objectContaining({
+          previousRole: null,
+          role: "admin",
+          targetUserId: "user_target",
+        }),
+      })
+    );
+    expect(JSON.stringify(auditEvents)).not.toContain("superadmin");
+    expect(JSON.stringify(logs)).toContain(
+      "auth_security_audit_organization_context_failure"
+    );
+  }, 10_000);
+
+  it("ignores malformed Better Auth organization member response roles before audit construction", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOrganizationSecurityAuditEventRecorder(
+      () =>
+        Promise.resolve(
+          Response.json({
+            id: "member_123",
+            organizationId: "org_123",
+            role: "superadmin",
+            userId: "user_target",
+          })
+        ),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+        resolveSession: () =>
+          Promise.resolve(
+            makeAuthenticationSessionResult({
+              activeOrganizationId: "org_123",
+            })
+          ),
+      }
+    );
+
+    const response = await handler(
+      new Request(
+        "https://api.ceird.example/api/auth/organization/update-member-role",
+        {
+          body: JSON.stringify({
+            memberId: "member_123",
+            organizationId: "org_123",
+            role: "admin",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        eventType: "organization_member_role_updated",
+        metadata: expect.objectContaining({
+          memberId: "member_123",
+          previousRole: null,
+          role: null,
+          targetUserId: null,
+        }),
+        organizationId: "org_123",
+      })
+    );
+    expect(JSON.stringify(auditEvents)).not.toContain("superadmin");
+  }, 10_000);
+
+  it("normalizes invite-member audit emails through schema before context lookup", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOrganizationSecurityAuditEventRecorder(
+      () =>
+        Promise.resolve(
+          Response.json({
+            email: " Target.Member@Example.com ",
+            organizationId: "org_123",
+            role: "member",
+          })
+        ),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+          invitationRows: [
+            {
+              email: "target.member@example.com",
+              organizationId: "org_123",
+              role: "member",
+            },
+          ],
+        }),
+        resolveSession: () =>
+          Promise.resolve(
+            makeAuthenticationSessionResult({
+              activeOrganizationId: "org_123",
+            })
+          ),
+      }
+    );
+
+    const response = await handler(
+      new Request(
+        "https://api.ceird.example/api/auth/organization/invite-member",
+        {
+          body: JSON.stringify({
+            email: " Target.Member@Example.com ",
+            organizationId: "org_123",
+            resend: true,
+            role: "member",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([
+      expect.objectContaining({
+        eventType: "organization_invitation_resent",
+        metadata: expect.objectContaining({
+          invitationEmailMasked: "t***@e***.com",
+          role: "member",
+        }),
+        organizationId: "org_123",
+      }),
+    ]);
+    expect(JSON.stringify(auditEvents)).not.toContain("Target.Member");
+  }, 10_000);
+
+  it("rejects blank invite-member audit emails before context lookup", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOrganizationSecurityAuditEventRecorder(
+      () =>
+        Promise.resolve(
+          Response.json({
+            email: "member@example.com",
+            organizationId: "org_123",
+            role: "member",
+          })
+        ),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+          invitationRows: [
+            {
+              email: "member@example.com",
+              organizationId: "org_123",
+              role: "member",
+            },
+          ],
+        }),
+        resolveSession: () =>
+          Promise.resolve(
+            makeAuthenticationSessionResult({
+              activeOrganizationId: "org_123",
+            })
+          ),
+      }
+    );
+
+    const response = await handler(
+      new Request(
+        "https://api.ceird.example/api/auth/organization/invite-member",
+        {
+          body: JSON.stringify({
+            email: "   ",
+            organizationId: "org_123",
+            resend: true,
+            role: "member",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+  }, 10_000);
+
+  it("uses the schema-owned email branch for memberIdOrEmail audit context lookup", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const memberIdLookupKeys: string[] = [];
+    const memberEmailLookupValues: string[][] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOrganizationSecurityAuditEventRecorder(
+      () => Promise.resolve(Response.json({})),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+          memberEmailLookupValues,
+          memberIdLookupKeys,
+          memberRows: [
+            {
+              email: "target.member@example.com",
+              id: "member_by_email",
+              organizationId: "org_123",
+              role: "admin",
+              userId: "user_target",
+            },
+          ],
+        }),
+        resolveSession: () =>
+          Promise.resolve(
+            makeAuthenticationSessionResult({
+              activeOrganizationId: "org_123",
+            })
+          ),
+      }
+    );
+
+    const response = await handler(
+      new Request(
+        "https://api.ceird.example/api/auth/organization/remove-member",
+        {
+          body: JSON.stringify({
+            memberIdOrEmail: " Target.Member@Example.com ",
+            organizationId: "org_123",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(memberIdLookupKeys).toStrictEqual([]);
+    expect(memberEmailLookupValues).toContainEqual(
+      expect.arrayContaining(["org_123", "target.member@example.com"])
+    );
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        eventType: "organization_member_removed",
+        metadata: expect.objectContaining({
+          memberId: "member_by_email",
+          role: "admin",
+          targetUserId: "user_target",
+        }),
+        organizationId: "org_123",
+      })
+    );
+  }, 10_000);
+
+  it("rejects empty organization member IDs before raw audit context lookup", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const memberIdLookupKeys: string[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOrganizationSecurityAuditEventRecorder(
+      () =>
+        Promise.resolve(
+          Response.json({
+            id: "member_123",
+            organizationId: "org_123",
+            role: "admin",
+            userId: "user_target",
+          })
+        ),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+          memberIdLookupKeys,
+          memberRows: [
+            {
+              id: "member_123",
+              organizationId: "org_123",
+              role: "member",
+              userId: "user_target",
+            },
+          ],
+        }),
+        resolveSession: () =>
+          Promise.resolve(
+            makeAuthenticationSessionResult({
+              activeOrganizationId: "org_123",
+            })
+          ),
+      }
+    );
+
+    const response = await handler(
+      new Request(
+        "https://api.ceird.example/api/auth/organization/update-member-role",
+        {
+          body: JSON.stringify({
+            memberId: "",
+            organizationId: "org_123",
+            role: "admin",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(memberIdLookupKeys).toStrictEqual([]);
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        eventType: "organization_member_role_updated",
+        metadata: expect.objectContaining({
+          memberId: "member_123",
+          previousRole: null,
+          role: "admin",
+        }),
+      })
     );
   }, 10_000);
 
@@ -4872,6 +6699,111 @@ describe("createAuthentication()", () => {
     expect(logText).toContain("write_failed");
   }, 10_000);
 
+  it("does not write observed rate-limit rows when Better Auth passes malformed limiter state", async () => {
+    const capturedWrites: unknown[] = [];
+    const { logger, logs } = captureLogs();
+
+    await Effect.gen(function* verifyRateLimitWriteDecodeFailureTelemetry() {
+      const runtimeContext = yield* Effect.context<never>();
+      const storage = makeObservedDatabaseRateLimitStorage(
+        makeRateLimitWriteCaptureDatabase(capturedWrites),
+        runtimeContext
+      );
+
+      yield* Effect.promise(() =>
+        Reflect.apply(storage.set, storage, [
+          "127.0.0.1|/request-password-reset",
+          {
+            count: -1,
+            key: "",
+            lastRequest: -1,
+          },
+        ])
+      );
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(capturedWrites).toStrictEqual([]);
+    expect(JSON.stringify(logs)).toContain("rate_limit_storage_write_failure");
+  }, 10_000);
+
+  it.each([
+    ["insert", false],
+    ["update", true],
+  ])(
+    "does not %s observed rate-limit rows when the Better Auth key and limiter value disagree",
+    async (_operation, update) => {
+      const capturedWrites: unknown[] = [];
+      const capturedUpdates: unknown[] = [];
+      const { logger, logs } = captureLogs();
+
+      await Effect.gen(function* verifyRateLimitKeyMismatchTelemetry() {
+        const runtimeContext = yield* Effect.context<never>();
+        const storage = makeObservedDatabaseRateLimitStorage(
+          makeRateLimitStorageMutationCaptureDatabase(
+            capturedWrites,
+            capturedUpdates
+          ),
+          runtimeContext
+        );
+
+        yield* Effect.promise(() =>
+          storage.set(
+            "127.0.0.1|/request-password-reset",
+            {
+              count: 1,
+              key: "127.0.0.2|/request-password-reset",
+              lastRequest: Date.now(),
+            },
+            update
+          )
+        );
+      }).pipe(
+        Effect.provide(Logger.layer([logger])),
+        Effect.provideService(References.MinimumLogLevel, "Trace"),
+        Effect.runPromise
+      );
+
+      expect(capturedWrites).toStrictEqual([]);
+      expect(capturedUpdates).toStrictEqual([]);
+      expect(JSON.stringify(logs)).toContain(
+        "rate_limit_storage_write_failure"
+      );
+    },
+    10_000
+  );
+
+  it("does not insert observed rate-limit rows when Better Auth passes a malformed storage key", async () => {
+    const capturedWrites: unknown[] = [];
+    const { logger, logs } = captureLogs();
+
+    await Effect.gen(function* verifyMalformedRateLimitKeyTelemetry() {
+      const runtimeContext = yield* Effect.context<never>();
+      const storage = makeObservedDatabaseRateLimitStorage(
+        makeRateLimitStorageMutationCaptureDatabase(capturedWrites, []),
+        runtimeContext
+      );
+
+      yield* Effect.promise(() =>
+        storage.set("", {
+          count: 1,
+          key: "127.0.0.1|/request-password-reset",
+          lastRequest: Date.now(),
+        })
+      );
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(capturedWrites).toStrictEqual([]);
+    expect(JSON.stringify(logs)).toContain("rate_limit_storage_write_failure");
+  }, 10_000);
+
   it("handles trusted auth preflight requests through the auth CORS wrapper", async () => {
     let delegated = false;
     const handler = withAuthenticationCors(() => {
@@ -5267,6 +7199,33 @@ describe("createAuthentication()", () => {
     expect(delegated).toBeFalsy();
   }, 10_000);
 
+  it("delegates non-boolean OAuth consent accept values without a verified-email probe", async () => {
+    let delegatedBody: unknown;
+    const handler = withAuthenticationAuthorizationGuards(async (request) => {
+      delegatedBody = await request.json();
+      return Response.json({ delegated: true });
+    }, makeThrowingGuardDatabase());
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/consent", {
+        body: JSON.stringify({
+          accept: "true",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "better-auth.session_token=session-token.signature",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({ delegated: true });
+    expect(response.status).toBe(200);
+    expect(delegatedBody).toStrictEqual({
+      accept: "true",
+    });
+  }, 10_000);
+
   it("allows verified users to approve Ceird OAuth consent without consuming the request body", async () => {
     let delegatedBody: unknown;
     const handler = withAuthenticationAuthorizationGuards(
@@ -5605,6 +7564,111 @@ describe("createAuthentication()", () => {
       message: "We couldn't verify your session. Please try again.",
     });
     expect(response.status).toBe(503);
+    expect(delegated).toBeFalsy();
+  }, 10_000);
+
+  it("treats malformed fallback verified-email session rows as unverified", async () => {
+    let delegated = false;
+    const handler = withAuthenticationAuthorizationGuards(
+      () => {
+        delegated = true;
+        return Promise.resolve(Response.json({ delegated: true }));
+      },
+      makeVerifiedEmailGuardDatabase({
+        emailVerified: true,
+        sessionToken: "session-token",
+        userId: "",
+      })
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/organization/create", {
+        body: JSON.stringify({
+          name: "Acme Field Ops",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "better-auth.session_token=session-token.signature",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      code: "EMAIL_NOT_VERIFIED",
+      message: "Verify your email before creating an organization.",
+    });
+    expect(response.status).toBe(403);
+    expect(delegated).toBeFalsy();
+  }, 10_000);
+
+  it("treats malformed fallback verified-email user rows as unverified", async () => {
+    let delegated = false;
+    const handler = withAuthenticationAuthorizationGuards(
+      () => {
+        delegated = true;
+        return Promise.resolve(Response.json({ delegated: true }));
+      },
+      makeVerifiedEmailGuardDatabase({
+        emailVerified: "yes",
+        sessionToken: "session-token",
+        userId: "user_123",
+      })
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/organization/create", {
+        body: JSON.stringify({
+          name: "Acme Field Ops",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "better-auth.session_token=session-token.signature",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      code: "EMAIL_NOT_VERIFIED",
+      message: "Verify your email before creating an organization.",
+    });
+    expect(response.status).toBe(403);
+    expect(delegated).toBeFalsy();
+  }, 10_000);
+
+  it("treats malformed fallback administrative member rows as non-administrative", async () => {
+    let delegated = false;
+    const handler = withAuthenticationAuthorizationGuards(
+      () => {
+        delegated = true;
+        return Promise.resolve(Response.json({ delegated: true }));
+      },
+      makeAdministrativeOrganizationGuardDatabase("superadmin"),
+      {
+        resolveSession: () =>
+          Promise.resolve(makeAuthenticationSessionResult(true)),
+      }
+    );
+
+    const response = await handler(
+      new Request(
+        "https://api.ceird.example/api/auth/organization/list-members?organizationId=org_123",
+        {
+          headers: {
+            cookie: "better-auth.session_token=session-token.signature",
+          },
+          method: "GET",
+        }
+      )
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      code: "FORBIDDEN",
+      message:
+        "Only organization owners and admins can access organization administration.",
+    });
+    expect(response.status).toBe(403);
     expect(delegated).toBeFalsy();
   }, 10_000);
 
@@ -6802,6 +8866,9 @@ function createAuthenticationForPluginInspection(
   > = {},
   options: {
     readonly database?: Parameters<typeof createAuthentication>[0]["database"];
+    readonly runtimeContext?: Parameters<
+      typeof createAuthentication
+    >[0]["runtimeContext"];
   } = {}
 ) {
   const pool = options.database
@@ -6825,6 +8892,7 @@ function createAuthenticationForPluginInspection(
     database: options.database ?? drizzle({ client: pool as Pool }),
     reportPasswordResetEmailFailure: () => {},
     reportVerificationEmailFailure: () => {},
+    runtimeContext: options.runtimeContext,
     sendOrganizationInvitationEmail: async () => {},
     sendPasswordResetEmail: async () => {},
     sendVerificationEmail: async () => {},
@@ -6948,14 +9016,14 @@ function makeAuthenticationSessionResult(
         readonly activeOrganizationId?: string | null | undefined;
         readonly emailVerified?: boolean | undefined;
       } = true
-): NonNullable<Awaited<ReturnType<CeirdAuthentication["api"]["getSession"]>>> {
+): AuthenticationSessionResult {
   const now = new Date();
   const emailVerified =
     typeof input === "boolean" ? input : input.emailVerified;
   const activeOrganizationId =
     typeof input === "boolean" ? undefined : input.activeOrganizationId;
 
-  return {
+  return Schema.decodeUnknownSync(AuthenticationSessionResultSchema)({
     session: {
       activeOrganizationId,
       createdAt: now,
@@ -6974,11 +9042,11 @@ function makeAuthenticationSessionResult(
       twoFactorEnabled: false,
       updatedAt: now,
     },
-  };
+  });
 }
 
 function makeVerifiedEmailGuardDatabase(input: {
-  readonly emailVerified: boolean;
+  readonly emailVerified: unknown;
   readonly sessionToken: string;
   readonly userId: string;
 }) {
@@ -7063,6 +9131,7 @@ interface OAuthRefreshTokenConsentGuardRow {
   readonly token: string;
 }
 interface CapturedOrganizationMemberAuditContextRow {
+  readonly email?: string;
   readonly id: string;
   readonly organizationId: string;
   readonly role: string;
@@ -7108,6 +9177,8 @@ function makeAuthSecurityAuditEventDatabase(
   events: CapturedAuthSecurityAuditEvent[],
   options?: {
     readonly invitationRows?: readonly CapturedOrganizationInvitationAuditContextRow[];
+    readonly memberEmailLookupValues?: string[][];
+    readonly memberIdLookupKeys?: string[];
     readonly memberRows?: readonly CapturedOrganizationMemberAuditContextRow[];
     readonly selectFailure?: Error;
     readonly tokenRows?: readonly (CapturedOAuthTokenAuditContextRow | null)[];
@@ -7125,6 +9196,27 @@ function makeAuthSecurityAuditEventDatabase(
         const tableName = readDrizzleTableName(table);
 
         return {
+          innerJoin: () => ({
+            where: (condition: unknown) => ({
+              limit: () => {
+                if (options?.selectFailure) {
+                  return Promise.reject(options.selectFailure);
+                }
+
+                const parameters = readDrizzleEqParameters(condition);
+                options?.memberEmailLookupValues?.push(parameters);
+                const row =
+                  options?.memberRows?.find(
+                    (memberRow) =>
+                      parameters.includes(memberRow.organizationId) &&
+                      memberRow.email !== undefined &&
+                      parameters.includes(memberRow.email)
+                  ) ?? null;
+
+                return Promise.resolve(row ? [row] : []);
+              },
+            }),
+          }),
           leftJoin: () => ({
             where: (condition: unknown) => ({
               limit: () => {
@@ -7155,6 +9247,9 @@ function makeAuthSecurityAuditEventDatabase(
               }
 
               const token = readDrizzleEqParameter(condition);
+              if (tableName === getTableName(member)) {
+                options?.memberIdLookupKeys?.push(token ?? "");
+              }
               const row =
                 options?.tokenRows?.find(
                   (tokenRow) => tokenRow?.token === token
@@ -7210,26 +9305,38 @@ async function readNoAuthSecurityAuditRows() {
 }
 
 function readDrizzleEqParameter(condition: unknown) {
-  if (
-    !condition ||
-    typeof condition !== "object" ||
-    !("queryChunks" in condition)
-  ) {
-    return null;
-  }
+  return readDrizzleEqParameters(condition)[0] ?? null;
+}
 
-  const { queryChunks } = condition as {
-    readonly queryChunks?: readonly unknown[];
+function readDrizzleEqParameters(condition: unknown) {
+  const parameters: string[] = [];
+  const seen = new Set<object>();
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object" || seen.has(value)) {
+      return;
+    }
+
+    seen.add(value);
+
+    if ("value" in value && typeof value.value === "string") {
+      parameters.push(value.value);
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item);
+      }
+      return;
+    }
+
+    for (const item of Object.values(value)) {
+      visit(item);
+    }
   };
-  const parameter = queryChunks?.find(
-    (chunk): chunk is { readonly value: string } =>
-      !!chunk &&
-      typeof chunk === "object" &&
-      "value" in chunk &&
-      typeof chunk.value === "string"
-  );
 
-  return parameter?.value ?? null;
+  visit(condition);
+
+  return parameters;
 }
 
 function readDrizzleTableName(table: unknown) {
@@ -7244,8 +9351,8 @@ function makeOAuthAuditSessionResult(options: {
   readonly activeOrganizationId?: string | null;
   readonly sessionId: string;
   readonly userId: string;
-}) {
-  return {
+}): AuthenticationSessionResult {
+  return Schema.decodeUnknownSync(AuthenticationSessionResultSchema)({
     session: {
       activeOrganizationId: options.activeOrganizationId,
       createdAt: new Date("2026-06-07T00:00:00.000Z"),
@@ -7264,7 +9371,7 @@ function makeOAuthAuditSessionResult(options: {
       twoFactorEnabled: false,
       updatedAt: new Date("2026-06-07T00:00:00.000Z"),
     },
-  };
+  });
 }
 
 function makeRateLimitReadFailureDatabase(error: unknown) {
@@ -7289,6 +9396,46 @@ function makeRateLimitWriteFailureDatabase(error: unknown) {
           throw error;
         },
       }),
+    }),
+  } as unknown as Parameters<typeof makeObservedDatabaseRateLimitStorage>[0];
+}
+
+function makeRateLimitWriteCaptureDatabase(capturedWrites: unknown[]) {
+  return {
+    insert: () => ({
+      values: (value: unknown) => {
+        capturedWrites.push(value);
+
+        return {
+          onConflictDoUpdate: () => Promise.resolve(),
+        };
+      },
+    }),
+  } as unknown as Parameters<typeof makeObservedDatabaseRateLimitStorage>[0];
+}
+
+function makeRateLimitStorageMutationCaptureDatabase(
+  capturedWrites: unknown[],
+  capturedUpdates: unknown[]
+) {
+  return {
+    insert: () => ({
+      values: (value: unknown) => {
+        capturedWrites.push(value);
+
+        return {
+          onConflictDoUpdate: () => Promise.resolve(),
+        };
+      },
+    }),
+    update: () => ({
+      set: (value: unknown) => {
+        capturedUpdates.push(value);
+
+        return {
+          where: () => Promise.resolve(),
+        };
+      },
     }),
   } as unknown as Parameters<typeof makeObservedDatabaseRateLimitStorage>[0];
 }

@@ -39,11 +39,12 @@ export const resolveCurrentUserId = Effect.fn("CurrentUser.resolve")(
     }
 
     return yield* Schema.decodeUnknownEffect(UserId)(session.user.id).pipe(
-      Effect.mapError(
-        (parseError) =>
+      Effect.catchTag("SchemaError", (parseError) =>
+        Effect.fail(
           new UserPreferencesAccessDeniedError({
             message: parseError.message,
           })
+        )
       )
     );
   }

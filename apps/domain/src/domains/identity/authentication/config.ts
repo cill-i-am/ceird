@@ -42,6 +42,8 @@ export const CEIRD_OAUTH_CLIENT_REGISTRATION_DEFAULT_SCOPES = [
 ] as const satisfies readonly CeirdOAuthScope[];
 export const CEIRD_OAUTH_CLIENT_REGISTRATION_ALLOWED_SCOPES =
   CEIRD_OAUTH_CLIENT_REGISTRATION_DEFAULT_SCOPES;
+export type CeirdOAuthClientRegistrationAllowedScope =
+  (typeof CEIRD_OAUTH_CLIENT_REGISTRATION_ALLOWED_SCOPES)[number];
 const TrustedOriginPattern = Schema.String.pipe(
   Schema.check(
     Schema.isPattern(

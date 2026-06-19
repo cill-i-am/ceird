@@ -1,3 +1,5 @@
+import { OrganizationId, SessionId, UserId } from "@ceird/identity-core";
+import { Effect, Option, Schema } from "effect";
 import type { Context } from "effect";
 
 import type { AuthenticationConfig } from "./config.js";
@@ -9,49 +11,94 @@ export const DEFAULT_BETTER_AUTH_COOKIE_PREFIX = "better-auth";
 
 export type AuthEffectRuntimeContext = Context.Context<never>;
 
-export interface AuthenticationSessionResult {
-  readonly session: {
-    readonly createdAt: Date | string;
-    readonly expiresAt: Date | string;
-    readonly id: string;
-    readonly ipAddress?: string | null | undefined;
-    readonly token: string;
-    readonly updatedAt: Date | string;
-    readonly activeOrganizationId?: string | null | undefined;
-    readonly userAgent?: string | null | undefined;
-    readonly userId: string;
-  } & Record<string, unknown>;
-  readonly user: {
-    readonly createdAt: Date | string;
-    readonly email: string;
-    readonly emailVerified: boolean;
-    readonly id: string;
-    readonly image?: string | null | undefined;
-    readonly name: string;
-    readonly twoFactorEnabled: boolean;
-    readonly updatedAt: Date | string;
-  } & Record<string, unknown>;
-}
+const AuthenticationDateFromString = Schema.DateFromString.pipe(
+  Schema.check(Schema.isDateValid())
+);
+const AuthenticationDate = Schema.Union([
+  Schema.DateValid,
+  AuthenticationDateFromString,
+]);
+const NullableString = Schema.NullOr(Schema.String).pipe(
+  Schema.withDecodingDefault(Effect.succeed(null))
+);
+const NullableOrganizationId = Schema.NullOr(OrganizationId).pipe(
+  Schema.withDecodingDefault(Effect.succeed(null))
+);
 
-export interface RawAuthenticationSessionResult {
-  readonly session: AuthenticationSessionResult["session"];
-  readonly user: {
-    readonly createdAt: Date | string;
-    readonly email: string;
-    readonly emailVerified: boolean;
-    readonly id: string;
-    readonly image?: string | null | undefined;
-    readonly name: string;
-    readonly twoFactorEnabled?: boolean | null | undefined;
-    readonly updatedAt: Date | string;
-  } & Record<string, unknown>;
-}
+export const BetterAuthSessionSchema = Schema.Struct({
+  activeOrganizationId: NullableOrganizationId,
+  createdAt: AuthenticationDate,
+  expiresAt: AuthenticationDate,
+  id: SessionId,
+  ipAddress: NullableString,
+  token: Schema.NonEmptyString,
+  updatedAt: AuthenticationDate,
+  userAgent: NullableString,
+  userId: UserId,
+});
+
+export const BetterAuthSessionUserSchema = Schema.Struct({
+  createdAt: AuthenticationDate,
+  email: Schema.NonEmptyString,
+  emailVerified: Schema.Boolean,
+  id: UserId,
+  image: NullableString,
+  name: Schema.String,
+  twoFactorEnabled: Schema.Boolean,
+  updatedAt: AuthenticationDate,
+});
+
+export const AuthenticationSessionResultSchema = Schema.Struct({
+  session: BetterAuthSessionSchema,
+  user: BetterAuthSessionUserSchema,
+});
+export type AuthenticationSessionResult = Schema.Schema.Type<
+  typeof AuthenticationSessionResultSchema
+>;
+
+export const AuthBoundaryRecordSchema = Schema.Record(
+  Schema.String,
+  Schema.Unknown
+);
+export type AuthBoundaryRecord = Schema.Schema.Type<
+  typeof AuthBoundaryRecordSchema
+>;
+
+const HttpContentLengthSchema = Schema.NumberFromString.pipe(
+  Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+);
+const DecodedHttpContentLengthSchema = Schema.Number.pipe(
+  Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+);
+const decodeHttpContentLength = Schema.decodeUnknownOption(
+  HttpContentLengthSchema
+);
+
+export const AuthBoundaryRequestEnvelopeSchema = Schema.Struct({
+  contentLength: Schema.NullOr(DecodedHttpContentLengthSchema),
+  contentType: Schema.String,
+  endpointPath: Schema.NonEmptyString,
+  method: Schema.NonEmptyString,
+});
+export type AuthBoundaryRequestEnvelope = Schema.Schema.Type<
+  typeof AuthBoundaryRequestEnvelopeSchema
+>;
 
 export type AuthenticationRateLimitRequestBodyReadFailureReason =
   | "body_too_large"
   | "invalid_body"
   | "read_failed"
   | "unsupported_content_type";
+
+export type AuthBoundaryRequestBodyReadResult<T> =
+  | {
+      readonly body: T | null;
+      readonly status: "available";
+    }
+  | {
+      readonly reason: AuthenticationRateLimitRequestBodyReadFailureReason;
+      readonly status: "unavailable";
+    };
 
 export class AuthRateLimitRequestBodyUnavailableError extends Error {
   readonly endpointPath: string;
@@ -81,15 +128,11 @@ export function maskInvitationEmail(email: string) {
   return `${localPart[0]}***@${maskedDomainLabel}${domainSuffix.length > 0 ? `.${domainSuffix.join(".")}` : ""}`;
 }
 
-export function decodeIdentityBoundaryValue<A>(
-  input: unknown,
-  decode: (input: unknown) => A
-): A | null {
-  try {
-    return decode(input);
-  } catch {
-    return null;
-  }
+export function decodeAuthBoundaryOption<S extends Schema.Decoder<unknown>>(
+  schema: S,
+  input: unknown
+): Option.Option<S["Type"]> {
+  return Schema.decodeUnknownOption(schema)(input);
 }
 
 export function resolveActiveAuthenticationSecret(
@@ -143,6 +186,18 @@ export function resolveAuthenticationEndpointPath(
   return pathname;
 }
 
+export function makeAuthBoundaryRequestEnvelope(
+  request: Request,
+  basePath: string
+) {
+  return Schema.decodeUnknownSync(AuthBoundaryRequestEnvelopeSchema)({
+    contentLength: readRequestContentLength(request),
+    contentType: request.headers.get("content-type") ?? "",
+    endpointPath: resolveAuthenticationEndpointPath(request, basePath),
+    method: request.method,
+  });
+}
+
 export async function readLimitedRequestText(
   request: Request,
   maxBodyBytes: number
@@ -188,13 +243,18 @@ async function cancelRequestReader(
 export function readRequestContentLength(request: Request) {
   const contentLength = request.headers.get("content-length");
 
-  return contentLength === null ? null : Number(contentLength);
+  return contentLength === null
+    ? null
+    : Option.getOrNull(decodeHttpContentLength(contentLength));
 }
 
-export async function readBoundedJsonRecordRequestBody(
+export async function readAuthBoundaryJsonRequestBody<
+  S extends Schema.Decoder<unknown>,
+>(
   request: Request,
-  endpointPath: string
-) {
+  endpointPath: string,
+  schema: S
+): Promise<S["Type"] | null> {
   try {
     const contentType = request.headers.get("content-type") ?? "";
     const contentLength = readRequestContentLength(request);
@@ -237,9 +297,20 @@ export async function readBoundedJsonRecordRequestBody(
       return null;
     }
 
-    const body = JSON.parse(bodyText);
+    const parsedBody = decodeJsonBodyText(bodyText);
 
-    if (!isRecord(body)) {
+    if (parsedBody.status === "invalid") {
+      throw new AuthRateLimitRequestBodyUnavailableError({
+        endpointPath,
+        reason: "invalid_body",
+      });
+    }
+
+    const body = Option.getOrNull(
+      Schema.decodeUnknownOption(schema)(parsedBody.value)
+    );
+
+    if (body === null) {
       throw new AuthRateLimitRequestBodyUnavailableError({
         endpointPath,
         reason: "invalid_body",
@@ -259,18 +330,126 @@ export async function readBoundedJsonRecordRequestBody(
   }
 }
 
-export function readStringField(
-  value: Record<string, unknown> | null,
-  field: string
-) {
-  const fieldValue = value?.[field];
-  return typeof fieldValue === "string" && fieldValue.length > 0
-    ? fieldValue
-    : null;
+export async function readAuthBoundaryJsonOrFormRequestBody<
+  S extends Schema.Decoder<unknown>,
+>(
+  request: Request,
+  maxBodyBytes: number,
+  schema: S,
+  options: {
+    readonly allowEmptyUnsupportedContentType?: boolean | undefined;
+    readonly rejectDuplicateFormFields?: readonly string[] | undefined;
+  } = {}
+): Promise<AuthBoundaryRequestBodyReadResult<S["Type"]>> {
+  try {
+    const contentType = request.headers.get("content-type") ?? "";
+    const contentLength = readRequestContentLength(request);
+
+    if (contentLength !== null && contentLength > maxBodyBytes) {
+      return {
+        reason: "body_too_large",
+        status: "unavailable",
+      };
+    }
+
+    if (
+      !contentType.includes("application/json") &&
+      !contentType.includes("application/x-www-form-urlencoded")
+    ) {
+      return options.allowEmptyUnsupportedContentType !== false &&
+        (request.body === null || contentLength === 0)
+        ? {
+            body: null,
+            status: "available",
+          }
+        : {
+            reason: "unsupported_content_type",
+            status: "unavailable",
+          };
+    }
+
+    const bodyText = await readLimitedRequestText(request, maxBodyBytes);
+
+    if (bodyText === null) {
+      return {
+        reason: "body_too_large",
+        status: "unavailable",
+      };
+    }
+
+    if (bodyText.length === 0) {
+      return {
+        body: null,
+        status: "available",
+      };
+    }
+
+    const rawBody = contentType.includes("application/json")
+      ? decodeJsonBodyText(bodyText)
+      : {
+          status: "decoded" as const,
+          value: parseAuthBoundaryFormBody(bodyText, options),
+        };
+
+    if (rawBody.status === "invalid" || rawBody.value === null) {
+      return {
+        reason: "invalid_body",
+        status: "unavailable",
+      };
+    }
+
+    const body = Option.getOrNull(
+      Schema.decodeUnknownOption(schema)(rawBody.value)
+    );
+
+    return body === null
+      ? {
+          reason: "invalid_body",
+          status: "unavailable",
+        }
+      : {
+          body,
+          status: "available",
+        };
+  } catch {
+    return {
+      reason: "read_failed",
+      status: "unavailable",
+    };
+  }
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+function decodeJsonBodyText(
+  bodyText: string
+):
+  | { readonly status: "decoded"; readonly value: unknown }
+  | { readonly status: "invalid" } {
+  return Option.match(
+    Schema.decodeUnknownOption(Schema.UnknownFromJsonString)(bodyText),
+    {
+      onNone: () => ({ status: "invalid" }),
+      onSome: (value) => ({ status: "decoded", value }),
+    }
+  );
+}
+
+function parseAuthBoundaryFormBody(
+  bodyText: string,
+  options: {
+    readonly rejectDuplicateFormFields?: readonly string[] | undefined;
+  }
+) {
+  const params = new URLSearchParams(bodyText);
+
+  if (
+    options.rejectDuplicateFormFields?.some(
+      (field) => params.getAll(field).length > 1
+    ) === true
+  ) {
+    return null;
+  }
+
+  return Object.fromEntries(params.entries());
 }
 
 export function sanitizeAuthFailureLogValue(value: string) {

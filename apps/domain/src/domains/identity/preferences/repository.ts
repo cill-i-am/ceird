@@ -201,12 +201,13 @@ function decodePreferenceBoundary<SchemaType extends Schema.Top>(
 ) {
   return (input: unknown) =>
     Schema.decodeUnknownEffect(schema)(input).pipe(
-      Effect.mapError(
-        (error) =>
+      Effect.catchTag("SchemaError", (error) =>
+        Effect.fail(
           new UserPreferencesStorageError({
             cause: error.message,
             message: `User preferences ${description} decode failed`,
           })
+        )
       )
     );
 }

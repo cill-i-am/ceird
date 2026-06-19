@@ -2,6 +2,7 @@
 import {
   ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES,
   OrganizationRole,
+  OrganizationMemberId,
   OrganizationSecurityActivityAccessDeniedError,
   OrganizationSecurityActivityCursor as OrganizationSecurityActivityCursorSchema,
   OrganizationSecurityActivityCursorInvalidError,
@@ -27,6 +28,7 @@ import {
   Effect,
   Layer,
   Match,
+  Option,
   Schema,
   pipe,
 } from "effect";
@@ -84,6 +86,8 @@ const decodeSecurityActivityCursorState = Schema.decodeUnknownSync(
   })
 );
 const isOrganizationRole = Schema.is(OrganizationRole);
+const decodeOrganizationMemberIdOption =
+  Schema.decodeUnknownOption(OrganizationMemberId);
 const isUserId = Schema.is(UserId);
 
 interface OrganizationSecurityActivityRow {
@@ -369,8 +373,11 @@ function makeOrganizationSecurityActivityTarget(
   const targetUserId = isUserId(row.target_user_id ?? "")
     ? row.target_user_id
     : undefined;
-  const memberId =
-    row.target_member_id ?? readStringMetadata(metadata, "memberId");
+  const memberId = Option.getOrUndefined(
+    decodeOrganizationMemberIdOption(
+      row.target_member_id ?? readStringMetadata(metadata, "memberId")
+    )
+  );
   const invitationEmailMasked = readStringMetadata(
     metadata,
     "invitationEmailMasked"

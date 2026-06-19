@@ -50,6 +50,31 @@ describe("user preferences service", () => {
     });
   }, 10_000);
 
+  it("maps malformed session user IDs to the explicit access-denied boundary error", async () => {
+    const exit = await Effect.runPromiseExit(
+      resolveCurrentUserId({
+        getSession: () =>
+          Promise.resolve({
+            user: { id: "" },
+          }),
+        headers: new Headers(),
+      })
+    );
+
+    expect(exit._tag).toBe("Failure");
+
+    if (Exit.isSuccess(exit)) {
+      throw new Error("Expected current user lookup to fail.");
+    }
+
+    const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
+
+    expect(failure).toBeInstanceOf(UserPreferencesAccessDeniedError);
+    expect(failure).toMatchObject({
+      _tag: "@ceird/identity-core/UserPreferencesAccessDeniedError",
+    });
+  }, 10_000);
+
   it("maps auth lookup failures to a storage error", async () => {
     const exit = await Effect.runPromiseExit(
       resolveCurrentUserId({

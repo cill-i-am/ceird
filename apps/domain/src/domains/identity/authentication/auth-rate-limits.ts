@@ -1,23 +1,19 @@
 /* eslint-disable max-classes-per-file */
 import { createHash, createHmac } from "node:crypto";
 
-import { decodeOrganizationId, decodeUserId } from "@ceird/identity-core";
-import type { UserId } from "@ceird/identity-core";
+import { OrganizationId, UserId } from "@ceird/identity-core";
 import { getIp } from "better-auth/api";
 import { eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Context, Effect } from "effect";
+import { Context, Effect, Option, Schema, SchemaGetter } from "effect";
 
 import {
-  AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES,
   AuthRateLimitRequestBodyUnavailableError,
-  decodeIdentityBoundaryValue,
-  isRecord,
-  readLimitedRequestText,
-  readRequestContentLength,
-  readStringField,
+  AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES,
+  decodeAuthBoundaryOption,
+  makeAuthBoundaryRequestEnvelope,
+  readAuthBoundaryJsonOrFormRequestBody,
   resolveActiveAuthenticationSecret,
-  resolveAuthenticationEndpointPath,
   serializeUnknownCause,
 } from "./auth-boundary-utils.js";
 import type {
@@ -72,17 +68,64 @@ const AUTH_RATE_LIMIT_REQUEST_INVALID_ERROR_CODE =
 const AUTH_ORGANIZATION_CONTEXT_MISMATCH_ERROR_CODE =
   "AUTH_ORGANIZATION_CONTEXT_MISMATCH";
 const AUTH_RATE_LIMIT_UNAVAILABLE_RETRY_AFTER_SECONDS = 30;
+const AuthenticationDeliveryEmail = Schema.Trim.pipe(
+  Schema.decode({
+    decode: SchemaGetter.transform((value) => value.toLowerCase()),
+    encode: SchemaGetter.transform((value) => value),
+  }),
+  Schema.check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(AUTH_DELIVERY_EMAIL_MAX_LENGTH),
+    Schema.isLowercased()
+  ),
+  Schema.brand("AuthenticationDeliveryEmail")
+);
+const decodeAuthenticationDeliveryEmailOption = Schema.decodeUnknownOption(
+  AuthenticationDeliveryEmail
+);
+const AuthenticationRateLimitRequestBodySchema = Schema.Struct({
+  email: Schema.optional(AuthenticationDeliveryEmail),
+  newEmail: Schema.optional(AuthenticationDeliveryEmail),
+  organizationId: Schema.optional(OrganizationId),
+});
+type DecodedAuthenticationRateLimitRequestBody = Schema.Schema.Type<
+  typeof AuthenticationRateLimitRequestBodySchema
+>;
 
-interface ObservedRateLimit {
+const ObservedRateLimitKeySchema = Schema.NonEmptyString.pipe(
+  Schema.brand("ObservedRateLimitKey")
+);
+const decodeObservedRateLimitKey = Schema.decodeUnknownSync(
+  ObservedRateLimitKeySchema
+);
+const NonNegativeIntegerSchema = Schema.Number.pipe(
+  Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+);
+const AuthenticationRateLimitReservationRowSchema = Schema.Struct({
+  count: NonNegativeIntegerSchema,
+});
+const decodeAuthenticationRateLimitReservationRow = Schema.decodeUnknownSync(
+  AuthenticationRateLimitReservationRowSchema
+);
+export const ObservedRateLimitSchema = Schema.Struct({
+  count: NonNegativeIntegerSchema,
+  key: ObservedRateLimitKeySchema,
+  lastRequest: NonNegativeIntegerSchema,
+});
+type ObservedRateLimit = Schema.Schema.Type<typeof ObservedRateLimitSchema>;
+interface ObservedRateLimitStorageValue {
   readonly count: number;
   readonly key: string;
   readonly lastRequest: number;
 }
+const decodeObservedRateLimit = Schema.decodeUnknownSync(
+  ObservedRateLimitSchema
+);
 interface ObservedRateLimitStorage {
   readonly get: (key: string) => Promise<ObservedRateLimit | null | undefined>;
   readonly set: (
     key: string,
-    value: ObservedRateLimit,
+    value: ObservedRateLimitStorageValue,
     update?: boolean | undefined
   ) => Promise<void>;
 }
@@ -116,7 +159,7 @@ interface AuthenticationRateLimitReservationRequest {
 }
 type AuthenticationRateLimitRequestBody =
   | {
-      readonly body: Record<string, unknown> | null;
+      readonly body: DecodedAuthenticationRateLimitRequestBody | null;
       readonly status: "available";
     }
   | {
@@ -196,20 +239,17 @@ async function reserveAuthenticationAbuseRateLimit(options: {
   readonly request: Request;
   readonly runtimeContext: AuthEffectRuntimeContext;
 }) {
-  if (
-    options.request.method !== "POST" ||
-    options.authConfig.rateLimit.enabled !== true
-  ) {
+  if (options.authConfig.rateLimit.enabled !== true) {
     return null;
   }
 
-  const endpointPath = resolveAuthenticationEndpointPath(
+  const { endpointPath, method } = makeAuthBoundaryRequestEnvelope(
     options.request,
     options.authConfig.basePath
   );
 
   if (
-    endpointPath === null ||
+    method !== "POST" ||
     !RATE_LIMIT_ATOMIC_RESERVATION_ENDPOINT_PATHS.has(endpointPath)
   ) {
     return null;
@@ -431,7 +471,10 @@ async function makeAuthenticationAbuseRateLimitReservationRequests(options: {
     options.endpointPath,
     sessionResolution
   )
-    ? await readAuthenticationRateLimitRequestBody(options.request)
+    ? await readAuthenticationRateLimitRequestBody(
+        options.request,
+        options.endpointPath
+      )
     : ({
         body: null,
         status: "available",
@@ -465,9 +508,8 @@ async function makeAuthenticationAbuseRateLimitReservationRequests(options: {
     });
   }
 
-  const actorUserId = decodeIdentityBoundaryValue(
-    sessionResolution.session.user.id,
-    decodeUserId
+  const actorUserId = Option.getOrNull(
+    decodeAuthBoundaryOption(UserId, sessionResolution.session.user.id)
   );
 
   if (actorUserId !== null) {
@@ -586,8 +628,10 @@ function makeAuthenticationDeliveryRateLimitReservationRequests(options: {
     case "/send-verification-email": {
       const email =
         options.sessionResolution.status === "resolved"
-          ? normalizeAuthDeliveryEmail(
-              options.sessionResolution.session.user.email
+          ? Option.getOrNull(
+              decodeAuthenticationDeliveryEmailOption(
+                options.sessionResolution.session.user.email
+              )
             )
           : readNormalizedAuthDeliveryEmailField(
               requireAuthenticationRateLimitRequestBody(options),
@@ -608,9 +652,11 @@ function makeAuthenticationDeliveryRateLimitReservationRequests(options: {
             ];
 
       if (options.sessionResolution.status === "resolved") {
-        const userId = decodeIdentityBoundaryValue(
-          options.sessionResolution.session.user.id,
-          decodeUserId
+        const userId = Option.getOrNull(
+          decodeAuthBoundaryOption(
+            UserId,
+            options.sessionResolution.session.user.id
+          )
         );
 
         if (userId !== null) {
@@ -649,9 +695,11 @@ function makeAuthenticationDeliveryRateLimitReservationRequests(options: {
               }),
             ];
 
-      const userId = decodeIdentityBoundaryValue(
-        options.sessionResolution.session.user.id,
-        decodeUserId
+      const userId = Option.getOrNull(
+        decodeAuthBoundaryOption(
+          UserId,
+          options.sessionResolution.session.user.id
+        )
       );
 
       if (userId !== null) {
@@ -751,100 +799,44 @@ function makeAuthenticationUserRateLimitReservationRequest(options: {
   };
 }
 
-async function readAuthenticationRateLimitRequestBody(request: Request) {
-  try {
-    const contentType = request.headers.get("content-type") ?? "";
-    const contentLength = readRequestContentLength(request);
-
-    if (
-      contentLength !== null &&
-      Number.isFinite(contentLength) &&
-      contentLength > AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES
-    ) {
-      return {
-        reason: "body_too_large",
-        status: "unavailable",
-      } satisfies AuthenticationRateLimitRequestBody;
+async function readAuthenticationRateLimitRequestBody(
+  request: Request,
+  endpointPath: string
+) {
+  return await readAuthBoundaryJsonOrFormRequestBody(
+    request,
+    AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES,
+    AuthenticationRateLimitRequestBodySchema,
+    {
+      rejectDuplicateFormFields:
+        resolveRateLimitRequestBodyDuplicateFields(endpointPath),
     }
+  );
+}
 
-    if (
-      !contentType.includes("application/json") &&
-      !contentType.includes("application/x-www-form-urlencoded")
-    ) {
-      return request.body === null || contentLength === 0
-        ? ({
-            body: null,
-            status: "available",
-          } satisfies AuthenticationRateLimitRequestBody)
-        : ({
-            reason: "unsupported_content_type",
-            status: "unavailable",
-          } satisfies AuthenticationRateLimitRequestBody);
+function resolveRateLimitRequestBodyDuplicateFields(endpointPath: string) {
+  switch (endpointPath) {
+    case "/change-email": {
+      return ["newEmail"];
     }
-
-    const bodyText = await readLimitedRequestText(
-      request,
-      AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES
-    );
-
-    if (bodyText === null) {
-      return {
-        reason: "body_too_large",
-        status: "unavailable",
-      } satisfies AuthenticationRateLimitRequestBody;
+    case "/request-password-reset":
+    case "/send-verification-email": {
+      return ["email"];
     }
-
-    if (bodyText.length === 0) {
-      return {
-        body: null,
-        status: "available",
-      } satisfies AuthenticationRateLimitRequestBody;
+    case ORGANIZATION_INVITE_MEMBER_ENDPOINT_PATH: {
+      return ["email", "organizationId"];
     }
-
-    if (contentType.includes("application/json")) {
-      const body = JSON.parse(bodyText);
-
-      return isRecord(body)
-        ? ({
-            body,
-            status: "available",
-          } satisfies AuthenticationRateLimitRequestBody)
-        : ({
-            reason: "invalid_body",
-            status: "unavailable",
-          } satisfies AuthenticationRateLimitRequestBody);
+    default: {
+      return [];
     }
-
-    return {
-      body: Object.fromEntries(new URLSearchParams(bodyText).entries()),
-      status: "available",
-    } satisfies AuthenticationRateLimitRequestBody;
-  } catch {
-    return {
-      reason: "read_failed",
-      status: "unavailable",
-    } satisfies AuthenticationRateLimitRequestBody;
   }
 }
 
 function readNormalizedAuthDeliveryEmailField(
-  body: Record<string, unknown> | null,
-  field: string
+  body: DecodedAuthenticationRateLimitRequestBody | null,
+  field: "email" | "newEmail"
 ) {
-  return normalizeAuthDeliveryEmail(readStringField(body, field));
-}
-
-function normalizeAuthDeliveryEmail(value: string | null | undefined) {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  const normalizedEmail = value.trim().toLowerCase();
-
-  return normalizedEmail.length > 0 &&
-    normalizedEmail.length <= AUTH_DELIVERY_EMAIL_MAX_LENGTH
-    ? normalizedEmail
-    : null;
+  return body?.[field] ?? null;
 }
 
 async function resolveAuthenticationAbuseRateLimitSession(
@@ -871,17 +863,16 @@ async function resolveAuthenticationAbuseRateLimitSession(
 }
 
 function resolveOrganizationInviteMemberRateLimitOrganizationId(options: {
-  readonly requestBody: Record<string, unknown> | null;
+  readonly requestBody: DecodedAuthenticationRateLimitRequestBody | null;
   readonly session: AuthenticationSessionResult;
 }) {
-  const activeOrganizationId = decodeIdentityBoundaryValue(
-    options.session.session.activeOrganizationId,
-    decodeOrganizationId
+  const activeOrganizationId = Option.getOrNull(
+    decodeAuthBoundaryOption(
+      OrganizationId,
+      options.session.session.activeOrganizationId
+    )
   );
-  const requestedOrganizationId = decodeIdentityBoundaryValue(
-    readStringField(options.requestBody, "organizationId"),
-    decodeOrganizationId
-  );
+  const requestedOrganizationId = options.requestBody?.organizationId ?? null;
 
   if (
     activeOrganizationId !== null &&
@@ -922,9 +913,11 @@ async function reserveAuthenticationRateLimit(options: {
   if (!reservation) {
     throw new Error("Auth rate-limit reservation did not return a row.");
   }
+  const decodedReservation =
+    decodeAuthenticationRateLimitReservationRow(reservation);
 
   return {
-    allowed: reservation.count <= options.rule.max,
+    allowed: decodedReservation.count <= options.rule.max,
     retryAfterSeconds: options.rule.window,
   };
 }
@@ -955,6 +948,7 @@ export function makeObservedDatabaseRateLimitStorage(
     get: (key) =>
       measureAuthenticationPhase("auth.rateLimitReadMs", async () => {
         try {
+          const decodedKey = decodeObservedRateLimitKey(key);
           const [row] = await database
             .select({
               count: rateLimitTable.count,
@@ -962,10 +956,10 @@ export function makeObservedDatabaseRateLimitStorage(
               lastRequest: rateLimitTable.lastRequest,
             })
             .from(rateLimitTable)
-            .where(eq(rateLimitTable.key, key))
+            .where(eq(rateLimitTable.key, decodedKey))
             .limit(1);
 
-          return row ?? null;
+          return row ? decodeObservedRateLimit(row) : null;
         } catch (error) {
           await reportRateLimitStorageReadFailure(
             key,
@@ -978,13 +972,20 @@ export function makeObservedDatabaseRateLimitStorage(
       }),
     set: (key, value, update) =>
       measureAuthenticationPhase("auth.rateLimitWriteMs", async () => {
-        const nextValue = {
-          count: value.count,
-          key: value.key,
-          lastRequest: value.lastRequest,
-        } satisfies ObservedRateLimit;
-
         try {
+          const decodedKey = decodeObservedRateLimitKey(key);
+          const nextValue = decodeObservedRateLimit({
+            count: value.count,
+            key: value.key,
+            lastRequest: value.lastRequest,
+          });
+
+          if (nextValue.key !== decodedKey) {
+            throw new Error(
+              "Observed rate-limit key must match the decoded limiter value key."
+            );
+          }
+
           if (update) {
             await database
               .update(rateLimitTable)
@@ -992,13 +993,17 @@ export function makeObservedDatabaseRateLimitStorage(
                 count: nextValue.count,
                 lastRequest: nextValue.lastRequest,
               })
-              .where(eq(rateLimitTable.key, key));
+              .where(eq(rateLimitTable.key, decodedKey));
             return;
           }
 
           await database
             .insert(rateLimitTable)
-            .values(nextValue)
+            .values({
+              count: nextValue.count,
+              key: decodedKey,
+              lastRequest: nextValue.lastRequest,
+            })
             .onConflictDoUpdate({
               set: {
                 count: nextValue.count,

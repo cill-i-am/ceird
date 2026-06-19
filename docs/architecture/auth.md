@@ -97,6 +97,7 @@ Responsibilities:
 - mount it at `/api/auth`
 - preserve the `/api/auth` prefix when wiring it into the Effect HTTP server
 - apply auth-specific CORS handling around the Better Auth web handler
+- install the Better Auth boundary policy adapter around the native handler
 
 Important implementation detail:
 
@@ -104,6 +105,29 @@ Important implementation detail:
 - the auth slice opts into `includePrefix: true`
 - this is required because Better Auth expects to receive requests with the
   configured base path intact
+
+### Better Auth Boundary Policy Adapter
+
+The Better Auth HTTP surface is isolated behind
+`auth-boundary-policy-adapter.ts`. `auth.ts` creates and configures Better Auth,
+then hands the native handler, decoded session resolver, database, OAuth client
+registration policy, runtime context, and active auth config to the adapter. The
+adapter owns the pre/post Better Auth policy order:
+
+- dynamic client registration policy and OAuth client-management endpoint guard
+- refresh-token live-consent checks
+- OAuth and organization security audit capture
+- atomic abuse rate-limit reservation
+- verified-email, organization-admin, and two-factor trusted-device guards
+- stable rate-limit failure response shaping
+
+Raw Better Auth request, body, and session shapes are decoded at this edge by
+schemas in `auth-boundary-utils.ts`. Internal policy modules receive decoded
+request envelopes, bounded JSON/form bodies, branded Better Auth session values,
+rate-limit subjects, and audit write payloads instead of raw HTTP payloads or
+ad hoc `Record<string, unknown>` readers. Better Auth still owns the public
+HTTP behavior; the adapter owns Ceird's contract, policy, resource, audit, and
+rate-limit decisions around that behavior.
 
 ### Better Auth Configuration
 
@@ -1426,14 +1450,19 @@ These are the important current rules we are following.
 ### Backend
 
 - `apps/domain/src/domains/identity/authentication/auth.ts`
-  Creates and mounts Better Auth, composes the auth boundary wrappers, applies
-  auth CORS, preserves `/api/auth` prefixing, and delegates password reset,
-  verification, email-change, and organization invitation delivery through
-  `AuthEmailSender`.
+  Creates and mounts Better Auth, preserves `/api/auth` prefixing, applies auth
+  CORS, and delegates password reset, verification, email-change, and
+  organization invitation delivery through `AuthEmailSender`.
+- `apps/domain/src/domains/identity/authentication/auth-boundary-policy-adapter.ts`
+  Owns the Better Auth boundary policy pipeline, including wrapper order,
+  decoded session resolver wiring, active-secret guard configuration,
+  OAuth/audit/rate-limit policy composition, and the stable handoff from raw
+  Better Auth HTTP behavior into Ceird-owned policy modules.
 - `apps/domain/src/domains/identity/authentication/auth-boundary-utils.ts`
-  Owns shared auth-boundary request-body parsing, request path normalization,
-  session-result types, active-secret resolution, and redaction helpers used by
-  the auth wrappers.
+  Owns shared auth-boundary Effect schemas for request envelopes, bounded
+  JSON/form request bodies, Better Auth session results, rate-limit body reads,
+  audit metadata records, active-secret resolution, path normalization, and
+  redaction helpers used by the auth adapter.
 - `apps/domain/src/domains/identity/authentication/auth-rate-limits.ts`
   Owns Better Auth rate-limit storage observation, atomic pre-handler abuse
   reservations, fail-open/fail-closed policy, stable rate-limit responses, and
