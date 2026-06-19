@@ -24,6 +24,7 @@ import {
 
 interface CapturedOrganizationAuthRequest {
   readonly body: unknown;
+  readonly headers: Record<string, string | null>;
   readonly method: string;
   readonly pathname: string;
 }
@@ -42,6 +43,10 @@ describe("organization member identity mapping", () => {
     const result = await runInviteMemberServiceWithHandler(async (request) => {
       requests.push({
         body: await request.json(),
+        headers: {
+          "cf-connecting-ip": request.headers.get("cf-connecting-ip"),
+          "x-forwarded-for": request.headers.get("x-forwarded-for"),
+        },
         method: request.method,
         pathname: new URL(request.url).pathname,
       });
@@ -55,6 +60,10 @@ describe("organization member identity mapping", () => {
           email: "pending@example.com",
           organizationId: "org_123",
           role: "member",
+        },
+        headers: {
+          "cf-connecting-ip": "203.0.113.10",
+          "x-forwarded-for": null,
         },
         method: "POST",
         pathname: "/api/auth/organization/invite-member",
@@ -126,7 +135,7 @@ describe("organization member identity mapping", () => {
     );
   });
 
-  it("scrubs body transport headers from synthetic Better Auth requests", () => {
+  it("preserves client IP while scrubbing transport headers from synthetic Better Auth requests", () => {
     const headers = makeOrganizationAuthRequestHeaders({
       accept: "text/html",
       "accept-encoding": "gzip, br",
@@ -151,7 +160,7 @@ describe("organization member identity mapping", () => {
     expect(headers.get("accept")).toBe("application/json");
     expect(headers.get("accept-encoding")).toBeNull();
     expect(headers.get("cdn-loop")).toBeNull();
-    expect(headers.get("cf-connecting-ip")).toBeNull();
+    expect(headers.get("cf-connecting-ip")).toBe("203.0.113.10");
     expect(headers.get("cf-ipcountry")).toBeNull();
     expect(headers.get("cf-ray")).toBeNull();
     expect(headers.get("connection")).toBeNull();
@@ -428,6 +437,7 @@ function makeTestHttpServerRequest(): HttpServerRequest.HttpServerRequest {
     "https://api.ceird.example/organization/invitations",
     {
       headers: {
+        "cf-connecting-ip": "203.0.113.10",
         cookie: "better-auth.session_token=session_123",
         origin: "https://app.ceird.example",
       },

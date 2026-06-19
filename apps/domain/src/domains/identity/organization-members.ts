@@ -162,7 +162,6 @@ const AuthenticationFailureBodySchema = Schema.Struct({
 const SYNTHETIC_ORGANIZATION_AUTH_TRANSPORT_HEADER_NAMES = [
   "accept-encoding",
   "cdn-loop",
-  "cf-connecting-ip",
   "cf-ew-via",
   "cf-ipcountry",
   "cf-ray",
