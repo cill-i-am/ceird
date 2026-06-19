@@ -15,7 +15,6 @@ import { Skeleton } from "#/components/ui/skeleton";
 import { authClient, getPublicInvitationPreview } from "#/lib/auth-client";
 import { beginMutationFeedback } from "#/lib/mutation-feedback";
 
-import { getCachedClientAppContext } from "../auth/app-context-client-cache";
 import {
   getLoginNavigationTarget,
   getSignupNavigationTarget,
@@ -486,9 +485,9 @@ function useAcceptInvitationPageModel(
 
 async function getInvitationClientSession() {
   try {
-    const appContext = await getCachedClientAppContext();
+    const sessionResult = await authClient.getSession();
 
-    return appContext.session;
+    return sessionResult.data;
   } catch {
     return null;
   }
