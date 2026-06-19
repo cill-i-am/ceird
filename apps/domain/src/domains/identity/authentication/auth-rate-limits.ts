@@ -1,26 +1,24 @@
 /* eslint-disable max-classes-per-file */
 import { createHash, createHmac } from "node:crypto";
 
-import { decodeOrganizationId, decodeUserId } from "@ceird/identity-core";
-import type { UserId } from "@ceird/identity-core";
+import { OrganizationId, UserId } from "@ceird/identity-core";
 import { getIp } from "better-auth/api";
 import { eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Context, Effect } from "effect";
+import { Context, Effect, Option } from "effect";
 
 import {
-  AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES,
   AuthRateLimitRequestBodyUnavailableError,
-  decodeIdentityBoundaryValue,
-  isRecord,
-  readLimitedRequestText,
-  readRequestContentLength,
-  readStringField,
+  AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES,
+  decodeAuthBoundaryOption,
+  makeAuthBoundaryRequestEnvelope,
+  readAuthBoundaryJsonOrFormRequestBody,
+  readAuthBoundaryStringField,
   resolveActiveAuthenticationSecret,
-  resolveAuthenticationEndpointPath,
   serializeUnknownCause,
 } from "./auth-boundary-utils.js";
 import type {
+  AuthBoundaryRecord,
   AuthEffectRuntimeContext,
   AuthenticationRateLimitRequestBodyReadFailureReason,
   AuthenticationSessionResult,
@@ -116,7 +114,7 @@ interface AuthenticationRateLimitReservationRequest {
 }
 type AuthenticationRateLimitRequestBody =
   | {
-      readonly body: Record<string, unknown> | null;
+      readonly body: AuthBoundaryRecord | null;
       readonly status: "available";
     }
   | {
@@ -196,20 +194,17 @@ async function reserveAuthenticationAbuseRateLimit(options: {
   readonly request: Request;
   readonly runtimeContext: AuthEffectRuntimeContext;
 }) {
-  if (
-    options.request.method !== "POST" ||
-    options.authConfig.rateLimit.enabled !== true
-  ) {
+  if (options.authConfig.rateLimit.enabled !== true) {
     return null;
   }
 
-  const endpointPath = resolveAuthenticationEndpointPath(
+  const { endpointPath, method } = makeAuthBoundaryRequestEnvelope(
     options.request,
     options.authConfig.basePath
   );
 
   if (
-    endpointPath === null ||
+    method !== "POST" ||
     !RATE_LIMIT_ATOMIC_RESERVATION_ENDPOINT_PATHS.has(endpointPath)
   ) {
     return null;
@@ -465,9 +460,8 @@ async function makeAuthenticationAbuseRateLimitReservationRequests(options: {
     });
   }
 
-  const actorUserId = decodeIdentityBoundaryValue(
-    sessionResolution.session.user.id,
-    decodeUserId
+  const actorUserId = Option.getOrNull(
+    decodeAuthBoundaryOption(UserId, sessionResolution.session.user.id)
   );
 
   if (actorUserId !== null) {
@@ -608,9 +602,11 @@ function makeAuthenticationDeliveryRateLimitReservationRequests(options: {
             ];
 
       if (options.sessionResolution.status === "resolved") {
-        const userId = decodeIdentityBoundaryValue(
-          options.sessionResolution.session.user.id,
-          decodeUserId
+        const userId = Option.getOrNull(
+          decodeAuthBoundaryOption(
+            UserId,
+            options.sessionResolution.session.user.id
+          )
         );
 
         if (userId !== null) {
@@ -649,9 +645,11 @@ function makeAuthenticationDeliveryRateLimitReservationRequests(options: {
               }),
             ];
 
-      const userId = decodeIdentityBoundaryValue(
-        options.sessionResolution.session.user.id,
-        decodeUserId
+      const userId = Option.getOrNull(
+        decodeAuthBoundaryOption(
+          UserId,
+          options.sessionResolution.session.user.id
+        )
       );
 
       if (userId !== null) {
@@ -752,86 +750,17 @@ function makeAuthenticationUserRateLimitReservationRequest(options: {
 }
 
 async function readAuthenticationRateLimitRequestBody(request: Request) {
-  try {
-    const contentType = request.headers.get("content-type") ?? "";
-    const contentLength = readRequestContentLength(request);
-
-    if (
-      contentLength !== null &&
-      Number.isFinite(contentLength) &&
-      contentLength > AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES
-    ) {
-      return {
-        reason: "body_too_large",
-        status: "unavailable",
-      } satisfies AuthenticationRateLimitRequestBody;
-    }
-
-    if (
-      !contentType.includes("application/json") &&
-      !contentType.includes("application/x-www-form-urlencoded")
-    ) {
-      return request.body === null || contentLength === 0
-        ? ({
-            body: null,
-            status: "available",
-          } satisfies AuthenticationRateLimitRequestBody)
-        : ({
-            reason: "unsupported_content_type",
-            status: "unavailable",
-          } satisfies AuthenticationRateLimitRequestBody);
-    }
-
-    const bodyText = await readLimitedRequestText(
-      request,
-      AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES
-    );
-
-    if (bodyText === null) {
-      return {
-        reason: "body_too_large",
-        status: "unavailable",
-      } satisfies AuthenticationRateLimitRequestBody;
-    }
-
-    if (bodyText.length === 0) {
-      return {
-        body: null,
-        status: "available",
-      } satisfies AuthenticationRateLimitRequestBody;
-    }
-
-    if (contentType.includes("application/json")) {
-      const body = JSON.parse(bodyText);
-
-      return isRecord(body)
-        ? ({
-            body,
-            status: "available",
-          } satisfies AuthenticationRateLimitRequestBody)
-        : ({
-            reason: "invalid_body",
-            status: "unavailable",
-          } satisfies AuthenticationRateLimitRequestBody);
-    }
-
-    return {
-      body: Object.fromEntries(new URLSearchParams(bodyText).entries()),
-      status: "available",
-    } satisfies AuthenticationRateLimitRequestBody;
-  } catch {
-    return {
-      reason: "read_failed",
-      status: "unavailable",
-    } satisfies AuthenticationRateLimitRequestBody;
-  }
+  return await readAuthBoundaryJsonOrFormRequestBody(
+    request,
+    AUTH_RATE_LIMIT_MAX_REQUEST_BODY_BYTES
+  );
 }
 
 function readNormalizedAuthDeliveryEmailField(
-  body: Record<string, unknown> | null,
+  body: AuthBoundaryRecord | null,
   field: string
 ) {
-  return normalizeAuthDeliveryEmail(readStringField(body, field));
+  return normalizeAuthDeliveryEmail(readAuthBoundaryStringField(body, field));
 }
 
 function normalizeAuthDeliveryEmail(value: string | null | undefined) {
@@ -871,16 +800,20 @@ async function resolveAuthenticationAbuseRateLimitSession(
 }
 
 function resolveOrganizationInviteMemberRateLimitOrganizationId(options: {
-  readonly requestBody: Record<string, unknown> | null;
+  readonly requestBody: AuthBoundaryRecord | null;
   readonly session: AuthenticationSessionResult;
 }) {
-  const activeOrganizationId = decodeIdentityBoundaryValue(
-    options.session.session.activeOrganizationId,
-    decodeOrganizationId
+  const activeOrganizationId = Option.getOrNull(
+    decodeAuthBoundaryOption(
+      OrganizationId,
+      options.session.session.activeOrganizationId
+    )
   );
-  const requestedOrganizationId = decodeIdentityBoundaryValue(
-    readStringField(options.requestBody, "organizationId"),
-    decodeOrganizationId
+  const requestedOrganizationId = Option.getOrNull(
+    decodeAuthBoundaryOption(
+      OrganizationId,
+      readAuthBoundaryStringField(options.requestBody, "organizationId")
+    )
   );
 
   if (

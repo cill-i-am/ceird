@@ -5,12 +5,12 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import {
   decodeInvitationId,
   decodeCreateOrganizationInput,
-  decodeOrganizationId,
   decodeOrganizationRole,
   decodePublicInvitationPreview,
   decodeSessionId,
   decodeUpdateOrganizationInput,
   decodeUserId,
+  OrganizationId,
 } from "@ceird/identity-core";
 import type {
   InvitationId,
@@ -33,22 +33,24 @@ import {
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { and, eq, gt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 
 import { AppDatabase } from "../../../platform/database/database.js";
-import { withAuthenticationAuthorizationGuards } from "./auth-authorization-guards.js";
+import { makeBetterAuthBoundaryPolicyHandler } from "./auth-boundary-policy-adapter.js";
 import {
-  decodeIdentityBoundaryValue,
+  AuthenticationSessionResultSchema,
+  RawAuthenticationSessionResultSchema,
+  decodeAuthBoundaryOption,
+  decodeAuthBoundaryRecordOrNull,
   makeRequestLocalAuthenticationSessionResolver,
   maskInvitationEmail,
-  resolveActiveAuthenticationSecret,
+  readAuthBoundaryStringField,
   sanitizeAuthFailureLogValue,
 } from "./auth-boundary-utils.js";
 import type {
   AuthEffectRuntimeContext,
   AuthenticationSessionResult,
-  RawAuthenticationSessionResult,
 } from "./auth-boundary-utils.js";
 import { loadAuthEmailConfig } from "./auth-email-config.js";
 import {
@@ -65,22 +67,13 @@ import {
   makeOrganizationInvitationAuditMetadata,
   makeOrganizationMemberAuditMetadata,
   recordOrganizationSecurityAuditEvent,
-  withOAuthClientManagementEndpointGuard,
-  withOAuthClientRegistrationPolicyGuard,
-  withOAuthRefreshTokenConsentGuard,
-  withOAuthSecurityAuditEventRecorder,
-  withOrganizationSecurityAuditEventRecorder,
 } from "./auth-oauth-policy.js";
 import { measureAuthenticationPhase } from "./auth-observability.js";
 import {
   makePasswordCompromiseCheckFailureReporter,
   makePasswordCompromiseCheckPlugin,
 } from "./auth-password-compromise.js";
-import {
-  makeObservedDatabaseRateLimitStorage,
-  withAuthenticationAbuseRateLimitGuard,
-  withAuthenticationRateLimitFailureResponse,
-} from "./auth-rate-limits.js";
+import { makeObservedDatabaseRateLimitStorage } from "./auth-rate-limits.js";
 import { loadAuthenticationConfig, matchesTrustedOrigin } from "./config.js";
 import type { AuthenticationConfig } from "./config.js";
 import {
@@ -91,6 +84,7 @@ import {
 } from "./schema.js";
 
 export { matchesTrustedOrigin } from "./config.js";
+export { makeBetterAuthBoundaryPolicyHandler } from "./auth-boundary-policy-adapter.js";
 export {
   AuthRateLimitRequestBodyUnavailableError,
   makeRequestLocalAuthenticationSessionResolver,
@@ -298,17 +292,19 @@ function oauthRequestIncludesCeirdScopes(scopes: readonly string[]): boolean {
   return scopes.some((scope) => scope.startsWith("ceird:"));
 }
 
-function resolveOAuthConsentActiveOrganizationId(
-  session: Readonly<Record<string, unknown>>
-) {
-  return decodeIdentityBoundaryValue(
-    session["activeOrganizationId"],
-    decodeOrganizationId
+function resolveOAuthConsentActiveOrganizationId(session: unknown) {
+  const sessionRecord = decodeAuthBoundaryRecordOrNull(session);
+
+  return Option.getOrNull(
+    decodeAuthBoundaryOption(
+      OrganizationId,
+      readAuthBoundaryStringField(sessionRecord, "activeOrganizationId")
+    )
   );
 }
 
 function resolveOAuthConsentReferenceId(
-  session: Readonly<Record<string, unknown>>,
+  session: unknown,
   scopes: readonly string[]
 ) {
   if (!oauthRequestIncludesCeirdScopes(scopes)) {
@@ -336,9 +332,8 @@ function resolveOAuthAccessTokenCustomClaims(input: {
     return {};
   }
 
-  const organizationId = decodeIdentityBoundaryValue(
-    input.referenceId,
-    decodeOrganizationId
+  const organizationId = Option.getOrNull(
+    decodeAuthBoundaryOption(OrganizationId, input.referenceId)
   );
 
   if (organizationId === null) {
@@ -353,10 +348,15 @@ function resolveOAuthAccessTokenCustomClaims(input: {
   };
 }
 
-function assertOrganizationUpdateOnlyChangesName(
-  organizationUpdate: Record<string, unknown>
-) {
-  const unsupportedField = Object.keys(organizationUpdate).find(
+function assertOrganizationUpdateOnlyChangesName(organizationUpdate: unknown) {
+  const decodedOrganizationUpdate =
+    decodeAuthBoundaryRecordOrNull(organizationUpdate);
+
+  if (decodedOrganizationUpdate === null) {
+    throwInvalidOrganizationInput("Invalid organization update.");
+  }
+
+  const unsupportedField = Object.keys(decodedOrganizationUpdate).find(
     (field) => !ORGANIZATION_UPDATE_INPUT_FIELDS.has(field)
   );
 
@@ -836,77 +836,38 @@ export function createAuthentication(options: {
       )
   );
 
-  auth.handler = withAuthenticationRateLimitFailureResponse(
-    withAuthenticationAuthorizationGuards(
-      withAuthenticationAbuseRateLimitGuard(
-        withOAuthSecurityAuditEventRecorder(
-          withOrganizationSecurityAuditEventRecorder(
-            withOAuthClientManagementEndpointGuard(
-              withOAuthRefreshTokenConsentGuard(
-                withOAuthClientRegistrationPolicyGuard(auth.handler, {
-                  allowLoopbackRedirects:
-                    oauthClientRegistrationAllowLoopbackRedirects,
-                  allowedScopes: oauthClientRegistrationAllowedScopes,
-                  basePath: authConfig.basePath,
-                  runtimeContext: options.runtimeContext,
-                }),
-                {
-                  basePath: authConfig.basePath,
-                  database,
-                  runtimeContext: options.runtimeContext,
-                }
-              ),
-              authConfig.basePath
-            ),
-            {
-              authConfig,
-              database,
-              resolveSession,
-              runtimeContext: options.runtimeContext,
-            }
-          ),
-          {
-            authConfig,
-            database,
-            resolveSession,
-            runtimeContext: options.runtimeContext,
-          }
-        ),
-        database,
-        authConfig,
-        options.runtimeContext,
-        {
-          resolveSession,
-        }
-      ),
-      database,
-      {
-        cookiePrefix: authConfig.advanced?.cookiePrefix,
-        resolveSession,
-        secret: resolveActiveAuthenticationSecret(authConfig),
-      }
-    )
-  );
+  auth.handler = makeBetterAuthBoundaryPolicyHandler(auth.handler, {
+    authConfig,
+    database,
+    oauthClientRegistrationAllowLoopbackRedirects,
+    oauthClientRegistrationAllowedScopes,
+    resolveSession,
+    runtimeContext: options.runtimeContext,
+  });
 
   return auth as CeirdAuthentication;
 }
 
 function normalizeAuthenticationSessionResult(
-  result: RawAuthenticationSessionResult | null
+  result: unknown
 ): AuthenticationSessionResult | null {
   if (result === null) {
     return null;
   }
 
-  return {
-    ...result,
+  const decoded = Schema.decodeUnknownSync(
+    RawAuthenticationSessionResultSchema
+  )(result);
+
+  return Schema.decodeUnknownSync(AuthenticationSessionResultSchema)({
+    ...decoded,
     user: {
-      ...result.user,
+      ...decoded.user,
       twoFactorEnabled: readAuthenticationSessionUserTwoFactorEnabled(
-        result.user
+        decoded.user
       ),
     },
-  };
+  });
 }
 
 function makeAuthenticationBackgroundTaskHandler() {
@@ -1058,7 +1019,7 @@ function serializeAuthenticationSessionResult(
         result.session.activeOrganizationId === null ||
         result.session.activeOrganizationId === undefined
           ? null
-          : decodeOrganizationId(result.session.activeOrganizationId),
+          : result.session.activeOrganizationId,
       createdAt: serializeAuthenticationDate(result.session.createdAt),
       expiresAt: serializeAuthenticationDate(result.session.expiresAt),
       id: decodeSessionId(result.session.id),

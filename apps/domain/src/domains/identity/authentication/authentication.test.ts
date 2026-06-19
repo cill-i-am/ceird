@@ -3,7 +3,14 @@ import path from "node:path";
 
 import { getTableColumns, getTableName } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { ConfigProvider, Effect, Layer, Logger, References } from "effect";
+import {
+  ConfigProvider,
+  Effect,
+  Layer,
+  Logger,
+  References,
+  Schema,
+} from "effect";
 import {
   HttpEffect,
   HttpRouter,
@@ -13,6 +20,8 @@ import {
 import { Pool } from "pg";
 
 import { readMigrationSql } from "../../../platform/database/test-database.js";
+import { AuthenticationSessionResultSchema } from "./auth-boundary-utils.js";
+import type { AuthenticationSessionResult } from "./auth-boundary-utils.js";
 import {
   makeAuthenticationRequestObservation,
   runWithAuthenticationRequestObservation,
@@ -1516,6 +1525,79 @@ describe("createAuthentication()", () => {
       });
     } finally {
       void cleanup();
+    }
+  }, 10_000);
+
+  it("applies dynamic client registration policy and audit capture through the composed auth handler", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+      }
+    );
+
+    try {
+      const response = await makeAuthenticationWebHandler(auth)(
+        new Request("https://api.ceird.example/api/auth/oauth2/register", {
+          body: JSON.stringify({
+            redirect_uris: ["https://client.example/oauth/callback"],
+            scope: "openid ceird:admin",
+          }),
+          headers: {
+            "content-type": "application/json",
+            "user-agent": "Ceird MCP Test",
+            "x-forwarded-for": "203.0.113.52",
+          },
+          method: "POST",
+        })
+      );
+
+      await expect(response.json()).resolves.toStrictEqual({
+        error: "invalid_scope",
+        error_description:
+          "Dynamic client registration requested a restricted scope.",
+      });
+      expect(response.status).toBe(400);
+      expect(auditEvents).toStrictEqual([
+        expect.objectContaining({
+          eventType: "oauth_client_registration_rejected",
+          metadata: {
+            dynamicRegistration: true,
+            oauthError: "invalid_scope",
+            outcome: "rejected",
+          },
+          scopes: ["openid", "ceird:admin"],
+          sourceIp: "203.0.113.52",
+          userAgent: "Ceird MCP Test",
+        }),
+      ]);
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("fails closed on uninspectable OAuth token requests through the composed auth handler", async () => {
+    const { auth, cleanup } = createAuthenticationForPluginInspection();
+
+    try {
+      const response = await makeAuthenticationWebHandler(auth)(
+        new Request("https://api.ceird.example/api/auth/oauth2/token", {
+          body: "",
+          headers: {
+            "content-type": "text/plain",
+          },
+          method: "POST",
+        })
+      );
+
+      await expect(response.json()).resolves.toStrictEqual({
+        error: "invalid_request",
+        error_description: "OAuth token request could not be inspected.",
+      });
+      expect(response.status).toBe(400);
+    } finally {
+      await cleanup();
     }
   }, 10_000);
 
@@ -3278,6 +3360,42 @@ describe("createAuthentication()", () => {
         body: '{"grant_type":',
         headers: {
           "content-type": "application/json",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      error: "invalid_request",
+      error_description: "OAuth token request could not be inspected.",
+    });
+    expect(response.status).toBe(400);
+    expect(delegated).toBeFalsy();
+  }, 10_000);
+
+  it("fails closed when token requests use an unsupported content type", async () => {
+    let delegated = false;
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthRefreshTokenConsentGuard(
+      () => {
+        delegated = true;
+        return Promise.resolve(Response.json({ delegated: true }));
+      },
+      {
+        basePath: config.basePath,
+        database: makeOAuthRefreshTokenConsentGuardDatabase({ rows: [] }),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/token", {
+        body: "",
+        headers: {
+          "content-type": "text/plain",
         },
         method: "POST",
       })
@@ -6948,14 +7066,14 @@ function makeAuthenticationSessionResult(
         readonly activeOrganizationId?: string | null | undefined;
         readonly emailVerified?: boolean | undefined;
       } = true
-): NonNullable<Awaited<ReturnType<CeirdAuthentication["api"]["getSession"]>>> {
+): AuthenticationSessionResult {
   const now = new Date();
   const emailVerified =
     typeof input === "boolean" ? input : input.emailVerified;
   const activeOrganizationId =
     typeof input === "boolean" ? undefined : input.activeOrganizationId;
 
-  return {
+  return Schema.decodeUnknownSync(AuthenticationSessionResultSchema)({
     session: {
       activeOrganizationId,
       createdAt: now,
@@ -6974,7 +7092,7 @@ function makeAuthenticationSessionResult(
       twoFactorEnabled: false,
       updatedAt: now,
     },
-  };
+  });
 }
 
 function makeVerifiedEmailGuardDatabase(input: {
@@ -7244,8 +7362,8 @@ function makeOAuthAuditSessionResult(options: {
   readonly activeOrganizationId?: string | null;
   readonly sessionId: string;
   readonly userId: string;
-}) {
-  return {
+}): AuthenticationSessionResult {
+  return Schema.decodeUnknownSync(AuthenticationSessionResultSchema)({
     session: {
       activeOrganizationId: options.activeOrganizationId,
       createdAt: new Date("2026-06-07T00:00:00.000Z"),
@@ -7264,7 +7382,7 @@ function makeOAuthAuditSessionResult(options: {
       twoFactorEnabled: false,
       updatedAt: new Date("2026-06-07T00:00:00.000Z"),
     },
-  };
+  });
 }
 
 function makeRateLimitReadFailureDatabase(error: unknown) {

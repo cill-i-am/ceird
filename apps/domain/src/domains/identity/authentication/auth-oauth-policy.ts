@@ -1,25 +1,27 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 
-import { decodeOrganizationId } from "@ceird/identity-core";
+import { OrganizationId } from "@ceird/identity-core";
 import { getIp } from "better-auth/api";
 import { and, eq, gt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Context, Effect } from "effect";
+import { Context, Effect, Option, Schema } from "effect";
 
 import {
   OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES,
-  decodeIdentityBoundaryValue,
-  isRecord,
+  AuthBoundaryRecordSchema,
+  decodeAuthBoundaryOption,
+  decodeAuthBoundaryRecordOrNull,
+  makeAuthBoundaryRequestEnvelope,
   maskInvitationEmail,
-  readBoundedJsonRecordRequestBody,
-  readLimitedRequestText,
-  readRequestContentLength,
-  readStringField,
-  resolveAuthenticationEndpointPath,
+  readAuthBoundaryJsonOrFormRequestBody,
+  readAuthBoundaryJsonRequestBody,
+  readAuthBoundaryRecordField,
+  readAuthBoundaryStringField,
   sanitizeAuthFailureLogValue,
 } from "./auth-boundary-utils.js";
 import type {
+  AuthBoundaryRecord,
   AuthEffectRuntimeContext,
   AuthenticationSessionResult,
 } from "./auth-boundary-utils.js";
@@ -100,6 +102,35 @@ const OAUTH_CLIENT_REGISTRATION_ALLOWED_FIELDS = new Set([
   "subject_type",
   "skip_consent",
 ]);
+const OAuthClientRegistrationStringArraySchema = Schema.Array(Schema.String);
+const OAuthClientRegistrationPolicyInputSchema = Schema.Struct({
+  body: AuthBoundaryRecordSchema,
+  clientName: Schema.optional(Schema.String),
+  clientUri: Schema.optional(Schema.String),
+  contacts: Schema.optional(OAuthClientRegistrationStringArraySchema),
+  grantTypes: Schema.optional(OAuthClientRegistrationStringArraySchema),
+  logoUri: Schema.optional(Schema.String),
+  policyUri: Schema.optional(Schema.String),
+  postLogoutRedirectUris: Schema.optional(
+    OAuthClientRegistrationStringArraySchema
+  ),
+  redirectUris: Schema.optional(OAuthClientRegistrationStringArraySchema),
+  responseTypes: Schema.optional(OAuthClientRegistrationStringArraySchema),
+  scope: Schema.optional(Schema.String),
+  skipConsentRequested: Schema.Boolean,
+  softwareId: Schema.optional(Schema.String),
+  softwareStatement: Schema.optional(Schema.String),
+  softwareVersion: Schema.optional(Schema.String),
+  tosUri: Schema.optional(Schema.String),
+  tokenEndpointAuthMethod: Schema.optional(Schema.String),
+  type: Schema.optional(Schema.String),
+});
+type OAuthClientRegistrationPolicyInput = Schema.Schema.Type<
+  typeof OAuthClientRegistrationPolicyInputSchema
+>;
+const decodeOAuthClientRegistrationStringArray = Schema.decodeUnknownOption(
+  OAuthClientRegistrationStringArraySchema
+);
 const OAUTH_SECURITY_AUDIT_ENDPOINT_PATHS = new Set([
   OAUTH_CLIENT_REGISTRATION_ENDPOINT_PATH,
   OAUTH_CONSENT_ENDPOINT_PATH,
@@ -133,7 +164,7 @@ export async function recordOrganizationSecurityAuditEvent(
   input: {
     readonly actorUserId?: string | null | undefined;
     readonly eventType: AuthSecurityAuditEventType;
-    readonly metadata?: Record<string, unknown> | undefined;
+    readonly metadata?: AuthBoundaryRecord | undefined;
     readonly organizationId?: string | null | undefined;
     readonly sessionId?: string | null | undefined;
     readonly sourceIp?: string | null | undefined;
@@ -192,7 +223,7 @@ export function withOAuthClientManagementEndpointGuard(
   basePath: string
 ) {
   return (request: Request) => {
-    const endpointPath = resolveAuthenticationEndpointPath(request, basePath);
+    const { endpointPath } = makeAuthBoundaryRequestEnvelope(request, basePath);
 
     if (!OAUTH_CLIENT_MANAGEMENT_ENDPOINT_PATHS.has(endpointPath)) {
       return handler(request);
@@ -221,15 +252,12 @@ export function withOAuthRefreshTokenConsentGuard(
   }
 ) {
   return async (request: Request) => {
-    const endpointPath = resolveAuthenticationEndpointPath(
+    const { endpointPath, method } = makeAuthBoundaryRequestEnvelope(
       request,
       options.basePath
     );
 
-    if (
-      request.method !== "POST" ||
-      endpointPath !== OAUTH_TOKEN_ENDPOINT_PATH
-    ) {
+    if (method !== "POST" || endpointPath !== OAUTH_TOKEN_ENDPOINT_PATH) {
       return await handler(request);
     }
 
@@ -243,11 +271,16 @@ export function withOAuthRefreshTokenConsentGuard(
       });
     }
 
-    if (readStringField(body.value, "grant_type") !== "refresh_token") {
+    if (
+      readAuthBoundaryStringField(body.value, "grant_type") !== "refresh_token"
+    ) {
       return await handler(request);
     }
 
-    const refreshToken = readStringField(body.value, "refresh_token");
+    const refreshToken = readAuthBoundaryStringField(
+      body.value,
+      "refresh_token"
+    );
 
     if (!refreshToken) {
       return await handler(request);
@@ -286,7 +319,7 @@ export function withOAuthRefreshTokenConsentGuard(
 type OAuthRefreshTokenConsentGuardRequestBody =
   | {
       readonly status: "inspectable";
-      readonly value: Record<string, unknown>;
+      readonly value: AuthBoundaryRecord;
     }
   | {
       readonly status: "uninspectable";
@@ -295,58 +328,20 @@ type OAuthRefreshTokenConsentGuardRequestBody =
 async function readOAuthRefreshTokenConsentGuardRequestBody(
   request: Request
 ): Promise<OAuthRefreshTokenConsentGuardRequestBody> {
-  try {
-    const contentType = request.headers.get("content-type") ?? "";
-    const contentLength = readRequestContentLength(request);
-
-    if (
-      contentLength !== null &&
-      Number.isFinite(contentLength) &&
-      contentLength > OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
-    ) {
-      return { status: "uninspectable" };
+  const body = await readAuthBoundaryJsonOrFormRequestBody(
+    request,
+    OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES,
+    {
+      allowEmptyUnsupportedContentType: false,
+      rejectDuplicateFormFields: ["grant_type", "refresh_token"],
     }
+  );
 
-    if (
-      !contentType.includes("application/json") &&
-      !contentType.includes("application/x-www-form-urlencoded")
-    ) {
-      return { status: "uninspectable" };
-    }
-
-    const bodyText = await readLimitedRequestText(
-      request,
-      OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
-    );
-
-    if (bodyText === null) {
-      return { status: "uninspectable" };
-    }
-
-    if (bodyText.length === 0) {
-      return { status: "inspectable", value: {} };
-    }
-
-    if (contentType.includes("application/json")) {
-      const body = JSON.parse(bodyText);
-      return isRecord(body)
-        ? { status: "inspectable", value: body }
-        : { status: "uninspectable" };
-    }
-
-    const params = new URLSearchParams(bodyText);
-
-    if (
-      params.getAll("grant_type").length > 1 ||
-      params.getAll("refresh_token").length > 1
-    ) {
-      return { status: "uninspectable" };
-    }
-
-    return { status: "inspectable", value: Object.fromEntries(params) };
-  } catch {
+  if (body.status === "unavailable") {
     return { status: "uninspectable" };
   }
+
+  return { status: "inspectable", value: body.body ?? {} };
 }
 
 interface OAuthRefreshTokenConsentGuardRow {
@@ -425,7 +420,7 @@ interface OrganizationSecurityAuditEventRecorderOptions extends AuthSecurityAudi
 }
 
 interface OAuthSecurityAuditRequestSnapshot {
-  readonly body: Record<string, unknown> | null;
+  readonly body: AuthBoundaryRecord | null;
   readonly endpointPath: string;
   readonly sourceIp: string | null;
   readonly tokenContext?: OAuthSecurityAuditTokenContext | null | undefined;
@@ -443,7 +438,7 @@ interface OAuthSecurityAuditTokenContext {
 interface AuthSecurityAuditEventInput {
   readonly actorUserId?: string | null | undefined;
   readonly eventType: AuthSecurityAuditEventType;
-  readonly metadata?: Record<string, unknown> | undefined;
+  readonly metadata?: AuthBoundaryRecord | undefined;
   readonly oauthClientId?: string | null | undefined;
   readonly organizationId?: string | null | undefined;
   readonly scopes?: readonly string[] | undefined;
@@ -480,7 +475,7 @@ export function withOAuthSecurityAuditEventRecorder(
 }
 
 interface OrganizationSecurityAuditRequestSnapshot {
-  readonly body: Record<string, unknown> | null;
+  readonly body: AuthBoundaryRecord | null;
   readonly endpointPath: string;
   readonly invitationBefore: {
     readonly email: string;
@@ -540,13 +535,13 @@ async function makeOrganizationSecurityAuditRequestSnapshot(
   request: Request,
   options: OrganizationSecurityAuditEventRecorderOptions
 ): Promise<OrganizationSecurityAuditRequestSnapshot | null> {
-  const endpointPath = resolveAuthenticationEndpointPath(
+  const { endpointPath, method } = makeAuthBoundaryRequestEnvelope(
     request,
     options.authConfig.basePath
   );
 
   if (
-    request.method !== "POST" ||
+    method !== "POST" ||
     !ORGANIZATION_SECURITY_AUDIT_ENDPOINT_PATHS.has(endpointPath)
   ) {
     return null;
@@ -582,7 +577,7 @@ async function makeOrganizationSecurityAuditRequestSnapshot(
 }
 
 async function resolveOrganizationInvitationResendAuditContext(options: {
-  readonly body: Record<string, unknown> | null;
+  readonly body: AuthBoundaryRecord | null;
   readonly database: NodePgDatabase;
   readonly endpointPath: string;
   readonly runtimeContext: AuthEffectRuntimeContext;
@@ -597,9 +592,10 @@ async function resolveOrganizationInvitationResendAuditContext(options: {
       return null;
     }
 
-    const email = readStringField(options.body, "email")?.toLowerCase() ?? null;
+    const email =
+      readAuthBoundaryStringField(options.body, "email")?.toLowerCase() ?? null;
     const organizationId =
-      readStringField(options.body, "organizationId") ??
+      readAuthBoundaryStringField(options.body, "organizationId") ??
       options.session.session.activeOrganizationId ??
       null;
 
@@ -649,13 +645,13 @@ async function findOrganizationInvitationAuditContext(
 }
 
 async function resolveOrganizationMemberAuditContext(options: {
-  readonly body: Record<string, unknown> | null;
+  readonly body: AuthBoundaryRecord | null;
   readonly database: NodePgDatabase;
   readonly runtimeContext: AuthEffectRuntimeContext;
 }) {
   const memberId =
-    readStringField(options.body, "memberId") ??
-    readStringField(options.body, "memberIdOrEmail");
+    readAuthBoundaryStringField(options.body, "memberId") ??
+    readAuthBoundaryStringField(options.body, "memberIdOrEmail");
 
   if (!memberId) {
     return null;
@@ -765,17 +761,17 @@ async function recordOrganizationInvitationResentSecurityAuditEvent(options: {
     metadata: {
       ...makeOrganizationInvitationAuditMetadata({
         email:
-          readStringField(responseBody, "email") ??
+          readAuthBoundaryStringField(responseBody, "email") ??
           options.snapshot.invitationBefore.email,
         role:
-          readStringField(responseBody, "role") ??
+          readAuthBoundaryStringField(responseBody, "role") ??
           options.snapshot.invitationBefore.role,
       }),
       outcome: "succeeded",
       source: "better_auth_organization_endpoint",
     },
     organizationId:
-      readStringField(responseBody, "organizationId") ??
+      readAuthBoundaryStringField(responseBody, "organizationId") ??
       options.snapshot.invitationBefore.organizationId ??
       options.snapshot.session?.session.activeOrganizationId,
     sessionId: options.snapshot.session?.session.id,
@@ -795,7 +791,7 @@ async function recordOrganizationActiveChangedSecurityAuditEvent(options: {
   const previousOrganizationId =
     options.snapshot.session?.session.activeOrganizationId ?? null;
   const activeOrganizationId =
-    readStringField(responseBody, "id") ??
+    readAuthBoundaryStringField(responseBody, "id") ??
     resolveRequestedActiveOrganizationId(
       options.snapshot.body,
       previousOrganizationId
@@ -822,18 +818,21 @@ async function recordOrganizationActiveChangedSecurityAuditEvent(options: {
 }
 
 function resolveRequestedActiveOrganizationId(
-  body: Record<string, unknown> | null,
+  body: AuthBoundaryRecord | null,
   previousOrganizationId: string | null
 ) {
-  const requestedOrganizationId = body?.organizationId;
+  const requestedOrganizationValue = body?.organizationId;
 
-  if (requestedOrganizationId === null) {
+  if (requestedOrganizationValue === null) {
     return null;
   }
 
-  return typeof requestedOrganizationId === "string"
-    ? requestedOrganizationId
-    : previousOrganizationId;
+  const requestedOrganizationId = readAuthBoundaryStringField(
+    body,
+    "organizationId"
+  );
+
+  return requestedOrganizationId ?? previousOrganizationId;
 }
 
 async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
@@ -844,14 +843,13 @@ async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
   const responseBody = await readOAuthSecurityAuditResponseBody(
     options.response
   );
-  const member = isRecord(responseBody?.member)
-    ? responseBody.member
-    : responseBody;
+  const member =
+    readAuthBoundaryRecordField(responseBody, "member") ?? responseBody;
   const memberId =
-    readStringField(member, "id") ??
-    readStringField(options.snapshot.body, "memberId");
+    readAuthBoundaryStringField(member, "id") ??
+    readAuthBoundaryStringField(options.snapshot.body, "memberId");
   const organizationId =
-    readStringField(member, "organizationId") ??
+    readAuthBoundaryStringField(member, "organizationId") ??
     options.snapshot.memberBefore?.organizationId ??
     options.snapshot.session?.session.activeOrganizationId;
 
@@ -862,9 +860,9 @@ async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
       ...makeOrganizationMemberAuditMetadata({
         memberId,
         previousRole: options.snapshot.memberBefore?.role,
-        role: readStringField(member, "role"),
+        role: readAuthBoundaryStringField(member, "role"),
         targetUserId:
-          readStringField(member, "userId") ??
+          readAuthBoundaryStringField(member, "userId") ??
           options.snapshot.memberBefore?.userId,
       }),
       outcome: "succeeded",
@@ -885,9 +883,10 @@ async function recordOrganizationMemberRemovedSecurityAuditEvent(options: {
   const responseBody = await readOAuthSecurityAuditResponseBody(
     options.response
   );
-  const member = isRecord(responseBody?.member)
-    ? responseBody.member
-    : (options.snapshot.memberBefore ?? null);
+  const member =
+    readAuthBoundaryRecordField(responseBody, "member") ??
+    decodeAuthBoundaryRecordOrNull(options.snapshot.memberBefore) ??
+    null;
 
   await recordOrganizationSecurityAuditEvent(options.options, {
     actorUserId: options.snapshot.session?.user.id,
@@ -895,19 +894,20 @@ async function recordOrganizationMemberRemovedSecurityAuditEvent(options: {
     metadata: {
       ...makeOrganizationMemberAuditMetadata({
         memberId:
-          readStringField(member, "id") ?? options.snapshot.memberBefore?.id,
+          readAuthBoundaryStringField(member, "id") ??
+          options.snapshot.memberBefore?.id,
         role:
-          readStringField(member, "role") ??
+          readAuthBoundaryStringField(member, "role") ??
           options.snapshot.memberBefore?.role,
         targetUserId:
-          readStringField(member, "userId") ??
+          readAuthBoundaryStringField(member, "userId") ??
           options.snapshot.memberBefore?.userId,
       }),
       outcome: "succeeded",
       source: "better_auth_organization_endpoint",
     },
     organizationId:
-      readStringField(member, "organizationId") ??
+      readAuthBoundaryStringField(member, "organizationId") ??
       options.snapshot.memberBefore?.organizationId ??
       options.snapshot.session?.session.activeOrganizationId,
     sessionId: options.snapshot.session?.session.id,
@@ -920,13 +920,13 @@ async function makeOAuthSecurityAuditRequestSnapshot(
   request: Request,
   options: OAuthSecurityAuditEventRecorderOptions
 ): Promise<OAuthSecurityAuditRequestSnapshot | null> {
-  const endpointPath = resolveAuthenticationEndpointPath(
+  const { endpointPath, method } = makeAuthBoundaryRequestEnvelope(
     request,
     options.authConfig.basePath
   );
 
   if (
-    request.method !== "POST" ||
+    method !== "POST" ||
     !OAUTH_SECURITY_AUDIT_ENDPOINT_PATHS.has(endpointPath)
   ) {
     return null;
@@ -951,47 +951,16 @@ async function makeOAuthSecurityAuditRequestSnapshot(
 }
 
 async function readOAuthSecurityAuditRequestBody(request: Request) {
-  try {
-    const contentType = request.headers.get("content-type") ?? "";
-    const contentLength = readRequestContentLength(request);
+  const body = await readAuthBoundaryJsonOrFormRequestBody(
+    request,
+    OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
+  );
 
-    if (
-      contentLength !== null &&
-      Number.isFinite(contentLength) &&
-      contentLength > OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
-    ) {
-      return null;
-    }
-
-    if (
-      !contentType.includes("application/json") &&
-      !contentType.includes("application/x-www-form-urlencoded")
-    ) {
-      return null;
-    }
-
-    const bodyText = await readLimitedRequestText(
-      request,
-      OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES
-    );
-
-    if (bodyText === null || bodyText.length === 0) {
-      return null;
-    }
-
-    if (contentType.includes("application/json")) {
-      const body = JSON.parse(bodyText);
-      return isRecord(body) ? body : null;
-    }
-
-    return Object.fromEntries(new URLSearchParams(bodyText).entries());
-  } catch {
-    return null;
-  }
+  return body.status === "available" ? body.body : null;
 }
 
 async function resolveOAuthSecurityAuditTokenContext(options: {
-  readonly body: Record<string, unknown> | null;
+  readonly body: AuthBoundaryRecord | null;
   readonly database: NodePgDatabase;
   readonly endpointPath: string;
   readonly runtimeContext: AuthEffectRuntimeContext;
@@ -999,9 +968,13 @@ async function resolveOAuthSecurityAuditTokenContext(options: {
   try {
     if (
       options.endpointPath === OAUTH_TOKEN_ENDPOINT_PATH &&
-      readStringField(options.body, "grant_type") === "refresh_token"
+      readAuthBoundaryStringField(options.body, "grant_type") ===
+        "refresh_token"
     ) {
-      const refreshToken = readStringField(options.body, "refresh_token");
+      const refreshToken = readAuthBoundaryStringField(
+        options.body,
+        "refresh_token"
+      );
       return refreshToken
         ? await findOAuthRefreshTokenAuditContext(
             options.database,
@@ -1014,12 +987,15 @@ async function resolveOAuthSecurityAuditTokenContext(options: {
       return null;
     }
 
-    const token = readStringField(options.body, "token");
+    const token = readAuthBoundaryStringField(options.body, "token");
     if (!token) {
       return null;
     }
 
-    const tokenTypeHint = readStringField(options.body, "token_type_hint");
+    const tokenTypeHint = readAuthBoundaryStringField(
+      options.body,
+      "token_type_hint"
+    );
 
     if (tokenTypeHint === "access_token") {
       return await findOAuthAccessTokenAuditContext(options.database, token);
@@ -1063,9 +1039,8 @@ async function findOAuthRefreshTokenAuditContext(
   return row
     ? {
         clientId: row.clientId,
-        organizationId: decodeIdentityBoundaryValue(
-          row.referenceId,
-          decodeOrganizationId
+        organizationId: Option.getOrNull(
+          decodeAuthBoundaryOption(OrganizationId, row.referenceId)
         ),
         scopes: sanitizeOAuthSecurityAuditScopes(row.scopes),
         sessionId: row.sessionId,
@@ -1095,9 +1070,8 @@ async function findOAuthAccessTokenAuditContext(
   return row
     ? {
         clientId: row.clientId,
-        organizationId: decodeIdentityBoundaryValue(
-          row.referenceId,
-          decodeOrganizationId
+        organizationId: Option.getOrNull(
+          decodeAuthBoundaryOption(OrganizationId, row.referenceId)
         ),
         scopes: sanitizeOAuthSecurityAuditScopes(row.scopes),
         sessionId: row.sessionId,
@@ -1151,21 +1125,23 @@ async function recordOAuthClientRegistrationSecurityAuditEvent(options: {
   const succeeded =
     options.response.status >= 200 && options.response.status < 300;
   const scopes = resolveOAuthAuditScopes(
-    readStringField(responseBody, "scope"),
-    readStringField(options.snapshot.body, "scope")
+    readAuthBoundaryStringField(responseBody, "scope"),
+    readAuthBoundaryStringField(options.snapshot.body, "scope")
   );
 
   await writeAuthSecurityAuditEvent(options.options, {
-    actorUserId: readStringField(responseBody, "user_id"),
+    actorUserId: readAuthBoundaryStringField(responseBody, "user_id"),
     eventType: succeeded
       ? "oauth_client_registration_succeeded"
       : "oauth_client_registration_rejected",
     metadata: {
       dynamicRegistration: true,
-      oauthError: succeeded ? null : readStringField(responseBody, "error"),
+      oauthError: succeeded
+        ? null
+        : readAuthBoundaryStringField(responseBody, "error"),
       outcome: succeeded ? "succeeded" : "rejected",
     },
-    oauthClientId: readStringField(responseBody, "client_id"),
+    oauthClientId: readAuthBoundaryStringField(responseBody, "client_id"),
     scopes,
     sourceIp: options.snapshot.sourceIp,
     userAgent: options.snapshot.userAgent,
@@ -1189,7 +1165,7 @@ async function recordOAuthConsentSecurityAuditEvent(options: {
   const accepted = options.snapshot.body.accept;
   const oauthQuery = readOAuthQuerySearchParams(options.snapshot.body);
   const scopes = resolveOAuthAuditScopes(
-    readStringField(options.snapshot.body, "scope"),
+    readAuthBoundaryStringField(options.snapshot.body, "scope"),
     oauthQuery?.get("scope")
   );
   const session = await resolveOAuthSecurityAuditSession(
@@ -1222,7 +1198,8 @@ async function recordOAuthTokenSecurityAuditEvent(options: {
   if (
     options.response.status < 200 ||
     options.response.status >= 300 ||
-    readStringField(options.snapshot.body, "grant_type") !== "refresh_token"
+    readAuthBoundaryStringField(options.snapshot.body, "grant_type") !==
+      "refresh_token"
   ) {
     return;
   }
@@ -1243,13 +1220,13 @@ async function recordOAuthTokenSecurityAuditEvent(options: {
     },
     oauthClientId:
       options.snapshot.tokenContext?.clientId ??
-      readStringField(options.snapshot.body, "client_id"),
+      readAuthBoundaryStringField(options.snapshot.body, "client_id"),
     organizationId: options.snapshot.tokenContext?.organizationId,
     scopes:
       options.snapshot.tokenContext?.scopes ??
       resolveOAuthAuditScopes(
-        readStringField(responseBody, "scope"),
-        readStringField(options.snapshot.body, "scope")
+        readAuthBoundaryStringField(responseBody, "scope"),
+        readAuthBoundaryStringField(options.snapshot.body, "scope")
       ),
     sessionId: options.snapshot.tokenContext?.sessionId,
     sourceIp: options.snapshot.sourceIp,
@@ -1275,11 +1252,12 @@ async function recordOAuthRevocationSecurityAuditEvent(options: {
         options.snapshot.tokenContext !== null,
       tokenKind: options.snapshot.tokenContext?.tokenKind ?? null,
       tokenTypeHint:
-        readStringField(options.snapshot.body, "token_type_hint") ?? null,
+        readAuthBoundaryStringField(options.snapshot.body, "token_type_hint") ??
+        null,
     },
     oauthClientId:
       options.snapshot.tokenContext?.clientId ??
-      readStringField(options.snapshot.body, "client_id"),
+      readAuthBoundaryStringField(options.snapshot.body, "client_id"),
     organizationId: options.snapshot.tokenContext?.organizationId,
     scopes: options.snapshot.tokenContext?.scopes,
     sessionId: options.snapshot.tokenContext?.sessionId,
@@ -1297,14 +1275,14 @@ async function readOAuthSecurityAuditResponseBody(response: Response) {
     }
 
     const body = await response.clone().json();
-    return isRecord(body) ? body : null;
+    return decodeAuthBoundaryRecordOrNull(body);
   } catch {
     return null;
   }
 }
 
-function readOAuthQuerySearchParams(body: Record<string, unknown> | null) {
-  const oauthQuery = readStringField(body, "oauth_query");
+function readOAuthQuerySearchParams(body: AuthBoundaryRecord | null) {
+  const oauthQuery = readAuthBoundaryStringField(body, "oauth_query");
   return oauthQuery ? new URLSearchParams(oauthQuery) : null;
 }
 
@@ -1517,15 +1495,19 @@ export function withOAuthClientRegistrationPolicyGuard(
   }
 ) {
   return async (request: Request) => {
+    const { endpointPath, method } = makeAuthBoundaryRequestEnvelope(
+      request,
+      options.basePath
+    );
+
     if (
-      request.method !== "POST" ||
-      resolveAuthenticationEndpointPath(request, options.basePath) !==
-        OAUTH_CLIENT_REGISTRATION_ENDPOINT_PATH
+      method !== "POST" ||
+      endpointPath !== OAUTH_CLIENT_REGISTRATION_ENDPOINT_PATH
     ) {
       return handler(request);
     }
 
-    const body = await readBoundedJsonRecordRequestBody(
+    const body = await readAuthBoundaryJsonRequestBody(
       request,
       OAUTH_CLIENT_REGISTRATION_ENDPOINT_PATH
     );
@@ -1534,10 +1516,19 @@ export function withOAuthClientRegistrationPolicyGuard(
       return handler(request);
     }
 
-    const rejection = validateOAuthClientRegistrationRequest(body, options);
+    const input = decodeOAuthClientRegistrationPolicyInput(body);
+    const rejection =
+      input.status === "rejected"
+        ? input.rejection
+        : validateOAuthClientRegistrationRequest(input.value, options);
 
     if (rejection === null) {
-      return handler(makePublicOAuthClientRegistrationRequest(request, body));
+      return handler(
+        makePublicOAuthClientRegistrationRequest(
+          request,
+          input.status === "decoded" ? input.value.body : body
+        )
+      );
     }
 
     await reportOAuthClientRegistrationRejected(
@@ -1550,35 +1541,218 @@ export function withOAuthClientRegistrationPolicyGuard(
   };
 }
 
-function validateOAuthClientRegistrationRequest(
-  body: Record<string, unknown>,
-  options: {
-    readonly allowLoopbackRedirects: boolean;
-    readonly allowedScopes: readonly string[];
-  }
-): OAuthClientRegistrationPolicyRejection | null {
+type OAuthClientRegistrationPolicyInputDecodeResult =
+  | {
+      readonly status: "decoded";
+      readonly value: OAuthClientRegistrationPolicyInput;
+    }
+  | {
+      readonly rejection: OAuthClientRegistrationPolicyRejection;
+      readonly status: "rejected";
+    };
+
+function decodeOAuthClientRegistrationPolicyInput(
+  body: AuthBoundaryRecord
+): OAuthClientRegistrationPolicyInputDecodeResult {
   const unknownField = Object.keys(body).find(
     (field) => !OAUTH_CLIENT_REGISTRATION_ALLOWED_FIELDS.has(field)
   );
 
   if (unknownField) {
-    return makeOAuthClientRegistrationPolicyRejection({
-      error: "invalid_client_metadata",
-      description: "Unsupported dynamic client registration metadata.",
-      reason: "unsupported_metadata_field",
-      severity: "dashboard",
-    });
+    return {
+      rejection: makeOAuthClientRegistrationPolicyRejection({
+        error: "invalid_client_metadata",
+        description: "Unsupported dynamic client registration metadata.",
+        reason: "unsupported_metadata_field",
+        severity: "dashboard",
+      }),
+      status: "rejected",
+    };
   }
 
+  const redirectUris = decodeOAuthClientRegistrationStringArrayField(
+    body,
+    "redirect_uris"
+  );
+  if (redirectUris.status === "rejected") {
+    return redirectUris;
+  }
+
+  const postLogoutRedirectUris = decodeOAuthClientRegistrationStringArrayField(
+    body,
+    "post_logout_redirect_uris"
+  );
+  if (postLogoutRedirectUris.status === "rejected") {
+    return postLogoutRedirectUris;
+  }
+
+  const grantTypes = decodeOAuthClientRegistrationStringArrayField(
+    body,
+    "grant_types"
+  );
+  if (grantTypes.status === "rejected") {
+    return grantTypes;
+  }
+
+  const responseTypes = decodeOAuthClientRegistrationStringArrayField(
+    body,
+    "response_types"
+  );
+  if (responseTypes.status === "rejected") {
+    return responseTypes;
+  }
+
+  const contacts = decodeOAuthClientRegistrationStringArrayField(
+    body,
+    "contacts"
+  );
+  if (contacts.status === "rejected") {
+    return contacts;
+  }
+
+  const tokenEndpointAuthMethod = decodeOAuthClientRegistrationStringField({
+    body,
+    description: "token_endpoint_auth_method must be a string.",
+    field: "token_endpoint_auth_method",
+    reason: "token_endpoint_auth_method_invalid_shape",
+  });
+  if (tokenEndpointAuthMethod.status === "rejected") {
+    return tokenEndpointAuthMethod;
+  }
+
+  const type = decodeOAuthClientRegistrationStringField({
+    body,
+    description: "type must be a string.",
+    field: "type",
+    reason: "type_invalid_shape",
+  });
+  if (type.status === "rejected") {
+    return type;
+  }
+
+  return {
+    status: "decoded",
+    value: Schema.decodeUnknownSync(OAuthClientRegistrationPolicyInputSchema)({
+      body,
+      clientName: readOAuthClientRegistrationStringField(body, "client_name"),
+      clientUri: readOAuthClientRegistrationStringField(body, "client_uri"),
+      contacts: contacts.value,
+      grantTypes: grantTypes.value,
+      logoUri: readOAuthClientRegistrationStringField(body, "logo_uri"),
+      policyUri: readOAuthClientRegistrationStringField(body, "policy_uri"),
+      postLogoutRedirectUris: postLogoutRedirectUris.value,
+      redirectUris: redirectUris.value,
+      responseTypes: responseTypes.value,
+      scope: readOAuthClientRegistrationStringField(body, "scope"),
+      skipConsentRequested: "skip_consent" in body,
+      softwareId: readOAuthClientRegistrationStringField(body, "software_id"),
+      softwareStatement: readOAuthClientRegistrationStringField(
+        body,
+        "software_statement"
+      ),
+      softwareVersion: readOAuthClientRegistrationStringField(
+        body,
+        "software_version"
+      ),
+      tokenEndpointAuthMethod: tokenEndpointAuthMethod.value,
+      tosUri: readOAuthClientRegistrationStringField(body, "tos_uri"),
+      type: type.value,
+    }),
+  };
+}
+
+type OAuthClientRegistrationFieldDecodeResult<T> =
+  | {
+      readonly status: "decoded";
+      readonly value: T | undefined;
+    }
+  | {
+      readonly rejection: OAuthClientRegistrationPolicyRejection;
+      readonly status: "rejected";
+    };
+
+function decodeOAuthClientRegistrationStringArrayField(
+  body: AuthBoundaryRecord,
+  field: string
+): OAuthClientRegistrationFieldDecodeResult<readonly string[]> {
+  const value = body[field];
+
+  if (value === undefined) {
+    return {
+      status: "decoded",
+      value: undefined,
+    };
+  }
+
+  return Option.match(decodeOAuthClientRegistrationStringArray(value), {
+    onNone: () => ({
+      rejection: makeOAuthClientRegistrationInvalidArrayShapeRejection(field),
+      status: "rejected",
+    }),
+    onSome: (decodedValue) => ({
+      status: "decoded",
+      value: decodedValue,
+    }),
+  });
+}
+
+function decodeOAuthClientRegistrationStringField(options: {
+  readonly body: AuthBoundaryRecord;
+  readonly description: string;
+  readonly field: string;
+  readonly reason: string;
+}): OAuthClientRegistrationFieldDecodeResult<string> {
+  const value = options.body[options.field];
+
+  if (value === undefined) {
+    return {
+      status: "decoded",
+      value: undefined,
+    };
+  }
+
+  if (typeof value !== "string") {
+    return {
+      rejection: makeOAuthClientRegistrationPolicyRejection({
+        error: "invalid_client_metadata",
+        description: options.description,
+        reason: options.reason,
+        severity: "dashboard",
+      }),
+      status: "rejected",
+    };
+  }
+
+  return {
+    status: "decoded",
+    value,
+  };
+}
+
+function readOAuthClientRegistrationStringField(
+  body: AuthBoundaryRecord,
+  field: string
+) {
+  const value = body[field];
+  return typeof value === "string" ? value : undefined;
+}
+
+function validateOAuthClientRegistrationRequest(
+  input: OAuthClientRegistrationPolicyInput,
+  options: {
+    readonly allowLoopbackRedirects: boolean;
+    readonly allowedScopes: readonly string[];
+  }
+): OAuthClientRegistrationPolicyRejection | null {
   const publicClientRejection =
-    validateOAuthClientRegistrationPublicClientMetadata(body);
+    validateOAuthClientRegistrationPublicClientMetadata(input);
 
   if (publicClientRejection) {
     return publicClientRejection;
   }
 
   const scopeRejection = validateOAuthClientRegistrationScope(
-    body.scope,
+    input.scope,
     options.allowedScopes
   );
 
@@ -1587,7 +1761,7 @@ function validateOAuthClientRegistrationRequest(
   }
 
   const grantTypesRejection = validateOAuthClientRegistrationGrantTypes(
-    body.grant_types
+    input.grantTypes
   );
 
   if (grantTypesRejection) {
@@ -1602,14 +1776,14 @@ function validateOAuthClientRegistrationRequest(
     maxCount: OAUTH_CLIENT_REGISTRATION_ALLOWED_RESPONSE_TYPES.size,
     reason: "unsupported_response_type_requested",
     severity: "high",
-    value: body.response_types,
+    value: input.responseTypes,
   });
 
   if (responseTypesRejection) {
     return responseTypesRejection;
   }
 
-  if ("skip_consent" in body) {
+  if (input.skipConsentRequested) {
     return makeOAuthClientRegistrationPolicyRejection({
       error: "invalid_client_metadata",
       description: "Dynamic client registration cannot skip consent.",
@@ -1622,7 +1796,7 @@ function validateOAuthClientRegistrationRequest(
     allowLoopbackRedirects: options.allowLoopbackRedirects,
     field: "redirect_uris",
     maxCount: OAUTH_CLIENT_REGISTRATION_MAX_REDIRECT_URIS,
-    value: body.redirect_uris,
+    value: input.redirectUris,
   });
 
   if (redirectRejection) {
@@ -1633,7 +1807,7 @@ function validateOAuthClientRegistrationRequest(
     allowLoopbackRedirects: options.allowLoopbackRedirects,
     field: "post_logout_redirect_uris",
     maxCount: OAUTH_CLIENT_REGISTRATION_MAX_REDIRECT_URIS,
-    value: body.post_logout_redirect_uris,
+    value: input.postLogoutRedirectUris,
   });
 
   if (logoutRedirectRejection) {
@@ -1642,52 +1816,52 @@ function validateOAuthClientRegistrationRequest(
 
   return (
     validateOAuthClientRegistrationStringField(
-      body.client_name,
+      input.clientName,
       OAUTH_CLIENT_REGISTRATION_MAX_CLIENT_NAME_LENGTH,
       "client_name_too_long"
     ) ??
     validateOAuthClientRegistrationUrlField(
-      body.client_uri,
+      input.clientUri,
       options.allowLoopbackRedirects,
       "client_uri"
     ) ??
     validateOAuthClientRegistrationUrlField(
-      body.logo_uri,
+      input.logoUri,
       options.allowLoopbackRedirects,
       "logo_uri"
     ) ??
     validateOAuthClientRegistrationUrlField(
-      body.tos_uri,
+      input.tosUri,
       options.allowLoopbackRedirects,
       "tos_uri"
     ) ??
     validateOAuthClientRegistrationUrlField(
-      body.policy_uri,
+      input.policyUri,
       options.allowLoopbackRedirects,
       "policy_uri"
     ) ??
     validateOAuthClientRegistrationStringField(
-      body.software_id,
+      input.softwareId,
       OAUTH_CLIENT_REGISTRATION_MAX_SOFTWARE_ID_LENGTH,
       "software_id_too_long"
     ) ??
     validateOAuthClientRegistrationStringField(
-      body.software_version,
+      input.softwareVersion,
       OAUTH_CLIENT_REGISTRATION_MAX_SOFTWARE_VERSION_LENGTH,
       "software_version_too_long"
     ) ??
     validateOAuthClientRegistrationStringField(
-      body.software_statement,
+      input.softwareStatement,
       OAUTH_CLIENT_REGISTRATION_MAX_SOFTWARE_STATEMENT_LENGTH,
       "software_statement_too_long"
     ) ??
-    validateOAuthClientRegistrationContacts(body.contacts)
+    validateOAuthClientRegistrationContacts(input.contacts)
   );
 }
 
 function makePublicOAuthClientRegistrationRequest(
   request: Request,
-  body: Record<string, unknown>
+  body: AuthBoundaryRecord
 ) {
   const headers = new Headers(request.headers);
   headers.delete("content-length");
@@ -1707,23 +1881,11 @@ function makePublicOAuthClientRegistrationRequest(
 }
 
 function validateOAuthClientRegistrationPublicClientMetadata(
-  body: Record<string, unknown>
+  input: OAuthClientRegistrationPolicyInput
 ) {
   if (
-    body.token_endpoint_auth_method !== undefined &&
-    typeof body.token_endpoint_auth_method !== "string"
-  ) {
-    return makeOAuthClientRegistrationPolicyRejection({
-      error: "invalid_client_metadata",
-      description: "token_endpoint_auth_method must be a string.",
-      reason: "token_endpoint_auth_method_invalid_shape",
-      severity: "dashboard",
-    });
-  }
-
-  if (
-    typeof body.token_endpoint_auth_method === "string" &&
-    body.token_endpoint_auth_method !== "none"
+    input.tokenEndpointAuthMethod !== undefined &&
+    input.tokenEndpointAuthMethod !== "none"
   ) {
     return makeOAuthClientRegistrationPolicyRejection({
       error: "invalid_client_metadata",
@@ -1734,16 +1896,7 @@ function validateOAuthClientRegistrationPublicClientMetadata(
     });
   }
 
-  if (body.type !== undefined && typeof body.type !== "string") {
-    return makeOAuthClientRegistrationPolicyRejection({
-      error: "invalid_client_metadata",
-      description: "type must be a string.",
-      reason: "type_invalid_shape",
-      severity: "dashboard",
-    });
-  }
-
-  if (body.type === "web") {
+  if (input.type === "web") {
     return makeOAuthClientRegistrationPolicyRejection({
       error: "invalid_client_metadata",
       description:
@@ -1754,9 +1907,9 @@ function validateOAuthClientRegistrationPublicClientMetadata(
   }
 
   if (
-    typeof body.type === "string" &&
-    body.type !== "native" &&
-    body.type !== "user-agent-based"
+    input.type !== undefined &&
+    input.type !== "native" &&
+    input.type !== "user-agent-based"
   ) {
     return makeOAuthClientRegistrationPolicyRejection({
       error: "invalid_client_metadata",
@@ -1787,10 +1940,10 @@ function makeOAuthClientRegistrationPolicyRejection(
 }
 
 function validateOAuthClientRegistrationScope(
-  scope: unknown,
+  scope: string | undefined,
   allowedScopes: readonly string[]
 ): OAuthClientRegistrationPolicyRejection | null {
-  if (typeof scope !== "string") {
+  if (scope === undefined) {
     return null;
   }
 
@@ -1844,8 +1997,10 @@ function validateOAuthClientRegistrationScope(
   return null;
 }
 
-function validateOAuthClientRegistrationGrantTypes(value: unknown) {
-  if (Array.isArray(value) && value.includes("client_credentials")) {
+function validateOAuthClientRegistrationGrantTypes(
+  value: readonly string[] | undefined
+) {
+  if (value?.includes("client_credentials") === true) {
     return makeOAuthClientRegistrationPolicyRejection({
       error: "invalid_client_metadata",
       description:
@@ -1874,18 +2029,10 @@ function validateOAuthClientRegistrationStringArray(options: {
   readonly maxCount: number;
   readonly reason: string;
   readonly severity: "dashboard" | "high";
-  readonly value: unknown;
+  readonly value: readonly string[] | undefined;
 }) {
   if (options.value === undefined) {
     return null;
-  }
-
-  if (!Array.isArray(options.value)) {
-    return makeOAuthClientRegistrationInvalidArrayShapeRejection(options.field);
-  }
-
-  if (options.value.some((value) => typeof value !== "string")) {
-    return makeOAuthClientRegistrationInvalidArrayShapeRejection(options.field);
   }
 
   if (options.value.length > options.maxCount) {
@@ -1917,18 +2064,10 @@ function validateOAuthClientRegistrationUriList(options: {
   readonly allowLoopbackRedirects: boolean;
   readonly field: string;
   readonly maxCount: number;
-  readonly value: unknown;
+  readonly value: readonly string[] | undefined;
 }) {
   if (options.value === undefined) {
     return null;
-  }
-
-  if (!Array.isArray(options.value)) {
-    return makeOAuthClientRegistrationInvalidArrayShapeRejection(options.field);
-  }
-
-  if (options.value.some((value) => typeof value !== "string")) {
-    return makeOAuthClientRegistrationInvalidArrayShapeRejection(options.field);
   }
 
   if (options.value.length > options.maxCount) {
@@ -2142,11 +2281,11 @@ function isOAuthClientRegistrationIPv4MappedIPv6LoopbackHostname(
 }
 
 function validateOAuthClientRegistrationStringField(
-  value: unknown,
+  value: string | undefined,
   maxLength: number,
   reason: string
 ) {
-  if (typeof value !== "string" || value.length <= maxLength) {
+  if (value === undefined || value.length <= maxLength) {
     return null;
   }
 
@@ -2158,17 +2297,11 @@ function validateOAuthClientRegistrationStringField(
   });
 }
 
-function validateOAuthClientRegistrationContacts(value: unknown) {
-  if (value !== undefined && !Array.isArray(value)) {
-    return makeOAuthClientRegistrationInvalidArrayShapeRejection("contacts");
-  }
-
-  if (!Array.isArray(value)) {
+function validateOAuthClientRegistrationContacts(
+  value: readonly string[] | undefined
+) {
+  if (value === undefined) {
     return null;
-  }
-
-  if (value.some((contact) => typeof contact !== "string")) {
-    return makeOAuthClientRegistrationInvalidArrayShapeRejection("contacts");
   }
 
   if (value.length > OAUTH_CLIENT_REGISTRATION_MAX_CONTACTS) {
@@ -2181,7 +2314,7 @@ function validateOAuthClientRegistrationContacts(value: unknown) {
   }
 
   for (const contact of value) {
-    if (typeof contact === "string" && contact.length > 320) {
+    if (contact.length > 320) {
       return makeOAuthClientRegistrationPolicyRejection({
         error: "invalid_client_metadata",
         description:

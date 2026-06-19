@@ -1,18 +1,18 @@
 import {
-  decodeOrganizationId,
   decodeOrganizationRole,
-  decodeOrganizationSlug,
-  decodeUserId,
   isAdministrativeOrganizationRole,
+  OrganizationId,
+  OrganizationSlugSchema,
+  UserId,
 } from "@ceird/identity-core";
-import type { OrganizationId } from "@ceird/identity-core";
 import { and, eq, gt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { Option } from "effect";
 
 import {
   DEFAULT_BETTER_AUTH_COOKIE_PREFIX,
-  decodeIdentityBoundaryValue,
-  readBoundedJsonRecordRequestBody,
+  decodeAuthBoundaryOption,
+  readAuthBoundaryJsonRequestBody,
 } from "./auth-boundary-utils.js";
 import type { AuthenticationSessionResult } from "./auth-boundary-utils.js";
 import {
@@ -204,7 +204,7 @@ async function requestsUnsupportedTwoFactorTrustedDevice(request: Request) {
   }
 
   try {
-    const body = await readBoundedJsonRecordRequestBody(request, endpointPath);
+    const body = await readAuthBoundaryJsonRequestBody(request, endpointPath);
 
     return body?.trustDevice === true;
   } catch {
@@ -226,7 +226,7 @@ function isPostAuthEndpointRequest(request: Request, endpointPath: string) {
 }
 
 async function isAcceptedOAuthConsentRequest(request: Request) {
-  const body = await readBoundedJsonRecordRequestBody(
+  const body = await readAuthBoundaryJsonRequestBody(
     request,
     OAUTH_CONSENT_ENDPOINT_PATH
   );
@@ -287,7 +287,9 @@ async function resolveVerifiedEmailEndpointAccess(
     return "unknown";
   }
 
-  const userId = decodeIdentityBoundaryValue(session.userId, decodeUserId);
+  const userId = Option.getOrNull(
+    decodeAuthBoundaryOption(UserId, session.userId)
+  );
 
   if (userId === null) {
     return "unverified";
@@ -386,7 +388,9 @@ async function resolveAdministrativeOrganizationSessionAccess(
     readonly userId: string;
   }
 ): Promise<"administrative" | "nonAdministrative" | "unknown"> {
-  const userId = decodeIdentityBoundaryValue(session.userId, decodeUserId);
+  const userId = Option.getOrNull(
+    decodeAuthBoundaryOption(UserId, session.userId)
+  );
 
   if (userId === null) {
     return "nonAdministrative";
@@ -433,9 +437,8 @@ async function resolveAdministrativeOrganizationTargetId(
   const organizationSlug = searchParams.get("organizationSlug");
 
   if (organizationSlug !== null) {
-    const decodedOrganizationSlug = decodeIdentityBoundaryValue(
-      organizationSlug,
-      decodeOrganizationSlug
+    const decodedOrganizationSlug = Option.getOrNull(
+      decodeAuthBoundaryOption(OrganizationSlugSchema, organizationSlug)
     );
 
     if (decodedOrganizationSlug === null) {
@@ -452,7 +455,9 @@ async function resolveAdministrativeOrganizationTargetId(
 
     return organizationRow === undefined
       ? null
-      : decodeIdentityBoundaryValue(organizationRow.id, decodeOrganizationId);
+      : Option.getOrNull(
+          decodeAuthBoundaryOption(OrganizationId, organizationRow.id)
+        );
   }
 
   const organizationId =
@@ -460,7 +465,9 @@ async function resolveAdministrativeOrganizationTargetId(
 
   return organizationId === null
     ? null
-    : decodeIdentityBoundaryValue(organizationId, decodeOrganizationId);
+    : Option.getOrNull(
+        decodeAuthBoundaryOption(OrganizationId, organizationId)
+      );
 }
 
 export function extractBetterAuthSessionToken(
