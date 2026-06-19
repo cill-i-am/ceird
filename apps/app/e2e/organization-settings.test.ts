@@ -159,16 +159,19 @@ test("an organization admin can manage labels from the realtime settings tab", a
   await expect(page.getByText("Label library")).toBeVisible({
     timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS,
   });
-  await expect(page.getByText("No labels yet")).toBeVisible();
+  await expect(page.getByText("No active labels yet")).toBeVisible();
 
-  await page.getByLabel("New label name").fill(labelName);
+  await page.getByRole("button", { name: /new label/i }).click();
+  const createDialog = page.getByRole("dialog", { name: "New label" });
+  await expect(createDialog).toBeVisible();
+  await createDialog.getByLabel("Name").fill(labelName);
   await Promise.all([
     waitForLabelMutation(page, "POST"),
-    page.getByRole("button", { name: /create/i }).click(),
+    createDialog.getByRole("button", { name: /save label/i }).click(),
   ]);
   await expect(page.getByText(labelName, { exact: true })).toBeVisible();
 
-  const createdLabelRow = page.getByRole("listitem").filter({
+  const createdLabelRow = page.getByRole("row").filter({
     has: page.getByText(labelName, { exact: true }),
   });
 
@@ -177,14 +180,16 @@ test("an organization admin can manage labels from the realtime settings tab", a
     .getByRole("button", { name: `Open actions for ${labelName}` })
     .click();
   await page.getByRole("menuitem", { name: "Edit label" }).click();
-  await page.getByLabel(`Rename ${labelName}`).fill(updatedLabelName);
+  const editDialog = page.getByRole("dialog", { name: "Edit label" });
+  await expect(editDialog).toBeVisible();
+  await editDialog.getByLabel("Name").fill(updatedLabelName);
   await Promise.all([
     waitForLabelMutation(page, "PATCH"),
-    page.getByRole("button", { name: `Save ${labelName}` }).click(),
+    editDialog.getByRole("button", { name: /save label/i }).click(),
   ]);
   await expect(page.getByText(updatedLabelName, { exact: true })).toBeVisible();
 
-  const updatedLabelRow = page.getByRole("listitem").filter({
+  const updatedLabelRow = page.getByRole("row").filter({
     has: page.getByText(updatedLabelName, { exact: true }),
   });
 
@@ -204,7 +209,7 @@ test("an organization admin can manage labels from the realtime settings tab", a
     confirmArchiveButton.click(),
   ]);
   await expect(page.getByText(updatedLabelName, { exact: true })).toBeHidden();
-  await expect(page.getByText("No labels yet")).toBeVisible();
+  await expect(page.getByText("No active labels yet")).toBeVisible();
 });
 
 async function waitForLabelMutation(
