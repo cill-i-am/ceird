@@ -6,9 +6,11 @@ import type {
   UpdateLabelInput,
 } from "@ceird/labels-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 
+import { Toaster } from "#/components/ui/sonner";
 import { TooltipProvider } from "#/components/ui/tooltip";
 import { createDataPlaneCollectionHealth } from "#/data-plane/collection-health";
 import type {
@@ -43,6 +45,10 @@ const plumbingLabel = makeLabel({
 });
 
 describe("organization labels settings page", () => {
+  afterEach(() => {
+    toast.dismiss();
+  });
+
   it("renders active labels from the synced collection with ready health", async () => {
     renderLabelsPage({
       collectionState: makeCollectionState({
@@ -549,17 +555,13 @@ describe("organization labels settings page", () => {
     await user.click(
       await screen.findByRole("menuitem", { name: /archive label/i })
     );
-    const archiveConfirmation = await screen.findByRole("group", {
-      name: /confirm archiving emergency/i,
-    });
-    await user.click(
-      within(archiveConfirmation).getByRole("button", {
-        name: /archive label/i,
-      })
-    );
+    await screen.findByText("Archive label?");
+    await user.click(screen.getByRole("button", { name: /archive label/i }));
     expect(archiveLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id);
     expect(awaitTxId).not.toHaveBeenCalled();
-    expect(screen.queryByText("Emergency")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /open actions for emergency/i })
+    ).not.toBeInTheDocument();
     await expect(screen.findByText("No labels yet")).resolves.toBeVisible();
   });
 
@@ -702,11 +704,13 @@ describe("organization labels settings page", () => {
       await screen.findByRole("menuitem", { name: /archive label/i })
     );
 
-    expect(screen.getByText("Archive this label?")).toBeVisible();
-    expect(screen.getByText("Urgent")).toBeVisible();
+    await screen.findByText("Archive label?");
+    expect(screen.getAllByText("Urgent").length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: /archive label/i }));
-    expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /open actions for urgent/i })
+    ).not.toBeInTheDocument();
   });
 
   it("shows command-backed empty state when sync health changes after archive", async () => {
@@ -737,8 +741,11 @@ describe("organization labels settings page", () => {
     await user.click(
       await screen.findByRole("menuitem", { name: /archive label/i })
     );
+    await screen.findByText("Archive label?");
     await user.click(screen.getByRole("button", { name: /archive label/i }));
-    expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /open actions for urgent/i })
+    ).not.toBeInTheDocument();
 
     rerender(
       <LabelsPageHarness
@@ -814,31 +821,46 @@ describe("organization labels settings page", () => {
     await user.click(
       await screen.findByRole("menuitem", { name: /archive label/i })
     );
-    const archiveConfirmation = await screen.findByRole("group", {
-      name: /confirm archiving emergency/i,
-    });
-    const confirmArchiveButton = within(archiveConfirmation).getByRole(
-      "button",
-      {
-        name: /archive label/i,
-      }
-    );
-    await waitFor(() => {
-      expect(confirmArchiveButton).toBeEnabled();
-    });
-    await user.click(confirmArchiveButton);
+    await screen.findByText("Archive label?");
+    await user.click(screen.getByRole("button", { name: /archive label/i }));
     expect(archiveLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id);
-    expect(screen.queryByText("Emergency")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /open actions for emergency/i })
+    ).not.toBeInTheDocument();
   });
 
-  it("requires edit-mode archive icon confirmation and supports cancel", async () => {
+  it("keeps archive out of edit mode and updates descriptions", async () => {
     const user = userEvent.setup();
+    const updateLabelWithConfirmation = vi.fn<
+      (
+        labelId: Label["id"],
+        input: UpdateLabelInput
+      ) => Promise<LabelWriteResponse>
+    >((labelId, input) =>
+      Promise.resolve(
+        makeLabelWriteResponse(
+          makeLabel({
+            description: input.description,
+            id: labelId,
+            name: input.name,
+          }),
+          124
+        )
+      )
+    );
 
     renderLabelsPage({
       collectionState: makeCollectionState({
-        labels: [urgentLabel],
+        labels: [
+          makeLabel({
+            description: "Old description",
+            id: urgentLabel.id,
+            name: urgentLabel.name,
+          }),
+        ],
         status: "ready",
       }),
+      updateLabelWithConfirmation,
     });
 
     await user.click(
@@ -847,22 +869,31 @@ describe("organization labels settings page", () => {
     await user.click(
       await screen.findByRole("menuitem", { name: /edit label/i })
     );
-    await user.click(screen.getByRole("button", { name: /archive urgent/i }));
-
-    expect(screen.getByText("Archive this label?")).toBeVisible();
     expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(
       "Urgent"
     );
+    expect(
+      screen.queryByRole("button", { name: /archive urgent/i })
+    ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    const descriptionInput = screen.getByRole("textbox", {
+      name: /update urgent description/i,
+    });
+    await user.clear(descriptionInput);
+    await user.type(descriptionInput, "Updated field response");
+    await user.click(screen.getByRole("button", { name: /save urgent/i }));
 
-    expect(screen.queryByText("Archive this label?")).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(
-      "Urgent"
-    );
+    expect(updateLabelWithConfirmation).toHaveBeenCalledWith(urgentLabel.id, {
+      color: "oklch(64% 0.19 28)",
+      description: "Updated field response",
+      name: "Urgent",
+    });
+    await expect(
+      screen.findByText("Updated field response")
+    ).resolves.toBeVisible();
   });
 
-  it("supports route hotkeys for search, create, save, cancel, and archive edit mode", async () => {
+  it("supports route hotkeys for search, create, save, and cancel edit mode", async () => {
     const user = userEvent.setup();
 
     renderLabelsPage({
@@ -902,22 +933,6 @@ describe("organization labels settings page", () => {
     expect(
       screen.queryByRole("textbox", { name: /rename urgent/i })
     ).not.toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", { name: /open actions for urgent/i })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /edit label/i })
-    );
-    await user.keyboard(getModShiftBackspaceKeyboardInput());
-    expect(screen.getByText("Archive this label?")).toBeVisible();
-    expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(
-      "Urgent"
-    );
-    await user.click(screen.getByRole("button", { name: /archive label/i }));
-    await waitFor(() => {
-      expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
-    });
   });
 });
 
@@ -968,12 +983,6 @@ function getModEnterKeyboardInput() {
     : "{Control>}{Enter}{/Control}";
 }
 
-function getModShiftBackspaceKeyboardInput() {
-  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
-    ? "{Meta>}{Shift>}{Backspace}{/Shift}{/Meta}"
-    : "{Control>}{Shift>}{Backspace}{/Shift}{/Control}";
-}
-
 function LabelsPageHarness({
   archiveLabelWithConfirmation,
   collectionState,
@@ -1005,6 +1014,7 @@ function LabelsPageHarness({
   return (
     <HotkeysProvider>
       <TooltipProvider>
+        <Toaster position="top-right" closeButton />
         <OrganizationLabelsSettingsPage
           archiveLabelWithConfirmation={
             archiveLabelWithConfirmation ?? archiveDefaultLabelWithConfirmation
@@ -1045,6 +1055,7 @@ function updateDefaultLabelWithConfirmation(
   return Promise.resolve(
     makeLabelWriteResponse(
       makeLabel({
+        description: input.description,
         id: labelId,
         name: input.name,
       }),

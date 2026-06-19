@@ -193,11 +193,8 @@ test("an organization admin can manage labels from the realtime settings tab", a
     .getByRole("button", { name: `Open actions for ${updatedLabelName}` })
     .click();
   await page.getByRole("menuitem", { name: "Archive label" }).click();
-  const archiveConfirmation = page.getByRole("group", {
-    name: `Confirm archiving ${updatedLabelName}`,
-  });
-  await expect(archiveConfirmation).toBeVisible();
-  const confirmArchiveButton = archiveConfirmation.getByRole("button", {
+  await expect(page.getByText("Archive label?")).toBeVisible();
+  const confirmArchiveButton = page.getByRole("button", {
     exact: true,
     name: "Archive label",
   });
