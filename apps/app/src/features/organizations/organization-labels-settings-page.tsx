@@ -10,6 +10,8 @@ import type {
   Label,
   LabelColor,
   LabelIdType,
+  LabelsResponse,
+  ListLabelsQuery,
   LabelWriteResponse,
   UpdateLabelInput,
 } from "@ceird/labels-core";
@@ -31,6 +33,7 @@ import {
   Pencil,
   Plus,
   RadioTower,
+  RotateCcw,
   Search,
   ShieldAlert,
   Slash,
@@ -41,7 +44,16 @@ import { toast } from "sonner";
 
 import { AppPageHeader } from "#/components/app-page-header";
 import { AppUtilityPanel } from "#/components/app-utility-panel";
+import { Alert, AlertDescription, AlertTitle } from "#/components/ui/alert";
+import { Badge } from "#/components/ui/badge";
 import { Button, buttonVariants } from "#/components/ui/button";
+import {
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "#/components/ui/drawer";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,7 +61,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
+import { Field, FieldError, FieldLabel } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import { ResponsiveDrawer } from "#/components/ui/responsive-drawer";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "#/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { Textarea } from "#/components/ui/textarea";
 import {
   Tooltip,
@@ -68,11 +91,14 @@ import { searchSettingsLabels } from "#/features/labels/labels-search";
 import {
   archiveBrowserLabelWithConfirmation,
   createBrowserLabelWithConfirmation,
+  listBrowserLabels,
+  restoreBrowserLabelWithConfirmation,
   updateBrowserLabelWithConfirmation,
 } from "#/features/labels/labels-state";
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
+import { cn } from "#/lib/utils";
 
 type LabelsSettingsShellState =
   | "connecting"
@@ -80,6 +106,9 @@ type LabelsSettingsShellState =
   | "permission-aware"
   | "ready"
   | "unavailable";
+type LabelsView = "active" | "archived";
+type LabelMutationKind = "archive" | "create" | "restore" | "update";
+type LabelFormMode = "create" | "edit";
 
 interface LabelsCollectionLike {
   readonly status: string;
@@ -103,9 +132,15 @@ export interface OrganizationLabelsSettingsPageProps {
   readonly createLabelWithConfirmation?:
     | ((input: CreateLabelInput) => Promise<LabelWriteResponse>)
     | undefined;
+  readonly listLabels?:
+    | ((query: ListLabelsQuery) => Promise<LabelsResponse>)
+    | undefined;
   readonly mutationJournal?: DataPlaneMutationJournal | undefined;
   readonly organization: OrganizationSummary;
   readonly organizationRole?: OrganizationRole | undefined;
+  readonly restoreLabelWithConfirmation?:
+    | ((labelId: LabelIdType) => Promise<LabelWriteResponse>)
+    | undefined;
   readonly state?: LabelsSettingsShellState | undefined;
   readonly updateLabelWithConfirmation?:
     | ((
@@ -115,8 +150,6 @@ export interface OrganizationLabelsSettingsPageProps {
     | undefined;
 }
 
-type LabelMutationKind = "archive" | "create" | "rename";
-
 interface PendingLabelMutation {
   readonly id: string;
   readonly kind: LabelMutationKind;
@@ -124,13 +157,28 @@ interface PendingLabelMutation {
 }
 
 interface LabelMutationStatus {
-  readonly kind: "error";
   readonly message: string;
 }
 
 interface LabelCommandReflection {
   readonly archivedIds: ReadonlySet<Label["id"]>;
   readonly upserts: ReadonlyMap<Label["id"], Label>;
+}
+
+interface LabelFormState {
+  readonly color: LabelColor;
+  readonly description: string;
+  readonly error: string | null;
+  readonly label: Label | null;
+  readonly mode: LabelFormMode;
+  readonly name: string;
+  readonly open: boolean;
+}
+
+interface ArchivedLabelsState {
+  readonly error: string | null;
+  readonly labels: readonly Label[];
+  readonly status: "idle" | "loading" | "ready" | "unavailable";
 }
 
 const LABEL_COMMAND_COLLECTIONS = ["labels"] as const;
@@ -140,17 +188,23 @@ const INVALID_LABEL_NAME_MESSAGE =
 const DUPLICATE_LABEL_NAME_MESSAGE = "A label with that name already exists.";
 const INVALID_LABEL_DESCRIPTION_MESSAGE =
   "Descriptions must be 280 characters or fewer.";
+const RESTORE_CONFLICT_MESSAGE =
+  "Restore blocked because an active label already uses that name.";
+const USAGE_PLACEHOLDER = "Coming next";
 
 const decodeCreateLabelInput = Schema.decodeUnknownSync(CreateLabelInputSchema);
 const decodeUpdateLabelInput = Schema.decodeUnknownSync(UpdateLabelInputSchema);
 
+// oxlint-disable-next-line complexity -- The route owns one explicit UI state machine for active sync, archived API reads, drawer edits, and mutation feedback.
 export function OrganizationLabelsSettingsPage({
   archiveLabelWithConfirmation = archiveDefaultLabelWithConfirmation,
   collectionState,
   createLabelWithConfirmation = createDefaultLabelWithConfirmation,
+  listLabels = listDefaultLabels,
   mutationJournal,
   organization,
   organizationRole,
+  restoreLabelWithConfirmation = restoreDefaultLabelWithConfirmation,
   state,
   updateLabelWithConfirmation = updateDefaultLabelWithConfirmation,
 }: OrganizationLabelsSettingsPageProps) {
@@ -166,7 +220,7 @@ export function OrganizationLabelsSettingsPage({
   );
   const [commandReflection, setCommandReflection] =
     React.useState<LabelCommandReflection>(createEmptyLabelCommandReflection);
-  const labels = React.useMemo(
+  const activeLabels = React.useMemo(
     () => reflectLabelCommands(syncedLabels, commandReflection),
     [commandReflection, syncedLabels]
   );
@@ -185,71 +239,398 @@ export function OrganizationLabelsSettingsPage({
     getLabelsSettingsState({
       canManageLabels,
       health,
-      labelCount: labels.length,
+      labelCount: activeLabels.length,
     });
+  const [activeView, setActiveView] = React.useState<LabelsView>("active");
   const [searchQuery, setSearchQuery] = React.useState("");
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
-  const createInputRef = React.useRef<HTMLInputElement>(null);
-  const editInputRef = React.useRef<HTMLInputElement>(null);
-  const visibleLabels = React.useMemo(
-    () => searchSettingsLabels(labels, searchQuery),
-    [labels, searchQuery]
+  const [archivedState, setArchivedState] = React.useState<ArchivedLabelsState>(
+    {
+      error: null,
+      labels: [],
+      status: "idle",
+    }
   );
+  const [formState, setFormState] = React.useState<LabelFormState>(
+    createClosedLabelFormState
+  );
+  const [pendingMutation, setPendingMutation] =
+    React.useState<PendingLabelMutation | null>(null);
+  const [mutationStatus, setMutationStatus] =
+    React.useState<LabelMutationStatus | null>(null);
+  const mutationInFlightRef = React.useRef(false);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const formNameRef = React.useRef<HTMLInputElement>(null);
+  const canWriteActiveLabels =
+    canManageLabels &&
+    collection !== null &&
+    (shellState === "ready" || shellState === "empty");
+  const visibleLabels = React.useMemo(
+    () =>
+      searchSettingsLabels(
+        activeView === "active" ? activeLabels : archivedState.labels,
+        searchQuery
+      ),
+    [activeLabels, activeView, archivedState.labels, searchQuery]
+  );
+  const viewTotal =
+    activeView === "active" ? activeLabels.length : archivedState.labels.length;
   const hasSearch = searchQuery.trim().length > 0;
-  const canWriteLabels = canWriteSettingsLabels({
-    canManageLabels,
-    collectionIsAvailable: collection !== null,
-    shellState,
-  });
-  const showLabelControls =
-    canManageLabels && (shellState === "ready" || shellState === "empty");
-  const {
-    cancelEditing,
-    createName,
-    createDescription,
-    createColor,
-    editingLabel,
-    editingLabelId,
-    editingName,
-    editingColor,
-    editingDescription,
-    handleCreateLabel,
-    handleRenameLabel,
-    isMutating,
-    mutationStatus,
-    pendingMutation,
-    requestArchiveConfirmation,
-    setCreateName,
-    setCreateDescription,
-    setCreateColor,
-    setEditingName,
-    setEditingColor,
-    setEditingDescription,
-    startEditingLabel,
-  } = useLabelsMutationController({
-    canWriteLabels,
-    archiveLabelWithConfirmation,
-    collection,
+  const refreshArchivedLabels = React.useCallback(async () => {
+    if (!canManageLabels) {
+      return;
+    }
+
+    setArchivedState((current) => ({
+      ...current,
+      error: null,
+      status: current.status === "ready" ? "ready" : "loading",
+    }));
+
+    try {
+      const response = await listLabels({ status: "archived" });
+      setArchivedState({
+        error: null,
+        labels: sortLabelsByName(response.labels),
+        status: "ready",
+      });
+    } catch {
+      setArchivedState({
+        error: "Archived labels could not be loaded.",
+        labels: [],
+        status: "unavailable",
+      });
+    }
+  }, [canManageLabels, listLabels]);
+
+  React.useEffect(() => {
+    if (activeView === "archived" && archivedState.status === "idle") {
+      void refreshArchivedLabels();
+    }
+  }, [activeView, archivedState.status, refreshArchivedLabels]);
+
+  React.useEffect(() => {
+    if (formState.open) {
+      window.setTimeout(() => {
+        formNameRef.current?.focus();
+        formNameRef.current?.select();
+      }, 0);
+    }
+  }, [formState.open]);
+
+  const openCreateForm = React.useCallback(() => {
+    if (!canWriteActiveLabels) {
+      return;
+    }
+
+    setMutationStatus(null);
+    setFormState({
+      color: DEFAULT_LABEL_COLOR,
+      description: "",
+      error: null,
+      label: null,
+      mode: "create",
+      name: "",
+      open: true,
+    });
+  }, [canWriteActiveLabels]);
+
+  const openEditForm = React.useCallback(
+    (label: Label) => {
+      if (!canWriteActiveLabels) {
+        return;
+      }
+
+      setMutationStatus(null);
+      setFormState({
+        color: label.color,
+        description: label.description ?? "",
+        error: null,
+        label,
+        mode: "edit",
+        name: label.name,
+        open: true,
+      });
+    },
+    [canWriteActiveLabels]
+  );
+
+  const closeForm = React.useCallback(() => {
+    if (mutationInFlightRef.current) {
+      return;
+    }
+
+    setFormState(createClosedLabelFormState());
+  }, []);
+
+  const setFormName = React.useCallback((name: string) => {
+    setFormState((current) => ({ ...current, error: null, name }));
+  }, []);
+  const setFormDescription = React.useCallback((description: string) => {
+    setFormState((current) => ({ ...current, description, error: null }));
+  }, []);
+  const setFormColor = React.useCallback((color: LabelColor) => {
+    setFormState((current) => ({ ...current, color, error: null }));
+  }, []);
+
+  // oxlint-disable-next-line complexity -- Keeping create/edit validation and command journaling in one transaction avoids splitting the form flow across single-use helpers.
+  const submitForm = React.useCallback(async () => {
+    if (
+      !canWriteActiveLabels ||
+      !formState.open ||
+      mutationInFlightRef.current
+    ) {
+      return;
+    }
+
+    const ignoreLabelId = formState.label?.id;
+    const decodedName = validateSettingsLabelName(
+      formState.name,
+      activeLabels,
+      ignoreLabelId
+    );
+
+    if (decodedName.kind === "error") {
+      setFormState((current) => ({ ...current, error: decodedName.message }));
+      return;
+    }
+
+    const decodedDescription = validateSettingsLabelDescription(
+      formState.description
+    );
+
+    if (decodedDescription.kind === "error") {
+      setFormState((current) => ({
+        ...current,
+        error: decodedDescription.message,
+      }));
+      return;
+    }
+
+    if (
+      formState.mode === "edit" &&
+      formState.label !== null &&
+      decodedName.name === formState.label.name &&
+      formState.color === formState.label.color &&
+      decodedDescription.description === formState.label.description
+    ) {
+      closeForm();
+      return;
+    }
+
+    const input =
+      formState.mode === "create"
+        ? createLabelInput(
+            decodedName.name,
+            formState.color,
+            decodedDescription.description
+          )
+        : updateLabelInput(
+            decodedName.name,
+            formState.color,
+            decodedDescription.description
+          );
+    const operationLabelId = formState.label?.id;
+    const operationId =
+      formState.mode === "create"
+        ? `labels.create:${decodedName.name}`
+        : `labels.update:${operationLabelId}`;
+
+    setPendingMutation({
+      id: operationId,
+      kind: formState.mode === "create" ? "create" : "update",
+      labelId: operationLabelId,
+    });
+    mutationInFlightRef.current = true;
+    setMutationStatus(null);
+
+    try {
+      const response = await persistLabelCommandMutation({
+        commandName:
+          formState.mode === "create" ? "labels.create" : "labels.update",
+        input:
+          formState.mode === "create"
+            ? input
+            : { labelId: operationLabelId, ...input },
+        journal: mutationJournal,
+        operation: () =>
+          formState.mode === "create"
+            ? createLabelWithConfirmation(input as CreateLabelInput)
+            : updateLabelWithConfirmation(
+                operationLabelId as LabelIdType,
+                input as UpdateLabelInput
+              ),
+      });
+
+      reflectLabelUpsert(response.label);
+      setFormState(createClosedLabelFormState());
+      toast.success(
+        formState.mode === "create" ? "Label created." : "Label updated."
+      );
+    } catch (error) {
+      const message = getLabelMutationFailureMessage(
+        error,
+        formState.mode === "create" ? "create" : "update"
+      );
+      setFormState((current) => ({ ...current, error: message }));
+      setMutationStatus({ message });
+    } finally {
+      mutationInFlightRef.current = false;
+      setPendingMutation((current) =>
+        current?.id === operationId ? null : current
+      );
+    }
+  }, [
+    activeLabels,
+    canWriteActiveLabels,
+    closeForm,
     createLabelWithConfirmation,
-    labels,
+    formState,
     mutationJournal,
-    reflectLabelArchive,
     reflectLabelUpsert,
     updateLabelWithConfirmation,
-  });
+  ]);
+
+  const archiveLabel = React.useCallback(
+    async (label: Label) => {
+      if (!canWriteActiveLabels || mutationInFlightRef.current) {
+        return;
+      }
+
+      const operationId = `labels.archive:${label.id}`;
+      setPendingMutation({
+        id: operationId,
+        kind: "archive",
+        labelId: label.id,
+      });
+      mutationInFlightRef.current = true;
+      setMutationStatus(null);
+
+      try {
+        const response = await persistLabelCommandMutation({
+          commandName: "labels.archive",
+          input: { labelId: label.id },
+          journal: mutationJournal,
+          operation: () => archiveLabelWithConfirmation(label.id),
+        });
+        const archivedLabel = ensureArchivedLabel(response.label);
+
+        reflectLabelArchive(label.id);
+        setArchivedState((current) =>
+          current.status === "ready"
+            ? {
+                ...current,
+                labels: sortLabelsByName([
+                  archivedLabel,
+                  ...current.labels.filter((item) => item.id !== label.id),
+                ]),
+              }
+            : current
+        );
+        toast.success("Label archived.");
+      } catch (error) {
+        setMutationStatus({
+          message: getLabelMutationFailureMessage(error, "archive"),
+        });
+      } finally {
+        mutationInFlightRef.current = false;
+        setPendingMutation((current) =>
+          current?.id === operationId ? null : current
+        );
+      }
+    },
+    [
+      archiveLabelWithConfirmation,
+      canWriteActiveLabels,
+      mutationJournal,
+      reflectLabelArchive,
+    ]
+  );
+
+  const requestArchiveConfirmation = React.useCallback(
+    (label: Label) => {
+      if (!canWriteActiveLabels || mutationInFlightRef.current) {
+        return;
+      }
+
+      toast("Archive label?", {
+        action: {
+          label: "Archive label",
+          onClick: () => {
+            void archiveLabel(label);
+          },
+        },
+        description: `${label.name} will leave active management views. Existing assignments stay on jobs and sites.`,
+      });
+    },
+    [archiveLabel, canWriteActiveLabels]
+  );
+
+  const restoreLabel = React.useCallback(
+    async (label: Label) => {
+      if (!canManageLabels || mutationInFlightRef.current) {
+        return;
+      }
+
+      if (hasDuplicateLabelName(activeLabels, label.name)) {
+        setMutationStatus({
+          message: RESTORE_CONFLICT_MESSAGE,
+        });
+        return;
+      }
+
+      const operationId = `labels.restore:${label.id}`;
+      setPendingMutation({
+        id: operationId,
+        kind: "restore",
+        labelId: label.id,
+      });
+      mutationInFlightRef.current = true;
+      setMutationStatus(null);
+
+      try {
+        const response = await persistLabelCommandMutation({
+          commandName: "labels.restore",
+          input: { labelId: label.id },
+          journal: mutationJournal,
+          operation: () => restoreLabelWithConfirmation(label.id),
+        });
+
+        reflectLabelUpsert(response.label);
+        setArchivedState((current) => ({
+          ...current,
+          labels: current.labels.filter((item) => item.id !== label.id),
+        }));
+        toast.success("Label restored.");
+      } catch (error) {
+        setMutationStatus({
+          message: getLabelMutationFailureMessage(error, "restore"),
+        });
+        void refreshArchivedLabels();
+      } finally {
+        mutationInFlightRef.current = false;
+        setPendingMutation((current) =>
+          current?.id === operationId ? null : current
+        );
+      }
+    },
+    [
+      activeLabels,
+      canManageLabels,
+      mutationJournal,
+      reflectLabelUpsert,
+      refreshArchivedLabels,
+      restoreLabelWithConfirmation,
+    ]
+  );
 
   useLabelsSettingsHotkeys({
     canManageLabels,
-    canWriteLabels,
-    cancelEditing,
-    createInputRef,
-    editInputRef,
-    editingLabel,
-    editingLabelId,
-    handleCreateLabel,
-    handleRenameLabel,
-    isMutating,
+    canWriteActiveLabels,
+    closeForm,
+    formOpen: formState.open,
+    openCreateForm,
     searchInputRef,
+    submitForm,
   });
 
   return (
@@ -257,7 +638,7 @@ export function OrganizationLabelsSettingsPage({
       <AppPageHeader
         eyebrow={organization.name}
         title="Labels"
-        description="Create the names, colors, and descriptions your team uses across the workspace."
+        description="Manage organization taxonomy for jobs, sites, and future work."
         className="border-b-0 pb-0"
         actions={
           <a className={buttonVariants()} href="/organization/settings">
@@ -267,90 +648,126 @@ export function OrganizationLabelsSettingsPage({
         }
       />
 
-      <div className="flex max-w-5xl flex-col gap-5">
+      <div className="flex max-w-6xl flex-col gap-5">
         <AppUtilityPanel
-          id="organization-labels-realtime-list"
+          id="organization-labels-management"
           title="Label library"
-          description="Keep shared label definitions consistent for jobs, sites, and workflow states."
+          description="Active labels are available to product workflows. Archived labels remain available for history and restore."
         >
-          <div className="space-y-4">
-            {showLabelControls ? (
-              <CreateLabelForm
-                canWriteLabels={canWriteLabels}
-                createName={createName}
-                createColor={createColor}
-                createDescription={createDescription}
-                disabled={isMutating}
-                inputRef={createInputRef}
-                onCreateColorChange={setCreateColor}
-                onCreateDescriptionChange={setCreateDescription}
-                onCreateNameChange={setCreateName}
-                onSubmit={() => void handleCreateLabel()}
-                pending={pendingMutation?.kind === "create"}
-              />
-            ) : null}
-            {showLabelControls ? (
+          <Tabs
+            value={activeView}
+            onValueChange={(value) => {
+              if (value === "active" || value === "archived") {
+                setActiveView(value);
+              }
+            }}
+            className="gap-4"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="no-scrollbar overflow-x-auto">
+                <TabsList aria-label="Label views">
+                  <TabsTrigger value="active">Active</TabsTrigger>
+                  <TabsTrigger value="archived">Archived</TabsTrigger>
+                </TabsList>
+              </div>
+              {canManageLabels ? (
+                <Button
+                  type="button"
+                  disabled={!canWriteActiveLabels}
+                  onClick={openCreateForm}
+                >
+                  <Plus aria-hidden="true" />
+                  New label
+                  <ShortcutHint
+                    decorative
+                    hotkey={HOTKEYS.labelsSettingsCreate.hotkey}
+                    label={HOTKEYS.labelsSettingsCreate.label}
+                  />
+                </Button>
+              ) : null}
+            </div>
+
+            {canManageLabels ? (
               <LabelsSearchField
-                disabled={false}
+                disabled={
+                  activeView === "active"
+                    ? shellState === "unavailable"
+                    : archivedState.status === "unavailable"
+                }
                 inputRef={searchInputRef}
                 resultCount={visibleLabels.length}
                 searchQuery={searchQuery}
-                totalCount={labels.length}
+                totalCount={viewTotal}
+                view={activeView}
                 onSearchQueryChange={setSearchQuery}
               />
             ) : null}
-            <LabelsStateView
-              hasSearch={hasSearch}
-              editingLabelId={editingLabelId}
-              editingName={editingName}
-              editingColor={editingColor}
-              editingDescription={editingDescription}
-              labels={visibleLabels}
-              hasCommandReflection={hasCommandReflection}
-              pendingMutation={pendingMutation}
-              searchQuery={searchQuery}
-              state={shellState}
-              onRequestArchiveConfirmation={requestArchiveConfirmation}
-              onCancelEdit={cancelEditing}
-              onEditingNameChange={setEditingName}
-              onEditingColorChange={setEditingColor}
-              onEditingDescriptionChange={setEditingDescription}
-              onRenameLabel={(label) => void handleRenameLabel(label)}
-              onStartEdit={startEditingLabel}
-              editInputRef={editInputRef}
-            />
-            <LabelMutationStatusView status={mutationStatus} />
-          </div>
+
+            <TabsContent value="active" keepMounted>
+              <LabelsStateView
+                canWriteLabels={canWriteActiveLabels}
+                hasCommandReflection={hasCommandReflection}
+                hasSearch={hasSearch}
+                labels={activeView === "active" ? visibleLabels : []}
+                pendingMutation={pendingMutation}
+                searchQuery={searchQuery}
+                state={shellState}
+                view="active"
+                onArchive={requestArchiveConfirmation}
+                onEdit={openEditForm}
+              />
+            </TabsContent>
+            <TabsContent value="archived" keepMounted>
+              <ArchivedLabelsStateView
+                canManageLabels={canManageLabels}
+                hasSearch={hasSearch}
+                labels={activeView === "archived" ? visibleLabels : []}
+                pendingMutation={pendingMutation}
+                searchQuery={searchQuery}
+                state={archivedState}
+                onRefresh={() => void refreshArchivedLabels()}
+                onRestore={(label) => void restoreLabel(label)}
+              />
+            </TabsContent>
+          </Tabs>
+
+          <LabelMutationStatusView status={mutationStatus} />
         </AppUtilityPanel>
       </div>
+
+      <LabelFormDrawer
+        form={formState}
+        nameRef={formNameRef}
+        pending={
+          pendingMutation?.kind === "create" ||
+          pendingMutation?.kind === "update"
+        }
+        onClose={closeForm}
+        onColorChange={setFormColor}
+        onDescriptionChange={setFormDescription}
+        onNameChange={setFormName}
+        onSubmit={() => void submitForm()}
+      />
     </main>
   );
 }
 
 function useLabelsSettingsHotkeys({
   canManageLabels,
-  canWriteLabels,
-  cancelEditing,
-  createInputRef,
-  editInputRef,
-  editingLabel,
-  editingLabelId,
-  handleCreateLabel,
-  handleRenameLabel,
-  isMutating,
+  canWriteActiveLabels,
+  closeForm,
+  formOpen,
+  openCreateForm,
   searchInputRef,
+  submitForm,
 }: {
   readonly canManageLabels: boolean;
-  readonly canWriteLabels: boolean;
-  readonly cancelEditing: () => void;
-  readonly createInputRef: React.RefObject<HTMLInputElement | null>;
-  readonly editInputRef: React.RefObject<HTMLInputElement | null>;
-  readonly editingLabel: Label | null;
-  readonly editingLabelId: Label["id"] | null;
-  readonly handleCreateLabel: () => Promise<void>;
-  readonly handleRenameLabel: (label: Label) => Promise<void>;
-  readonly isMutating: boolean;
+  readonly canWriteActiveLabels: boolean;
+  readonly closeForm: () => void;
+  readonly formOpen: boolean;
+  readonly openCreateForm: () => void;
   readonly searchInputRef: React.RefObject<HTMLInputElement | null>;
+  readonly submitForm: () => Promise<void>;
 }) {
   useAppHotkey(
     "labelsSettingsSearch",
@@ -360,466 +777,23 @@ function useLabelsSettingsHotkeys({
     { enabled: canManageLabels, ignoreInputs: true }
   );
 
-  useAppHotkey(
-    "labelsSettingsCreate",
-    () => {
-      createInputRef.current?.focus();
-    },
-    { enabled: canWriteLabels, ignoreInputs: true }
-  );
+  useAppHotkey("labelsSettingsCreate", openCreateForm, {
+    enabled: canWriteActiveLabels && !formOpen,
+    ignoreInputs: true,
+  });
 
   useAppHotkey(
     "labelsSettingsSubmit",
     () => {
-      if (editingLabel !== null) {
-        void handleRenameLabel(editingLabel);
-        return;
-      }
-
-      void handleCreateLabel();
+      void submitForm();
     },
-    { enabled: canWriteLabels && !isMutating, ignoreInputs: false }
+    { enabled: canWriteActiveLabels && formOpen, ignoreInputs: false }
   );
 
-  useAppHotkey(
-    "labelsSettingsCancel",
-    () => {
-      cancelEditing();
-    },
-    { enabled: editingLabelId !== null && !isMutating, ignoreInputs: false }
-  );
-
-  React.useEffect(() => {
-    if (editingLabelId !== null) {
-      editInputRef.current?.focus();
-      editInputRef.current?.select();
-    }
-  }, [editInputRef, editingLabelId]);
-}
-
-function canWriteSettingsLabels({
-  canManageLabels,
-  collectionIsAvailable,
-  shellState,
-}: {
-  readonly canManageLabels: boolean;
-  readonly collectionIsAvailable: boolean;
-  readonly shellState: LabelsSettingsShellState;
-}) {
-  return (
-    canManageLabels &&
-    collectionIsAvailable &&
-    (shellState === "ready" || shellState === "empty")
-  );
-}
-
-function useLabelsMutationController({
-  archiveLabelWithConfirmation,
-  canWriteLabels,
-  collection,
-  createLabelWithConfirmation,
-  labels,
-  mutationJournal,
-  reflectLabelArchive,
-  reflectLabelUpsert,
-  updateLabelWithConfirmation,
-}: {
-  readonly archiveLabelWithConfirmation: (
-    labelId: LabelIdType
-  ) => Promise<LabelWriteResponse>;
-  readonly canWriteLabels: boolean;
-  readonly collection: LabelsCollectionLike | null;
-  readonly createLabelWithConfirmation: (
-    input: CreateLabelInput
-  ) => Promise<LabelWriteResponse>;
-  readonly labels: readonly Label[];
-  readonly mutationJournal?: DataPlaneMutationJournal | undefined;
-  readonly reflectLabelArchive: (labelId: Label["id"]) => void;
-  readonly reflectLabelUpsert: (label: Label) => void;
-  readonly updateLabelWithConfirmation: (
-    labelId: LabelIdType,
-    input: UpdateLabelInput
-  ) => Promise<LabelWriteResponse>;
-}) {
-  const [createName, setCreateName] = React.useState("");
-  const [createDescription, setCreateDescription] = React.useState("");
-  const [createColor, setCreateColor] =
-    React.useState<LabelColor>(DEFAULT_LABEL_COLOR);
-  const [editingLabelId, setEditingLabelId] = React.useState<
-    Label["id"] | null
-  >(null);
-  const [editingName, setEditingName] = React.useState("");
-  const [editingColor, setEditingColor] =
-    React.useState<LabelColor>(DEFAULT_LABEL_COLOR);
-  const [editingDescription, setEditingDescription] = React.useState("");
-  const [pendingMutation, setPendingMutation] =
-    React.useState<PendingLabelMutation | null>(null);
-  const [mutationStatus, setMutationStatus] =
-    React.useState<LabelMutationStatus | null>(null);
-  const mutationInFlightRef = React.useRef(false);
-  const editingLabel =
-    editingLabelId === null
-      ? null
-      : (labels.find((label) => label.id === editingLabelId) ?? null);
-
-  function cancelEditing() {
-    setEditingLabelId(null);
-    setEditingName("");
-    setEditingColor(DEFAULT_LABEL_COLOR);
-    setEditingDescription("");
-  }
-
-  async function handleCreateLabel() {
-    if (!canWriteLabels || collection === null || mutationInFlightRef.current) {
-      return;
-    }
-
-    const decodedName = validateSettingsLabelName(createName, labels);
-
-    if (decodedName.kind === "error") {
-      setMutationStatus({ kind: "error", message: decodedName.message });
-      return;
-    }
-
-    const decodedDescription =
-      validateSettingsLabelDescription(createDescription);
-
-    if (decodedDescription.kind === "error") {
-      setMutationStatus({
-        kind: "error",
-        message: decodedDescription.message,
-      });
-      return;
-    }
-
-    const operationId = `labels.create:${decodedName.name}`;
-    const input = createLabelInput(
-      decodedName.name,
-      createColor,
-      decodedDescription.description
-    );
-
-    setPendingMutation({
-      id: operationId,
-      kind: "create",
-    });
-    mutationInFlightRef.current = true;
-    setMutationStatus(null);
-
-    try {
-      const response = await persistLabelCommandMutation({
-        commandName: "labels.create",
-        input,
-        journal: mutationJournal,
-        operation: () => createLabelWithConfirmation(input),
-      });
-
-      reflectLabelUpsert(response.label);
-
-      setCreateName("");
-      setCreateDescription("");
-      setCreateColor(DEFAULT_LABEL_COLOR);
-      setMutationStatus(null);
-    } catch (error) {
-      setMutationStatus({
-        kind: "error",
-        message: getLabelMutationFailureMessage(error, "create"),
-      });
-    } finally {
-      mutationInFlightRef.current = false;
-      setPendingMutation((current) =>
-        current?.id === operationId ? null : current
-      );
-    }
-  }
-
-  async function handleRenameLabel(label: Label) {
-    if (!canWriteLabels || collection === null || mutationInFlightRef.current) {
-      return;
-    }
-
-    const decodedName = validateSettingsLabelName(
-      editingName,
-      labels,
-      label.id
-    );
-
-    if (decodedName.kind === "error") {
-      setMutationStatus({ kind: "error", message: decodedName.message });
-      return;
-    }
-
-    const decodedDescription =
-      validateSettingsLabelDescription(editingDescription);
-
-    if (decodedDescription.kind === "error") {
-      setMutationStatus({
-        kind: "error",
-        message: decodedDescription.message,
-      });
-      return;
-    }
-
-    if (
-      decodedName.name === label.name &&
-      editingColor === label.color &&
-      decodedDescription.description === label.description
-    ) {
-      cancelEditing();
-      return;
-    }
-
-    const operationId = `labels.rename:${label.id}`;
-    setPendingMutation({
-      id: operationId,
-      kind: "rename",
-      labelId: label.id,
-    });
-    mutationInFlightRef.current = true;
-    setMutationStatus(null);
-
-    try {
-      const input = updateLabelInput(
-        decodedName.name,
-        editingColor,
-        decodedDescription.description
-      );
-      const response = await persistLabelCommandMutation({
-        commandName: "labels.update",
-        input: {
-          labelId: label.id,
-          ...input,
-        },
-        journal: mutationJournal,
-        operation: () => updateLabelWithConfirmation(label.id, input),
-      });
-
-      reflectLabelUpsert(response.label);
-      cancelEditing();
-      setMutationStatus(null);
-    } catch (error) {
-      cancelEditing();
-      setMutationStatus({
-        kind: "error",
-        message: getLabelMutationFailureMessage(error, "rename"),
-      });
-    } finally {
-      mutationInFlightRef.current = false;
-      setPendingMutation((current) =>
-        current?.id === operationId ? null : current
-      );
-    }
-  }
-
-  async function handleArchiveLabel(label: Label) {
-    if (!canWriteLabels || collection === null || mutationInFlightRef.current) {
-      return;
-    }
-
-    const operationId = `labels.archive:${label.id}`;
-    setPendingMutation({
-      id: operationId,
-      kind: "archive",
-      labelId: label.id,
-    });
-    mutationInFlightRef.current = true;
-    setMutationStatus(null);
-
-    try {
-      await persistLabelCommandMutation({
-        commandName: "labels.archive",
-        input: { labelId: label.id },
-        journal: mutationJournal,
-        operation: () => archiveLabelWithConfirmation(label.id),
-      });
-
-      reflectLabelArchive(label.id);
-
-      if (editingLabelId === label.id) {
-        cancelEditing();
-      }
-      setMutationStatus(null);
-    } catch (error) {
-      setMutationStatus({
-        kind: "error",
-        message: getLabelMutationFailureMessage(error, "archive"),
-      });
-    } finally {
-      mutationInFlightRef.current = false;
-      setPendingMutation((current) =>
-        current?.id === operationId ? null : current
-      );
-    }
-  }
-
-  function startEditingLabel(label: Label) {
-    setEditingLabelId(label.id);
-    setEditingName(label.name);
-    setEditingColor(label.color);
-    setEditingDescription(label.description ?? "");
-    setMutationStatus(null);
-  }
-
-  function requestArchiveConfirmation(label: Label) {
-    if (!canWriteLabels || mutationInFlightRef.current) {
-      return;
-    }
-
-    setMutationStatus(null);
-    toast("Archive label?", {
-      action: {
-        label: "Archive label",
-        onClick: () => {
-          void handleArchiveLabel(label);
-        },
-      },
-      description: label.name,
-    });
-  }
-
-  return {
-    cancelEditing,
-    createName,
-    createDescription,
-    createColor,
-    editingLabel,
-    editingLabelId,
-    editingName,
-    editingColor,
-    editingDescription,
-    handleCreateLabel,
-    handleRenameLabel,
-    isMutating: pendingMutation !== null,
-    mutationStatus,
-    pendingMutation,
-    requestArchiveConfirmation,
-    setCreateName,
-    setCreateDescription,
-    setCreateColor,
-    setEditingName,
-    setEditingColor,
-    setEditingDescription,
-    startEditingLabel,
-  } as const;
-}
-
-function CreateLabelForm({
-  canWriteLabels,
-  createColor,
-  createDescription,
-  createName,
-  disabled,
-  inputRef,
-  onCreateColorChange,
-  onCreateDescriptionChange,
-  onCreateNameChange,
-  onSubmit,
-  pending,
-}: {
-  readonly canWriteLabels: boolean;
-  readonly createColor: LabelColor;
-  readonly createDescription: string;
-  readonly createName: string;
-  readonly disabled: boolean;
-  readonly inputRef: React.RefObject<HTMLInputElement | null>;
-  readonly onCreateColorChange: (color: LabelColor) => void;
-  readonly onCreateDescriptionChange: (description: string) => void;
-  readonly onCreateNameChange: (name: string) => void;
-  readonly onSubmit: () => void;
-  readonly pending: boolean;
-}) {
-  const [descriptionExpanded, setDescriptionExpanded] = React.useState(false);
-  const showDescription =
-    descriptionExpanded || createDescription.trim().length > 0;
-
-  React.useEffect(() => {
-    if (createName.length === 0 && createDescription.length === 0) {
-      setDescriptionExpanded(false);
-    }
-  }, [createDescription, createName]);
-
-  return (
-    <form
-      className="grid gap-3 rounded-lg border border-border/70 bg-background p-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-    >
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-        <div className="relative min-w-0">
-          <LabelColorPicker
-            className="absolute top-0 left-0 z-10 size-9 rounded-r-none border-r border-border bg-background hover:bg-muted aria-expanded:bg-muted"
-            disabled={!canWriteLabels || disabled}
-            label="New label color"
-            value={createColor}
-            onChange={onCreateColorChange}
-          />
-          <label className="sr-only" htmlFor="organization-labels-create">
-            New label name
-          </label>
-          <Input
-            id="organization-labels-create"
-            ref={inputRef}
-            className="pl-12"
-            disabled={!canWriteLabels || disabled}
-            placeholder="New label name"
-            value={createName}
-            onChange={(event) => onCreateNameChange(event.currentTarget.value)}
-          />
-          <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2">
-            <ShortcutHint
-              decorative
-              hotkey={HOTKEYS.labelsSettingsCreate.hotkey}
-              label={HOTKEYS.labelsSettingsCreate.label}
-            />
-          </span>
-        </div>
-        <Button type="submit" disabled={!canWriteLabels || disabled}>
-          {pending ? (
-            <Loader2 className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Plus aria-hidden="true" />
-          )}
-          Create
-          <ShortcutHint
-            decorative
-            hotkey={HOTKEYS.labelsSettingsSubmit.hotkey}
-            label={HOTKEYS.labelsSettingsSubmit.label}
-          />
-        </Button>
-      </div>
-      {showDescription ? (
-        <React.Fragment>
-          <label className="sr-only" htmlFor="organization-labels-description">
-            New label description
-          </label>
-          <Textarea
-            id="organization-labels-description"
-            className="min-h-16 resize-none"
-            disabled={!canWriteLabels || disabled}
-            placeholder="Description"
-            value={createDescription}
-            onChange={(event) =>
-              onCreateDescriptionChange(event.currentTarget.value)
-            }
-          />
-        </React.Fragment>
-      ) : (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="w-fit text-muted-foreground"
-          disabled={!canWriteLabels || disabled}
-          onClick={() => setDescriptionExpanded(true)}
-        >
-          <Plus aria-hidden="true" />
-          Add description
-        </Button>
-      )}
-    </form>
-  );
+  useAppHotkey("labelsSettingsCancel", closeForm, {
+    enabled: formOpen,
+    ignoreInputs: false,
+  });
 }
 
 function LabelsSearchField({
@@ -829,6 +803,7 @@ function LabelsSearchField({
   resultCount,
   searchQuery,
   totalCount,
+  view,
 }: {
   readonly disabled: boolean;
   readonly inputRef: React.RefObject<HTMLInputElement | null>;
@@ -836,6 +811,7 @@ function LabelsSearchField({
   readonly resultCount: number;
   readonly searchQuery: string;
   readonly totalCount: number;
+  readonly view: LabelsView;
 }) {
   return (
     <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
@@ -850,8 +826,10 @@ function LabelsSearchField({
         <Input
           id="organization-labels-search"
           ref={inputRef}
+          autoComplete="off"
           className="pr-20 pl-9"
           disabled={disabled}
+          name="label-search"
           placeholder="Search labels…"
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
@@ -867,53 +845,37 @@ function LabelsSearchField({
       <p className="text-sm text-muted-foreground" aria-live="polite">
         {searchQuery.trim().length > 0
           ? `${resultCount} of ${totalCount} labels`
-          : `${totalCount} active labels`}
+          : `${totalCount} ${view} labels`}
       </p>
     </div>
   );
 }
 
 function LabelsStateView({
-  editInputRef,
-  editingLabelId,
-  editingColor,
-  editingDescription,
-  editingName,
-  hasSearch,
+  canWriteLabels,
   hasCommandReflection,
+  hasSearch,
   labels,
-  onCancelEdit,
-  onEditingColorChange,
-  onEditingDescriptionChange,
-  onEditingNameChange,
-  onRequestArchiveConfirmation,
-  onRenameLabel,
-  onStartEdit,
+  onArchive,
+  onEdit,
   pendingMutation,
   searchQuery,
   state,
+  view,
 }: {
-  readonly editInputRef: React.RefObject<HTMLInputElement | null>;
-  readonly editingLabelId: Label["id"] | null;
-  readonly editingColor: LabelColor;
-  readonly editingDescription: string;
-  readonly editingName: string;
-  readonly hasSearch: boolean;
+  readonly canWriteLabels: boolean;
   readonly hasCommandReflection: boolean;
+  readonly hasSearch: boolean;
   readonly labels: readonly Label[];
-  readonly onCancelEdit: () => void;
-  readonly onEditingColorChange: (color: LabelColor) => void;
-  readonly onEditingDescriptionChange: (description: string) => void;
-  readonly onEditingNameChange: (name: string) => void;
-  readonly onRequestArchiveConfirmation: (label: Label) => void;
-  readonly onRenameLabel: (label: Label) => void;
-  readonly onStartEdit: (label: Label) => void;
+  readonly onArchive: (label: Label) => void;
+  readonly onEdit: (label: Label) => void;
   readonly pendingMutation: PendingLabelMutation | null;
   readonly searchQuery: string;
   readonly state: LabelsSettingsShellState;
+  readonly view: LabelsView;
 }) {
   if (labels.length === 0 && !hasSearch && hasCommandReflection) {
-    return <LabelsEmptyNotice />;
+    return <LabelsEmptyNotice view={view} />;
   }
 
   switch (state) {
@@ -921,14 +883,14 @@ function LabelsStateView({
       return <LabelsLoadingSkeleton />;
     }
     case "empty": {
-      return <LabelsEmptyNotice />;
+      return <LabelsEmptyNotice view={view} />;
     }
     case "unavailable": {
       return (
         <ShellNotice
           icon={<RadioTower aria-hidden="true" />}
           title="Labels unavailable"
-          description="Labels could not be loaded. Try again in a moment."
+          description="Active labels could not be loaded from realtime sync."
         />
       );
     }
@@ -943,47 +905,22 @@ function LabelsStateView({
     }
     case "ready": {
       if (labels.length === 0) {
-        if (!hasSearch) {
-          return <LabelsEmptyNotice />;
-        }
-
-        return (
-          <ShellNotice
-            icon={<Slash aria-hidden="true" />}
-            title="No matching labels"
-            description={`No active labels match "${searchQuery.trim()}".`}
-          />
+        return hasSearch ? (
+          <NoMatchingLabelsNotice query={searchQuery} view={view} />
+        ) : (
+          <LabelsEmptyNotice view={view} />
         );
       }
 
       return (
-        <div className="overflow-hidden rounded-lg border border-border/70">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border/70 bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground">
-            <span>Label</span>
-            <span>Actions</span>
-          </div>
-          <ul className="divide-y divide-border/70">
-            {labels.map((label) => (
-              <LabelRow
-                editInputRef={editInputRef}
-                editing={editingLabelId === label.id}
-                editingColor={editingColor}
-                editingDescription={editingDescription}
-                editingName={editingName}
-                key={label.id}
-                label={label}
-                pendingMutation={pendingMutation}
-                onCancelEdit={onCancelEdit}
-                onEditingColorChange={onEditingColorChange}
-                onEditingDescriptionChange={onEditingDescriptionChange}
-                onEditingNameChange={onEditingNameChange}
-                onRenameLabel={onRenameLabel}
-                onRequestArchiveConfirmation={onRequestArchiveConfirmation}
-                onStartEdit={onStartEdit}
-              />
-            ))}
-          </ul>
-        </div>
+        <LabelsTable
+          canWriteLabels={canWriteLabels}
+          labels={labels}
+          pendingMutation={pendingMutation}
+          view="active"
+          onArchive={onArchive}
+          onEdit={onEdit}
+        />
       );
     }
     default: {
@@ -993,179 +930,247 @@ function LabelsStateView({
   }
 }
 
-function LabelsEmptyNotice() {
+function ArchivedLabelsStateView({
+  canManageLabels,
+  hasSearch,
+  labels,
+  onRefresh,
+  onRestore,
+  pendingMutation,
+  searchQuery,
+  state,
+}: {
+  readonly canManageLabels: boolean;
+  readonly hasSearch: boolean;
+  readonly labels: readonly Label[];
+  readonly onRefresh: () => void;
+  readonly onRestore: (label: Label) => void;
+  readonly pendingMutation: PendingLabelMutation | null;
+  readonly searchQuery: string;
+  readonly state: ArchivedLabelsState;
+}) {
+  if (!canManageLabels) {
+    return (
+      <ShellNotice
+        icon={<ShieldAlert aria-hidden="true" />}
+        title="Admin label management"
+        description="Owners and admins can manage organization labels."
+      />
+    );
+  }
+
+  if (state.status === "idle" || state.status === "loading") {
+    return <LabelsLoadingSkeleton label="Loading archived labels" />;
+  }
+
+  if (state.status === "unavailable") {
+    return (
+      <ShellNotice
+        icon={<RadioTower aria-hidden="true" />}
+        title="Archived labels unavailable"
+        description={state.error ?? "Archived labels could not be loaded."}
+        action={
+          <Button type="button" variant="outline" onClick={onRefresh}>
+            Refresh
+          </Button>
+        }
+      />
+    );
+  }
+
+  if (labels.length === 0) {
+    return hasSearch ? (
+      <NoMatchingLabelsNotice query={searchQuery} view="archived" />
+    ) : (
+      <LabelsEmptyNotice view="archived" />
+    );
+  }
+
   return (
-    <ShellNotice
-      icon={<CheckCircle2 aria-hidden="true" />}
-      title="No labels yet"
-      description="Create a label to keep shared work categories consistent."
+    <LabelsTable
+      canWriteLabels
+      labels={labels}
+      pendingMutation={pendingMutation}
+      view="archived"
+      onRestore={onRestore}
     />
   );
 }
 
-function LabelRow({
-  editInputRef,
-  editing,
-  editingColor,
-  editingDescription,
-  editingName,
-  label,
-  onCancelEdit,
-  onEditingColorChange,
-  onEditingDescriptionChange,
-  onEditingNameChange,
-  onRenameLabel,
-  onRequestArchiveConfirmation,
-  onStartEdit,
+function LabelsTable({
+  canWriteLabels,
+  labels,
+  onArchive,
+  onEdit,
+  onRestore,
   pendingMutation,
+  view,
 }: {
-  readonly editInputRef: React.RefObject<HTMLInputElement | null>;
-  readonly editing: boolean;
-  readonly editingColor: LabelColor;
-  readonly editingDescription: string;
-  readonly editingName: string;
-  readonly label: Label;
-  readonly onCancelEdit: () => void;
-  readonly onEditingColorChange: (color: LabelColor) => void;
-  readonly onEditingDescriptionChange: (description: string) => void;
-  readonly onEditingNameChange: (name: string) => void;
-  readonly onRenameLabel: (label: Label) => void;
-  readonly onRequestArchiveConfirmation: (label: Label) => void;
-  readonly onStartEdit: (label: Label) => void;
+  readonly canWriteLabels: boolean;
+  readonly labels: readonly Label[];
+  readonly onArchive?: ((label: Label) => void) | undefined;
+  readonly onEdit?: ((label: Label) => void) | undefined;
+  readonly onRestore?: ((label: Label) => void) | undefined;
   readonly pendingMutation: PendingLabelMutation | null;
+  readonly view: LabelsView;
 }) {
-  const actionsDisabled = pendingMutation !== null;
-  const renamePending =
-    pendingMutation?.kind === "rename" && pendingMutation.labelId === label.id;
+  return (
+    <div
+      className="overflow-x-auto rounded-lg border border-border/70"
+      data-testid="labels-table-scroll"
+    >
+      <div style={{ width: "max(100%, 680px)" }}>
+        <Table className="table-fixed">
+          <TableHeader>
+            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableHead className="w-[36%]">Label</TableHead>
+              <TableHead className="w-[32%]">Description</TableHead>
+              <TableHead className="w-28">Jobs</TableHead>
+              <TableHead className="w-28">Sites</TableHead>
+              <TableHead className="w-12 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {labels.map((label) => (
+              <LabelTableRow
+                canWriteLabels={canWriteLabels}
+                key={label.id}
+                label={label}
+                pendingMutation={pendingMutation}
+                view={view}
+                onArchive={onArchive}
+                onEdit={onEdit}
+                onRestore={onRestore}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+function LabelTableRow({
+  canWriteLabels,
+  label,
+  onArchive,
+  onEdit,
+  onRestore,
+  pendingMutation,
+  view,
+}: {
+  readonly canWriteLabels: boolean;
+  readonly label: Label;
+  readonly onArchive?: ((label: Label) => void) | undefined;
+  readonly onEdit?: ((label: Label) => void) | undefined;
+  readonly onRestore?: ((label: Label) => void) | undefined;
+  readonly pendingMutation: PendingLabelMutation | null;
+  readonly view: LabelsView;
+}) {
+  const rowPending = pendingMutation?.labelId === label.id;
+  const actionsDisabled = pendingMutation !== null || !canWriteLabels;
 
   return (
-    <li className="group/label-row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-background px-4 py-3">
-      <div className="min-w-0">
-        {editing ? (
-          <div className="grid gap-2">
-            <div className="relative min-w-0">
-              <LabelColorPicker
-                className="absolute top-0 left-0 z-10 size-9 rounded-r-none border-r border-border bg-background hover:bg-muted aria-expanded:bg-muted"
-                disabled={actionsDisabled}
-                label={`Label color`}
-                value={editingColor}
-                onChange={onEditingColorChange}
-              />
-              <label className="sr-only" htmlFor={`label-edit-${label.id}`}>
-                Rename {label.name}
-              </label>
-              <Input
-                id={`label-edit-${label.id}`}
-                ref={editInputRef}
-                className="pl-12"
-                disabled={actionsDisabled}
-                value={editingName}
-                onChange={(event) =>
-                  onEditingNameChange(event.currentTarget.value)
-                }
-              />
-            </div>
-            <label
-              className="sr-only"
-              htmlFor={`label-edit-description-${label.id}`}
-            >
-              Update {label.name} description
-            </label>
-            <Textarea
-              id={`label-edit-description-${label.id}`}
-              className="min-h-16 resize-none"
-              disabled={actionsDisabled}
-              placeholder="Description"
-              value={editingDescription}
-              onChange={(event) =>
-                onEditingDescriptionChange(event.currentTarget.value)
-              }
-            />
-          </div>
-        ) : (
-          <>
-            <div className="flex min-w-0 items-center gap-2">
-              <span
-                className="size-3 shrink-0 rounded-full border border-black/15"
-                style={{ backgroundColor: label.color }}
-                aria-hidden="true"
-              />
-              <p className="truncate text-sm font-medium text-foreground">
-                {label.name}
-              </p>
-            </div>
-            {label.description ? (
-              <p className="truncate text-xs text-muted-foreground">
-                {label.description}
-              </p>
+    <TableRow className="group/label-row bg-background">
+      <TableCell className="max-w-0">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={cn(
+              "size-3 shrink-0 rounded-full border border-black/15",
+              view === "archived" ? "opacity-55 grayscale" : undefined
+            )}
+            style={{ backgroundColor: label.color }}
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground">{label.name}</p>
+            {view === "archived" ? (
+              <Badge variant="outline" className="mt-1">
+                Archived
+              </Badge>
             ) : null}
-          </>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="max-w-0 text-muted-foreground">
+        <LabelDescriptionText description={label.description} />
+      </TableCell>
+      <TableCell>
+        <UsagePlaceholder />
+      </TableCell>
+      <TableCell>
+        <UsagePlaceholder />
+      </TableCell>
+      <TableCell className="text-right">
+        {rowPending ? (
+          <Loader2
+            className="ml-auto size-4 animate-spin text-muted-foreground"
+            aria-label="Label mutation pending"
+          />
+        ) : (
+          <LabelRowActions
+            actionsDisabled={actionsDisabled}
+            label={label}
+            view={view}
+            onArchive={onArchive}
+            onEdit={onEdit}
+            onRestore={onRestore}
+          />
         )}
-      </div>
-      <LabelRowActions
-        actionsDisabled={actionsDisabled}
-        editing={editing}
-        label={label}
-        renamePending={renamePending}
-        onCancelEdit={onCancelEdit}
-        onRenameLabel={onRenameLabel}
-        onRequestArchiveConfirmation={onRequestArchiveConfirmation}
-        onStartEdit={onStartEdit}
-      />
-    </li>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function LabelDescriptionText({
+  description,
+}: {
+  readonly description: string | null | undefined;
+}) {
+  const text = description ?? "No description";
+
+  if (!description) {
+    return (
+      <span className="block w-full truncate text-left text-muted-foreground">
+        {text}
+      </span>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            className="block w-full truncate rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
+            type="button"
+          />
+        }
+      >
+        {text}
+      </TooltipTrigger>
+      <TooltipContent align="start" className="max-w-sm whitespace-normal">
+        {description}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
 function LabelRowActions({
   actionsDisabled,
-  editing,
   label,
-  renamePending,
-  onCancelEdit,
-  onRenameLabel,
-  onRequestArchiveConfirmation,
-  onStartEdit,
+  onArchive,
+  onEdit,
+  onRestore,
+  view,
 }: {
   readonly actionsDisabled: boolean;
-  readonly editing: boolean;
   readonly label: Label;
-  readonly renamePending: boolean;
-  readonly onCancelEdit: () => void;
-  readonly onRenameLabel: (label: Label) => void;
-  readonly onRequestArchiveConfirmation: (label: Label) => void;
-  readonly onStartEdit: (label: Label) => void;
+  readonly onArchive?: ((label: Label) => void) | undefined;
+  readonly onEdit?: ((label: Label) => void) | undefined;
+  readonly onRestore?: ((label: Label) => void) | undefined;
+  readonly view: LabelsView;
 }) {
-  if (editing) {
-    return (
-      <div className="flex items-center gap-1">
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          aria-label={`Save ${label.name}`}
-          disabled={actionsDisabled}
-          onClick={() => onRenameLabel(label)}
-        >
-          {renamePending ? (
-            <Loader2 className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Check aria-hidden="true" />
-          )}
-        </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          aria-label={`Cancel editing ${label.name}`}
-          disabled={actionsDisabled}
-          onClick={onCancelEdit}
-        >
-          <X aria-hidden="true" />
-        </Button>
-      </div>
-    );
-  }
-
   return (
     <DropdownMenu>
       <Tooltip>
@@ -1191,24 +1196,210 @@ function LabelRowActions({
         <TooltipContent>Label actions</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuItem
-          disabled={actionsDisabled}
-          onClick={() => onStartEdit(label)}
-        >
-          <Pencil aria-hidden="true" />
-          Edit label
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          disabled={actionsDisabled}
-          variant="destructive"
-          onClick={() => onRequestArchiveConfirmation(label)}
-        >
-          <Archive aria-hidden="true" />
-          Archive label
-        </DropdownMenuItem>
+        {view === "active" ? (
+          <React.Fragment>
+            <DropdownMenuItem
+              disabled={actionsDisabled}
+              onClick={() => onEdit?.(label)}
+            >
+              <Pencil aria-hidden="true" />
+              Edit label
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={actionsDisabled}
+              variant="destructive"
+              onClick={() => onArchive?.(label)}
+            >
+              <Archive aria-hidden="true" />
+              Archive label
+            </DropdownMenuItem>
+          </React.Fragment>
+        ) : (
+          <DropdownMenuItem
+            disabled={actionsDisabled}
+            onClick={() => onRestore?.(label)}
+          >
+            <RotateCcw aria-hidden="true" />
+            Restore label
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function LabelFormDrawer({
+  form,
+  nameRef,
+  onClose,
+  onColorChange,
+  onDescriptionChange,
+  onNameChange,
+  onSubmit,
+  pending,
+}: {
+  readonly form: LabelFormState;
+  readonly nameRef: React.RefObject<HTMLInputElement | null>;
+  readonly onClose: () => void;
+  readonly onColorChange: (color: LabelColor) => void;
+  readonly onDescriptionChange: (description: string) => void;
+  readonly onNameChange: (name: string) => void;
+  readonly onSubmit: () => void;
+  readonly pending: boolean;
+}) {
+  const title = form.mode === "create" ? "New label" : "Edit label";
+
+  return (
+    <ResponsiveDrawer open={form.open} onOpenChange={ignoreDrawerOpenChange}>
+      <DrawerContent className="max-h-[92vh] overflow-hidden p-0 data-[vaul-drawer-direction=bottom]:min-h-[70vh] data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=right]:h-full data-[vaul-drawer-direction=right]:max-h-none data-[vaul-drawer-direction=right]:sm:max-w-lg">
+        <DrawerHeader className="shrink-0 border-b px-5 py-4 text-left md:px-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <DrawerTitle>{title}</DrawerTitle>
+              <DrawerDescription>
+                Name, description, and color are shared by product surfaces.
+              </DrawerDescription>
+            </div>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Close label drawer"
+              disabled={pending}
+              onClick={onClose}
+            >
+              <X aria-hidden="true" />
+            </Button>
+          </div>
+        </DrawerHeader>
+        <form
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <div className="grid min-h-0 flex-1 content-start gap-5 overflow-y-auto px-5 py-5 md:px-6">
+            {form.error ? (
+              <Alert variant="destructive">
+                <AlertTitle>Label not saved</AlertTitle>
+                <AlertDescription>{form.error}</AlertDescription>
+              </Alert>
+            ) : null}
+            <Field>
+              <FieldLabel htmlFor="label-form-name">Name</FieldLabel>
+              <div className="relative min-w-0">
+                <LabelColorPicker
+                  className="absolute top-0 left-0 z-10 size-9 rounded-r-none border-r border-border bg-background hover:bg-muted aria-expanded:bg-muted"
+                  disabled={pending}
+                  label="Label color"
+                  value={form.color}
+                  onChange={onColorChange}
+                />
+                <Input
+                  id="label-form-name"
+                  ref={nameRef}
+                  autoComplete="off"
+                  className="pl-12"
+                  disabled={pending}
+                  name="label-name"
+                  value={form.name}
+                  onChange={(event) => onNameChange(event.currentTarget.value)}
+                />
+              </div>
+              <FieldError />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="label-form-description">
+                Description
+              </FieldLabel>
+              <Textarea
+                id="label-form-description"
+                autoComplete="off"
+                className="min-h-28 resize-none"
+                disabled={pending}
+                name="label-description"
+                value={form.description}
+                onChange={(event) =>
+                  onDescriptionChange(event.currentTarget.value)
+                }
+              />
+            </Field>
+          </div>
+          <DrawerFooter className="shrink-0 flex-col-reverse gap-2 border-t px-5 py-4 sm:flex-row sm:justify-end md:px-6">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={onClose}
+            >
+              Cancel
+              <ShortcutHint
+                decorative
+                hotkey={HOTKEYS.labelsSettingsCancel.hotkey}
+                label={HOTKEYS.labelsSettingsCancel.label}
+              />
+            </Button>
+            <Button type="button" disabled={pending} onClick={onSubmit}>
+              {pending ? (
+                <Loader2 className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Check aria-hidden="true" />
+              )}
+              Save label
+              <ShortcutHint
+                decorative
+                hotkey={HOTKEYS.labelsSettingsSubmit.hotkey}
+                label={HOTKEYS.labelsSettingsSubmit.label}
+              />
+            </Button>
+          </DrawerFooter>
+        </form>
+      </DrawerContent>
+    </ResponsiveDrawer>
+  );
+}
+
+function UsagePlaceholder() {
+  return (
+    <Badge variant="outline" className="text-muted-foreground">
+      {USAGE_PLACEHOLDER}
+    </Badge>
+  );
+}
+
+function ignoreDrawerOpenChange(open: boolean) {
+  void open;
+}
+
+function LabelsEmptyNotice({ view }: { readonly view: LabelsView }) {
+  return (
+    <ShellNotice
+      icon={<CheckCircle2 aria-hidden="true" />}
+      title={view === "active" ? "No active labels yet" : "No archived labels"}
+      description={
+        view === "active"
+          ? "Create a label to keep shared work categories consistent."
+          : "Archived labels will appear here after admins archive them."
+      }
+    />
+  );
+}
+
+function NoMatchingLabelsNotice({
+  query,
+  view,
+}: {
+  readonly query: string;
+  readonly view: LabelsView;
+}) {
+  return (
+    <ShellNotice
+      icon={<Slash aria-hidden="true" />}
+      title="No matching labels"
+      description={`No ${view} labels match "${query.trim()}".`}
+    />
   );
 }
 
@@ -1223,7 +1414,7 @@ function LabelMutationStatusView({
 
   return (
     <p
-      className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+      className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
       role="alert"
     >
       {status.message}
@@ -1231,12 +1422,16 @@ function LabelMutationStatusView({
   );
 }
 
-function LabelsLoadingSkeleton() {
+function LabelsLoadingSkeleton({
+  label = "Loading labels",
+}: {
+  readonly label?: string | undefined;
+}) {
   return (
     <div
       className="grid gap-3 rounded-lg border border-border/60 p-4"
       aria-busy="true"
-      aria-label="Loading labels"
+      aria-label={label}
     >
       <div className="h-4 w-36 rounded bg-muted" />
       <div className="h-3 w-full max-w-lg rounded bg-muted/70" />
@@ -1246,10 +1441,12 @@ function LabelsLoadingSkeleton() {
 }
 
 function ShellNotice({
+  action,
+  description,
   icon,
   title,
-  description,
 }: {
+  readonly action?: React.ReactNode | undefined;
   readonly description: string;
   readonly icon: React.ReactNode;
   readonly title: string;
@@ -1259,12 +1456,13 @@ function ShellNotice({
       <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
         {icon}
       </div>
-      <div className="min-w-0 space-y-1">
+      <div className="min-w-0 flex-1 space-y-1">
         <h3 className="text-sm font-medium text-foreground">{title}</h3>
         <p className="max-w-[64ch] text-sm/6 text-muted-foreground">
           {description}
         </p>
       </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
@@ -1295,6 +1493,18 @@ function getLabelsSettingsState({
   }
 
   return "unavailable";
+}
+
+function createClosedLabelFormState(): LabelFormState {
+  return {
+    color: DEFAULT_LABEL_COLOR,
+    description: "",
+    error: null,
+    label: null,
+    mode: "create",
+    name: "",
+    open: false,
+  };
 }
 
 function createEmptyLabelCommandReflection(): LabelCommandReflection {
@@ -1446,6 +1656,14 @@ function archiveDefaultLabelWithConfirmation(labelId: LabelIdType) {
   return Effect.runPromise(archiveBrowserLabelWithConfirmation(labelId));
 }
 
+function restoreDefaultLabelWithConfirmation(labelId: LabelIdType) {
+  return Effect.runPromise(restoreBrowserLabelWithConfirmation(labelId));
+}
+
+function listDefaultLabels(query: ListLabelsQuery) {
+  return Effect.runPromise(listBrowserLabels(query));
+}
+
 function validateSettingsLabelName(
   input: string,
   labels: readonly Label[],
@@ -1523,6 +1741,10 @@ function getLabelMutationFailureMessage(
     return DUPLICATE_LABEL_NAME_MESSAGE;
   }
 
+  if (tag === "@ceird/labels-core/LabelRestoreConflictError") {
+    return RESTORE_CONFLICT_MESSAGE;
+  }
+
   if (tag === "@ceird/labels-core/LabelAccessDeniedError") {
     return "You do not have permission to manage organization labels.";
   }
@@ -1539,9 +1761,19 @@ function getLabelMutationFailureMessage(
     return "Could not archive the label. The active label list was restored.";
   }
 
-  if (operation === "rename") {
-    return "Could not rename the label. The active label list was restored.";
+  if (operation === "restore") {
+    return "Could not restore the label. Try again after archived labels refresh.";
+  }
+
+  if (operation === "update") {
+    return "Could not update the label. The active label list was restored.";
   }
 
   return "Could not create the label. The pending row was removed.";
+}
+
+function ensureArchivedLabel(label: Label): Label {
+  return label.archivedAt === null
+    ? { ...label, archivedAt: new Date().toISOString() }
+    : label;
 }

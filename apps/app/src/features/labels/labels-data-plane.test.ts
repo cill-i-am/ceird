@@ -210,16 +210,20 @@ describe("labels data plane", () => {
     } satisfies Label;
     const electricalLabel = {
       ...label,
+      description: "Panels and lighting",
       id: "33333333-3333-4333-8333-333333333333" as Label["id"],
       name: "Electrical",
     } satisfies Label;
 
     expect(
-      searchSettingsLabels([label, urgentLabel, electricalLabel], "g")
-    ).toStrictEqual([label, urgentLabel]);
+      searchSettingsLabels([label, urgentLabel, electricalLabel], "ur")
+    ).toStrictEqual([urgentLabel]);
     expect(
-      searchSettingsLabels([urgentLabel, label, electricalLabel], "")
+      searchSettingsLabels([electricalLabel, label, urgentLabel], "")
     ).toStrictEqual([electricalLabel, label, urgentLabel]);
+    expect(
+      searchSettingsLabels([label, urgentLabel, electricalLabel], "lighting")
+    ).toStrictEqual([electricalLabel]);
   });
 
   it("normalizes deployed Electric label rows before decoding the label contract", () => {

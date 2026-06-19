@@ -494,15 +494,25 @@ an explicit SSR strategy. The current migrated slices are:
   `labels` Electric shape directly and surfaces disabled/unavailable sync
   health without API fallback.
 - `features/organizations/organization-labels-settings-page.tsx`, where the
-  dedicated Labels settings route renders active labels from the
-  Electric-backed Settings Labels collection, filters the hydrated collection
-  locally for search, exposes connecting/ready/empty/unavailable/permission
-  states, uses `features/labels/label-color-picker.tsx` for curated OKLCH
-  swatches and custom Popover color selection, and runs create, rename, and
-  archive mutations through domain/API label commands with local command
-  reflection while realtime sync catches up. General organization settings
-  links to this route instead of loading or rendering the old API-backed labels
-  panel.
+  dedicated Labels settings route renders a data-table-like Active/Archived
+  management surface. Active labels come from the Electric-backed Settings
+  Labels collection and use local command reflection while realtime sync catches
+  up. Archived labels are loaded deliberately through the Labels API
+  `status=archived` query because the synced `labels` shape is active-only.
+  Search filters the current view by name and admin description. Create and edit
+  share one responsive drawer with `features/labels/label-color-picker.tsx` for
+  curated OKLCH swatches and custom Popover color selection. Archive and restore
+  stay single-label actions; restore surfaces active-name conflicts before a
+  label returns to the active view. Archive and restore remain menu-only rather
+  than row-hotkeyed in v1 because they are destructive/restorative repeated-row
+  actions that need explicit target selection and confirmation. The route
+  exposes connecting/ready/empty/unavailable/permission states, registers
+  search, create, submit, and cancel through the shared hotkey layer, and keeps
+  the table focused on label, constrained admin description, Jobs/Sites usage
+  placeholders, and row actions until the usage slice owns deeper reporting.
+  General
+  organization settings links to this route instead of loading or rendering the
+  old API-backed labels panel.
 - `features/jobs-workspace/jobs-workspace-live-list.ts`, where the primary
   Jobs route subscribes to the Jobs read-model collections,
   derives visible live rows from jobs, label assignments, labels, site

@@ -3,6 +3,8 @@ import type {
   CreateLabelInput,
   Label,
   LabelIdType,
+  LabelsResponse,
+  ListLabelsQuery,
   LabelWriteResponse,
   UpdateLabelInput,
 } from "@ceird/labels-core";
@@ -47,6 +49,12 @@ export function createBrowserLabelWithConfirmation(input: CreateLabelInput) {
   );
 }
 
+export function listBrowserLabels(query: ListLabelsQuery = {}) {
+  return runBrowserAppApiRequest("LabelsBrowser.listLabels", (client) =>
+    client.labels.listLabels({ query })
+  ) satisfies Effect.Effect<LabelsResponse, unknown>;
+}
+
 export function updateBrowserLabel(
   labelId: LabelIdType,
   input: UpdateLabelInput
@@ -77,6 +85,14 @@ export function archiveBrowserLabel(labelId: LabelIdType) {
 export function archiveBrowserLabelWithConfirmation(labelId: LabelIdType) {
   return runBrowserAppApiRequest("LabelsBrowser.archiveLabel", (client) =>
     client.labels.archiveLabel({
+      params: { labelId },
+    })
+  );
+}
+
+export function restoreBrowserLabelWithConfirmation(labelId: LabelIdType) {
+  return runBrowserAppApiRequest("LabelsBrowser.restoreLabel", (client) =>
+    client.labels.restoreLabel({
       params: { labelId },
     })
   );

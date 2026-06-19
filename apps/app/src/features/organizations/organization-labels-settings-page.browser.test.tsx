@@ -2,11 +2,13 @@ import { decodeOrganizationSummary } from "@ceird/identity-core";
 import type {
   CreateLabelInput,
   Label,
+  LabelsResponse,
   LabelWriteResponse,
+  ListLabelsQuery,
   UpdateLabelInput,
 } from "@ceird/labels-core";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 
@@ -32,14 +34,18 @@ const TEST_ORGANIZATION = decodeOrganizationSummary({
 });
 
 const urgentLabel = makeLabel({
+  description: "Escalated work orders",
   id: "11111111-1111-4111-8111-111111111111",
   name: "Urgent",
 });
 const electricalLabel = makeLabel({
+  description: "Panels and lighting",
   id: "22222222-2222-4222-8222-222222222222",
   name: "Electrical",
 });
-const plumbingLabel = makeLabel({
+const archivedLabel = makeLabel({
+  archivedAt: "2026-06-18T10:00:00.000Z",
+  description: "Legacy plumbing category",
   id: "33333333-3333-4333-8333-333333333333",
   name: "Plumbing",
 });
@@ -47,33 +53,130 @@ const plumbingLabel = makeLabel({
 describe("organization labels settings page", () => {
   afterEach(() => {
     toast.dismiss();
+    vi.restoreAllMocks();
   });
 
-  it("renders active labels from the synced collection with ready health", async () => {
+  it("renders a first-class active labels table with settings context", async () => {
     renderLabelsPage({
       collectionState: makeCollectionState({
-        labels: [urgentLabel, electricalLabel, plumbingLabel],
+        labels: [urgentLabel, electricalLabel],
         status: "ready",
       }),
     });
 
     expect(screen.getByRole("heading", { name: "Labels" })).toBeVisible();
-    expect(screen.getByText("Label library")).toBeVisible();
+    expect(screen.getByText("Organization settings")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Active" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.getByRole("columnheader", { name: "Jobs" })).toBeVisible();
+    expect(screen.getByRole("columnheader", { name: "Sites" })).toBeVisible();
     expect(
-      screen.getByRole("textbox", { name: /new label name/i })
-    ).toBeVisible();
+      screen.queryByRole("columnheader", { name: "Created" })
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("Coming next")).toHaveLength(4);
+    expect(screen.getByText("2 active labels")).toBeVisible();
     await expect(
       screen.findByRole("button", {
         name: /open actions for electrical/i,
       })
     ).resolves.toBeVisible();
-    expect(screen.getByText("Plumbing")).toBeVisible();
-    expect(screen.getByText("Urgent")).toBeVisible();
-    expect(screen.getByText("3 active labels")).toBeVisible();
   });
 
-  it("enables command-backed create when a ready Electric collection lacks local write helpers", async () => {
+  it("keeps the labels table scrollable in a constrained mobile width", async () => {
+    const { container } = renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [urgentLabel, electricalLabel],
+        status: "ready",
+      }),
+    });
+    container.style.width = "360px";
+
+    const scrollRegion = await screen.findByTestId("labels-table-scroll");
+
+    expect(screen.getByRole("table")).toBeVisible();
+    expect(scrollRegion.scrollWidth).toBeGreaterThan(scrollRegion.clientWidth);
+  });
+
+  it("loads archived labels behind the Archived tab", async () => {
+    const listLabels = vi.fn<
+      (query: ListLabelsQuery) => Promise<LabelsResponse>
+    >(() => Promise.resolve({ labels: [archivedLabel] }));
     const user = userEvent.setup();
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [urgentLabel],
+        status: "ready",
+      }),
+      listLabels,
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Archived" }));
+
+    expect(listLabels).toHaveBeenCalledWith({ status: "archived" });
+    await expect(screen.findByText("Plumbing")).resolves.toBeVisible();
+    expect(screen.getByText("Legacy plumbing category")).toBeVisible();
+    expect(screen.getByText("1 archived labels")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /open actions for plumbing/i })
+    ).toBeVisible();
+  });
+
+  it("searches the current view by label name and description", async () => {
+    const user = userEvent.setup();
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [urgentLabel, electricalLabel],
+        status: "ready",
+      }),
+    });
+
+    await user.type(
+      screen.getByRole("textbox", { name: /search labels/i }),
+      "lighting"
+    );
+
+    expect(screen.getByText("Electrical")).toBeVisible();
+    expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
+    expect(screen.getByText("1 of 2 labels")).toBeVisible();
+  });
+
+  it("keeps long descriptions constrained and exposes the full text in a tooltip", async () => {
+    const user = userEvent.setup();
+    const longDescription =
+      "High-priority environmental access constraints that should remain readable on demand without taking over the row.";
+    const longDescriptionLabel = makeLabel({
+      description: longDescription,
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Environmental access review",
+    });
+
+    const { container } = renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [longDescriptionLabel],
+        status: "ready",
+      }),
+    });
+    container.style.width = "360px";
+
+    expect(screen.getByRole("button", { name: longDescription })).toBeVisible();
+    await user.hover(screen.getByRole("button", { name: longDescription }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(longDescription)).toHaveLength(2);
+    });
+  });
+
+  it("creates labels from the responsive drawer with description and color", async () => {
+    const user = userEvent.setup();
+    const toastSuccess = vi.spyOn(toast, "success");
+    const mutationJournal = createDataPlaneMutationJournal({
+      createId: () => "mutation_create",
+      now: () => 1000,
+    });
     const createLabelWithConfirmation = vi.fn<
       (input: CreateLabelInput) => Promise<LabelWriteResponse>
     >((input) =>
@@ -82,7 +185,7 @@ describe("organization labels settings page", () => {
           makeLabel({
             description: input.description,
             id: "44444444-4444-4444-8444-444444444444",
-            name: "Fire Safety",
+            name: input.name,
           }),
           123
         )
@@ -90,747 +193,49 @@ describe("organization labels settings page", () => {
     );
 
     renderLabelsPage({
-      collectionState: makeCollectionState({
-        labels: [],
-        status: "ready",
-        writeUtils: false,
-      }),
+      collectionState: makeCollectionState({ labels: [], status: "ready" }),
       createLabelWithConfirmation,
-    });
-
-    const createInput = screen.getByRole("textbox", {
-      name: /new label name/i,
-    });
-    expect(createInput).toBeEnabled();
-    await user.type(createInput, "Fire Safety");
-    await user.click(screen.getByRole("button", { name: /add description/i }));
-    await user.type(
-      screen.getByRole("textbox", { name: /new label description/i }),
-      "Used for annual fire checks"
-    );
-    await user.click(screen.getByRole("button", { name: /create/i }));
-    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
-    expect(screen.getByText("Used for annual fire checks")).toBeVisible();
-    expect(createLabelWithConfirmation).toHaveBeenCalledWith({
-      color: "oklch(64% 0.19 28)",
-      description: "Used for annual fire checks",
-      name: "Fire Safety",
-    });
-  });
-
-  it("filters labels locally from the synced collection", async () => {
-    const user = userEvent.setup();
-
-    renderLabelsPage({
-      collectionState: makeCollectionState({
-        labels: [urgentLabel, electricalLabel, plumbingLabel],
-        status: "ready",
-      }),
-    });
-
-    await screen.findByText("Electrical");
-    await user.type(
-      screen.getByRole("textbox", { name: /search labels/i }),
-      "g"
-    );
-
-    expect(screen.getByText("Plumbing")).toBeVisible();
-    expect(screen.getByText("Urgent")).toBeVisible();
-    expect(screen.queryByText("Electrical")).not.toBeInTheDocument();
-    expect(screen.getByText("2 of 3 labels")).toBeVisible();
-  });
-
-  it("shows an empty search result without changing sync state", async () => {
-    const user = userEvent.setup();
-
-    renderLabelsPage({
-      collectionState: makeCollectionState({
-        labels: [electricalLabel],
-        status: "ready",
-      }),
-    });
-
-    await screen.findByText("Electrical");
-    await user.type(
-      screen.getByRole("textbox", { name: /search labels/i }),
-      "zz"
-    );
-
-    expect(screen.getByText("No matching labels")).toBeVisible();
-    expect(screen.getByText('No active labels match "zz".')).toBeVisible();
-    expect(screen.queryByText("Realtime ready")).not.toBeInTheDocument();
-  });
-
-  it("shows the empty notice when ready rendering has no labels", () => {
-    renderLabelsPage({
-      collectionState: makeCollectionState({
-        labels: [],
-        status: "ready",
-      }),
-      state: "ready",
-    });
-
-    expect(screen.getByText("No labels yet")).toBeVisible();
-    expect(screen.queryByText("No matching labels")).not.toBeInTheDocument();
-  });
-
-  it("renders connecting, empty, unavailable, and permission-aware states", async () => {
-    const { rerender } = renderLabelsPage({
-      collectionState: makeCollectionState({
-        labels: [],
-        status: "connecting",
-      }),
-    });
-
-    expect(screen.getByLabelText("Loading labels")).toBeVisible();
-    expect(screen.queryByText("Connecting to realtime labels")).toBeNull();
-
-    rerender(
-      <LabelsPageHarness
-        collectionState={makeCollectionState({ labels: [], status: "ready" })}
-      />
-    );
-    await waitFor(() => {
-      expect(screen.getByText("No labels yet")).toBeVisible();
-    });
-
-    rerender(
-      <LabelsPageHarness
-        collectionState={makeCollectionState({
-          labels: [],
-          status: "unavailable",
-        })}
-      />
-    );
-    expect(screen.getByText("Labels unavailable")).toBeVisible();
-    expect(
-      screen.queryByRole("textbox", { name: /new label name/i })
-    ).not.toBeInTheDocument();
-
-    rerender(
-      <LabelsPageHarness
-        collectionState={makeCollectionState({
-          labels: [urgentLabel],
-          status: "ready",
-        })}
-        organizationRole="member"
-      />
-    );
-    expect(screen.getByText("Admin label management")).toBeVisible();
-    expect(
-      screen.queryByRole("textbox", { name: /search labels/i })
-    ).toBeNull();
-  });
-
-  it("creates labels through the labels command and records command lifecycle", async () => {
-    const user = userEvent.setup();
-    const mutationJournal = createDataPlaneMutationJournal({
-      createId: () => "mutation_1",
-      now: () => 1000,
-    });
-
-    renderLabelsPage({
-      collectionState: makeCollectionState({
-        labels: [],
-        status: "ready",
-      }),
       mutationJournal,
     });
 
+    await user.click(screen.getByRole("button", { name: /new label/i }));
+    const dialog = screen.getByRole("dialog", { name: "New label" });
+    await user.click(
+      within(dialog).getByRole("button", { name: /choose label color/i })
+    );
+    await user.click(await screen.findByRole("radio", { name: /blue/i }));
     await user.type(
-      screen.getByRole("textbox", { name: /new label name/i }),
+      within(dialog).getByRole("textbox", { name: "Name" }),
       "Fire Safety"
     );
-    await user.click(screen.getByRole("button", { name: /create/i }));
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Description" }),
+      "Annual fire checks"
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: /save label/i })
+    );
 
-    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+    expect(createLabelWithConfirmation).toHaveBeenCalledWith({
+      color: "oklch(63% 0.18 255)",
+      description: "Annual fire checks",
+      name: "Fire Safety",
+    });
     expect(mutationJournal.entries()).toMatchObject([
       {
         affectedCollections: ["labels"],
         commandName: "labels.create",
-        input: {
-          color: "oklch(64% 0.19 28)",
-          description: null,
-          name: "Fire Safety",
-        },
         status: "success",
       },
     ]);
-  });
-
-  it("creates labels with the chosen curated color", async () => {
-    const user = userEvent.setup();
-    const createLabelWithConfirmation = vi.fn<
-      (input: CreateLabelInput) => Promise<LabelWriteResponse>
-    >((input) =>
-      Promise.resolve(
-        makeLabelWriteResponse(
-          {
-            ...makeLabel({
-              id: "44444444-4444-4444-8444-444444444444",
-              name: input.name,
-            }),
-            color: input.color,
-          },
-          123
-        )
-      )
-    );
-
-    renderLabelsPage({
-      collectionState: makeCollectionState({
-        labels: [],
-        status: "ready",
-      }),
-      createLabelWithConfirmation,
-    });
-
-    await user.click(
-      screen.getByRole("button", { name: /choose new label color/i })
-    );
-    await user.click(await screen.findByRole("radio", { name: /blue/i }));
-    await user.type(
-      screen.getByRole("textbox", { name: /new label name/i }),
-      "Customer visit"
-    );
-    await user.click(screen.getByRole("button", { name: /create/i }));
-
-    await expect(screen.findByText("Customer visit")).resolves.toBeVisible();
-    expect(createLabelWithConfirmation).toHaveBeenCalledWith({
-      color: "oklch(63% 0.18 255)",
-      description: null,
-      name: "Customer visit",
-    });
-  });
-
-  it("uses server create ids before immediate rename actions", async () => {
-    const user = userEvent.setup();
-    const serverLabel = makeLabel({
-      id: "55555555-5555-4555-8555-555555555555",
-      name: "Fire Safety",
-    });
-    const renamedLabel = { ...serverLabel, name: "Emergency" };
-    const createLabelWithConfirmation = vi.fn<
-      (input: CreateLabelInput) => Promise<LabelWriteResponse>
-    >((_input) => Promise.resolve(makeLabelWriteResponse(serverLabel, 123)));
-    const updateLabelWithConfirmation = vi.fn<
-      (
-        labelId: Label["id"],
-        input: UpdateLabelInput
-      ) => Promise<LabelWriteResponse>
-    >((_labelId, _input) =>
-      Promise.resolve(makeLabelWriteResponse(renamedLabel, 124))
-    );
-
-    renderLabelsPage({
-      collectionState: makeCollectionState({
-        labels: [],
-        status: "ready",
-      }),
-      createLabelWithConfirmation,
-      updateLabelWithConfirmation,
-    });
-
-    await user.type(
-      screen.getByRole("textbox", { name: /new label name/i }),
-      "Fire Safety"
-    );
-    await user.click(screen.getByRole("button", { name: /create/i }));
-    await user.click(
-      await screen.findByRole("button", {
-        name: /open actions for fire safety/i,
-      })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /edit label/i })
-    );
-    const editInput = screen.getByRole("textbox", {
-      name: /rename fire safety/i,
-    });
-    await user.clear(editInput);
-    await user.type(editInput, "Emergency");
-    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
-    expect(updateLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id, {
-      color: "oklch(64% 0.19 28)",
-      description: null,
-      name: "Emergency",
-    });
-    await waitFor(() => {
-      expect(screen.getByText("Emergency")).toBeVisible();
-    });
-    expect(screen.queryByText("Fire Safety")).not.toBeInTheDocument();
-  });
-
-  it("creates and renames labels from authoritative command responses without local write helpers", async () => {
-    const user = userEvent.setup();
-    const serverLabel = makeLabel({
-      id: "55555555-5555-4555-8555-555555555555",
-      name: "Fire Safety",
-    });
-    const renamedLabel = { ...serverLabel, name: "Emergency" };
-    const createLabelWithConfirmation = vi.fn<
-      (input: CreateLabelInput) => Promise<LabelWriteResponse>
-    >((_input) => Promise.resolve(makeLabelWriteResponse(serverLabel, 456)));
-    const updateLabelWithConfirmation = vi.fn<
-      (
-        labelId: Label["id"],
-        input: UpdateLabelInput
-      ) => Promise<LabelWriteResponse>
-    >((_labelId, _input) =>
-      Promise.resolve(makeLabelWriteResponse(renamedLabel, 789))
-    );
-    const awaitTxId = vi
-      .fn<(txid: number, timeout?: number) => Promise<boolean>>()
-      .mockRejectedValue(new Error("Timeout waiting for txId: 789"));
-
-    renderLabelsPage({
-      collectionState: makeCollectionState({
-        awaitTxId,
-        labels: [],
-        status: "ready",
-        writeUtils: false,
-      }),
-      createLabelWithConfirmation,
-      updateLabelWithConfirmation,
-    });
-
-    await user.type(
-      screen.getByRole("textbox", { name: /new label name/i }),
-      "Fire Safety"
-    );
-    await user.click(screen.getByRole("button", { name: /create/i }));
-    expect(createLabelWithConfirmation).toHaveBeenCalledWith({
-      color: "oklch(64% 0.19 28)",
-      description: null,
-      name: "Fire Safety",
-    });
-    expect(awaitTxId).not.toHaveBeenCalled();
     await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: /open actions for fire safety/i,
-      })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /edit label/i })
-    );
-    const editInput = screen.getByRole("textbox", {
-      name: /rename fire safety/i,
-    });
-    await user.clear(editInput);
-    await user.type(editInput, "Emergency");
-    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
-    expect(updateLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id, {
-      color: "oklch(64% 0.19 28)",
-      description: null,
-      name: "Emergency",
-    });
-    expect(awaitTxId).not.toHaveBeenCalled();
-    await waitFor(() => {
-      expect(screen.getByText("Emergency")).toBeVisible();
-    });
-    expect(screen.queryByText("Fire Safety")).not.toBeInTheDocument();
+    expect(screen.getByText("Annual fire checks")).toBeVisible();
+    expect(toastSuccess).toHaveBeenCalledWith("Label created.");
   });
 
-  it("renames labels from the command response when Electric txid confirmation would time out", async () => {
+  it("edits labels from the shared drawer model", async () => {
     const user = userEvent.setup();
-    const serverLabel = makeLabel({
-      id: "33333333-3333-4333-8333-333333333333",
-      name: "Fire Safety",
-    });
-    const renamedLabel = { ...serverLabel, name: "Emergency" };
-    const updateLabelWithConfirmation = vi.fn<
-      (
-        labelId: Label["id"],
-        input: UpdateLabelInput
-      ) => Promise<LabelWriteResponse>
-    >((_labelId, _input) =>
-      Promise.resolve(makeLabelWriteResponse(renamedLabel, 789))
-    );
-    const awaitTxId = vi.fn<
-      (txid: number, timeout?: number) => Promise<boolean>
-    >(() => Promise.reject(new Error("Timeout waiting for txId: 789")));
-
-    renderLabelsPage({
-      collectionState: makeCollectionState({
-        awaitTxId,
-        labels: [serverLabel],
-        status: "ready",
-      }),
-      updateLabelWithConfirmation,
-    });
-
-    await user.click(
-      screen.getByRole("button", {
-        name: /open actions for fire safety/i,
-      })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /edit label/i })
-    );
-    const editInput = screen.getByRole("textbox", {
-      name: /rename fire safety/i,
-    });
-    await user.clear(editInput);
-    await user.type(editInput, "Emergency");
-    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
-    expect(updateLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id, {
-      color: "oklch(64% 0.19 28)",
-      description: null,
-      name: "Emergency",
-    });
-    expect(awaitTxId).not.toHaveBeenCalled();
-    await waitFor(() => {
-      expect(screen.getByText("Emergency")).toBeVisible();
-    });
-    expect(screen.queryByText("Fire Safety")).not.toBeInTheDocument();
-  });
-
-  it("archives labels through authoritative command responses without local write helpers", async () => {
-    const user = userEvent.setup();
-    const serverLabel = makeLabel({
-      id: "55555555-5555-4555-8555-555555555555",
-      name: "Fire Safety",
-    });
-    const renamedLabel = { ...serverLabel, name: "Emergency" };
-    const createLabelWithConfirmation = vi.fn<
-      (input: CreateLabelInput) => Promise<LabelWriteResponse>
-    >((_input) => Promise.resolve(makeLabelWriteResponse(serverLabel, 456)));
-    const archiveLabelWithConfirmation = vi.fn<
-      (labelId: Label["id"]) => Promise<LabelWriteResponse>
-    >((_labelId) => Promise.resolve(makeLabelWriteResponse(renamedLabel, 789)));
-    const updateLabelWithConfirmation = vi.fn<
-      (
-        labelId: Label["id"],
-        input: UpdateLabelInput
-      ) => Promise<LabelWriteResponse>
-    >((_labelId, _input) =>
-      Promise.resolve(makeLabelWriteResponse(renamedLabel, 678))
-    );
-    const awaitTxId = vi.fn<
-      (txid: number, timeout?: number) => Promise<boolean>
-    >(() => Promise.resolve(true));
-
-    renderLabelsPage({
-      archiveLabelWithConfirmation,
-      collectionState: makeCollectionState({
-        awaitTxId,
-        labels: [],
-        status: "ready",
-        writeUtils: false,
-      }),
-      createLabelWithConfirmation,
-      updateLabelWithConfirmation,
-    });
-
-    await user.type(
-      screen.getByRole("textbox", { name: /new label name/i }),
-      "Fire Safety"
-    );
-    await user.click(screen.getByRole("button", { name: /create/i }));
-    await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: /open actions for fire safety/i,
-      })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /edit label/i })
-    );
-    const editInput = screen.getByRole("textbox", {
-      name: /rename fire safety/i,
-    });
-    await user.clear(editInput);
-    await user.type(editInput, "Emergency");
-    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
-    await expect(screen.findByText("Emergency")).resolves.toBeVisible();
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: /open actions for emergency/i,
-      })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /archive label/i })
-    );
-    await screen.findByText("Archive label?");
-    await user.click(screen.getByRole("button", { name: /archive label/i }));
-    expect(archiveLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id);
-    expect(awaitTxId).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole("button", { name: /open actions for emergency/i })
-    ).not.toBeInTheDocument();
-    await expect(screen.findByText("No labels yet")).resolves.toBeVisible();
-  });
-
-  it("disables mouse-driven row actions while another mutation is pending", async () => {
-    const user = userEvent.setup();
-    const createResponse = Promise.withResolvers<LabelWriteResponse>();
-    const createLabelWithConfirmation = vi.fn<
-      (input: CreateLabelInput) => Promise<LabelWriteResponse>
-    >(() => createResponse.promise);
-
-    renderLabelsPage({
-      collectionState: makeCollectionState({
-        labels: [urgentLabel],
-        status: "ready",
-      }),
-      createLabelWithConfirmation,
-    });
-
-    await user.type(
-      screen.getByRole("textbox", { name: /new label name/i }),
-      "Fire Safety"
-    );
-    await user.click(screen.getByRole("button", { name: /create/i }));
-
-    expect(screen.getByRole("button", { name: /create/i })).toBeDisabled();
-    const urgentActions = screen.getByRole("button", {
-      name: /open actions for urgent/i,
-    });
-    expect(urgentActions).toBeDisabled();
-
-    await user.click(urgentActions);
-
-    expect(
-      screen.queryByRole("menuitem", { name: /archive label/i })
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /create/i })).toBeDisabled();
-
-    createResponse.resolve(
-      makeLabelWriteResponse(
-        makeLabel({
-          id: "44444444-4444-4444-8444-444444444444",
-          name: "Fire Safety",
-        }),
-        123
-      )
-    );
-  });
-
-  it("shows duplicate and invalid label feedback before submitting", async () => {
-    const user = userEvent.setup();
-
-    renderLabelsPage({
-      collectionState: makeCollectionState({
-        labels: [urgentLabel],
-        status: "ready",
-      }),
-    });
-
-    const input = screen.getByRole("textbox", { name: /new label name/i });
-    await user.type(input, "  urgent  ");
-    await user.click(screen.getByRole("button", { name: /create/i }));
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "A label with that name already exists."
-    );
-
-    await user.clear(input);
-    await user.type(input, "x".repeat(49));
-    await user.click(screen.getByRole("button", { name: /create/i }));
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Label names must be between 1 and 48 characters."
-    );
-  });
-
-  it("shows command confirmation failures without changing the active label", async () => {
-    const user = userEvent.setup();
-    const mutationJournal = createDataPlaneMutationJournal({
-      createId: () => "mutation_rename",
-      now: () => 1000,
-    });
-    const collectionState = makeCollectionState({
-      labels: [urgentLabel],
-      status: "ready",
-    });
-    const updateLabelWithConfirmation = vi.fn<
-      (
-        labelId: Label["id"],
-        input: UpdateLabelInput
-      ) => Promise<LabelWriteResponse>
-    >(() => Promise.reject(new Error("Timeout waiting for txId: 102")));
-
-    renderLabelsPage({
-      collectionState,
-      mutationJournal,
-      updateLabelWithConfirmation,
-    });
-
-    await user.click(
-      await screen.findByRole("button", { name: /open actions for urgent/i })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /edit label/i })
-    );
-    const editInput = screen.getByRole("textbox", { name: /rename urgent/i });
-    await user.clear(editInput);
-    await user.type(editInput, "Emergency");
-    await user.click(screen.getByRole("button", { name: /save urgent/i }));
-
-    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
-      "realtime confirmation timed out"
-    );
-    await waitFor(() => {
-      expect(screen.getByText("Urgent")).toBeVisible();
-    });
-    await waitFor(() => {
-      expect(screen.queryByText("Emergency")).not.toBeInTheDocument();
-    });
-    expect(mutationJournal.entries()).toMatchObject([
-      {
-        affectedCollections: ["labels"],
-        commandName: "labels.update",
-        status: "failure",
-      },
-    ]);
-  });
-
-  it("requires menu archive confirmation before removing labels from the active synced list", async () => {
-    const user = userEvent.setup();
-
-    renderLabelsPage({
-      collectionState: makeCollectionState({
-        labels: [urgentLabel],
-        status: "ready",
-      }),
-    });
-
-    await user.click(
-      await screen.findByRole("button", { name: /open actions for urgent/i })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /archive label/i })
-    );
-
-    await screen.findByText("Archive label?");
-    expect(screen.getAllByText("Urgent").length).toBeGreaterThan(0);
-
-    await user.click(screen.getByRole("button", { name: /archive label/i }));
-    expect(
-      screen.queryByRole("button", { name: /open actions for urgent/i })
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows command-backed empty state when sync health changes after archive", async () => {
-    const user = userEvent.setup();
-    const archivedLabel = {
-      ...urgentLabel,
-      archivedAt: "2026-06-18T19:00:00.000Z",
-    };
-    const collectionState = makeCollectionState({
-      labels: [urgentLabel],
-      status: "ready",
-    });
-    const archiveLabelWithConfirmation = vi.fn<
-      (labelId: Label["id"]) => Promise<LabelWriteResponse>
-    >((_labelId) =>
-      Promise.resolve(makeLabelWriteResponse(archivedLabel, 222))
-    );
-
-    const { rerender } = renderLabelsPage({
-      archiveLabelWithConfirmation,
-      collectionState,
-      state: "ready",
-    });
-
-    await user.click(
-      await screen.findByRole("button", { name: /open actions for urgent/i })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /archive label/i })
-    );
-    await screen.findByText("Archive label?");
-    await user.click(screen.getByRole("button", { name: /archive label/i }));
-    expect(
-      screen.queryByRole("button", { name: /open actions for urgent/i })
-    ).not.toBeInTheDocument();
-
-    rerender(
-      <LabelsPageHarness
-        archiveLabelWithConfirmation={archiveLabelWithConfirmation}
-        collectionState={collectionState}
-        state="unavailable"
-      />
-    );
-
-    expect(screen.getByText("No labels yet")).toBeVisible();
-    expect(screen.queryByText("Labels unavailable")).not.toBeInTheDocument();
-  });
-
-  it("archives labels after command-backed create and rename", async () => {
-    const user = userEvent.setup();
-    const serverLabel = makeLabel({
-      id: "55555555-5555-4555-8555-555555555555",
-      name: "Fire Safety",
-    });
-    const renamedLabel = { ...serverLabel, name: "Emergency" };
-    const createLabelWithConfirmation = vi.fn<
-      (input: CreateLabelInput) => Promise<LabelWriteResponse>
-    >((_input) => Promise.resolve(makeLabelWriteResponse(serverLabel, 101)));
-    const updateLabelWithConfirmation = vi.fn<
-      (
-        labelId: Label["id"],
-        input: UpdateLabelInput
-      ) => Promise<LabelWriteResponse>
-    >((_labelId, _input) =>
-      Promise.resolve(makeLabelWriteResponse(renamedLabel, 102))
-    );
-    const archiveLabelWithConfirmation = vi.fn<
-      (labelId: Label["id"]) => Promise<LabelWriteResponse>
-    >((_labelId) => Promise.resolve(makeLabelWriteResponse(renamedLabel, 103)));
-
-    renderLabelsPage({
-      archiveLabelWithConfirmation,
-      collectionState: makeCollectionState({
-        labels: [],
-        status: "ready",
-      }),
-      createLabelWithConfirmation,
-      updateLabelWithConfirmation,
-    });
-
-    await user.type(
-      screen.getByRole("textbox", { name: /new label name/i }),
-      "Fire Safety"
-    );
-    await user.click(screen.getByRole("button", { name: /create/i }));
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: /open actions for fire safety/i,
-      })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /edit label/i })
-    );
-    const editInput = screen.getByRole("textbox", {
-      name: /rename fire safety/i,
-    });
-    await user.clear(editInput);
-    await user.type(editInput, "Emergency");
-    await user.click(screen.getByRole("button", { name: /save fire safety/i }));
-    await expect(screen.findByText("Emergency")).resolves.toBeVisible();
-
-    await user.click(
-      await screen.findByRole("button", {
-        name: /open actions for emergency/i,
-      })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /archive label/i })
-    );
-    await screen.findByText("Archive label?");
-    await user.click(screen.getByRole("button", { name: /archive label/i }));
-    expect(archiveLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id);
-    expect(
-      screen.queryByRole("button", { name: /open actions for emergency/i })
-    ).not.toBeInTheDocument();
-  });
-
-  it("keeps archive out of edit mode and updates descriptions", async () => {
-    const user = userEvent.setup();
+    const toastSuccess = vi.spyOn(toast, "success");
     const updateLabelWithConfirmation = vi.fn<
       (
         labelId: Label["id"],
@@ -851,49 +256,196 @@ describe("organization labels settings page", () => {
 
     renderLabelsPage({
       collectionState: makeCollectionState({
-        labels: [
-          makeLabel({
-            description: "Old description",
-            id: urgentLabel.id,
-            name: urgentLabel.name,
-          }),
-        ],
+        labels: [urgentLabel],
         status: "ready",
       }),
       updateLabelWithConfirmation,
     });
 
-    await user.click(
-      await screen.findByRole("button", { name: /open actions for urgent/i })
+    await openRowAction(user, "Urgent", "Edit label");
+    const dialog = screen.getByRole("dialog", { name: "Edit label" });
+    await user.clear(within(dialog).getByRole("textbox", { name: "Name" }));
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Name" }),
+      "Emergency"
+    );
+    await user.clear(
+      within(dialog).getByRole("textbox", { name: "Description" })
+    );
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Description" }),
+      "Dispatch first"
     );
     await user.click(
-      await screen.findByRole("menuitem", { name: /edit label/i })
+      within(dialog).getByRole("button", { name: /save label/i })
     );
-    expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(
-      "Urgent"
-    );
-    expect(
-      screen.queryByRole("button", { name: /archive urgent/i })
-    ).not.toBeInTheDocument();
-
-    const descriptionInput = screen.getByRole("textbox", {
-      name: /update urgent description/i,
-    });
-    await user.clear(descriptionInput);
-    await user.type(descriptionInput, "Updated field response");
-    await user.click(screen.getByRole("button", { name: /save urgent/i }));
 
     expect(updateLabelWithConfirmation).toHaveBeenCalledWith(urgentLabel.id, {
       color: "oklch(64% 0.19 28)",
-      description: "Updated field response",
-      name: "Urgent",
+      description: "Dispatch first",
+      name: "Emergency",
     });
-    await expect(
-      screen.findByText("Updated field response")
-    ).resolves.toBeVisible();
+    await expect(screen.findByText("Emergency")).resolves.toBeVisible();
+    expect(screen.getByText("Dispatch first")).toBeVisible();
+    expect(toastSuccess).toHaveBeenCalledWith("Label updated.");
   });
 
-  it("supports route hotkeys for search, create, save, and cancel edit mode", async () => {
+  it("archives one active label after confirmation", async () => {
+    const user = userEvent.setup();
+    const toastSuccess = vi.spyOn(toast, "success");
+    const mutationJournal = createDataPlaneMutationJournal({
+      createId: () => "mutation_archive",
+      now: () => 1000,
+    });
+    const archiveLabelWithConfirmation = vi.fn<
+      (labelId: Label["id"]) => Promise<LabelWriteResponse>
+    >((_labelId) =>
+      Promise.resolve(
+        makeLabelWriteResponse(
+          { ...urgentLabel, archivedAt: "2026-06-18T10:00:00.000Z" },
+          125
+        )
+      )
+    );
+
+    renderLabelsPage({
+      archiveLabelWithConfirmation,
+      collectionState: makeCollectionState({
+        labels: [urgentLabel],
+        status: "ready",
+      }),
+      mutationJournal,
+    });
+
+    await openRowAction(user, "Urgent", "Archive label");
+    await screen.findByText("Archive label?");
+    await user.click(screen.getByRole("button", { name: /archive label/i }));
+
+    expect(archiveLabelWithConfirmation).toHaveBeenCalledWith(urgentLabel.id);
+    expect(mutationJournal.entries()).toMatchObject([
+      {
+        affectedCollections: ["labels"],
+        commandName: "labels.archive",
+        status: "success",
+      },
+    ]);
+    await waitFor(() => {
+      expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("No active labels yet")).toBeVisible();
+    expect(toastSuccess).toHaveBeenCalledWith("Label archived.");
+  });
+
+  it("restores one archived label and reflects it in Active", async () => {
+    const user = userEvent.setup();
+    const toastSuccess = vi.spyOn(toast, "success");
+    const mutationJournal = createDataPlaneMutationJournal({
+      createId: () => "mutation_restore",
+      now: () => 1000,
+    });
+    const restoreLabelWithConfirmation = vi.fn<
+      (labelId: Label["id"]) => Promise<LabelWriteResponse>
+    >((_labelId) =>
+      Promise.resolve(
+        makeLabelWriteResponse({ ...archivedLabel, archivedAt: null }, 126)
+      )
+    );
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({ labels: [], status: "ready" }),
+      listLabels: () => Promise.resolve({ labels: [archivedLabel] }),
+      mutationJournal,
+      restoreLabelWithConfirmation,
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Archived" }));
+    await screen.findByText("Plumbing");
+    await openRowAction(user, "Plumbing", "Restore label");
+
+    expect(restoreLabelWithConfirmation).toHaveBeenCalledWith(archivedLabel.id);
+    expect(mutationJournal.entries()).toMatchObject([
+      {
+        affectedCollections: ["labels"],
+        commandName: "labels.restore",
+        status: "success",
+      },
+    ]);
+    await waitFor(() => {
+      expect(screen.queryByText("Plumbing")).not.toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("tab", { name: "Active" }));
+    expect(screen.getByText("Plumbing")).toBeVisible();
+    expect(toastSuccess).toHaveBeenCalledWith("Label restored.");
+  });
+
+  it("surfaces active-name restore conflicts clearly", async () => {
+    const user = userEvent.setup();
+    const conflictingArchivedLabel = {
+      ...archivedLabel,
+      name: urgentLabel.name,
+    };
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [urgentLabel],
+        status: "ready",
+      }),
+      listLabels: () => Promise.resolve({ labels: [conflictingArchivedLabel] }),
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Archived" }));
+    await screen.findByText("Urgent");
+    await openRowAction(user, "Urgent", "Restore label");
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "Restore blocked because an active label already uses that name."
+    );
+  });
+
+  it("surfaces server-side restore conflicts and keeps archived labels visible", async () => {
+    const user = userEvent.setup();
+    const mutationJournal = createDataPlaneMutationJournal({
+      createId: () => "mutation_restore_conflict",
+      now: () => 1000,
+    });
+    const restoreLabelWithConfirmation = vi.fn<
+      (labelId: Label["id"]) => Promise<LabelWriteResponse>
+    >(() =>
+      Promise.reject(
+        Object.assign(new Error("Active name conflict."), {
+          _tag: "@ceird/labels-core/LabelRestoreConflictError",
+          activeLabelId: urgentLabel.id,
+          labelId: archivedLabel.id,
+          name: archivedLabel.name,
+        })
+      )
+    );
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({ labels: [], status: "ready" }),
+      listLabels: () => Promise.resolve({ labels: [archivedLabel] }),
+      mutationJournal,
+      restoreLabelWithConfirmation,
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Archived" }));
+    await screen.findByText("Plumbing");
+    await openRowAction(user, "Plumbing", "Restore label");
+
+    await expect(screen.findByRole("alert")).resolves.toHaveTextContent(
+      "Restore blocked because an active label already uses that name."
+    );
+    expect(screen.getByText("Plumbing")).toBeVisible();
+    expect(mutationJournal.entries()).toMatchObject([
+      {
+        affectedCollections: ["labels"],
+        commandName: "labels.restore",
+        status: "failure",
+      },
+    ]);
+  });
+
+  it("shows validation errors inside the drawer", async () => {
     const user = userEvent.setup();
 
     renderLabelsPage({
@@ -903,45 +455,175 @@ describe("organization labels settings page", () => {
       }),
     });
 
-    const searchInput = await screen.findByRole("textbox", {
-      name: /search labels/i,
-    });
-    await user.keyboard("/");
+    await user.click(screen.getByRole("button", { name: /new label/i }));
+    const dialog = screen.getByRole("dialog", { name: "New label" });
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Name" }),
+      "urgent"
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: /save label/i })
+    );
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "A label with that name already exists."
+    );
 
-    expect(searchInput).toHaveFocus();
+    await user.clear(within(dialog).getByRole("textbox", { name: "Name" }));
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Name" }),
+      "x".repeat(49)
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: /save label/i })
+    );
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(
+      "Label names must be between 1 and 48 characters."
+    );
+  });
+
+  it("renders loading, unavailable, and permission-denied states", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [],
+        status: "connecting",
+      }),
+    });
+
+    expect(screen.getByLabelText("Loading labels")).toBeVisible();
+
+    rerender(
+      <LabelsPageHarness
+        collectionState={makeCollectionState({
+          labels: [],
+          status: "unavailable",
+        })}
+      />
+    );
+    expect(screen.getByText("Labels unavailable")).toBeVisible();
+    expect(screen.getByRole("button", { name: /new label/i })).toBeDisabled();
+
+    rerender(
+      <LabelsPageHarness
+        collectionState={makeCollectionState({
+          labels: [urgentLabel],
+          status: "ready",
+        })}
+        organizationRole="member"
+      />
+    );
+    expect(screen.getAllByText("Admin label management")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /new label/i })).toBeNull();
+
+    await user.click(screen.getByRole("tab", { name: "Archived" }));
+    expect(screen.getAllByText("Admin label management")).toHaveLength(2);
+    expect(screen.queryByLabelText("Loading archived labels")).toBeNull();
+  });
+
+  it("records command lifecycle for create and failed update mutations", async () => {
+    const user = userEvent.setup();
+    const mutationJournal = createDataPlaneMutationJournal({
+      createId: () => "mutation_1",
+      now: () => 1000,
+    });
+    const updateLabelWithConfirmation = vi.fn<
+      (
+        labelId: Label["id"],
+        input: UpdateLabelInput
+      ) => Promise<LabelWriteResponse>
+    >(() => Promise.reject(new Error("Timeout waiting for txId: 102")));
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [urgentLabel],
+        status: "ready",
+      }),
+      mutationJournal,
+      updateLabelWithConfirmation,
+    });
+
+    await openRowAction(user, "Urgent", "Edit label");
+    const dialog = screen.getByRole("dialog", { name: "Edit label" });
+    await user.clear(within(dialog).getByRole("textbox", { name: "Name" }));
+    await user.type(
+      within(dialog).getByRole("textbox", { name: "Name" }),
+      "Emergency"
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: /save label/i })
+    );
+
+    await expect(
+      screen.findAllByText(/realtime confirmation timed out/i)
+    ).resolves.not.toHaveLength(0);
+    expect(mutationJournal.entries()).toMatchObject([
+      {
+        affectedCollections: ["labels"],
+        commandName: "labels.update",
+        status: "failure",
+      },
+    ]);
+    expect(screen.getByText("Urgent")).toBeVisible();
+  });
+
+  it("supports route hotkeys for search, create, submit, and cancel", async () => {
+    const user = userEvent.setup();
+
+    renderLabelsPage({
+      collectionState: makeCollectionState({
+        labels: [urgentLabel],
+        status: "ready",
+      }),
+    });
+
+    await user.keyboard("/");
+    expect(
+      screen.getByRole("textbox", { name: /search labels/i })
+    ).toHaveFocus();
 
     await user.click(screen.getByRole("heading", { name: "Labels" }));
     await user.keyboard("n");
-    const createInput = screen.getByRole("textbox", {
-      name: /new label name/i,
-    });
-    expect(createInput).toHaveFocus();
-    await user.type(createInput, "Plaster");
+    const createDialog = screen.getByRole("dialog", { name: "New label" });
+    expect(
+      within(createDialog).getByRole("textbox", { name: "Name" })
+    ).toHaveFocus();
+    await user.type(
+      within(createDialog).getByRole("textbox", { name: "Name" }),
+      "Plaster"
+    );
     await user.keyboard(getModEnterKeyboardInput());
     await expect(screen.findByText("Plaster")).resolves.toBeVisible();
 
-    await user.click(
-      await screen.findByRole("button", { name: /open actions for urgent/i })
-    );
-    await user.click(
-      await screen.findByRole("menuitem", { name: /edit label/i })
-    );
-    expect(
-      screen.getByRole("textbox", { name: /rename urgent/i })
-    ).toHaveFocus();
+    await user.keyboard("n");
+    expect(screen.getByRole("dialog", { name: "New label" })).toBeVisible();
     await user.keyboard("{Escape}");
-    expect(
-      screen.queryByRole("textbox", { name: /rename urgent/i })
-    ).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "New label" })).toBeNull();
+    });
   });
 });
+
+async function openRowAction(
+  user: ReturnType<typeof userEvent.setup>,
+  labelName: string,
+  itemName: string
+) {
+  await user.click(
+    await screen.findByRole("button", {
+      name: new RegExp(`open actions for ${labelName}`, "i"),
+    })
+  );
+  await user.click(await screen.findByRole("menuitem", { name: itemName }));
+}
 
 function renderLabelsPage({
   archiveLabelWithConfirmation,
   collectionState,
   createLabelWithConfirmation,
+  listLabels,
   mutationJournal,
   organizationRole = "owner",
+  restoreLabelWithConfirmation,
   state,
   updateLabelWithConfirmation,
 }: {
@@ -952,10 +634,16 @@ function renderLabelsPage({
   readonly createLabelWithConfirmation?:
     | ((input: CreateLabelInput) => Promise<LabelWriteResponse>)
     | undefined;
+  readonly listLabels?:
+    | ((query: ListLabelsQuery) => Promise<LabelsResponse>)
+    | undefined;
   readonly mutationJournal?:
     | ReturnType<typeof createDataPlaneMutationJournal>
     | undefined;
   readonly organizationRole?: "admin" | "member" | "owner";
+  readonly restoreLabelWithConfirmation?:
+    | ((labelId: Label["id"]) => Promise<LabelWriteResponse>)
+    | undefined;
   readonly state?: LabelsPageState;
   readonly updateLabelWithConfirmation?:
     | ((
@@ -969,26 +657,24 @@ function renderLabelsPage({
       archiveLabelWithConfirmation={archiveLabelWithConfirmation}
       collectionState={collectionState}
       createLabelWithConfirmation={createLabelWithConfirmation}
+      listLabels={listLabels}
       mutationJournal={mutationJournal}
       organizationRole={organizationRole}
+      restoreLabelWithConfirmation={restoreLabelWithConfirmation}
       state={state}
       updateLabelWithConfirmation={updateLabelWithConfirmation}
     />
   );
 }
 
-function getModEnterKeyboardInput() {
-  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
-    ? "{Meta>}{Enter}{/Meta}"
-    : "{Control>}{Enter}{/Control}";
-}
-
 function LabelsPageHarness({
   archiveLabelWithConfirmation,
   collectionState,
   createLabelWithConfirmation,
+  listLabels = () => Promise.resolve({ labels: [] }),
   mutationJournal,
   organizationRole = "owner",
+  restoreLabelWithConfirmation,
   state,
   updateLabelWithConfirmation,
 }: {
@@ -999,10 +685,14 @@ function LabelsPageHarness({
   readonly createLabelWithConfirmation?:
     | ((input: CreateLabelInput) => Promise<LabelWriteResponse>)
     | undefined;
+  readonly listLabels?: (query: ListLabelsQuery) => Promise<LabelsResponse>;
   readonly mutationJournal?:
     | ReturnType<typeof createDataPlaneMutationJournal>
     | undefined;
   readonly organizationRole?: "admin" | "member" | "owner";
+  readonly restoreLabelWithConfirmation?:
+    | ((labelId: Label["id"]) => Promise<LabelWriteResponse>)
+    | undefined;
   readonly state?: LabelsPageState;
   readonly updateLabelWithConfirmation?:
     | ((
@@ -1023,9 +713,13 @@ function LabelsPageHarness({
           createLabelWithConfirmation={
             createLabelWithConfirmation ?? createDefaultLabelWithConfirmation
           }
+          listLabels={listLabels}
           mutationJournal={mutationJournal}
           organization={TEST_ORGANIZATION}
           organizationRole={organizationRole}
+          restoreLabelWithConfirmation={
+            restoreLabelWithConfirmation ?? restoreDefaultLabelWithConfirmation
+          }
           state={state}
           updateLabelWithConfirmation={
             updateLabelWithConfirmation ?? updateDefaultLabelWithConfirmation
@@ -1040,6 +734,7 @@ function createDefaultLabelWithConfirmation(input: CreateLabelInput) {
   return Promise.resolve(
     makeLabelWriteResponse(
       makeLabel({
+        description: input.description,
         id: "44444444-4444-4444-8444-444444444444",
         name: input.name,
       }),
@@ -1068,6 +763,7 @@ function archiveDefaultLabelWithConfirmation(labelId: Label["id"]) {
   return Promise.resolve(
     makeLabelWriteResponse(
       makeLabel({
+        archivedAt: "2026-06-18T10:00:00.000Z",
         id: labelId,
         name: "Archived",
       }),
@@ -1076,18 +772,30 @@ function archiveDefaultLabelWithConfirmation(labelId: Label["id"]) {
   );
 }
 
+function restoreDefaultLabelWithConfirmation(labelId: Label["id"]) {
+  return Promise.resolve(
+    makeLabelWriteResponse(
+      makeLabel({
+        id: labelId,
+        name: "Restored",
+      }),
+      126
+    )
+  );
+}
+
+function getModEnterKeyboardInput() {
+  return /(Mac|iPhone|iPad|iPod)/i.test(navigator.platform)
+    ? "{Meta>}{Enter}{/Meta}"
+    : "{Control>}{Enter}{/Control}";
+}
+
 function makeCollectionState({
-  awaitTxId,
   labels,
   status,
-  writeUtils = true,
 }: {
-  readonly awaitTxId?:
-    | ((txid: number, timeout?: number) => Promise<boolean>)
-    | undefined;
   readonly labels: readonly Label[];
   readonly status: DataPlaneCollectionHealthStatus;
-  readonly writeUtils?: boolean | undefined;
 }) {
   const health = createDataPlaneCollectionHealth({
     collection: "labels",
@@ -1114,16 +822,14 @@ function makeCollectionState({
     collection:
       status === "disabled" || status === "unavailable"
         ? null
-        : makeCollection(labels, status, awaitTxId, writeUtils),
+        : makeCollection(labels, status),
     health: health as DataPlaneCollectionHealth,
   };
 }
 
 function makeCollection(
   labels: readonly Label[],
-  status: DataPlaneCollectionHealthStatus,
-  awaitTxId?: (txid: number, timeout?: number) => Promise<boolean>,
-  writeUtils = true
+  status: DataPlaneCollectionHealthStatus
 ) {
   let currentLabels = [...labels].toSorted(compareLabels);
   const listeners = new Set<() => void>();
@@ -1150,39 +856,40 @@ function makeCollection(
         },
       };
     },
-    utils: writeUtils
-      ? {
-          awaitTxId,
-          writeDelete: (key: Label["id"]) => {
-            currentLabels = currentLabels.filter((label) => label.id !== key);
-            notify();
-          },
-          writeUpsert: (label: Label) => {
-            currentLabels = [
-              label,
-              ...currentLabels.filter(
-                (currentLabel) => currentLabel.id !== label.id
-              ),
-            ].toSorted(compareLabels);
-            notify();
-          },
-        }
-      : undefined,
+    utils: {
+      writeDelete: (key: Label["id"]) => {
+        currentLabels = currentLabels.filter((label) => label.id !== key);
+        notify();
+      },
+      writeUpsert: (label: Label) => {
+        currentLabels = [
+          label,
+          ...currentLabels.filter(
+            (currentLabel) => currentLabel.id !== label.id
+          ),
+        ].toSorted(compareLabels);
+        notify();
+      },
+    },
   };
 }
 
 function makeLabel({
+  archivedAt = null,
+  color = "oklch(64% 0.19 28)",
   description = null,
   id,
   name,
 }: {
+  readonly archivedAt?: Label["archivedAt"] | undefined;
+  readonly color?: Label["color"] | undefined;
   readonly description?: Label["description"] | undefined;
   readonly id: string;
   readonly name: string;
 }): Label {
   return {
-    archivedAt: null,
-    color: "oklch(64% 0.19 28)",
+    archivedAt,
+    color,
     createdAt: "2026-06-14T00:00:00.000Z",
     description,
     id: id as Label["id"],
