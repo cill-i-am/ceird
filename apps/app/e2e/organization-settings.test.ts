@@ -63,6 +63,17 @@ async function openSettingsFromAccountMenu(page: Page) {
   });
 }
 
+async function openLabelActions(page: Page, labelName: string) {
+  const row = page.getByRole("listitem").filter({
+    has: page.getByText(labelName, { exact: true }),
+  });
+
+  await row.hover();
+  await row
+    .getByRole("button", { name: `Open actions for ${labelName}` })
+    .click();
+}
+
 async function signUpAndCreateOrganization(
   page: Page,
   {
@@ -168,9 +179,7 @@ test("an organization admin can manage labels from the realtime settings tab", a
   ]);
   await expect(page.getByText(labelName, { exact: true })).toBeVisible();
 
-  await page
-    .getByRole("button", { name: `Open actions for ${labelName}` })
-    .click();
+  await openLabelActions(page, labelName);
   await page.getByRole("menuitem", { name: "Edit label" }).click();
   await page.getByLabel(`Rename ${labelName}`).fill(updatedLabelName);
   await Promise.all([
@@ -179,9 +188,7 @@ test("an organization admin can manage labels from the realtime settings tab", a
   ]);
   await expect(page.getByText(updatedLabelName, { exact: true })).toBeVisible();
 
-  await page
-    .getByRole("button", { name: `Open actions for ${updatedLabelName}` })
-    .click();
+  await openLabelActions(page, updatedLabelName);
   await page.getByRole("menuitem", { name: "Archive label" }).click();
   const archiveConfirmation = page.getByRole("group", {
     name: `Confirm archiving ${updatedLabelName}`,
