@@ -1,12 +1,18 @@
+import {
+  decodeOrganizationId,
+  OrganizationSecurityActivityStorageError,
+} from "@ceird/identity-core";
 import type { OrganizationSecurityActivityCursor } from "@ceird/identity-core";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Effect, Layer, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 
 import { OrganizationSecurityActivityRowSchema } from "./persistence-schemas.js";
 import {
   decodeOrganizationSecurityActivityCursor,
   encodeOrganizationSecurityActivityCursor,
   mapOrganizationSecurityActivityRow,
+  OrganizationSecurityActivityRepository,
 } from "./security-activity.js";
 
 const decodeActivityRow = Schema.decodeUnknownSync(
@@ -223,6 +229,93 @@ describe("organization security activity mapping", () => {
       })
     ).toThrow(/previousRole/u);
   });
+
+  it("rejects organization-created rows when member target columns are projected", () => {
+    expect(() =>
+      decodeActivityRow({
+        actor_email: "owner@example.com",
+        actor_name: "Owner User",
+        actor_user_id: "user_owner",
+        created_at: new Date("2026-06-07T10:30:00.000Z"),
+        created_at_cursor: "2026-06-07T10:30:00.000000Z",
+        event_type: "organization_created",
+        id: "audit_created_joined_target",
+        metadata: {
+          ...auditMetadataSource,
+          memberId: "member_owner",
+          previousRole: null,
+          role: "owner",
+          targetUserId: "user_owner",
+        },
+        organization_id: "org_123",
+        organization_name: "Acme Field Ops",
+        target_email: "owner@example.com",
+        target_member_id: "member_owner",
+        target_name: "Owner User",
+        target_user_id: "user_owner",
+      })
+    ).toThrow();
+  });
+
+  it("rejects raw persisted invitation emails at the repository boundary", () => {
+    expect(() =>
+      decodeActivityRow({
+        actor_email: "owner@example.com",
+        actor_name: "Owner User",
+        actor_user_id: "user_owner",
+        created_at: new Date("2026-06-07T11:00:00.000Z"),
+        created_at_cursor: "2026-06-07T11:00:00.000000Z",
+        event_type: "organization_invitation_created",
+        id: "audit_raw_email",
+        metadata: {
+          ...auditMetadataSource,
+          invitationEmailMasked: "member@example.com",
+          role: "member",
+          targetUserId: null,
+        },
+        organization_id: "org_123",
+        organization_name: "Acme Field Ops",
+        target_email: null,
+        target_member_id: null,
+        target_name: null,
+        target_user_id: null,
+      })
+    ).toThrow(/masked invitation email/u);
+  });
+
+  it.each([
+    ["outcome", { source: "better_auth_organization_plugin" }],
+    ["source", { outcome: "succeeded" }],
+    [
+      "extra",
+      {
+        ...auditMetadataSource,
+        extra: true,
+      },
+    ],
+  ])("rejects %s metadata contract violations", (_label, metadata) => {
+    expect(() =>
+      decodeActivityRow({
+        actor_email: "owner@example.com",
+        actor_name: "Owner User",
+        actor_user_id: "user_owner",
+        created_at: new Date("2026-06-07T11:00:00.000Z"),
+        created_at_cursor: "2026-06-07T11:00:00.000000Z",
+        event_type: "organization_updated",
+        id: "audit_bad_contract",
+        metadata: {
+          ...metadata,
+          updatedFields: ["name"],
+        },
+        organization_id: "org_123",
+        organization_name: "Acme Field Ops",
+        target_email: null,
+        target_member_id: null,
+        target_name: null,
+        target_user_id: null,
+      })
+    ).toThrow();
+  });
 });
 
 describe("organization security activity cursors", () => {
@@ -269,4 +362,116 @@ describe("organization security activity cursors", () => {
       /UTC timestamp cursor/u
     );
   });
+
+  it("requires database-formatted microsecond cursor timestamps", () => {
+    const cursor = Buffer.from(
+      JSON.stringify({
+        createdAt: "2026-06-07T10:30:00.123Z",
+        id: "audit_123",
+      })
+    ).toString("base64url") as OrganizationSecurityActivityCursor;
+
+    expect(() => decodeOrganizationSecurityActivityCursor(cursor)).toThrow(
+      /UTC timestamp cursor/u
+    );
+  });
 });
+
+describe("organization security activity repository", () => {
+  it("lists organization-created rows with creator member metadata after target projection", async () => {
+    const response = await Effect.runPromise(
+      runRepositoryList([
+        {
+          actor_email: "owner@example.com",
+          actor_name: "Owner User",
+          actor_user_id: "user_owner",
+          created_at: new Date("2026-06-07T10:30:00.000Z"),
+          created_at_cursor: "2026-06-07T10:30:00.000000Z",
+          event_type: "organization_created",
+          id: "audit_created",
+          metadata: {
+            ...auditMetadataSource,
+            memberId: "member_owner",
+            previousRole: null,
+            role: "owner",
+            targetUserId: "user_owner",
+          },
+          organization_id: "org_123",
+          organization_name: "Acme Field Ops",
+          target_email: null,
+          target_member_id: null,
+          target_name: null,
+          target_user_id: null,
+        },
+      ])
+    );
+
+    expect(response.items).toStrictEqual([
+      expect.objectContaining({
+        eventType: "organization_created",
+        summary: "Created Acme Field Ops.",
+        target: {
+          label: "Acme Field Ops",
+          type: "organization",
+        },
+      }),
+    ]);
+  });
+
+  it("fails invalid persisted rows through a typed storage error", async () => {
+    const error = await Effect.runPromise(
+      Effect.flip(
+        runRepositoryList([
+          {
+            actor_email: "owner@example.com",
+            actor_name: "Owner User",
+            actor_user_id: "user_owner",
+            created_at: new Date("2026-06-07T12:00:00.000Z"),
+            created_at_cursor: "2026-06-07T12:00:00.000000Z",
+            event_type: "organization_active_changed",
+            id: "audit_active",
+            metadata: auditMetadataSource,
+            organization_id: "org_123",
+            organization_name: "Acme Field Ops",
+            target_email: null,
+            target_member_id: null,
+            target_name: null,
+            target_user_id: null,
+          },
+        ])
+      )
+    );
+
+    expect(error).toBeInstanceOf(OrganizationSecurityActivityStorageError);
+    expect(error.message).toBe(
+      "Organization security activity row decode failed"
+    );
+  });
+});
+
+function runRepositoryList(rows: readonly Record<string, unknown>[]) {
+  return Effect.gen(function* runSecurityActivityRepositoryList() {
+    const repository = yield* OrganizationSecurityActivityRepository;
+
+    return yield* repository.list(decodeOrganizationId("org_123"), {});
+  }).pipe(
+    Effect.provide(OrganizationSecurityActivityRepository.Default),
+    Effect.provide(
+      Layer.succeed(SqlClient.SqlClient, makeSecurityActivitySqlClient(rows))
+    )
+  );
+}
+
+function makeSecurityActivitySqlClient(
+  rows: readonly Record<string, unknown>[]
+): SqlClient.SqlClient {
+  const sql = Object.assign(<Row>() => Effect.succeed([...rows] as Row[]), {
+    and: (clauses: readonly unknown[]) => clauses,
+    in: (values: readonly unknown[]) => values,
+    withTransaction: <Value, Error, Requirements>(
+      effect: Effect.Effect<Value, Error, Requirements>
+    ) => effect,
+  });
+
+  return sql as unknown as SqlClient.SqlClient;
+}

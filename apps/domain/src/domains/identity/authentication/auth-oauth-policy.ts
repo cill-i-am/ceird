@@ -18,6 +18,7 @@ import {
   OrganizationInvitationAcceptedAuditMetadataSchema,
   OrganizationInvitationAuditMetadataSchema,
   OrganizationMemberAuditMetadataSchema,
+  OrganizationSecurityAuditWriteSchema,
   OrganizationUpdatedAuditMetadataSchema,
 } from "../persistence-schemas.js";
 import {
@@ -49,7 +50,10 @@ import {
   oauthRefreshToken as oauthRefreshTokenTable,
   user as userTable,
 } from "./schema.js";
-import type { AuthSecurityAuditEventType } from "./schema.js";
+import type {
+  AuthSecurityAuditEventMetadata,
+  AuthSecurityAuditEventType,
+} from "./schema.js";
 
 const OAUTH_CONSENT_ENDPOINT_PATH = "/oauth2/consent";
 const OAUTH_CLIENT_REGISTRATION_ENDPOINT_PATH = "/oauth2/register";
@@ -612,6 +616,9 @@ const decodeOrganizationMemberAuditMetadata = Schema.decodeUnknownSync(
 );
 const decodeOrganizationUpdatedAuditMetadata = Schema.decodeUnknownSync(
   OrganizationUpdatedAuditMetadataSchema
+);
+const decodeOrganizationSecurityAuditWrite = Schema.decodeUnknownSync(
+  OrganizationSecurityAuditWriteSchema
 );
 
 export async function recordOrganizationSecurityAuditEvent(

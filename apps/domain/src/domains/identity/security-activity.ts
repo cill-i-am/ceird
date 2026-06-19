@@ -204,6 +204,11 @@ export class OrganizationSecurityActivityRepository extends Context.Service<Orga
           left join member as target_member
             on target_member.id = (auth_security_audit_event.metadata ->> 'memberId')
             and target_member.organization_id = auth_security_audit_event.organization_id
+            and auth_security_audit_event.event_type in (
+              'organization_invitation_accepted',
+              'organization_member_role_updated',
+              'organization_member_removed'
+            )
           left join "user" as target_user
             on target_user.id = target_member.user_id
           where ${sql.and(clauses)}

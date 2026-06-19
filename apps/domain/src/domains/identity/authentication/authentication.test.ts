@@ -21,6 +21,7 @@ import {
 import { Pool } from "pg";
 
 import { readMigrationSql } from "../../../platform/database/test-database.js";
+import { OrganizationSecurityAuditWriteSchema } from "../persistence-schemas.js";
 import {
   AuthenticationSessionResultSchema,
   readAuthBoundaryJsonOrFormRequestBody,
@@ -86,6 +87,10 @@ import {
   user,
   verification,
 } from "./schema.js";
+
+const decodeOrganizationSecurityAuditWrite = Schema.decodeUnknownSync(
+  OrganizationSecurityAuditWriteSchema
+);
 
 describe("makeAuthenticationConfig()", () => {
   it("defines the Ceird OAuth scopes exposed to MCP clients", () => {
@@ -5259,41 +5264,49 @@ describe("createAuthentication()", () => {
         },
       });
 
-      expect(auditEvents.map((event) => event.eventType)).toStrictEqual([
+      const decodedAuditEvents =
+        decodeCapturedOrganizationSecurityAuditWrites(auditEvents);
+
+      expect(decodedAuditEvents.map((event) => event.eventType)).toStrictEqual([
         "organization_created",
         "organization_updated",
         "organization_invitation_created",
         "organization_invitation_accepted",
         "organization_invitation_canceled",
       ]);
-      const organizationCreatedAuditEvent = auditEvents.find(
-        (event) => event.eventType === "organization_created"
-      );
-
-      expect(organizationCreatedAuditEvent?.metadata).not.toHaveProperty(
-        "previousRole"
-      );
-      expect(auditEvents).toContainEqual(
+      expect(decodedAuditEvents).toContainEqual(
         expect.objectContaining({
           actorUserId: "user_owner",
           eventType: "organization_created",
           organizationId: "org_123",
-          metadata: expect.objectContaining({
+          metadata: {
             memberId: "member_owner",
+            outcome: "succeeded",
             role: "owner",
+            source: "better_auth_organization_plugin",
             targetUserId: "user_owner",
-          }),
+          },
         })
       );
-      expect(auditEvents).toContainEqual(
+      expect(decodedAuditEvents).toContainEqual(
         expect.objectContaining({
           actorUserId: "user_owner",
           eventType: "organization_invitation_created",
-          organizationId: "org_123",
-          metadata: expect.objectContaining({
+          metadata: {
             invitationEmailMasked: "m***@e***.com",
+            outcome: "succeeded",
             role: "member",
-          }),
+            source: "better_auth_organization_plugin",
+            targetUserId: null,
+          },
+          organizationId: "org_123",
+        })
+      );
+      expect(decodedAuditEvents).toContainEqual(
+        expect.objectContaining({
+          actorUserId: "user_owner",
+          eventType: "organization_created",
+          organizationId: "org_123",
         })
       );
       expect(auditEvents).toContainEqual(
@@ -5502,7 +5515,10 @@ describe("createAuthentication()", () => {
         })
       );
 
-      expect(auditEvents).toContainEqual(
+      const decodedAuditEvents =
+        decodeCapturedOrganizationSecurityAuditWrites(auditEvents);
+
+      expect(decodedAuditEvents).toContainEqual(
         expect.objectContaining({
           eventType: "organization_created",
           sessionId: "session_123",
@@ -5565,6 +5581,7 @@ describe("createAuthentication()", () => {
           }),
           headers: {
             "content-type": "application/json",
+            "user-agent": "Ceird Test Browser",
             "x-forwarded-for": "203.0.113.10",
           },
           method: "POST",
@@ -5653,14 +5670,17 @@ describe("createAuthentication()", () => {
       )
     );
 
-    expect(auditEvents.map((event) => event.eventType)).toStrictEqual([
+    const decodedAuditEvents =
+      decodeCapturedOrganizationSecurityAuditWrites(auditEvents);
+
+    expect(decodedAuditEvents.map((event) => event.eventType)).toStrictEqual([
       "organization_active_changed",
       "organization_active_changed",
       "organization_invitation_resent",
       "organization_member_role_updated",
       "organization_member_removed",
     ]);
-    expect(auditEvents).toContainEqual(
+    expect(decodedAuditEvents).toContainEqual(
       expect.objectContaining({
         actorUserId: "user_123",
         eventType: "organization_active_changed",
@@ -5681,6 +5701,22 @@ describe("createAuthentication()", () => {
           targetUserId: "user_target",
         }),
         organizationId: "org_123",
+      })
+    );
+    expect(decodedAuditEvents).toContainEqual(
+      expect.objectContaining({
+        actorUserId: "user_123",
+        eventType: "organization_active_changed",
+        metadata: {
+          activeOrganizationId: "org_next",
+          outcome: "succeeded",
+          previousOrganizationId: "org_previous",
+          source: "better_auth_organization_endpoint",
+        },
+        organizationId: "org_next",
+        sessionId: "session_123",
+        sourceIp: "203.0.113.10",
+        userAgent: "Ceird Test Browser",
       })
     );
     expect(JSON.stringify(auditEvents)).not.toContain("member@example.com");
@@ -5798,7 +5834,10 @@ describe("createAuthentication()", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(auditEvents).toContainEqual(
+    const decodedAuditEvents =
+      decodeCapturedOrganizationSecurityAuditWrites(auditEvents);
+
+    expect(decodedAuditEvents).toContainEqual(
       expect.objectContaining({
         eventType: "organization_member_role_updated",
         metadata: expect.objectContaining({
@@ -9552,7 +9591,7 @@ function makeThrowingGuardDatabase() {
 interface CapturedAuthSecurityAuditEvent {
   readonly actorUserId?: string | null;
   readonly eventType: string;
-  readonly metadata?: Record<string, unknown>;
+  readonly metadata: unknown;
   readonly oauthClientId?: string | null;
   readonly organizationId?: string | null;
   readonly scopes?: readonly string[] | null;
@@ -9560,6 +9599,23 @@ interface CapturedAuthSecurityAuditEvent {
   readonly sourceIp?: string | null;
   readonly userAgent?: string | null;
 }
+
+function decodeCapturedOrganizationSecurityAuditWrites(
+  events: readonly CapturedAuthSecurityAuditEvent[]
+) {
+  return events.map((event) =>
+    decodeOrganizationSecurityAuditWrite({
+      actorUserId: event.actorUserId,
+      eventType: event.eventType,
+      metadata: event.metadata,
+      organizationId: event.organizationId,
+      sessionId: event.sessionId,
+      sourceIp: event.sourceIp,
+      userAgent: event.userAgent,
+    })
+  );
+}
+
 interface CapturedOAuthTokenAuditContextRow {
   readonly clientId: string;
   readonly activeOrganizationId?: string | null;

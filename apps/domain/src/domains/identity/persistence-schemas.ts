@@ -141,6 +141,16 @@ const AuthSecurityAuditMetadataBaseFields = {
   source: AuthSecurityAuditMetadataSourceSchema,
 };
 
+export const MaskedInvitationEmailSchema = Schema.String.pipe(
+  Schema.refine((value): value is string => isMaskedInvitationEmail(value), {
+    message: "Expected a masked invitation email",
+  }),
+  Schema.brand("@ceird/domains/identity/MaskedInvitationEmail")
+);
+export type MaskedInvitationEmail = Schema.Schema.Type<
+  typeof MaskedInvitationEmailSchema
+>;
+
 export const OrganizationUpdatedAuditMetadataSchema = Schema.Struct({
   ...AuthSecurityAuditMetadataBaseFields,
   updatedFields: Schema.Array(Schema.NonEmptyString),
@@ -153,7 +163,7 @@ export type OrganizationUpdatedAuditMetadata = Schema.Schema.Type<
 
 export const OrganizationInvitationAuditMetadataSchema = Schema.Struct({
   ...AuthSecurityAuditMetadataBaseFields,
-  invitationEmailMasked: Schema.NullOr(Schema.NonEmptyString),
+  invitationEmailMasked: Schema.NullOr(MaskedInvitationEmailSchema),
   role: Schema.NullOr(OrganizationRole),
   targetUserId: Schema.NullOr(UserId),
 }).annotate({
@@ -165,7 +175,7 @@ export type OrganizationInvitationAuditMetadata = Schema.Schema.Type<
 
 export const OrganizationInvitationAcceptedAuditMetadataSchema = Schema.Struct({
   ...AuthSecurityAuditMetadataBaseFields,
-  invitationEmailMasked: Schema.NullOr(Schema.NonEmptyString),
+  invitationEmailMasked: Schema.NullOr(MaskedInvitationEmailSchema),
   memberId: Schema.NullOr(Schema.NonEmptyString),
   role: Schema.NullOr(OrganizationRole),
   targetUserId: Schema.NullOr(UserId),
@@ -187,6 +197,70 @@ export const OrganizationMemberAuditMetadataSchema = Schema.Struct({
 });
 export type OrganizationMemberAuditMetadata = Schema.Schema.Type<
   typeof OrganizationMemberAuditMetadataSchema
+>;
+
+export const OrganizationActiveChangedAuditMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  activeOrganizationId: Schema.NullOr(OrganizationId),
+  previousOrganizationId: Schema.NullOr(OrganizationId),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationActiveChangedAuditMetadata = Schema.Schema.Type<
+  typeof OrganizationActiveChangedAuditMetadataSchema
+>;
+
+const OrganizationSecurityAuditWriteBaseFields = {
+  actorUserId: Schema.optional(Schema.NullOr(UserId)),
+  organizationId: Schema.optional(Schema.NullOr(OrganizationId)),
+  sessionId: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
+  sourceIp: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
+  userAgent: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
+};
+
+export const OrganizationSecurityAuditWriteSchema = Schema.Union([
+  Schema.Struct({
+    ...OrganizationSecurityAuditWriteBaseFields,
+    eventType: Schema.Literal("organization_created"),
+    metadata: OrganizationMemberAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OrganizationSecurityAuditWriteBaseFields,
+    eventType: Schema.Literal("organization_updated"),
+    metadata: OrganizationUpdatedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OrganizationSecurityAuditWriteBaseFields,
+    eventType: Schema.Literal("organization_active_changed"),
+    metadata: OrganizationActiveChangedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OrganizationSecurityAuditWriteBaseFields,
+    eventType: Schema.Literals([
+      "organization_invitation_created",
+      "organization_invitation_resent",
+      "organization_invitation_canceled",
+    ] as const),
+    metadata: OrganizationInvitationAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OrganizationSecurityAuditWriteBaseFields,
+    eventType: Schema.Literal("organization_invitation_accepted"),
+    metadata: OrganizationInvitationAcceptedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OrganizationSecurityAuditWriteBaseFields,
+    eventType: Schema.Literals([
+      "organization_member_role_updated",
+      "organization_member_removed",
+    ] as const),
+    metadata: OrganizationMemberAuditMetadataSchema,
+  }),
+]).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationSecurityAuditWrite = Schema.Schema.Type<
+  typeof OrganizationSecurityAuditWriteSchema
 >;
 
 const OrganizationSecurityActivityMemberTargetFields = {
@@ -290,9 +364,7 @@ export type OrganizationSecurityActivityVisibleEventType = Schema.Schema.Type<
 
 function isUtcMicrosecondTimestamp(value: string): boolean {
   const match =
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?Z$/u.exec(
-      value
-    );
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{6})Z$/u.exec(value);
 
   if (match === null) {
     return false;
@@ -321,5 +393,12 @@ function isUtcMicrosecondTimestamp(value: string): boolean {
     date.getUTCHours() === hour &&
     date.getUTCMinutes() === minute &&
     date.getUTCSeconds() === second
+  );
+}
+
+function isMaskedInvitationEmail(value: string): boolean {
+  return (
+    value === "***" ||
+    /^[^@\s]\*\*\*@[^@\s.]\*\*\*(?:\.[^@\s.]+)*$/u.test(value)
   );
 }

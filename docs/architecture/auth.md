@@ -537,6 +537,13 @@ before/after values when available. Invitation audit metadata stores masked
 recipient email addresses only; raw invitation URLs and invitation IDs are not
 written to the audit table.
 
+Organization audit writes decode through the domain identity persistence schemas
+before insert. The write schema is a finite event-type union that pairs each
+organization lifecycle event with its event-specific metadata contract, including
+the internal `organization_active_changed` event. Invitation email display values
+must use the schema-owned masked-email shape, so raw persisted emails fail the
+audit boundary rather than reaching security activity presentation.
+
 Organization audit rows are success-only for this stage: Ceird records events
 after Better Auth accepts and applies the lifecycle mutation. Failed
 organization mutation attempts remain covered by abuse/rate-limit telemetry and
