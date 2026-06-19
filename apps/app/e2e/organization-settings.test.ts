@@ -64,14 +64,25 @@ async function openSettingsFromAccountMenu(page: Page) {
 }
 
 async function openLabelActions(page: Page, labelName: string) {
-  const row = page.getByRole("listitem").filter({
-    has: page.getByText(labelName, { exact: true }),
-  });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const row = page.getByRole("listitem").filter({
+      has: page.getByText(labelName, { exact: true }),
+    });
 
-  await row.hover();
-  await row
-    .getByRole("button", { name: `Open actions for ${labelName}` })
-    .click();
+    try {
+      await expect(row).toBeVisible();
+      await row.hover();
+      await row
+        .getByRole("button", { name: `Open actions for ${labelName}` })
+        .click({ timeout: 10_000 });
+
+      return;
+    } catch (error) {
+      if (attempt === 2) {
+        throw error;
+      }
+    }
+  }
 }
 
 async function signUpAndCreateOrganization(
