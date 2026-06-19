@@ -886,10 +886,15 @@ export type OrganizationInvitationDetails = Schema.Schema.Type<
   typeof OrganizationInvitationDetailsSchema
 >;
 
+const NativeOrganizationInvitationDetailsDateSchema = Schema.Union([
+  IsoDateTimeString,
+  Schema.DateValid,
+]);
+
 export const NativeOrganizationInvitationDetailsPayloadSchema = Schema.Struct({
-  createdAt: IsoDateTimeString,
+  createdAt: NativeOrganizationInvitationDetailsDateSchema,
   email: OrganizationEmailAddress,
-  expiresAt: IsoDateTimeString,
+  expiresAt: NativeOrganizationInvitationDetailsDateSchema,
   id: InvitationId,
   inviterEmail: OrganizationEmailAddress,
   inviterId: UserId,

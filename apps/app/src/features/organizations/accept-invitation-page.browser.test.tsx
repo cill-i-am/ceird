@@ -86,9 +86,9 @@ const {
 }));
 
 const nativeInvitationDetails = {
-  createdAt: "2026-04-01T09:30:00.000Z",
+  createdAt: new Date("2026-04-01T09:30:00.000Z"),
   email: "member@example.com",
-  expiresAt: "2026-04-12T09:30:00.000Z",
+  expiresAt: new Date("2026-04-12T09:30:00.000Z"),
   id: "inv_123",
   inviterEmail: "owner@example.com",
   inviterId: "user_owner",
@@ -97,7 +97,6 @@ const nativeInvitationDetails = {
   organizationSlug: "acme-field-ops",
   role: "member",
   status: "pending",
-  teamId: null,
 };
 
 vi.mock(import("../auth/app-context-client-cache"), () => ({

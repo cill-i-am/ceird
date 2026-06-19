@@ -531,9 +531,9 @@ describe("organization member identity boundary", () => {
 
   it("projects native signed-in invitation details into the Ceird DTO", () => {
     const nativeInvitationDetails = {
-      createdAt: "2026-04-01T09:30:00.000Z",
+      createdAt: new Date("2026-04-01T09:30:00.000Z"),
       email: "pending@example.com",
-      expiresAt: "2026-04-12T09:30:00.000Z",
+      expiresAt: new Date("2026-04-12T09:30:00.000Z"),
       id: "inv_123",
       inviterEmail: "owner@example.com",
       inviterId: "user_owner",
@@ -542,7 +542,6 @@ describe("organization member identity boundary", () => {
       organizationSlug: "acme-field-ops",
       role: "member",
       status: "pending",
-      teamId: null,
     };
 
     expect(
@@ -554,6 +553,25 @@ describe("organization member identity boundary", () => {
       organizationName: "Acme Field Ops",
       role: "member",
     });
+    expect(
+      decodeOrganizationInvitationDetails({
+        ...nativeInvitationDetails,
+        expiresAt: "2026-04-12T09:30:00.000Z",
+        teamId: null,
+      })
+    ).toStrictEqual({
+      email: "pending@example.com",
+      id: "inv_123",
+      inviterEmail: "owner@example.com",
+      organizationName: "Acme Field Ops",
+      role: "member",
+    });
+    expect(() =>
+      decodeOrganizationInvitationDetails({
+        ...nativeInvitationDetails,
+        createdAt: new Date("invalid"),
+      })
+    ).toThrow(/Expected/);
     expect(() =>
       decodeOrganizationInvitationDetails({
         ...nativeInvitationDetails,
