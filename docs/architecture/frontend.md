@@ -432,8 +432,11 @@ example:
 - `features/auth/password-reset-search.ts`
 - `features/auth/email-verification-search.ts`
 - `features/organizations/organization-schemas.ts`
-- `features/organizations/organization-member-invite-schemas.ts`
 - `features/settings/user-settings-schemas.ts`
+
+Organization member/invitation forms do not own feature-local schema wrappers.
+They import the shared `@ceird/identity-core` invite schema and decoder directly
+so the browser boundary matches the Ceird identity contract.
 
 UI state for API-backed feature workflows is kept in focused state modules such
 as `jobs-state.ts`, `jobs-detail-state.ts`, and `sites-state.ts`.
