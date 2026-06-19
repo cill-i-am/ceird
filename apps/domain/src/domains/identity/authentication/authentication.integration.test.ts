@@ -1231,6 +1231,7 @@ describe("authentication integration", () => {
           oauthError?: string;
           outcome?: string;
           requestedUnknownScope?: boolean;
+          source?: string;
         };
         oauth_client_id: string | null;
         scopes: string[] | null;
@@ -1254,6 +1255,7 @@ describe("authentication integration", () => {
           oauthError: "invalid_scope",
           outcome: "rejected",
           requestedUnknownScope: false,
+          source: "better_auth_oauth_endpoint",
         },
         oauth_client_id: null,
         scopes: ["openid", "ceird:write"],
@@ -1487,6 +1489,7 @@ describe("authentication integration", () => {
           dynamicRegistration?: boolean;
           oauthError?: string | null;
           outcome?: string;
+          source?: string;
         };
         oauth_client_id: string | null;
         scopes: string[] | null;
@@ -1514,6 +1517,7 @@ describe("authentication integration", () => {
           dynamicRegistration: true,
           oauthError: null,
           outcome: "succeeded",
+          source: "better_auth_oauth_endpoint",
         },
         oauth_client_id: refreshRegistration.client_id,
         scopes: expectedDefaultScopes,
@@ -1527,6 +1531,7 @@ describe("authentication integration", () => {
           dynamicRegistration: true,
           oauthError: null,
           outcome: "succeeded",
+          source: "better_auth_oauth_endpoint",
         },
         oauth_client_id: authorizationOnlyRegistration.client_id,
         scopes: expectedDefaultScopes,
