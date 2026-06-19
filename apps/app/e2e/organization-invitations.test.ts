@@ -16,6 +16,7 @@ import { Schema } from "effect";
 
 import { createTestPassword } from "./helpers/test-account";
 import { skipLocationAccessBeforeExpectedPage } from "./pages/location-access-page";
+import { LoginPage } from "./pages/login-page";
 import { MembersPage } from "./pages/members-page";
 import { SignupPage } from "./pages/signup-page";
 import { API_ORIGIN, APP_ORIGIN, readPlaywrightDatabaseUrl } from "./test-urls";
@@ -660,13 +661,15 @@ test.describe("organization invitations", () => {
         `${APP_ORIGIN}/login?invitation=${invitationId}`
       );
 
-      await signInInvitationContext(
-        request,
-        invitedPage,
-        invitedEmail,
-        invitedPassword
+      const invitedLoginPage = new LoginPage(invitedPage);
+      await invitedLoginPage.email.fill(invitedEmail);
+      await invitedLoginPage.password.fill(invitedPassword);
+      await invitedLoginPage.submit.click();
+
+      await expect(invitedPage).toHaveURL(
+        `${APP_ORIGIN}/accept-invitation/${invitationId}`,
+        { timeout: INVITATION_UI_TIMEOUT_MS }
       );
-      await invitedPage.goto(`/accept-invitation/${invitationId}`);
       await invitedPage
         .getByRole("button", { name: "Accept invitation" })
         .click();
