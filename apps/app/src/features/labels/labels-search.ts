@@ -7,13 +7,18 @@ export function searchSettingsLabels(
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
 
   if (normalizedQuery.length === 0) {
-    return sortLabels(labels);
+    return labels;
   }
 
   return sortLabels(
-    labels.filter((label) =>
-      label.name.toLocaleLowerCase().includes(normalizedQuery)
-    )
+    labels.filter((label) => {
+      const description = label.description?.toLocaleLowerCase() ?? "";
+
+      return (
+        label.name.toLocaleLowerCase().includes(normalizedQuery) ||
+        description.includes(normalizedQuery)
+      );
+    })
   );
 }
 
