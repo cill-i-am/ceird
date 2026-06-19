@@ -63,7 +63,6 @@ import type {
 import {
   hashOAuthStoredToken,
   makeOrganizationInvitationAuditMetadata,
-  makeOrganizationMemberAuditMetadata,
   recordOrganizationSecurityAuditEvent,
 } from "./auth-oauth-policy.js";
 import { measureAuthenticationPhase } from "./auth-observability.js";
@@ -586,11 +585,11 @@ export function createAuthentication(options: {
               {
                 actorUserId: user.id,
                 eventType: "organization_created",
-                metadata: makeOrganizationMemberAuditMetadata({
+                metadata: {
                   memberId: member.id,
                   role: member.role,
                   targetUserId: user.id,
-                }),
+                },
                 organizationId: nextOrganization.id,
               }
             );

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import {
   OAuthClientId,
   OrganizationId,
+  OrganizationRole,
   SessionId,
   UserId,
 } from "@ceird/identity-core";
@@ -15,7 +16,6 @@ import { Context, Effect, Option, Schema } from "effect";
 import {
   OAUTH_SECURITY_AUDIT_MAX_REQUEST_BODY_BYTES,
   AuthBoundaryRecordSchema,
-  decodeAuthBoundaryOption,
   makeAuthBoundaryRequestEnvelope,
   maskInvitationEmail,
   readAuthBoundaryJsonOrFormRequestBody,
@@ -179,6 +179,18 @@ const ORGANIZATION_SECURITY_AUDIT_ENDPOINT_PATHS = new Set([
 ]);
 const OAUTH_SECURITY_AUDIT_MAX_SCOPES = 16;
 const OAUTH_SECURITY_AUDIT_MAX_SCOPE_LENGTH = 128;
+const OAuthSecurityAuditScopeSchema = Schema.Literals(CEIRD_OAUTH_SCOPES).pipe(
+  Schema.brand("OAuthSecurityAuditScope")
+);
+type OAuthSecurityAuditScope = Schema.Schema.Type<
+  typeof OAuthSecurityAuditScopeSchema
+>;
+const OAuthSecurityAuditScopesSchema = Schema.Array(
+  OAuthSecurityAuditScopeSchema
+).pipe(Schema.check(Schema.isMaxLength(OAUTH_SECURITY_AUDIT_MAX_SCOPES)));
+const decodeOAuthSecurityAuditScopeOption = Schema.decodeUnknownOption(
+  OAuthSecurityAuditScopeSchema
+);
 const OAuthAuditRequestBodySchema = Schema.Struct({
   accept: Schema.optional(Schema.Boolean),
   client_id: Schema.optional(Schema.String),
@@ -241,12 +253,10 @@ const AuthSecurityAuditTokenKindSchema = Schema.Literals([
 const AuthSecurityAuditTokenTypeHintSchema = Schema.NullOr(
   Schema.String.pipe(Schema.check(Schema.isMaxLength(64)))
 );
-const AuthSecurityAuditScopeSchema = Schema.Literals(CEIRD_OAUTH_SCOPES).pipe(
-  Schema.brand("AuthSecurityAuditScope")
+const AuthSecurityAuditScopesSchema = OAuthSecurityAuditScopesSchema;
+const OrganizationMemberId = Schema.NonEmptyString.pipe(
+  Schema.brand("OrganizationMemberId")
 );
-const AuthSecurityAuditScopesSchema = Schema.Array(
-  AuthSecurityAuditScopeSchema
-).pipe(Schema.check(Schema.isMaxLength(OAUTH_SECURITY_AUDIT_MAX_SCOPES)));
 const AuthSecurityAuditCommonWriteFields = {
   actorUserId: Schema.NullOr(UserId),
   oauthClientId: Schema.NullOr(OAuthClientId),
@@ -265,6 +275,7 @@ const OAuthClientRegistrationRejectedAuditMetadataSchema = Schema.Struct({
   dynamicRegistration: Schema.Literal(true),
   oauthError: AuthSecurityAuditNullableStringSchema,
   outcome: Schema.Literal("rejected"),
+  requestedUnknownScope: Schema.Boolean,
 });
 const OAuthConsentAuditMetadataSchema = Schema.Struct({
   accepted: Schema.Boolean,
@@ -302,6 +313,20 @@ const OrganizationActiveChangedAuditMetadataSchema = Schema.Struct({
   previousOrganizationId: Schema.NullOr(OrganizationId),
   source: AuthSecurityAuditOrganizationSourceSchema,
 });
+const OrganizationCreatedAuditMetadataSchema = Schema.Struct({
+  memberId: OrganizationMemberId,
+  outcome: Schema.Literal("succeeded"),
+  role: OrganizationRole,
+  source: AuthSecurityAuditOrganizationSourceSchema,
+  targetUserId: UserId,
+});
+const OrganizationCreatedAuditMetadataInputSchema = Schema.Struct({
+  memberId: OrganizationMemberId,
+  role: Schema.String,
+  targetUserId: UserId,
+});
+type OrganizationCreatedAuditMetadataInput =
+  (typeof OrganizationCreatedAuditMetadataInputSchema)["Encoded"];
 const OrganizationMemberRoleUpdatedAuditMetadataSchema = Schema.Struct({
   memberId: AuthSecurityAuditNullableStringSchema,
   outcome: Schema.Literal("succeeded"),
@@ -354,7 +379,7 @@ export const AuthSecurityAuditEventWriteSchema = Schema.Union([
   Schema.Struct({
     ...AuthSecurityAuditCommonWriteFields,
     eventType: Schema.Literal("organization_created"),
-    metadata: OrganizationMemberRoleUpdatedAuditMetadataSchema,
+    metadata: OrganizationCreatedAuditMetadataSchema,
   }),
   Schema.Struct({
     ...AuthSecurityAuditCommonWriteFields,
@@ -416,9 +441,7 @@ type OrganizationSecurityAuditEventInput =
     (
       | {
           readonly eventType: "organization_created";
-          readonly metadata: OrganizationAuditMetadataBeforeProvenance<
-            typeof OrganizationMemberRoleUpdatedAuditMetadataSchema
-          >;
+          readonly metadata: OrganizationCreatedAuditMetadataInput;
         }
       | {
           readonly eventType: "organization_updated";
@@ -646,10 +669,16 @@ async function readOAuthRefreshTokenConsentGuardRequestBody(
   return { status: "inspectable", value: body.body ?? {} };
 }
 
-interface OAuthRefreshTokenConsentGuardRow {
-  readonly consentScopes: readonly string[] | null;
-  readonly refreshTokenScopes: readonly string[];
-}
+const OAuthRefreshTokenConsentGuardRowSchema = Schema.Struct({
+  consentScopes: Schema.NullOr(OAuthSecurityAuditScopesSchema),
+  refreshTokenScopes: OAuthSecurityAuditScopesSchema,
+});
+type OAuthRefreshTokenConsentGuardRow = Schema.Schema.Type<
+  typeof OAuthRefreshTokenConsentGuardRowSchema
+>;
+const decodeOAuthRefreshTokenConsentGuardRow = Schema.decodeUnknownSync(
+  OAuthRefreshTokenConsentGuardRowSchema
+);
 
 async function refreshTokenHasActiveOAuthConsent(
   database: NodePgDatabase,
@@ -672,10 +701,17 @@ async function refreshTokenHasActiveOAuthConsent(
     )
     .where(eq(oauthRefreshTokenTable.token, storedToken))
     .limit(1);
-  const [row] = rows as readonly OAuthRefreshTokenConsentGuardRow[];
+  const [rawRow] = rows;
 
-  if (row === undefined) {
+  if (rawRow === undefined) {
     return null;
+  }
+
+  let row: OAuthRefreshTokenConsentGuardRow;
+  try {
+    row = decodeOAuthRefreshTokenConsentGuardRow(rawRow);
+  } catch {
+    throw new Error("OAuth refresh token consent row schema decode failed.");
   }
 
   const { consentScopes } = row;
@@ -728,13 +764,53 @@ interface OAuthSecurityAuditRequestSnapshot {
   readonly tokenContext?: OAuthSecurityAuditTokenContext | null | undefined;
   readonly userAgent: string | null;
 }
-interface OAuthSecurityAuditTokenContext {
-  readonly clientId: string;
-  readonly organizationId?: string | null | undefined;
-  readonly scopes: readonly string[];
-  readonly sessionId?: string | null | undefined;
-  readonly tokenKind: "access_token" | "refresh_token";
-  readonly userId?: string | null | undefined;
+const OAuthSecurityAuditTokenContextSchema = Schema.Struct({
+  clientId: OAuthClientId,
+  organizationId: Schema.NullOr(OrganizationId),
+  scopes: OAuthSecurityAuditScopesSchema,
+  sessionId: Schema.NullOr(SessionId),
+  tokenKind: AuthSecurityAuditTokenKindSchema,
+  userId: Schema.NullOr(UserId),
+});
+type OAuthSecurityAuditTokenContext = Schema.Schema.Type<
+  typeof OAuthSecurityAuditTokenContextSchema
+>;
+const OAuthSecurityAuditTokenContextRowSchema = Schema.Struct({
+  clientId: OAuthClientId,
+  referenceId: Schema.NullOr(OrganizationId),
+  scopes: OAuthSecurityAuditScopesSchema,
+  sessionId: Schema.NullOr(SessionId),
+  userId: Schema.NullOr(UserId),
+});
+const decodeOAuthSecurityAuditTokenContextRow = Schema.decodeUnknownSync(
+  OAuthSecurityAuditTokenContextRowSchema
+);
+const decodeOAuthSecurityAuditTokenContext = Schema.decodeUnknownSync(
+  OAuthSecurityAuditTokenContextSchema
+);
+
+function makeOAuthSecurityAuditTokenContext(
+  row: unknown,
+  tokenKind: "access_token" | "refresh_token"
+) {
+  let decodedRow: Schema.Schema.Type<
+    typeof OAuthSecurityAuditTokenContextRowSchema
+  >;
+
+  try {
+    decodedRow = decodeOAuthSecurityAuditTokenContextRow(row);
+  } catch {
+    throw new Error("OAuth token audit context row schema decode failed.");
+  }
+
+  return decodeOAuthSecurityAuditTokenContext({
+    clientId: decodedRow.clientId,
+    organizationId: decodedRow.referenceId,
+    scopes: decodedRow.scopes,
+    sessionId: decodedRow.sessionId,
+    tokenKind,
+    userId: decodedRow.userId,
+  });
 }
 
 function resolveAuthenticationSessionAuditContext(
@@ -757,7 +833,7 @@ function resolveAuthenticationSessionAuditContext(
 
 function resolveOAuthTokenAuditContext(
   snapshot: OAuthSecurityAuditRequestSnapshot,
-  fallbackScopes: readonly string[]
+  fallbackScopes: readonly OAuthSecurityAuditScope[]
 ) {
   const tokenContext = snapshot.tokenContext ?? null;
 
@@ -1343,18 +1419,7 @@ async function findOAuthRefreshTokenAuditContext(
     .where(eq(oauthRefreshTokenTable.token, storedToken))
     .limit(1);
 
-  return row
-    ? {
-        clientId: row.clientId,
-        organizationId: Option.getOrNull(
-          decodeAuthBoundaryOption(OrganizationId, row.referenceId)
-        ),
-        scopes: sanitizeOAuthSecurityAuditScopes(row.scopes),
-        sessionId: row.sessionId,
-        tokenKind: "refresh_token",
-        userId: row.userId,
-      }
-    : null;
+  return row ? makeOAuthSecurityAuditTokenContext(row, "refresh_token") : null;
 }
 
 async function findOAuthAccessTokenAuditContext(
@@ -1374,18 +1439,7 @@ async function findOAuthAccessTokenAuditContext(
     .where(eq(oauthAccessTokenTable.token, storedToken))
     .limit(1);
 
-  return row
-    ? {
-        clientId: row.clientId,
-        organizationId: Option.getOrNull(
-          decodeAuthBoundaryOption(OrganizationId, row.referenceId)
-        ),
-        scopes: sanitizeOAuthSecurityAuditScopes(row.scopes),
-        sessionId: row.sessionId,
-        tokenKind: "access_token",
-        userId: row.userId,
-      }
-    : null;
+  return row ? makeOAuthSecurityAuditTokenContext(row, "access_token") : null;
 }
 
 async function recordOAuthSecurityAuditEventForResponse(options: {
@@ -1432,7 +1486,7 @@ async function recordOAuthClientRegistrationSecurityAuditEvent(options: {
   );
   const succeeded =
     options.response.status >= 200 && options.response.status < 300;
-  const scopes = resolveOAuthAuditScopes(
+  const scopeSummary = resolveOAuthAuditScopeSummary(
     responseBody?.scope,
     options.snapshot.body?.scope
   );
@@ -1446,10 +1500,13 @@ async function recordOAuthClientRegistrationSecurityAuditEvent(options: {
       dynamicRegistration: true,
       oauthError: succeeded ? null : (responseBody?.error ?? null),
       outcome: succeeded ? "succeeded" : "rejected",
+      ...(succeeded
+        ? {}
+        : { requestedUnknownScope: scopeSummary.requestedUnknownScope }),
     },
     oauthClientId: responseBody?.client_id ?? null,
     organizationId: null,
-    scopes,
+    scopes: scopeSummary.scopes,
     sessionId: null,
     sourceIp: options.snapshot.sourceIp,
     userAgent: options.snapshot.userAgent,
@@ -1488,8 +1545,8 @@ async function recordOAuthConsentSecurityAuditEvent(options: {
     eventType: accepted ? "oauth_consent_granted" : "oauth_consent_denied",
     metadata: {
       accepted,
-      containsAdminScope: scopes.includes("ceird:admin"),
-      containsWriteScope: scopes.includes("ceird:write"),
+      containsAdminScope: scopes.some((scope) => scope === "ceird:admin"),
+      containsWriteScope: scopes.some((scope) => scope === "ceird:write"),
     },
     oauthClientId: oauthQuery?.get("client_id") ?? null,
     organizationId: session?.session?.activeOrganizationId ?? null,
@@ -1615,51 +1672,68 @@ async function resolveOAuthSecurityAuditSession(
 function resolveOAuthAuditScopes(
   ...scopeValues: readonly (string | null | undefined)[]
 ) {
-  for (const scopeValue of scopeValues) {
-    const scopes = parseOAuthAuditScopes(scopeValue);
+  return resolveOAuthAuditScopeSummary(...scopeValues).scopes;
+}
 
-    if (scopes.length > 0) {
-      return scopes;
+function resolveOAuthAuditScopeSummary(
+  ...scopeValues: readonly (string | null | undefined)[]
+) {
+  for (const scopeValue of scopeValues) {
+    const scopeSummary = parseOAuthAuditScopeSummary(scopeValue);
+
+    if (scopeSummary.scopes.length > 0 || scopeSummary.requestedUnknownScope) {
+      return scopeSummary;
     }
   }
 
-  return [];
+  return { requestedUnknownScope: false, scopes: [] };
 }
 
-function parseOAuthAuditScopes(scopeValue: string | null | undefined) {
-  if (
-    !scopeValue ||
-    scopeValue.length > OAUTH_CLIENT_REGISTRATION_MAX_SCOPE_LENGTH
-  ) {
-    return [];
+function parseOAuthAuditScopeSummary(scopeValue: string | null | undefined): {
+  readonly requestedUnknownScope: boolean;
+  readonly scopes: readonly OAuthSecurityAuditScope[];
+} {
+  if (!scopeValue) {
+    return { requestedUnknownScope: false, scopes: [] };
   }
 
-  return [
-    ...new Set(
-      scopeValue
-        .split(/\s+/)
-        .map((scope) => scope.trim())
-        .filter(
-          (scope) =>
-            scope.length > 0 &&
-            scope.length <= OAUTH_SECURITY_AUDIT_MAX_SCOPE_LENGTH
-        )
-    ),
-  ].slice(0, OAUTH_SECURITY_AUDIT_MAX_SCOPES);
-}
-
-function sanitizeOAuthSecurityAuditScopes(scopes: readonly string[] | null) {
-  if (scopes === null) {
-    return [];
+  if (scopeValue.length > OAUTH_CLIENT_REGISTRATION_MAX_SCOPE_LENGTH) {
+    return { requestedUnknownScope: true, scopes: [] };
   }
 
-  return [...new Set(scopes)]
-    .filter(
-      (scope) =>
-        scope.length > 0 &&
-        scope.length <= OAUTH_SECURITY_AUDIT_MAX_SCOPE_LENGTH
-    )
-    .slice(0, OAUTH_SECURITY_AUDIT_MAX_SCOPES);
+  let requestedUnknownScope = false;
+  const scopes: OAuthSecurityAuditScope[] = [];
+  const seenScopes = new Set<OAuthSecurityAuditScope>();
+
+  for (const scope of scopeValue.split(/\s+/).map((value) => value.trim())) {
+    if (scope.length === 0) {
+      continue;
+    }
+
+    if (scope.length > OAUTH_SECURITY_AUDIT_MAX_SCOPE_LENGTH) {
+      requestedUnknownScope = true;
+      continue;
+    }
+
+    const decodedScope = Option.getOrNull(
+      decodeOAuthSecurityAuditScopeOption(scope)
+    );
+
+    if (decodedScope === null) {
+      requestedUnknownScope = true;
+      continue;
+    }
+
+    if (!seenScopes.has(decodedScope)) {
+      seenScopes.add(decodedScope);
+      scopes.push(decodedScope);
+    }
+  }
+
+  return {
+    requestedUnknownScope,
+    scopes: scopes.slice(0, OAUTH_SECURITY_AUDIT_MAX_SCOPES),
+  };
 }
 
 export async function writeAuthSecurityAuditEvent(

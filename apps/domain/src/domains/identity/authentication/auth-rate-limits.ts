@@ -77,11 +77,19 @@ type DecodedAuthenticationRateLimitRequestBody = Schema.Schema.Type<
   typeof AuthenticationRateLimitRequestBodySchema
 >;
 
-interface ObservedRateLimit {
-  readonly count: number;
-  readonly key: string;
-  readonly lastRequest: number;
-}
+export const ObservedRateLimitSchema = Schema.Struct({
+  count: Schema.Number.pipe(
+    Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+  ),
+  key: Schema.NonEmptyString,
+  lastRequest: Schema.Number.pipe(
+    Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+  ),
+});
+type ObservedRateLimit = Schema.Schema.Type<typeof ObservedRateLimitSchema>;
+const decodeObservedRateLimit = Schema.decodeUnknownSync(
+  ObservedRateLimitSchema
+);
 interface ObservedRateLimitStorage {
   readonly get: (key: string) => Promise<ObservedRateLimit | null | undefined>;
   readonly set: (
@@ -928,7 +936,7 @@ export function makeObservedDatabaseRateLimitStorage(
             .where(eq(rateLimitTable.key, key))
             .limit(1);
 
-          return row ?? null;
+          return row ? decodeObservedRateLimit(row) : null;
         } catch (error) {
           await reportRateLimitStorageReadFailure(
             key,
@@ -941,13 +949,13 @@ export function makeObservedDatabaseRateLimitStorage(
       }),
     set: (key, value, update) =>
       measureAuthenticationPhase("auth.rateLimitWriteMs", async () => {
-        const nextValue = {
-          count: value.count,
-          key: value.key,
-          lastRequest: value.lastRequest,
-        } satisfies ObservedRateLimit;
-
         try {
+          const nextValue = decodeObservedRateLimit({
+            count: value.count,
+            key: value.key,
+            lastRequest: value.lastRequest,
+          });
+
           if (update) {
             await database
               .update(rateLimitTable)

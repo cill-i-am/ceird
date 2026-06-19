@@ -44,9 +44,7 @@ export const BetterAuthSessionUserSchema = Schema.Struct({
   id: UserId,
   image: NullableString,
   name: Schema.String,
-  twoFactorEnabled: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(false))
-  ),
+  twoFactorEnabled: Schema.Boolean,
   updatedAt: AuthenticationDate,
 });
 
