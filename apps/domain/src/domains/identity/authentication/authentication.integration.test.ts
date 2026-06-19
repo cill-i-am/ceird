@@ -1230,7 +1230,6 @@ describe("authentication integration", () => {
           dynamicRegistration?: boolean;
           oauthError?: string;
           outcome?: string;
-          requestedUnknownScope?: boolean;
           source?: string;
         };
         oauth_client_id: string | null;
@@ -1254,7 +1253,6 @@ describe("authentication integration", () => {
           dynamicRegistration: true,
           oauthError: "invalid_scope",
           outcome: "rejected",
-          requestedUnknownScope: false,
           source: "better_auth_oauth_endpoint",
         },
         oauth_client_id: null,
