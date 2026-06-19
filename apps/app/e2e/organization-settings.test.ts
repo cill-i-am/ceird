@@ -156,7 +156,7 @@ test("an organization admin can manage labels from the realtime settings tab", a
   await expect(
     page.getByRole("heading", { exact: true, name: "Labels" })
   ).toBeVisible({ timeout: AUTHENTICATED_HOME_TIMEOUT_MS });
-  await expect(page.getByText("Realtime ready")).toBeVisible({
+  await expect(page.getByText("Label library")).toBeVisible({
     timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS,
   });
   await expect(page.getByText("No labels yet")).toBeVisible();
@@ -166,13 +166,14 @@ test("an organization admin can manage labels from the realtime settings tab", a
     waitForLabelMutation(page, "POST"),
     page.getByRole("button", { name: /create/i }).click(),
   ]);
-  await expectLabelCommandStatus(
-    page,
-    "Label created and reflected locally while realtime sync catches up."
-  );
   await expect(page.getByText(labelName, { exact: true })).toBeVisible();
 
-  await page
+  const createdLabelRow = page.getByRole("listitem").filter({
+    has: page.getByText(labelName, { exact: true }),
+  });
+
+  await createdLabelRow.hover();
+  await createdLabelRow
     .getByRole("button", { name: `Open actions for ${labelName}` })
     .click();
   await page.getByRole("menuitem", { name: "Edit label" }).click();
@@ -181,21 +182,19 @@ test("an organization admin can manage labels from the realtime settings tab", a
     waitForLabelMutation(page, "PATCH"),
     page.getByRole("button", { name: `Save ${labelName}` }).click(),
   ]);
-  await expectLabelCommandStatus(
-    page,
-    "Label renamed and reflected locally while realtime sync catches up."
-  );
   await expect(page.getByText(updatedLabelName, { exact: true })).toBeVisible();
 
-  await page
+  const updatedLabelRow = page.getByRole("listitem").filter({
+    has: page.getByText(updatedLabelName, { exact: true }),
+  });
+
+  await updatedLabelRow.hover();
+  await updatedLabelRow
     .getByRole("button", { name: `Open actions for ${updatedLabelName}` })
     .click();
   await page.getByRole("menuitem", { name: "Archive label" }).click();
-  const archiveConfirmation = page.getByRole("group", {
-    name: `Confirm archiving ${updatedLabelName}`,
-  });
-  await expect(archiveConfirmation).toBeVisible();
-  const confirmArchiveButton = archiveConfirmation.getByRole("button", {
+  await expect(page.getByText("Archive label?")).toBeVisible();
+  const confirmArchiveButton = page.getByRole("button", {
     exact: true,
     name: "Archive label",
   });
@@ -204,19 +203,9 @@ test("an organization admin can manage labels from the realtime settings tab", a
     waitForLabelMutation(page, "DELETE"),
     confirmArchiveButton.click(),
   ]);
-  await expectLabelCommandStatus(
-    page,
-    "Label archived and reflected locally while realtime sync catches up."
-  );
   await expect(page.getByText(updatedLabelName, { exact: true })).toBeHidden();
   await expect(page.getByText("No labels yet")).toBeVisible();
 });
-
-async function expectLabelCommandStatus(page: Page, message: string) {
-  await expect(page.getByRole("status")).toContainText(message, {
-    timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS,
-  });
-}
 
 async function waitForLabelMutation(
   page: Page,

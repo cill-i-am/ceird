@@ -260,6 +260,8 @@ Exports the shared organization-label contract:
 - `LabelId`
 - label name, optional description, canonical OKLCH color schemas, and
   normalization helpers
+- curated label color options with canonical OKLCH values, stable ids, UI
+  names, and role descriptions for app-side default selection
 - label create/update/list/read DTOs, including active/archived/all list query
   status
 - `LabelWriteResponse`, which wraps the canonical label row with

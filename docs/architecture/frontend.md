@@ -490,11 +490,12 @@ an explicit SSR strategy. The current migrated slices are:
   dedicated Labels settings route renders active labels from the
   Electric-backed Settings Labels collection, filters the hydrated collection
   locally for search, exposes connecting/ready/empty/unavailable/permission
-  states, and runs create, rename, and archive mutations through the writable
-  Settings Labels collection so the domain/API label commands stay
-  authoritative while the UI waits for Electric txid confirmation. General
-  organization settings links to this route instead of loading or rendering the
-  old API-backed labels panel.
+  states, uses `features/labels/label-color-picker.tsx` for curated OKLCH
+  swatches and custom Popover color selection, and runs create, rename, and
+  archive mutations through domain/API label commands with local command
+  reflection while realtime sync catches up. General organization settings
+  links to this route instead of loading or rendering the old API-backed labels
+  panel.
 - `features/jobs-workspace/jobs-workspace-live-list.ts`, where the primary
   Jobs route subscribes to the Jobs read-model collections,
   derives visible live rows from jobs, label assignments, labels, site

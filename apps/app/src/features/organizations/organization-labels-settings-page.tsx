@@ -8,13 +8,16 @@ import type {
 import type {
   CreateLabelInput,
   Label,
+  LabelColor,
   LabelIdType,
   LabelWriteResponse,
   UpdateLabelInput,
 } from "@ceird/labels-core";
 import {
   CreateLabelInputSchema,
+  DEFAULT_LABEL_COLOR,
   UpdateLabelInputSchema,
+  normalizeLabelDescription,
   normalizeLabelName,
 } from "@ceird/labels-core";
 import { Effect, Schema } from "effect";
@@ -34,6 +37,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { toast } from "sonner";
 
 import { AppPageHeader } from "#/components/app-page-header";
 import { AppUtilityPanel } from "#/components/app-utility-panel";
@@ -41,12 +45,12 @@ import { Button, buttonVariants } from "#/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuHeader,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { Input } from "#/components/ui/input";
+import { Textarea } from "#/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -58,6 +62,7 @@ import type {
 } from "#/data-plane/collection-health";
 import { useHydratedCollectionItems } from "#/data-plane/hydrated-collection";
 import type { DataPlaneMutationJournal } from "#/data-plane/mutation-journal";
+import { LabelColorPicker } from "#/features/labels/label-color-picker";
 import { validateLabelName } from "#/features/labels/label-name-validation";
 import { searchSettingsLabels } from "#/features/labels/labels-search";
 import {
@@ -68,7 +73,6 @@ import {
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
-import { cn } from "#/lib/utils";
 
 type LabelsSettingsShellState =
   | "connecting"
@@ -120,7 +124,7 @@ interface PendingLabelMutation {
 }
 
 interface LabelMutationStatus {
-  readonly kind: "error" | "success";
+  readonly kind: "error";
   readonly message: string;
 }
 
@@ -134,12 +138,8 @@ const EMPTY_LABEL_NAME_MESSAGE = "Type a label name before saving it.";
 const INVALID_LABEL_NAME_MESSAGE =
   "Label names must be between 1 and 48 characters.";
 const DUPLICATE_LABEL_NAME_MESSAGE = "A label with that name already exists.";
-const LABEL_CREATED_LOCAL_STATUS =
-  "Label created and reflected locally while realtime sync catches up.";
-const LABEL_RENAMED_LOCAL_STATUS =
-  "Label renamed and reflected locally while realtime sync catches up.";
-const LABEL_ARCHIVED_LOCAL_STATUS =
-  "Label archived and reflected locally while realtime sync catches up.";
+const INVALID_LABEL_DESCRIPTION_MESSAGE =
+  "Descriptions must be 280 characters or fewer.";
 
 const decodeCreateLabelInput = Schema.decodeUnknownSync(CreateLabelInputSchema);
 const decodeUpdateLabelInput = Schema.decodeUnknownSync(UpdateLabelInputSchema);
@@ -201,15 +201,18 @@ export function OrganizationLabelsSettingsPage({
     collectionIsAvailable: collection !== null,
     shellState,
   });
+  const showLabelControls =
+    canManageLabels && (shellState === "ready" || shellState === "empty");
   const {
     cancelEditing,
     createName,
-    cancelArchiveConfirmation,
-    confirmingArchiveLabelId,
+    createDescription,
+    createColor,
     editingLabel,
     editingLabelId,
     editingName,
-    handleArchiveLabel,
+    editingColor,
+    editingDescription,
     handleCreateLabel,
     handleRenameLabel,
     isMutating,
@@ -217,7 +220,11 @@ export function OrganizationLabelsSettingsPage({
     pendingMutation,
     requestArchiveConfirmation,
     setCreateName,
+    setCreateDescription,
+    setCreateColor,
     setEditingName,
+    setEditingColor,
+    setEditingDescription,
     startEditingLabel,
   } = useLabelsMutationController({
     canWriteLabels,
@@ -239,7 +246,6 @@ export function OrganizationLabelsSettingsPage({
     editInputRef,
     editingLabel,
     editingLabelId,
-    requestArchiveConfirmation,
     handleCreateLabel,
     handleRenameLabel,
     isMutating,
@@ -251,11 +257,11 @@ export function OrganizationLabelsSettingsPage({
       <AppPageHeader
         eyebrow={organization.name}
         title="Labels"
-        description="Manage active organization label definitions from the realtime product data plane."
+        description="Create the names, colors, and descriptions your team uses across the workspace."
         className="border-b-0 pb-0"
         actions={
           <a className={buttonVariants()} href="/organization/settings">
-            General settings
+            Organization settings
             <ArrowRight aria-hidden="true" />
           </a>
         }
@@ -264,25 +270,28 @@ export function OrganizationLabelsSettingsPage({
       <div className="flex max-w-5xl flex-col gap-5">
         <AppUtilityPanel
           id="organization-labels-realtime-list"
-          title="Realtime labels"
-          description="Active labels are read from the Electric-backed TanStack DB collection for this organization."
+          title="Label library"
+          description="Keep shared label definitions consistent for jobs, sites, and workflow states."
         >
           <div className="space-y-4">
-            <LabelsHealthBanner health={health} state={shellState} />
-            {canManageLabels ? (
+            {showLabelControls ? (
               <CreateLabelForm
                 canWriteLabels={canWriteLabels}
                 createName={createName}
+                createColor={createColor}
+                createDescription={createDescription}
                 disabled={isMutating}
                 inputRef={createInputRef}
+                onCreateColorChange={setCreateColor}
+                onCreateDescriptionChange={setCreateDescription}
                 onCreateNameChange={setCreateName}
                 onSubmit={() => void handleCreateLabel()}
                 pending={pendingMutation?.kind === "create"}
               />
             ) : null}
-            {canManageLabels ? (
+            {showLabelControls ? (
               <LabelsSearchField
-                disabled={shellState === "unavailable"}
+                disabled={false}
                 inputRef={searchInputRef}
                 resultCount={visibleLabels.length}
                 searchQuery={searchQuery}
@@ -291,20 +300,21 @@ export function OrganizationLabelsSettingsPage({
               />
             ) : null}
             <LabelsStateView
-              confirmingArchiveLabelId={confirmingArchiveLabelId}
               hasSearch={hasSearch}
               editingLabelId={editingLabelId}
               editingName={editingName}
+              editingColor={editingColor}
+              editingDescription={editingDescription}
               labels={visibleLabels}
               hasCommandReflection={hasCommandReflection}
               pendingMutation={pendingMutation}
               searchQuery={searchQuery}
               state={shellState}
-              onArchiveLabel={(label) => void handleArchiveLabel(label)}
-              onCancelArchiveConfirmation={cancelArchiveConfirmation}
               onRequestArchiveConfirmation={requestArchiveConfirmation}
               onCancelEdit={cancelEditing}
               onEditingNameChange={setEditingName}
+              onEditingColorChange={setEditingColor}
+              onEditingDescriptionChange={setEditingDescription}
               onRenameLabel={(label) => void handleRenameLabel(label)}
               onStartEdit={startEditingLabel}
               editInputRef={editInputRef}
@@ -328,7 +338,6 @@ function useLabelsSettingsHotkeys({
   handleCreateLabel,
   handleRenameLabel,
   isMutating,
-  requestArchiveConfirmation,
   searchInputRef,
 }: {
   readonly canManageLabels: boolean;
@@ -341,7 +350,6 @@ function useLabelsSettingsHotkeys({
   readonly handleCreateLabel: () => Promise<void>;
   readonly handleRenameLabel: (label: Label) => Promise<void>;
   readonly isMutating: boolean;
-  readonly requestArchiveConfirmation: (label: Label) => void;
   readonly searchInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   useAppHotkey(
@@ -379,19 +387,6 @@ function useLabelsSettingsHotkeys({
       cancelEditing();
     },
     { enabled: editingLabelId !== null && !isMutating, ignoreInputs: false }
-  );
-
-  useAppHotkey(
-    "labelsSettingsArchive",
-    () => {
-      if (editingLabel !== null) {
-        requestArchiveConfirmation(editingLabel);
-      }
-    },
-    {
-      enabled: canWriteLabels && editingLabel !== null && !isMutating,
-      ignoreInputs: false,
-    }
   );
 
   React.useEffect(() => {
@@ -447,16 +442,20 @@ function useLabelsMutationController({
   ) => Promise<LabelWriteResponse>;
 }) {
   const [createName, setCreateName] = React.useState("");
+  const [createDescription, setCreateDescription] = React.useState("");
+  const [createColor, setCreateColor] =
+    React.useState<LabelColor>(DEFAULT_LABEL_COLOR);
   const [editingLabelId, setEditingLabelId] = React.useState<
     Label["id"] | null
   >(null);
   const [editingName, setEditingName] = React.useState("");
+  const [editingColor, setEditingColor] =
+    React.useState<LabelColor>(DEFAULT_LABEL_COLOR);
+  const [editingDescription, setEditingDescription] = React.useState("");
   const [pendingMutation, setPendingMutation] =
     React.useState<PendingLabelMutation | null>(null);
   const [mutationStatus, setMutationStatus] =
     React.useState<LabelMutationStatus | null>(null);
-  const [confirmingArchiveLabelId, setConfirmingArchiveLabelId] =
-    React.useState<Label["id"] | null>(null);
   const mutationInFlightRef = React.useRef(false);
   const editingLabel =
     editingLabelId === null
@@ -466,19 +465,8 @@ function useLabelsMutationController({
   function cancelEditing() {
     setEditingLabelId(null);
     setEditingName("");
-  }
-
-  function cancelArchiveConfirmation() {
-    setConfirmingArchiveLabelId(null);
-  }
-
-  function requestArchiveConfirmation(label: Label) {
-    if (!canWriteLabels || mutationInFlightRef.current) {
-      return;
-    }
-
-    setConfirmingArchiveLabelId(label.id);
-    setMutationStatus(null);
+    setEditingColor(DEFAULT_LABEL_COLOR);
+    setEditingDescription("");
   }
 
   async function handleCreateLabel() {
@@ -493,32 +481,45 @@ function useLabelsMutationController({
       return;
     }
 
+    const decodedDescription =
+      validateSettingsLabelDescription(createDescription);
+
+    if (decodedDescription.kind === "error") {
+      setMutationStatus({
+        kind: "error",
+        message: decodedDescription.message,
+      });
+      return;
+    }
+
     const operationId = `labels.create:${decodedName.name}`;
+    const input = createLabelInput(
+      decodedName.name,
+      createColor,
+      decodedDescription.description
+    );
 
     setPendingMutation({
       id: operationId,
       kind: "create",
     });
     mutationInFlightRef.current = true;
-    cancelArchiveConfirmation();
     setMutationStatus(null);
 
     try {
       const response = await persistLabelCommandMutation({
         commandName: "labels.create",
-        input: createLabelInput(decodedName.name),
+        input,
         journal: mutationJournal,
-        operation: () =>
-          createLabelWithConfirmation(createLabelInput(decodedName.name)),
+        operation: () => createLabelWithConfirmation(input),
       });
 
       reflectLabelUpsert(response.label);
 
       setCreateName("");
-      setMutationStatus({
-        kind: "success",
-        message: LABEL_CREATED_LOCAL_STATUS,
-      });
+      setCreateDescription("");
+      setCreateColor(DEFAULT_LABEL_COLOR);
+      setMutationStatus(null);
     } catch (error) {
       setMutationStatus({
         kind: "error",
@@ -548,7 +549,22 @@ function useLabelsMutationController({
       return;
     }
 
-    if (decodedName.name === label.name) {
+    const decodedDescription =
+      validateSettingsLabelDescription(editingDescription);
+
+    if (decodedDescription.kind === "error") {
+      setMutationStatus({
+        kind: "error",
+        message: decodedDescription.message,
+      });
+      return;
+    }
+
+    if (
+      decodedName.name === label.name &&
+      editingColor === label.color &&
+      decodedDescription.description === label.description
+    ) {
       cancelEditing();
       return;
     }
@@ -560,11 +576,14 @@ function useLabelsMutationController({
       labelId: label.id,
     });
     mutationInFlightRef.current = true;
-    cancelArchiveConfirmation();
     setMutationStatus(null);
 
     try {
-      const input = updateLabelInput(label, decodedName.name);
+      const input = updateLabelInput(
+        decodedName.name,
+        editingColor,
+        decodedDescription.description
+      );
       const response = await persistLabelCommandMutation({
         commandName: "labels.update",
         input: {
@@ -577,10 +596,7 @@ function useLabelsMutationController({
 
       reflectLabelUpsert(response.label);
       cancelEditing();
-      setMutationStatus({
-        kind: "success",
-        message: LABEL_RENAMED_LOCAL_STATUS,
-      });
+      setMutationStatus(null);
     } catch (error) {
       cancelEditing();
       setMutationStatus({
@@ -596,12 +612,7 @@ function useLabelsMutationController({
   }
 
   async function handleArchiveLabel(label: Label) {
-    if (
-      !canWriteLabels ||
-      collection === null ||
-      mutationInFlightRef.current ||
-      confirmingArchiveLabelId !== label.id
-    ) {
+    if (!canWriteLabels || collection === null || mutationInFlightRef.current) {
       return;
     }
 
@@ -627,12 +638,7 @@ function useLabelsMutationController({
       if (editingLabelId === label.id) {
         cancelEditing();
       }
-
-      cancelArchiveConfirmation();
-      setMutationStatus({
-        kind: "success",
-        message: LABEL_ARCHIVED_LOCAL_STATUS,
-      });
+      setMutationStatus(null);
     } catch (error) {
       setMutationStatus({
         kind: "error",
@@ -649,18 +655,38 @@ function useLabelsMutationController({
   function startEditingLabel(label: Label) {
     setEditingLabelId(label.id);
     setEditingName(label.name);
+    setEditingColor(label.color);
+    setEditingDescription(label.description ?? "");
     setMutationStatus(null);
+  }
+
+  function requestArchiveConfirmation(label: Label) {
+    if (!canWriteLabels || mutationInFlightRef.current) {
+      return;
+    }
+
+    setMutationStatus(null);
+    toast("Archive label?", {
+      action: {
+        label: "Archive label",
+        onClick: () => {
+          void handleArchiveLabel(label);
+        },
+      },
+      description: label.name,
+    });
   }
 
   return {
     cancelEditing,
     createName,
-    cancelArchiveConfirmation,
-    confirmingArchiveLabelId,
+    createDescription,
+    createColor,
     editingLabel,
     editingLabelId,
     editingName,
-    handleArchiveLabel,
+    editingColor,
+    editingDescription,
     handleCreateLabel,
     handleRenameLabel,
     isMutating: pendingMutation !== null,
@@ -668,69 +694,130 @@ function useLabelsMutationController({
     pendingMutation,
     requestArchiveConfirmation,
     setCreateName,
+    setCreateDescription,
+    setCreateColor,
     setEditingName,
+    setEditingColor,
+    setEditingDescription,
     startEditingLabel,
   } as const;
 }
 
 function CreateLabelForm({
   canWriteLabels,
+  createColor,
+  createDescription,
   createName,
   disabled,
   inputRef,
+  onCreateColorChange,
+  onCreateDescriptionChange,
   onCreateNameChange,
   onSubmit,
   pending,
 }: {
   readonly canWriteLabels: boolean;
+  readonly createColor: LabelColor;
+  readonly createDescription: string;
   readonly createName: string;
   readonly disabled: boolean;
   readonly inputRef: React.RefObject<HTMLInputElement | null>;
+  readonly onCreateColorChange: (color: LabelColor) => void;
+  readonly onCreateDescriptionChange: (description: string) => void;
   readonly onCreateNameChange: (name: string) => void;
   readonly onSubmit: () => void;
   readonly pending: boolean;
 }) {
+  const [descriptionExpanded, setDescriptionExpanded] = React.useState(false);
+  const showDescription =
+    descriptionExpanded || createDescription.trim().length > 0;
+
+  React.useEffect(() => {
+    if (createName.length === 0 && createDescription.length === 0) {
+      setDescriptionExpanded(false);
+    }
+  }, [createDescription, createName]);
+
   return (
     <form
-      className="grid gap-2 rounded-lg border border-border/70 bg-background p-3 sm:grid-cols-[minmax(0,1fr)_auto]"
+      className="grid gap-3 rounded-lg border border-border/70 bg-background p-3"
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit();
       }}
     >
-      <div className="relative min-w-0">
-        <label className="sr-only" htmlFor="organization-labels-create">
-          New label name
-        </label>
-        <Input
-          id="organization-labels-create"
-          ref={inputRef}
-          disabled={!canWriteLabels || disabled}
-          placeholder="New label name"
-          value={createName}
-          onChange={(event) => onCreateNameChange(event.currentTarget.value)}
-        />
-        <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <div className="relative min-w-0">
+          <LabelColorPicker
+            className="absolute top-0 left-0 z-10 size-9 rounded-r-none border-r border-border bg-background hover:bg-muted aria-expanded:bg-muted"
+            disabled={!canWriteLabels || disabled}
+            label="New label color"
+            value={createColor}
+            onChange={onCreateColorChange}
+          />
+          <label className="sr-only" htmlFor="organization-labels-create">
+            New label name
+          </label>
+          <Input
+            id="organization-labels-create"
+            ref={inputRef}
+            className="pl-12"
+            disabled={!canWriteLabels || disabled}
+            placeholder="New label name"
+            value={createName}
+            onChange={(event) => onCreateNameChange(event.currentTarget.value)}
+          />
+          <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2">
+            <ShortcutHint
+              decorative
+              hotkey={HOTKEYS.labelsSettingsCreate.hotkey}
+              label={HOTKEYS.labelsSettingsCreate.label}
+            />
+          </span>
+        </div>
+        <Button type="submit" disabled={!canWriteLabels || disabled}>
+          {pending ? (
+            <Loader2 className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Plus aria-hidden="true" />
+          )}
+          Create
           <ShortcutHint
             decorative
-            hotkey={HOTKEYS.labelsSettingsCreate.hotkey}
-            label={HOTKEYS.labelsSettingsCreate.label}
+            hotkey={HOTKEYS.labelsSettingsSubmit.hotkey}
+            label={HOTKEYS.labelsSettingsSubmit.label}
           />
-        </span>
+        </Button>
       </div>
-      <Button type="submit" disabled={!canWriteLabels || disabled}>
-        {pending ? (
-          <Loader2 className="animate-spin" aria-hidden="true" />
-        ) : (
+      {showDescription ? (
+        <React.Fragment>
+          <label className="sr-only" htmlFor="organization-labels-description">
+            New label description
+          </label>
+          <Textarea
+            id="organization-labels-description"
+            className="min-h-16 resize-none"
+            disabled={!canWriteLabels || disabled}
+            placeholder="Description"
+            value={createDescription}
+            onChange={(event) =>
+              onCreateDescriptionChange(event.currentTarget.value)
+            }
+          />
+        </React.Fragment>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-fit text-muted-foreground"
+          disabled={!canWriteLabels || disabled}
+          onClick={() => setDescriptionExpanded(true)}
+        >
           <Plus aria-hidden="true" />
-        )}
-        Create
-        <ShortcutHint
-          decorative
-          hotkey={HOTKEYS.labelsSettingsSubmit.hotkey}
-          label={HOTKEYS.labelsSettingsSubmit.label}
-        />
-      </Button>
+          Add description
+        </Button>
+      )}
     </form>
   );
 }
@@ -786,59 +873,18 @@ function LabelsSearchField({
   );
 }
 
-function LabelsHealthBanner({
-  health,
-  state,
-}: {
-  readonly health: DataPlaneCollectionHealthSnapshot | null;
-  readonly state: LabelsSettingsShellState;
-}) {
-  const healthCopy = getHealthCopy({ health, state });
-
-  return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start",
-        state === "ready" || state === "empty"
-          ? "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"
-          : "border-border/70 bg-muted/35"
-      )}
-    >
-      <div
-        className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-lg",
-          state === "ready" || state === "empty"
-            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-100"
-            : "bg-background text-muted-foreground"
-        )}
-      >
-        {state === "ready" || state === "empty" ? (
-          <CheckCircle2 aria-hidden="true" />
-        ) : (
-          <RadioTower aria-hidden="true" />
-        )}
-      </div>
-      <div className="min-w-0 space-y-1">
-        <h3 className="text-sm font-medium">{healthCopy.title}</h3>
-        <p className="max-w-[72ch] text-sm/6 text-muted-foreground">
-          {healthCopy.description}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function LabelsStateView({
-  confirmingArchiveLabelId,
   editInputRef,
   editingLabelId,
+  editingColor,
+  editingDescription,
   editingName,
   hasSearch,
   hasCommandReflection,
   labels,
-  onArchiveLabel,
-  onCancelArchiveConfirmation,
   onCancelEdit,
+  onEditingColorChange,
+  onEditingDescriptionChange,
   onEditingNameChange,
   onRequestArchiveConfirmation,
   onRenameLabel,
@@ -847,16 +893,17 @@ function LabelsStateView({
   searchQuery,
   state,
 }: {
-  readonly confirmingArchiveLabelId: Label["id"] | null;
   readonly editInputRef: React.RefObject<HTMLInputElement | null>;
   readonly editingLabelId: Label["id"] | null;
+  readonly editingColor: LabelColor;
+  readonly editingDescription: string;
   readonly editingName: string;
   readonly hasSearch: boolean;
   readonly hasCommandReflection: boolean;
   readonly labels: readonly Label[];
-  readonly onArchiveLabel: (label: Label) => void;
-  readonly onCancelArchiveConfirmation: () => void;
   readonly onCancelEdit: () => void;
+  readonly onEditingColorChange: (color: LabelColor) => void;
+  readonly onEditingDescriptionChange: (description: string) => void;
   readonly onEditingNameChange: (name: string) => void;
   readonly onRequestArchiveConfirmation: (label: Label) => void;
   readonly onRenameLabel: (label: Label) => void;
@@ -880,8 +927,8 @@ function LabelsStateView({
       return (
         <ShellNotice
           icon={<RadioTower aria-hidden="true" />}
-          title="Realtime labels unavailable"
-          description="The Labels tab is waiting for the Electric labels collection. Check sync configuration or try again when realtime is reachable."
+          title="Labels unavailable"
+          description="Labels could not be loaded. Try again in a moment."
         />
       );
     }
@@ -890,7 +937,7 @@ function LabelsStateView({
         <ShellNotice
           icon={<ShieldAlert aria-hidden="true" />}
           title="Admin label management"
-          description="Owners and admins can manage organization labels from this realtime settings surface."
+          description="Owners and admins can manage organization labels."
         />
       );
     }
@@ -918,16 +965,17 @@ function LabelsStateView({
           <ul className="divide-y divide-border/70">
             {labels.map((label) => (
               <LabelRow
-                confirmingArchive={confirmingArchiveLabelId === label.id}
                 editInputRef={editInputRef}
                 editing={editingLabelId === label.id}
+                editingColor={editingColor}
+                editingDescription={editingDescription}
                 editingName={editingName}
                 key={label.id}
                 label={label}
                 pendingMutation={pendingMutation}
-                onArchiveLabel={onArchiveLabel}
-                onCancelArchiveConfirmation={onCancelArchiveConfirmation}
                 onCancelEdit={onCancelEdit}
+                onEditingColorChange={onEditingColorChange}
+                onEditingDescriptionChange={onEditingDescriptionChange}
                 onEditingNameChange={onEditingNameChange}
                 onRenameLabel={onRenameLabel}
                 onRequestArchiveConfirmation={onRequestArchiveConfirmation}
@@ -950,34 +998,36 @@ function LabelsEmptyNotice() {
     <ShellNotice
       icon={<CheckCircle2 aria-hidden="true" />}
       title="No labels yet"
-      description="New labels created by admins will appear here after the Electric labels shape observes them."
+      description="Create a label to keep shared work categories consistent."
     />
   );
 }
 
 function LabelRow({
-  confirmingArchive,
   editInputRef,
   editing,
+  editingColor,
+  editingDescription,
   editingName,
   label,
-  onArchiveLabel,
-  onCancelArchiveConfirmation,
   onCancelEdit,
+  onEditingColorChange,
+  onEditingDescriptionChange,
   onEditingNameChange,
   onRenameLabel,
   onRequestArchiveConfirmation,
   onStartEdit,
   pendingMutation,
 }: {
-  readonly confirmingArchive: boolean;
   readonly editInputRef: React.RefObject<HTMLInputElement | null>;
   readonly editing: boolean;
+  readonly editingColor: LabelColor;
+  readonly editingDescription: string;
   readonly editingName: string;
   readonly label: Label;
-  readonly onArchiveLabel: (label: Label) => void;
-  readonly onCancelArchiveConfirmation: () => void;
   readonly onCancelEdit: () => void;
+  readonly onEditingColorChange: (color: LabelColor) => void;
+  readonly onEditingDescriptionChange: (description: string) => void;
   readonly onEditingNameChange: (name: string) => void;
   readonly onRenameLabel: (label: Label) => void;
   readonly onRequestArchiveConfirmation: (label: Label) => void;
@@ -985,55 +1035,78 @@ function LabelRow({
   readonly pendingMutation: PendingLabelMutation | null;
 }) {
   const actionsDisabled = pendingMutation !== null;
-  const rowPending = pendingMutation?.labelId === label.id;
-  const archivePending =
-    pendingMutation?.kind === "archive" && pendingMutation.labelId === label.id;
   const renamePending =
     pendingMutation?.kind === "rename" && pendingMutation.labelId === label.id;
 
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-background px-4 py-3">
+    <li className="group/label-row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-background px-4 py-3">
       <div className="min-w-0">
         {editing ? (
           <div className="grid gap-2">
-            <label className="sr-only" htmlFor={`label-edit-${label.id}`}>
-              Rename {label.name}
+            <div className="relative min-w-0">
+              <LabelColorPicker
+                className="absolute top-0 left-0 z-10 size-9 rounded-r-none border-r border-border bg-background hover:bg-muted aria-expanded:bg-muted"
+                disabled={actionsDisabled}
+                label={`Label color`}
+                value={editingColor}
+                onChange={onEditingColorChange}
+              />
+              <label className="sr-only" htmlFor={`label-edit-${label.id}`}>
+                Rename {label.name}
+              </label>
+              <Input
+                id={`label-edit-${label.id}`}
+                ref={editInputRef}
+                className="pl-12"
+                disabled={actionsDisabled}
+                value={editingName}
+                onChange={(event) =>
+                  onEditingNameChange(event.currentTarget.value)
+                }
+              />
+            </div>
+            <label
+              className="sr-only"
+              htmlFor={`label-edit-description-${label.id}`}
+            >
+              Update {label.name} description
             </label>
-            <Input
-              id={`label-edit-${label.id}`}
-              ref={editInputRef}
+            <Textarea
+              id={`label-edit-description-${label.id}`}
+              className="min-h-16 resize-none"
               disabled={actionsDisabled}
-              value={editingName}
+              placeholder="Description"
+              value={editingDescription}
               onChange={(event) =>
-                onEditingNameChange(event.currentTarget.value)
+                onEditingDescriptionChange(event.currentTarget.value)
               }
             />
-            <p className="text-xs text-muted-foreground">
-              <EditLabelShortcutHelp confirmingArchive={confirmingArchive} />
-            </p>
           </div>
         ) : (
           <>
-            <p className="truncate text-sm font-medium text-foreground">
-              {label.name}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {rowPending
-                ? "Pending realtime confirmation"
-                : "Active synced label"}
-            </p>
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                className="size-3 shrink-0 rounded-full border border-black/15"
+                style={{ backgroundColor: label.color }}
+                aria-hidden="true"
+              />
+              <p className="truncate text-sm font-medium text-foreground">
+                {label.name}
+              </p>
+            </div>
+            {label.description ? (
+              <p className="truncate text-xs text-muted-foreground">
+                {label.description}
+              </p>
+            ) : null}
           </>
         )}
       </div>
       <LabelRowActions
         actionsDisabled={actionsDisabled}
-        archivePending={archivePending}
-        confirmingArchive={confirmingArchive}
         editing={editing}
         label={label}
         renamePending={renamePending}
-        onArchiveLabel={onArchiveLabel}
-        onCancelArchiveConfirmation={onCancelArchiveConfirmation}
         onCancelEdit={onCancelEdit}
         onRenameLabel={onRenameLabel}
         onRequestArchiveConfirmation={onRequestArchiveConfirmation}
@@ -1045,42 +1118,23 @@ function LabelRow({
 
 function LabelRowActions({
   actionsDisabled,
-  archivePending,
-  confirmingArchive,
   editing,
   label,
   renamePending,
-  onArchiveLabel,
-  onCancelArchiveConfirmation,
   onCancelEdit,
   onRenameLabel,
   onRequestArchiveConfirmation,
   onStartEdit,
 }: {
   readonly actionsDisabled: boolean;
-  readonly archivePending: boolean;
-  readonly confirmingArchive: boolean;
   readonly editing: boolean;
   readonly label: Label;
   readonly renamePending: boolean;
-  readonly onArchiveLabel: (label: Label) => void;
-  readonly onCancelArchiveConfirmation: () => void;
   readonly onCancelEdit: () => void;
   readonly onRenameLabel: (label: Label) => void;
   readonly onRequestArchiveConfirmation: (label: Label) => void;
   readonly onStartEdit: (label: Label) => void;
 }) {
-  if (confirmingArchive) {
-    return (
-      <ArchiveConfirmationActions
-        label={label}
-        pending={archivePending}
-        onArchiveLabel={onArchiveLabel}
-        onCancelArchiveConfirmation={onCancelArchiveConfirmation}
-      />
-    );
-  }
-
   if (editing) {
     return (
       <div className="flex items-center gap-1">
@@ -1108,17 +1162,6 @@ function LabelRowActions({
         >
           <X aria-hidden="true" />
         </Button>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="destructive"
-          aria-label={`Archive ${label.name}`}
-          disabled={actionsDisabled}
-          onClick={() => onRequestArchiveConfirmation(label)}
-          title={`${HOTKEYS.labelsSettingsArchive.label}: ${HOTKEYS.labelsSettingsArchive.hotkey}`}
-        >
-          <Archive aria-hidden="true" />
-        </Button>
       </div>
     );
   }
@@ -1133,6 +1176,7 @@ function LabelRowActions({
                 <Button
                   type="button"
                   aria-label={`Open actions for ${label.name}`}
+                  className="pointer-events-auto opacity-100 transition-opacity focus-visible:pointer-events-auto focus-visible:opacity-100 sm:pointer-events-none sm:opacity-0 sm:group-focus-within/label-row:pointer-events-auto sm:group-focus-within/label-row:opacity-100 sm:group-hover/label-row:pointer-events-auto sm:group-hover/label-row:opacity-100"
                   disabled={actionsDisabled}
                   size="icon-sm"
                   title={`Actions for ${label.name}`}
@@ -1147,7 +1191,6 @@ function LabelRowActions({
         <TooltipContent>Label actions</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuHeader>{label.name}</DropdownMenuHeader>
         <DropdownMenuItem
           disabled={actionsDisabled}
           onClick={() => onStartEdit(label)}
@@ -1169,84 +1212,6 @@ function LabelRowActions({
   );
 }
 
-function EditLabelShortcutHelp({
-  confirmingArchive,
-}: {
-  readonly confirmingArchive: boolean;
-}) {
-  if (confirmingArchive) {
-    return "Confirm or cancel archive below.";
-  }
-
-  return (
-    <React.Fragment>
-      Save with{" "}
-      <ShortcutHint
-        decorative
-        hotkey={HOTKEYS.labelsSettingsSubmit.hotkey}
-        label={HOTKEYS.labelsSettingsSubmit.label}
-      />
-      , cancel with{" "}
-      <ShortcutHint
-        decorative
-        hotkey={HOTKEYS.labelsSettingsCancel.hotkey}
-        label={HOTKEYS.labelsSettingsCancel.label}
-      />{" "}
-      or prepare archive with{" "}
-      <ShortcutHint
-        decorative
-        hotkey={HOTKEYS.labelsSettingsArchive.hotkey}
-        label={HOTKEYS.labelsSettingsArchive.label}
-      />
-    </React.Fragment>
-  );
-}
-
-function ArchiveConfirmationActions({
-  label,
-  pending,
-  onArchiveLabel,
-  onCancelArchiveConfirmation,
-}: {
-  readonly label: Label;
-  readonly pending: boolean;
-  readonly onArchiveLabel: (label: Label) => void;
-  readonly onCancelArchiveConfirmation: () => void;
-}) {
-  return (
-    <fieldset className="m-0 flex min-w-0 flex-wrap items-center justify-end gap-2 border-0 p-0">
-      <legend className="sr-only">Confirm archiving {label.name}</legend>
-      <p className="basis-full text-sm font-medium text-foreground sm:text-right">
-        Archive this label?
-      </p>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        disabled={pending}
-        onClick={onCancelArchiveConfirmation}
-      >
-        <X aria-hidden="true" />
-        Cancel
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="destructive"
-        disabled={pending}
-        onClick={() => onArchiveLabel(label)}
-      >
-        {pending ? (
-          <Loader2 className="animate-spin" aria-hidden="true" />
-        ) : (
-          <Archive aria-hidden="true" />
-        )}
-        Archive label
-      </Button>
-    </fieldset>
-  );
-}
-
 function LabelMutationStatusView({
   status,
 }: {
@@ -1258,13 +1223,8 @@ function LabelMutationStatusView({
 
   return (
     <p
-      className={cn(
-        "rounded-lg border px-3 py-2 text-sm",
-        status.kind === "success"
-          ? "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"
-          : "border-destructive/30 bg-destructive/10 text-destructive"
-      )}
-      role={status.kind === "error" ? "alert" : "status"}
+      className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+      role="alert"
     >
       {status.message}
     </p>
@@ -1322,7 +1282,11 @@ function getLabelsSettingsState({
     return "permission-aware";
   }
 
-  if (!health || health.status === "connecting") {
+  if (
+    !health ||
+    health.status === "connecting" ||
+    health.disabledReason === "server-render"
+  ) {
     return "connecting";
   }
 
@@ -1399,46 +1363,6 @@ function compareLabelsByName(left: Label, right: Label) {
     : nameComparison;
 }
 
-function getHealthCopy({
-  health,
-  state,
-}: {
-  readonly health: DataPlaneCollectionHealthSnapshot | null;
-  readonly state: LabelsSettingsShellState;
-}) {
-  if (state === "permission-aware") {
-    return {
-      description:
-        "Label management is available to organization owners and admins.",
-      title: "Permission-aware access",
-    };
-  }
-
-  if (state === "ready" || state === "empty") {
-    return {
-      description:
-        "The labels collection is ready and reflects active organization labels from the sync data plane.",
-      title: "Realtime ready",
-    };
-  }
-
-  if (state === "connecting") {
-    return {
-      description:
-        "The Labels tab is subscribing to the named Electric labels shape.",
-      title: "Connecting to realtime labels",
-    };
-  }
-
-  return {
-    description:
-      health?.lastError?.message ??
-      health?.disabledReason ??
-      "The Electric labels collection is not available for this browser session.",
-    title: "Realtime labels unavailable",
-  };
-}
-
 function useCollectionHealthSnapshot(
   health: DataPlaneCollectionHealth | undefined
 ) {
@@ -1452,14 +1376,26 @@ function useCollectionHealthSnapshot(
   );
 }
 
-function createLabelInput(name: Label["name"]): CreateLabelInput {
-  return decodeCreateLabelInput({ name });
+function createLabelInput(
+  name: Label["name"],
+  color: LabelColor,
+  description: string | null
+): CreateLabelInput {
+  return decodeCreateLabelInput({
+    color,
+    description: normalizeLabelDescription(description),
+    name,
+  });
 }
 
-function updateLabelInput(label: Label, name: Label["name"]): UpdateLabelInput {
+function updateLabelInput(
+  name: Label["name"],
+  color: LabelColor,
+  description: string | null
+): UpdateLabelInput {
   return decodeUpdateLabelInput({
-    color: label.color,
-    description: label.description,
+    color,
+    description: normalizeLabelDescription(description),
     name,
   });
 }
@@ -1532,6 +1468,24 @@ function validateSettingsLabelName(
   }
 
   return decoded;
+}
+
+function validateSettingsLabelDescription(
+  input: string
+):
+  | { readonly description: string | null; readonly kind: "valid" }
+  | { readonly kind: "error"; readonly message: string } {
+  try {
+    return {
+      description: normalizeLabelDescription(input),
+      kind: "valid",
+    };
+  } catch {
+    return {
+      kind: "error",
+      message: INVALID_LABEL_DESCRIPTION_MESSAGE,
+    };
+  }
 }
 
 function hasDuplicateLabelName(
