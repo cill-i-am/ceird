@@ -152,6 +152,35 @@ describe("organization security activity mapping", () => {
     expect(JSON.stringify(item)).not.toContain("user_from_other_org");
   });
 
+  it("does not expose malformed metadata member IDs in member targets", () => {
+    const item = mapOrganizationSecurityActivityRow({
+      actor_email: "owner@example.com",
+      actor_name: "Owner User",
+      actor_user_id: "user_owner",
+      created_at: new Date("2026-06-07T11:50:00.000Z"),
+      created_at_cursor: "2026-06-07T11:50:00.000000Z",
+      event_type: "organization_member_removed",
+      id: "audit_malformed_member",
+      metadata: {
+        memberId: "",
+        role: "member",
+      },
+      organization_id: "org_123",
+      organization_name: "Acme Field Ops",
+      target_email: null,
+      target_member_id: null,
+      target_name: null,
+      target_user_id: null,
+    });
+
+    expect(item.target).toStrictEqual({
+      label: "Member",
+      memberId: undefined,
+      type: "member",
+      userId: undefined,
+    });
+  });
+
   it("rejects organization-active-changed rows from the admin-facing view", () => {
     expect(() =>
       mapOrganizationSecurityActivityRow({

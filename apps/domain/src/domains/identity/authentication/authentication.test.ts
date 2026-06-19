@@ -4890,6 +4890,53 @@ describe("createAuthentication()", () => {
     10_000
   );
 
+  it("drops malformed OAuth request client IDs before audit fallback construction", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOAuthSecurityAuditEventRecorder(
+      () => Promise.resolve(Response.json({})),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+      }
+    );
+
+    const response = await handler(
+      new Request("https://api.ceird.example/api/auth/oauth2/revoke", {
+        body: new URLSearchParams({
+          client_id: "",
+          token: "raw-revoked-token",
+          token_type_hint: "refresh_token",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        method: "POST",
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([
+      expect.objectContaining({
+        eventType: "oauth_token_revoked",
+        metadata: {
+          matchedStoredToken: false,
+          tokenKind: null,
+          tokenTypeHint: null,
+        },
+        oauthClientId: null,
+        organizationId: null,
+        scopes: null,
+        sessionId: null,
+      }),
+    ]);
+    expect(JSON.stringify(auditEvents)).not.toContain("raw-revoked-token");
+  }, 10_000);
+
   it("fails open and logs telemetry when auth security audit writes fail", async () => {
     const { logger, logs } = captureLogs();
     const config = makeAuthenticationConfig({
@@ -5134,7 +5181,7 @@ describe("createAuthentication()", () => {
       });
       await hooks?.afterCreateInvitation?.({
         invitation: {
-          email: "member@example.com",
+          email: " Member@Example.COM ",
           organizationId: "org_123",
           role: "member",
         },
@@ -5147,7 +5194,7 @@ describe("createAuthentication()", () => {
       });
       await hooks?.afterAcceptInvitation?.({
         invitation: {
-          email: "member@example.com",
+          email: " Member@Example.COM ",
           organizationId: "org_123",
           role: "member",
         },
@@ -5214,11 +5261,88 @@ describe("createAuthentication()", () => {
           }),
         })
       );
+      expect(auditEvents).toContainEqual(
+        expect.objectContaining({
+          actorUserId: "user_member",
+          eventType: "organization_invitation_accepted",
+          organizationId: "org_123",
+          metadata: expect.objectContaining({
+            invitationEmailMasked: "m***@e***.com",
+            memberId: "member_accepted",
+          }),
+        })
+      );
       const serializedAuditEvents = JSON.stringify(auditEvents);
 
       expect(serializedAuditEvents).not.toContain("member@example.com");
+      expect(serializedAuditEvents).not.toContain("Member@Example.COM");
       expect(serializedAuditEvents).not.toContain("accept-invitation");
       expect(serializedAuditEvents).not.toContain("inv_");
+    } finally {
+      await cleanup();
+    }
+  }, 10_000);
+
+  it("fails open when Better Auth hook metadata contains malformed organization member IDs", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const runtimeContext = await Effect.context<never>().pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+    const { auth, cleanup } = createAuthenticationForPluginInspection(
+      {},
+      {
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+        runtimeContext,
+      }
+    );
+
+    try {
+      const hooks = getOrganizationPluginOptions(auth).organizationHooks as
+        | {
+            readonly afterAcceptInvitation?: (data: {
+              readonly invitation: {
+                readonly email: string;
+                readonly organizationId: string;
+                readonly role: string;
+              };
+              readonly member: {
+                readonly id: string;
+                readonly organizationId: string;
+                readonly userId: string;
+              };
+              readonly organization: { readonly id: string };
+              readonly user: { readonly id: string };
+            }) => Promise<void>;
+          }
+        | undefined;
+
+      await hooks?.afterAcceptInvitation?.({
+        invitation: {
+          email: "member@example.com",
+          organizationId: "org_123",
+          role: "member",
+        },
+        member: {
+          id: "",
+          organizationId: "org_123",
+          userId: "user_member",
+        },
+        organization: {
+          id: "org_123",
+        },
+        user: {
+          id: "user_member",
+        },
+      });
+
+      expect(auditEvents).toStrictEqual([]);
+      expect(JSON.stringify(logs)).toContain(
+        "auth_security_audit_write_failure"
+      );
+      expect(JSON.stringify(logs)).not.toContain("member@example.com");
     } finally {
       await cleanup();
     }
@@ -8742,6 +8866,9 @@ function createAuthenticationForPluginInspection(
   > = {},
   options: {
     readonly database?: Parameters<typeof createAuthentication>[0]["database"];
+    readonly runtimeContext?: Parameters<
+      typeof createAuthentication
+    >[0]["runtimeContext"];
   } = {}
 ) {
   const pool = options.database
@@ -8765,6 +8892,7 @@ function createAuthenticationForPluginInspection(
     database: options.database ?? drizzle({ client: pool as Pool }),
     reportPasswordResetEmailFailure: () => {},
     reportVerificationEmailFailure: () => {},
+    runtimeContext: options.runtimeContext,
     sendOrganizationInvitationEmail: async () => {},
     sendPasswordResetEmail: async () => {},
     sendVerificationEmail: async () => {},

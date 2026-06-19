@@ -333,6 +333,13 @@ export function isReservedOrganizationSlug(value: string): boolean {
   return (RESERVED_ORGANIZATION_SLUGS as readonly string[]).includes(value);
 }
 
+export const OrganizationMemberId = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/identity-core/OrganizationMemberId")
+);
+export type OrganizationMemberId = Schema.Schema.Type<
+  typeof OrganizationMemberId
+>;
+
 function avoidReservedOrganizationSlug(slug: string): string {
   if (!isReservedOrganizationSlug(slug)) {
     return slug;
@@ -689,7 +696,7 @@ export type OrganizationSecurityActivityTargetType = Schema.Schema.Type<
 
 const OrganizationSecurityActivityTargetSchema = Schema.Struct({
   label: Schema.optional(Schema.String),
-  memberId: Schema.optional(Schema.NonEmptyString),
+  memberId: Schema.optional(OrganizationMemberId),
   type: OrganizationSecurityActivityTargetType,
   userId: Schema.optional(UserId),
 }).annotate({

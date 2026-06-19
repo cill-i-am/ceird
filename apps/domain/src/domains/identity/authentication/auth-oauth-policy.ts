@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import {
   OAuthClientId,
   OrganizationId,
+  OrganizationMemberId,
   OrganizationRole,
   SessionId,
   UserId,
@@ -212,7 +213,7 @@ const decodeOAuthSecurityAuditScopeOption = Schema.decodeUnknownOption(
 );
 const OAuthAuditRequestBodySchema = Schema.Struct({
   accept: Schema.optional(Schema.Boolean),
-  client_id: Schema.optional(Schema.String),
+  client_id: Schema.optional(OAuthClientId),
   grant_type: Schema.optional(Schema.String),
   oauth_query: Schema.optional(Schema.String),
   refresh_token: Schema.optional(Schema.String),
@@ -233,9 +234,6 @@ const OAuthAuditResponseBodySchema = Schema.Struct({
   scope: Schema.optional(Schema.String),
   user_id: Schema.optional(UserId),
 });
-const OrganizationMemberId = Schema.NonEmptyString.pipe(
-  Schema.brand("OrganizationMemberId")
-);
 const decodeOrganizationMemberIdOption =
   Schema.decodeUnknownOption(OrganizationMemberId);
 const OrganizationAuditEmail = Schema.Trim.pipe(
@@ -404,7 +402,7 @@ const OrganizationInvitationAuditMetadataSchema = Schema.Struct({
 });
 const OrganizationInvitationAcceptedAuditMetadataSchema = Schema.Struct({
   invitationEmailMasked: AuthSecurityAuditNullableStringSchema,
-  memberId: AuthSecurityAuditNullableStringSchema,
+  memberId: Schema.NullOr(OrganizationMemberId),
   outcome: OrganizationAuditSucceededOutcomeSchema,
   role: OrganizationAuditNullableRoleSchema,
   source: OrganizationAuditMetadataSourceSchema,
@@ -424,7 +422,7 @@ const OrganizationCreatedAuditMetadataSchema = Schema.Struct({
   targetUserId: UserId,
 });
 const OrganizationMemberRoleUpdatedAuditMetadataSchema = Schema.Struct({
-  memberId: AuthSecurityAuditNullableStringSchema,
+  memberId: Schema.NullOr(OrganizationMemberId),
   outcome: OrganizationAuditSucceededOutcomeSchema,
   previousRole: OrganizationAuditNullableRoleSchema,
   role: OrganizationAuditNullableRoleSchema,
@@ -432,7 +430,7 @@ const OrganizationMemberRoleUpdatedAuditMetadataSchema = Schema.Struct({
   targetUserId: Schema.NullOr(UserId),
 });
 const OrganizationMemberRemovedAuditMetadataSchema = Schema.Struct({
-  memberId: AuthSecurityAuditNullableStringSchema,
+  memberId: Schema.NullOr(OrganizationMemberId),
   outcome: OrganizationAuditSucceededOutcomeSchema,
   role: OrganizationAuditNullableRoleSchema,
   source: OrganizationAuditMetadataSourceSchema,
@@ -631,23 +629,29 @@ export function makeOrganizationInvitationAuditMetadata(input: {
   readonly role?: string | null | undefined;
   readonly targetUserId?: string | null | undefined;
 }) {
+  const email = Option.getOrNull(
+    decodeOrganizationAuditEmailOption(input.email)
+  );
+
   return {
-    invitationEmailMasked: input.email
-      ? maskInvitationEmail(input.email)
-      : null,
+    invitationEmailMasked: email === null ? null : maskInvitationEmail(email),
     role: input.role ?? null,
     targetUserId: input.targetUserId ?? null,
   };
 }
 
 export function makeOrganizationMemberAuditMetadata(input: {
-  readonly memberId?: string | null | undefined;
+  readonly memberId?: unknown;
   readonly previousRole?: string | null | undefined;
   readonly role?: string | null | undefined;
   readonly targetUserId?: string | null | undefined;
 }) {
+  const memberId = Option.getOrNull(
+    decodeOrganizationMemberIdOption(input.memberId)
+  );
+
   return {
-    memberId: input.memberId ?? null,
+    memberId,
     previousRole: input.previousRole ?? null,
     role: input.role ?? null,
     targetUserId: input.targetUserId ?? null,
