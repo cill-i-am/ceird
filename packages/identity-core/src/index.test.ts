@@ -36,10 +36,12 @@ import {
   ConnectedAppGrantAccessDeniedError,
   ConnectedAppGrantNotFoundError,
   ConnectedAppGrantStorageError,
+  decodeAcceptedOrganizationId,
   decodeCancelOrganizationInvitationInput,
   decodeConnectedAppGrantListResponse,
   decodeDisconnectConnectedAppGrantInput,
   decodeInviteOrganizationMemberInput,
+  decodeNativeAuthClientSessionResult,
   decodeOrganizationInvitation,
   decodeOrganizationInvitationDetails,
   decodeOrganizationInvitationListResponse,
@@ -47,6 +49,7 @@ import {
   decodeOrganizationMemberListQuery,
   decodeOrganizationMemberId,
   decodeOrganizationMemberListResponse,
+  decodeOrganizationMemberRoleResponse,
   decodePublicInvitationPreview,
   decodeRemoveOrganizationMemberInput,
   decodeUpdateOrganizationMemberRoleInput,
@@ -590,6 +593,157 @@ describe("organization member identity boundary", () => {
         role: "owner",
       })
     ).toThrow(/Expected/);
+  }, 1000);
+
+  it("strictly decodes public invitation previews", () => {
+    expect(
+      decodePublicInvitationPreview({
+        email: "m***@e***.com",
+        organizationName: "Acme Field Ops",
+        role: "member",
+      })
+    ).toStrictEqual({
+      email: "m***@e***.com",
+      organizationName: "Acme Field Ops",
+      role: "member",
+    });
+    expect(() =>
+      decodePublicInvitationPreview({
+        email: "not-an-email",
+        organizationName: "Acme Field Ops",
+        role: "member",
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      decodePublicInvitationPreview({
+        email: "m***@e***.com",
+        organizationName: "A",
+        role: "member",
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      decodePublicInvitationPreview({
+        email: "m***@e***.com",
+        organizationName: "Acme Field Ops",
+        role: "member",
+        rawBetterAuthField: "raw",
+      })
+    ).toThrow(/[Uu]nexpected/);
+  }, 1000);
+
+  it("decodes native accepted invitation payloads before using the organization id", () => {
+    const payload = {
+      invitation: {
+        createdAt: new Date("2026-04-01T09:30:00.000Z"),
+        email: "member@example.com",
+        expiresAt: new Date("2026-04-12T09:30:00.000Z"),
+        id: "inv_123",
+        inviterId: "user_owner",
+        organizationId: "org_123",
+        role: "member",
+        status: "accepted",
+        teamId: null,
+      },
+      member: {
+        createdAt: new Date("2026-04-01T10:00:00.000Z"),
+        id: "member_123",
+        organizationId: "org_123",
+        role: "member",
+        userId: "user_member",
+      },
+    };
+
+    expect(decodeAcceptedOrganizationId(payload)).toBe("org_123");
+    expect(
+      decodeAcceptedOrganizationId({
+        ...payload,
+        invitation: {
+          ...payload.invitation,
+          createdAt: "2026-04-01T09:30:00.000Z",
+          expiresAt: "2026-04-12T09:30:00.000Z",
+        },
+        member: {
+          ...payload.member,
+          createdAt: "2026-04-01T10:00:00.000Z",
+        },
+      })
+    ).toBe("org_123");
+    expect(() =>
+      decodeAcceptedOrganizationId({
+        ...payload,
+        member: {
+          ...payload.member,
+          organizationId: undefined,
+        },
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      decodeAcceptedOrganizationId({
+        ...payload,
+        rawBetterAuthField: "raw",
+      })
+    ).toThrow(/[Uu]nexpected/);
+  }, 1000);
+
+  it("decodes native auth client session results", () => {
+    const session = {
+      session: {
+        activeOrganizationId: null,
+        createdAt: new Date("2026-04-01T09:00:00.000Z"),
+        expiresAt: new Date("2026-05-01T09:00:00.000Z"),
+        id: "session_123",
+        ipAddress: null,
+        updatedAt: new Date("2026-04-01T09:00:00.000Z"),
+        userAgent: null,
+        userId: "user_member",
+      },
+      user: {
+        createdAt: new Date("2026-04-01T08:00:00.000Z"),
+        email: "member@example.com",
+        emailVerified: true,
+        id: "user_member",
+        image: null,
+        name: "Member Example",
+        twoFactorEnabled: false,
+        updatedAt: new Date("2026-04-01T08:00:00.000Z"),
+      },
+    };
+
+    expect(
+      decodeNativeAuthClientSessionResult({
+        data: session,
+        error: null,
+      }).data?.user.email
+    ).toBe("member@example.com");
+    expect(
+      decodeNativeAuthClientSessionResult({
+        data: null,
+        error: null,
+      })
+    ).toStrictEqual({ data: null, error: null });
+    expect(() =>
+      decodeNativeAuthClientSessionResult({
+        data: {
+          ...session,
+          rawBetterAuthField: "raw",
+        },
+        error: null,
+      })
+    ).toThrow(/[Uu]nexpected/);
+  }, 1000);
+
+  it("strictly decodes organization member role responses", () => {
+    expect(
+      decodeOrganizationMemberRoleResponse({ role: "admin" })
+    ).toStrictEqual({
+      role: "admin",
+    });
+    expect(() =>
+      decodeOrganizationMemberRoleResponse({
+        role: "admin",
+        rawBetterAuthField: "raw",
+      })
+    ).toThrow(/[Uu]nexpected/);
   }, 1000);
 
   it("rejects invalid organization member and invitation emails", () => {

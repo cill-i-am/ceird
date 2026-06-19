@@ -3,6 +3,8 @@ import { createRequire } from "node:module";
 
 import {
   appendOrganizationSlugSuffix,
+  decodeAcceptedOrganizationId,
+  decodePublicInvitationPreview,
   InviteOrganizationMemberResponseSchema,
   OrganizationInvitationListResponseSchema,
 } from "@ceird/identity-core";
@@ -261,18 +263,9 @@ async function acceptInvitationWithCurrentSession(
       cookieJar,
     }
   );
-  const acceptInvitationPayload = (await acceptInvitationResponse.json()) as {
-    readonly member?: {
-      readonly organizationId?: unknown;
-    };
-  };
-  const acceptedOrganizationId = acceptInvitationPayload.member?.organizationId;
-
-  if (typeof acceptedOrganizationId !== "string") {
-    throw new TypeError(
-      "Expected accepted invitation response to include an organization id."
-    );
-  }
+  const acceptedOrganizationId = decodeAcceptedOrganizationId(
+    await acceptInvitationResponse.json()
+  );
 
   await sendAuthRequest(request, "/organization/set-active", {
     body: {
@@ -373,9 +366,7 @@ async function expectPublicInvitationPreviewReady(
           return null;
         }
 
-        return (await response.json()) as {
-          readonly organizationName?: string;
-        } | null;
+        return decodePublicInvitationPreview(await response.json());
       },
       {
         message: "public invitation preview is ready",

@@ -1,3 +1,4 @@
+import { decodeInvitationId } from "@ceird/identity-core";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { AcceptInvitationPage } from "#/features/organizations/accept-invitation-page";
@@ -9,5 +10,7 @@ export const Route = createFileRoute("/accept-invitation/$invitationId")({
 function AcceptInvitationRoute() {
   const { invitationId } = Route.useParams();
 
-  return <AcceptInvitationPage invitationId={invitationId} />;
+  return (
+    <AcceptInvitationPage invitationId={decodeInvitationId(invitationId)} />
+  );
 }

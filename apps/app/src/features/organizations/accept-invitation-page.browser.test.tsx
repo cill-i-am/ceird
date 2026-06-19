@@ -1,7 +1,17 @@
-import type { PublicInvitationPreview } from "@ceird/identity-core";
+import {
+  decodeInvitationId,
+  NativeAuthClientSessionSchema,
+  NativeOrganizationAcceptInvitationPayloadSchema,
+} from "@ceird/identity-core";
+import type {
+  NativeAuthClientSession,
+  NativeOrganizationAcceptInvitationPayload,
+  PublicInvitationPreview,
+} from "@ceird/identity-core";
 import type * as RouterModule from "@tanstack/react-router";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Schema } from "effect";
 import type { ComponentProps } from "react";
 
 import type * as AppContextClientCacheModule from "#/features/auth/app-context-client-cache";
@@ -23,15 +33,7 @@ const {
 } = vi.hoisted(() => ({
   mockedAcceptInvitation: vi.fn<
     (input: { invitationId: string }) => Promise<{
-      data: {
-        invitation: {
-          id: string;
-          status: string;
-        };
-        member: {
-          organizationId: string;
-        };
-      } | null;
+      data: unknown | null;
       error: {
         message: string;
         status: number;
@@ -54,14 +56,7 @@ const {
     vi.fn<(invitationId: string) => Promise<PublicInvitationPreview | null>>(),
   mockedGetSession: vi.fn<
     () => Promise<{
-      data: {
-        session: {
-          id: string;
-        };
-        user: {
-          email: string;
-        };
-      } | null;
+      data: NativeAuthClientSession | null;
       error: null;
     }>
   >(),
@@ -98,6 +93,64 @@ const nativeInvitationDetails = {
   role: "member",
   status: "pending",
 };
+
+const decodeNativeClientSession = Schema.decodeUnknownSync(
+  NativeAuthClientSessionSchema
+);
+const decodeNativeAcceptInvitationPayload = Schema.decodeUnknownSync(
+  NativeOrganizationAcceptInvitationPayloadSchema
+);
+
+const nativeClientSession: NativeAuthClientSession = decodeNativeClientSession({
+  session: {
+    activeOrganizationId: null,
+    createdAt: new Date("2026-04-01T09:00:00.000Z"),
+    expiresAt: new Date("2026-05-01T09:00:00.000Z"),
+    id: "session_123",
+    ipAddress: null,
+    updatedAt: new Date("2026-04-01T09:00:00.000Z"),
+    userAgent: null,
+    userId: "user_member",
+  },
+  user: {
+    createdAt: new Date("2026-04-01T08:00:00.000Z"),
+    email: "member@example.com",
+    emailVerified: true,
+    id: "user_member",
+    image: null,
+    name: "Member Example",
+    twoFactorEnabled: false,
+    updatedAt: new Date("2026-04-01T08:00:00.000Z"),
+  },
+});
+
+const nativeAcceptInvitationPayload: NativeOrganizationAcceptInvitationPayload =
+  decodeNativeAcceptInvitationPayload({
+    invitation: {
+      createdAt: new Date("2026-04-01T09:30:00.000Z"),
+      email: "member@example.com",
+      expiresAt: new Date("2026-04-12T09:30:00.000Z"),
+      id: "inv_123",
+      inviterId: "user_owner",
+      organizationId: "org_123",
+      role: "member",
+      status: "accepted",
+      teamId: null,
+    },
+    member: {
+      createdAt: new Date("2026-04-01T10:00:00.000Z"),
+      id: "member_123",
+      organizationId: "org_123",
+      role: "member",
+      userId: "user_member",
+    },
+  });
+
+function renderAcceptInvitationPage() {
+  return render(
+    <AcceptInvitationPage invitationId={decodeInvitationId("inv_123")} />
+  );
+}
 
 vi.mock(import("../auth/app-context-client-cache"), () => ({
   getCachedClientAppContext: vi.fn<
@@ -188,15 +241,7 @@ describe("accept invitation page", () => {
   beforeEach(() => {
     mockedNavigate.mockResolvedValue();
     mockedAcceptInvitation.mockResolvedValue({
-      data: {
-        invitation: {
-          id: "inv_123",
-          status: "accepted",
-        },
-        member: {
-          organizationId: "org_123",
-        },
-      },
+      data: nativeAcceptInvitationPayload,
       error: null,
     });
     mockedSetActiveOrganization.mockResolvedValue({
@@ -231,7 +276,7 @@ describe("accept invitation page", () => {
   });
 
   it("offers sign-in and sign-up continuation links to signed-out users", async () => {
-    render(<AcceptInvitationPage invitationId="inv_123" />);
+    renderAcceptInvitationPage();
 
     await expect(
       screen.findByRole("heading", { name: "Join Acme Field Ops" })
@@ -264,7 +309,7 @@ describe("accept invitation page", () => {
       new Error("preview unavailable")
     );
 
-    render(<AcceptInvitationPage invitationId="inv_123" />);
+    renderAcceptInvitationPage();
 
     await expect(
       screen.findByRole("heading", {
@@ -282,18 +327,11 @@ describe("accept invitation page", () => {
 
   it("shows invitation details for the authenticated recipient", async () => {
     mockedGetSession.mockResolvedValue({
-      data: {
-        session: {
-          id: "session_123",
-        },
-        user: {
-          email: "member@example.com",
-        },
-      },
+      data: nativeClientSession,
       error: null,
     });
 
-    render(<AcceptInvitationPage invitationId="inv_123" />);
+    renderAcceptInvitationPage();
 
     await expect(
       screen.findByText("Join Acme Field Ops")
@@ -319,14 +357,7 @@ describe("accept invitation page", () => {
 
   it("rejects unmodeled signed-in invitation details", async () => {
     mockedGetSession.mockResolvedValue({
-      data: {
-        session: {
-          id: "session_123",
-        },
-        user: {
-          email: "member@example.com",
-        },
-      },
+      data: nativeClientSession,
       error: null,
     });
     mockedGetInvitation.mockResolvedValue({
@@ -337,7 +368,7 @@ describe("accept invitation page", () => {
       error: null,
     });
 
-    render(<AcceptInvitationPage invitationId="inv_123" />);
+    renderAcceptInvitationPage();
 
     await expect(
       screen.findByText(
@@ -352,20 +383,13 @@ describe("accept invitation page", () => {
 
   it("accepts the invitation and continues to location onboarding", async () => {
     mockedGetSession.mockResolvedValue({
-      data: {
-        session: {
-          id: "session_123",
-        },
-        user: {
-          email: "member@example.com",
-        },
-      },
+      data: nativeClientSession,
       error: null,
     });
 
     const user = userEvent.setup();
 
-    render(<AcceptInvitationPage invitationId="inv_123" />);
+    renderAcceptInvitationPage();
 
     await user.click(
       await screen.findByRole("button", { name: "Accept invitation" })
@@ -401,16 +425,40 @@ describe("accept invitation page", () => {
     expect(setActiveOrganizationCallOrder).toBeLessThan(navigateCallOrder);
   }, 10_000);
 
-  it("accepts with the public preview when authenticated invitation details are temporarily unavailable", async () => {
+  it("fails closed when the accept response omits the accepted organization id", async () => {
     mockedGetSession.mockResolvedValue({
+      data: nativeClientSession,
+      error: null,
+    });
+    mockedAcceptInvitation.mockResolvedValue({
       data: {
-        session: {
-          id: "session_123",
-        },
-        user: {
-          email: "member@example.com",
+        ...nativeAcceptInvitationPayload,
+        member: {
+          ...nativeAcceptInvitationPayload.member,
+          organizationId: "",
         },
       },
+      error: null,
+    });
+
+    const user = userEvent.setup();
+
+    renderAcceptInvitationPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Accept invitation" })
+    );
+
+    await expect(
+      screen.findByText("We couldn't accept this invitation. Please try again.")
+    ).resolves.toBeInTheDocument();
+    expect(mockedSetActiveOrganization).not.toHaveBeenCalled();
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("accepts with the public preview when authenticated invitation details are temporarily unavailable", async () => {
+    mockedGetSession.mockResolvedValue({
+      data: nativeClientSession,
       error: null,
     });
     mockedGetInvitation.mockResolvedValue({
@@ -424,7 +472,7 @@ describe("accept invitation page", () => {
 
     const user = userEvent.setup();
 
-    render(<AcceptInvitationPage invitationId="inv_123" />);
+    renderAcceptInvitationPage();
 
     await expect(
       screen.findByRole("heading", { name: "Join Acme Field Ops" })
@@ -449,14 +497,7 @@ describe("accept invitation page", () => {
 
   it("keeps the invitation details visible when acceptance fails", async () => {
     mockedGetSession.mockResolvedValue({
-      data: {
-        session: {
-          id: "session_123",
-        },
-        user: {
-          email: "member@example.com",
-        },
-      },
+      data: nativeClientSession,
       error: null,
     });
     mockedAcceptInvitation.mockResolvedValue({
@@ -470,7 +511,7 @@ describe("accept invitation page", () => {
 
     const user = userEvent.setup();
 
-    render(<AcceptInvitationPage invitationId="inv_123" />);
+    renderAcceptInvitationPage();
 
     await user.click(
       await screen.findByRole("button", { name: "Accept invitation" })
@@ -489,14 +530,7 @@ describe("accept invitation page", () => {
 
   it("shows membership-limit copy when the organization is full", async () => {
     mockedGetSession.mockResolvedValue({
-      data: {
-        session: {
-          id: "session_123",
-        },
-        user: {
-          email: "member@example.com",
-        },
-      },
+      data: nativeClientSession,
       error: null,
     });
     mockedAcceptInvitation.mockResolvedValue({
@@ -510,7 +544,7 @@ describe("accept invitation page", () => {
 
     const user = userEvent.setup();
 
-    render(<AcceptInvitationPage invitationId="inv_123" />);
+    renderAcceptInvitationPage();
 
     await user.click(
       await screen.findByRole("button", { name: "Accept invitation" })
@@ -528,14 +562,7 @@ describe("accept invitation page", () => {
 
   it("clears organization caches when acceptance succeeds but activation fails", async () => {
     mockedGetSession.mockResolvedValue({
-      data: {
-        session: {
-          id: "session_123",
-        },
-        user: {
-          email: "member@example.com",
-        },
-      },
+      data: nativeClientSession,
       error: null,
     });
     mockedSetActiveOrganization.mockResolvedValue({
@@ -549,7 +576,7 @@ describe("accept invitation page", () => {
 
     const user = userEvent.setup();
 
-    render(<AcceptInvitationPage invitationId="inv_123" />);
+    renderAcceptInvitationPage();
 
     await user.click(
       await screen.findByRole("button", { name: "Accept invitation" })
@@ -576,10 +603,9 @@ describe("accept invitation page", () => {
   it("lets the user sign out and retry with another account when lookup is denied", async () => {
     mockedGetSession.mockResolvedValue({
       data: {
-        session: {
-          id: "session_123",
-        },
+        ...nativeClientSession,
         user: {
+          ...nativeClientSession.user,
           email: "wrong-account@example.com",
         },
       },
@@ -596,7 +622,7 @@ describe("accept invitation page", () => {
 
     const user = userEvent.setup();
 
-    render(<AcceptInvitationPage invitationId="inv_123" />);
+    renderAcceptInvitationPage();
 
     await user.click(
       await screen.findByRole("button", {

@@ -23,7 +23,6 @@ import {
 import { AuthFormField } from "#/features/auth/auth-form-field";
 import { EntryShell, EntrySurfaceCard } from "#/features/auth/entry-shell";
 import { useIsHydrated } from "#/hooks/use-is-hydrated";
-import { authClient } from "#/lib/auth-client";
 import {
   getBrowserLocationHref,
   navigateBrowserTo,
@@ -50,6 +49,7 @@ import {
   organizationMemberInviteSchema,
 } from "./organization-member-invite-schemas";
 import type { OrganizationMemberInviteInput } from "./organization-member-invite-schemas";
+import { inviteOrganizationMember } from "./organization-members-api";
 import {
   decodeCreateOrganizationNameInput,
   organizationOnboardingSchema,
@@ -115,7 +115,6 @@ export function OrganizationOnboardingPage() {
       <EntryShell atmosphere="setup">
         {createdOrganization ? (
           <InviteMembersStep
-            organization={createdOrganization}
             isHydrated={isHydrated}
             onContinue={() =>
               continueToCreatedOrganization({
@@ -220,11 +219,9 @@ async function continueToCreatedOrganization({
 function InviteMembersStep({
   isHydrated,
   onContinue,
-  organization,
 }: {
   readonly isHydrated: boolean;
   readonly onContinue: () => Promise<void>;
-  readonly organization: OrganizationSummary;
 }) {
   const [hasSentInvite, setHasSentInvite] = React.useState(false);
   const [roleSelectOpen, setRoleSelectOpen] = React.useState(false);
@@ -242,19 +239,13 @@ function InviteMembersStep({
         minimumDurationMs: 500,
       });
       const invite = decodeOrganizationMemberInviteInput(value);
-      const result = await authClient.organization.inviteMember({
-        email: invite.email,
-        organizationId: organization.id,
-        role: invite.role,
-      });
 
-      if (result.error) {
+      try {
+        await inviteOrganizationMember(invite);
+      } catch (error) {
         formApi.setErrorMap({
           onSubmit: {
-            form: getInviteMemberFailureMessage(
-              result.error,
-              INVITE_FAILURE_MESSAGE
-            ),
+            form: getInviteMemberFailureMessage(error, INVITE_FAILURE_MESSAGE),
             fields: {},
           },
         });

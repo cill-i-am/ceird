@@ -321,6 +321,8 @@ export function decodeProductMemberActorSummaryElectricRow(
 
 export const OrganizationMemberRoleResponseSchema = Schema.Struct({
   role: OrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 export type OrganizationMemberRoleResponse = Schema.Schema.Type<
   typeof OrganizationMemberRoleResponseSchema
@@ -864,9 +866,11 @@ export type UpdateOrganizationInput = Schema.Schema.Type<
 >;
 
 export const PublicInvitationPreviewSchema = Schema.Struct({
-  email: Schema.String,
-  organizationName: Schema.String,
+  email: OrganizationEmailAddress,
+  organizationName: OrganizationNameSchema,
   role: InvitableOrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
 });
 
 export type PublicInvitationPreview = Schema.Schema.Type<
@@ -909,6 +913,94 @@ export const NativeOrganizationInvitationDetailsPayloadSchema = Schema.Struct({
 });
 export type NativeOrganizationInvitationDetailsPayload = Schema.Schema.Type<
   typeof NativeOrganizationInvitationDetailsPayloadSchema
+>;
+
+const NativeAuthClientDateSchema = Schema.Union([
+  IsoDateTimeString,
+  Schema.DateValid,
+]);
+
+const NativeAuthClientNullableString = Schema.NullOr(Schema.String);
+
+export const NativeAuthClientSessionSchema = Schema.Struct({
+  session: Schema.Struct({
+    activeOrganizationId: Schema.optional(Schema.NullOr(OrganizationId)),
+    createdAt: NativeAuthClientDateSchema,
+    expiresAt: NativeAuthClientDateSchema,
+    id: SessionId,
+    ipAddress: Schema.optional(NativeAuthClientNullableString),
+    updatedAt: NativeAuthClientDateSchema,
+    userAgent: Schema.optional(NativeAuthClientNullableString),
+    userId: UserId,
+  }).annotate({
+    parseOptions: { onExcessProperty: "error" },
+  }),
+  user: Schema.Struct({
+    createdAt: NativeAuthClientDateSchema,
+    email: OrganizationEmailAddress,
+    emailVerified: Schema.Boolean,
+    id: UserId,
+    image: Schema.optional(NativeAuthClientNullableString),
+    name: Schema.String,
+    twoFactorEnabled: Schema.Boolean,
+    updatedAt: NativeAuthClientDateSchema,
+  }).annotate({
+    parseOptions: { onExcessProperty: "error" },
+  }),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type NativeAuthClientSession = Schema.Schema.Type<
+  typeof NativeAuthClientSessionSchema
+>;
+
+const NativeAuthClientErrorSchema = Schema.Struct({
+  code: Schema.optional(Schema.String),
+  message: Schema.String,
+  status: Schema.optional(Schema.Number),
+  statusText: Schema.optional(Schema.String),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+export const NativeAuthClientSessionResultSchema = Schema.Struct({
+  data: Schema.NullOr(NativeAuthClientSessionSchema),
+  error: Schema.NullOr(NativeAuthClientErrorSchema),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type NativeAuthClientSessionResult = Schema.Schema.Type<
+  typeof NativeAuthClientSessionResultSchema
+>;
+
+export const NativeOrganizationAcceptInvitationPayloadSchema = Schema.Struct({
+  invitation: Schema.Struct({
+    createdAt: NativeOrganizationInvitationDetailsDateSchema,
+    email: OrganizationEmailAddress,
+    expiresAt: NativeOrganizationInvitationDetailsDateSchema,
+    id: InvitationId,
+    inviterId: UserId,
+    organizationId: OrganizationId,
+    role: InvitableOrganizationRole,
+    status: Schema.Literal("accepted"),
+    teamId: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
+  }).annotate({
+    parseOptions: { onExcessProperty: "error" },
+  }),
+  member: Schema.Struct({
+    createdAt: NativeOrganizationInvitationDetailsDateSchema,
+    id: OrganizationMemberId,
+    organizationId: OrganizationId,
+    role: OrganizationRole,
+    userId: UserId,
+  }).annotate({
+    parseOptions: { onExcessProperty: "error" },
+  }),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type NativeOrganizationAcceptInvitationPayload = Schema.Schema.Type<
+  typeof NativeOrganizationAcceptInvitationPayloadSchema
 >;
 
 export const ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES = [
@@ -1266,6 +1358,18 @@ export function decodeOrganizationInvitationDetails(
     organizationName: payload.organizationName,
     role: payload.role,
   });
+}
+
+export function decodeNativeAuthClientSessionResult(
+  input: unknown
+): NativeAuthClientSessionResult {
+  return Schema.decodeUnknownSync(NativeAuthClientSessionResultSchema)(input);
+}
+
+export function decodeAcceptedOrganizationId(input: unknown): OrganizationId {
+  return Schema.decodeUnknownSync(
+    NativeOrganizationAcceptInvitationPayloadSchema
+  )(input).member.organizationId;
 }
 
 export function decodeOrganizationId(input: unknown): OrganizationId {
