@@ -44,8 +44,13 @@ describe("organization member identity mapping", () => {
       requests.push({
         body: await request.json(),
         headers: {
+          authorization: request.headers.get("authorization"),
           "cf-connecting-ip": request.headers.get("cf-connecting-ip"),
+          cookie: request.headers.get("cookie"),
+          origin: request.headers.get("origin"),
+          "user-agent": request.headers.get("user-agent"),
           "x-forwarded-for": request.headers.get("x-forwarded-for"),
+          "x-forwarded-host": request.headers.get("x-forwarded-host"),
         },
         method: request.method,
         pathname: new URL(request.url).pathname,
@@ -62,8 +67,13 @@ describe("organization member identity mapping", () => {
           role: "member",
         },
         headers: {
-          "cf-connecting-ip": "203.0.113.10",
-          "x-forwarded-for": null,
+          authorization: "Bearer nested-auth-token",
+          "cf-connecting-ip": null,
+          cookie: "better-auth.session_token=session-value",
+          origin: "https://app.ceird.example",
+          "user-agent": "Ceird E2E",
+          "x-forwarded-for": "203.0.113.10",
+          "x-forwarded-host": null,
         },
         method: "POST",
         pathname: "/api/auth/organization/invite-member",
@@ -135,10 +145,11 @@ describe("organization member identity mapping", () => {
     );
   });
 
-  it("preserves client IP while scrubbing transport headers from synthetic Better Auth requests", () => {
+  it("projects trusted auth headers while scrubbing transport headers from synthetic Better Auth requests", () => {
     const headers = makeOrganizationAuthRequestHeaders({
       accept: "text/html",
       "accept-encoding": "gzip, br",
+      authorization: "Bearer nested-auth-token",
       "cdn-loop": "cloudflare",
       "cf-connecting-ip": "203.0.113.10",
       "cf-ipcountry": "US",
@@ -151,7 +162,12 @@ describe("organization member identity mapping", () => {
       cookie: "better-auth.session_token=session-value",
       host: "api.pr-248.ceird.app",
       origin: "https://app.pr-248.ceird.app",
+      priority: "u=1, i",
+      referer: "https://app.pr-248.ceird.app/members",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-site": "same-site",
       "transfer-encoding": "chunked",
+      "user-agent": "Ceird E2E",
       "x-forwarded-for": "198.51.100.20",
       "x-forwarded-host": "api.pr-248.ceird.app",
       "x-request-id": "request-id",
@@ -159,8 +175,9 @@ describe("organization member identity mapping", () => {
 
     expect(headers.get("accept")).toBe("application/json");
     expect(headers.get("accept-encoding")).toBeNull();
+    expect(headers.get("authorization")).toBe("Bearer nested-auth-token");
     expect(headers.get("cdn-loop")).toBeNull();
-    expect(headers.get("cf-connecting-ip")).toBe("203.0.113.10");
+    expect(headers.get("cf-connecting-ip")).toBeNull();
     expect(headers.get("cf-ipcountry")).toBeNull();
     expect(headers.get("cf-ray")).toBeNull();
     expect(headers.get("connection")).toBeNull();
@@ -173,10 +190,24 @@ describe("organization member identity mapping", () => {
     );
     expect(headers.get("host")).toBeNull();
     expect(headers.get("origin")).toBe("https://app.pr-248.ceird.app");
+    expect(headers.get("priority")).toBeNull();
+    expect(headers.get("referer")).toBeNull();
+    expect(headers.get("sec-fetch-mode")).toBeNull();
+    expect(headers.get("sec-fetch-site")).toBeNull();
     expect(headers.get("transfer-encoding")).toBeNull();
+    expect(headers.get("user-agent")).toBe("Ceird E2E");
     expect(headers.get("x-forwarded-for")).toBe("198.51.100.20");
-    expect(headers.get("x-forwarded-host")).toBe("api.pr-248.ceird.app");
-    expect(headers.get("x-request-id")).toBe("request-id");
+    expect(headers.get("x-forwarded-host")).toBeNull();
+    expect(headers.get("x-request-id")).toBeNull();
+  });
+
+  it("projects Cloudflare client IP into x-forwarded-for when no forwarded chain is present", () => {
+    const headers = makeOrganizationAuthRequestHeaders({
+      "cf-connecting-ip": "203.0.113.10",
+    });
+
+    expect(headers.get("cf-connecting-ip")).toBeNull();
+    expect(headers.get("x-forwarded-for")).toBe("203.0.113.10");
   });
 
   it("maps joined member rows into a safe member DTO", () => {
@@ -437,9 +468,11 @@ function makeTestHttpServerRequest(): HttpServerRequest.HttpServerRequest {
     "https://api.ceird.example/organization/invitations",
     {
       headers: {
+        authorization: "Bearer nested-auth-token",
         "cf-connecting-ip": "203.0.113.10",
-        cookie: "better-auth.session_token=session_123",
+        cookie: "better-auth.session_token=session-value",
         origin: "https://app.ceird.example",
+        "user-agent": "Ceird E2E",
       },
     }
   );

@@ -159,20 +159,6 @@ const AuthenticationFailureBodySchema = Schema.Struct({
 }).annotate({
   parseOptions: { onExcessProperty: "ignore" },
 });
-const SYNTHETIC_ORGANIZATION_AUTH_TRANSPORT_HEADER_NAMES = [
-  "accept-encoding",
-  "cdn-loop",
-  "cf-ew-via",
-  "cf-ipcountry",
-  "cf-ray",
-  "cf-visitor",
-  "connection",
-  "content-encoding",
-  "content-length",
-  "content-md5",
-  "host",
-  "transfer-encoding",
-] as const;
 type OrganizationMemberRow = Schema.Schema.Type<
   typeof OrganizationMemberRowSchema
 >;
@@ -591,16 +577,61 @@ export function mapOrganizationMemberRemovalPayload(
 }
 
 export function makeOrganizationAuthRequestHeaders(input: HeadersInit) {
-  const headers = new Headers(input);
-
-  for (const name of SYNTHETIC_ORGANIZATION_AUTH_TRANSPORT_HEADER_NAMES) {
-    headers.delete(name);
-  }
+  const incomingHeaders = new Headers(input);
+  const headers = new Headers();
 
   headers.set("accept", "application/json");
   headers.set("content-type", "application/json");
+  setSyntheticOrganizationAuthHeader(
+    headers,
+    "authorization",
+    incomingHeaders.get("authorization")
+  );
+  setSyntheticOrganizationAuthHeader(
+    headers,
+    "cookie",
+    incomingHeaders.get("cookie")
+  );
+  setSyntheticOrganizationAuthHeader(
+    headers,
+    "origin",
+    incomingHeaders.get("origin")
+  );
+  setSyntheticOrganizationAuthHeader(
+    headers,
+    "user-agent",
+    incomingHeaders.get("user-agent")
+  );
+  setSyntheticOrganizationAuthHeader(
+    headers,
+    "x-forwarded-for",
+    resolveSyntheticOrganizationAuthClientIp(incomingHeaders)
+  );
 
   return headers;
+}
+
+function resolveSyntheticOrganizationAuthClientIp(headers: Headers) {
+  return (
+    readNonEmptyHeader(headers, "x-forwarded-for") ??
+    readNonEmptyHeader(headers, "cf-connecting-ip")
+  );
+}
+
+function setSyntheticOrganizationAuthHeader(
+  headers: Headers,
+  name: string,
+  value: string | null
+) {
+  if (value !== null && value.length > 0) {
+    headers.set(name, value);
+  }
+}
+
+function readNonEmptyHeader(headers: Headers, name: string) {
+  const value = headers.get(name);
+
+  return value === null || value.length === 0 ? null : value;
 }
 
 function dispatchOrganizationAuthRequest(
