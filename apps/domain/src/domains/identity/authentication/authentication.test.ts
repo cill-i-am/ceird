@@ -5318,7 +5318,7 @@ describe("createAuthentication()", () => {
     }
   }, 10_000);
 
-  it("fails open when Better Auth hook metadata contains malformed organization member IDs", async () => {
+  it("fails closed when Better Auth hook metadata contains malformed organization member IDs", async () => {
     const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
     const { logger, logs } = captureLogs();
     const runtimeContext = await Effect.context<never>().pipe(
@@ -5354,29 +5354,33 @@ describe("createAuthentication()", () => {
           }
         | undefined;
 
-      await hooks?.afterAcceptInvitation?.({
-        invitation: {
-          email: "member@example.com",
-          organizationId: "org_123",
-          role: "member",
-        },
-        member: {
-          id: "",
-          organizationId: "org_123",
-          userId: "user_member",
-        },
-        organization: {
-          id: "org_123",
-        },
-        user: {
-          id: "user_member",
+      await expect(
+        hooks?.afterAcceptInvitation?.({
+          invitation: {
+            email: "member@example.com",
+            organizationId: "org_123",
+            role: "member",
+          },
+          member: {
+            id: "",
+            organizationId: "org_123",
+            userId: "user_member",
+          },
+          organization: {
+            id: "org_123",
+          },
+          user: {
+            id: "user_member",
+          },
+        })
+      ).rejects.toMatchObject({
+        status: "BAD_REQUEST",
+        body: {
+          code: "INVALID_ORGANIZATION_INVITATION_PAYLOAD",
         },
       });
 
       expect(auditEvents).toStrictEqual([]);
-      expect(JSON.stringify(logs)).toContain(
-        "auth_security_audit_write_failure"
-      );
       expect(JSON.stringify(logs)).not.toContain("member@example.com");
     } finally {
       await cleanup();

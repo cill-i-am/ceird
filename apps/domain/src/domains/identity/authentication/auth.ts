@@ -6,7 +6,6 @@ import {
   decodeInvitationId,
   decodeCreateOrganizationInput,
   decodeInvitableOrganizationRole,
-  decodeOrganizationId,
   decodeOrganizationRole,
   decodePublicInvitationPreview,
   decodeSessionId,

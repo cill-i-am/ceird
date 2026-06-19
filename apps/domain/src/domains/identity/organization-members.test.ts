@@ -1,4 +1,8 @@
-import { decodeOrganizationId, decodeUserId } from "@ceird/identity-core";
+import {
+  decodeOrganizationId,
+  decodeSessionId,
+  decodeUserId,
+} from "@ceird/identity-core";
 import { Effect, Layer } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
@@ -529,19 +533,22 @@ function makeAuthenticationSession(): AuthenticationSessionResult {
 
   return {
     session: {
-      activeOrganizationId: "org_123",
+      activeOrganizationId: decodeOrganizationId("org_123"),
       createdAt: now,
       expiresAt: new Date("2026-04-01T10:30:00.000Z"),
-      id: "session_123",
+      id: decodeSessionId("session_123"),
+      ipAddress: "203.0.113.10",
       token: "session_token_123",
       updatedAt: now,
-      userId: "user_owner",
+      userAgent: "Ceird E2E",
+      userId: decodeUserId("user_owner"),
     },
     user: {
       createdAt: now,
       email: "owner@example.com",
       emailVerified: true,
-      id: "user_owner",
+      id: decodeUserId("user_owner"),
+      image: null,
       name: "Owner Example",
       twoFactorEnabled: false,
       updatedAt: now,
