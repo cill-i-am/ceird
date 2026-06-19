@@ -17,7 +17,10 @@ import {
   withAuthenticationAbuseRateLimitGuard,
   withAuthenticationRateLimitFailureResponse,
 } from "./auth-rate-limits.js";
-import type { AuthenticationConfig } from "./config.js";
+import type {
+  AuthenticationConfig,
+  CeirdOAuthClientRegistrationAllowedScope,
+} from "./config.js";
 
 type BetterAuthBoundaryPolicyHandler = (request: Request) => Promise<Response>;
 
@@ -28,7 +31,7 @@ export interface BetterAuthBoundaryPolicyAdapterOptions {
   >;
   readonly database: NodePgDatabase;
   readonly oauthClientRegistrationAllowLoopbackRedirects: boolean;
-  readonly oauthClientRegistrationAllowedScopes: readonly string[];
+  readonly oauthClientRegistrationAllowedScopes: readonly CeirdOAuthClientRegistrationAllowedScope[];
   readonly resolveSession: (
     request: Request
   ) => Promise<AuthenticationSessionResult | null>;

@@ -5,7 +5,7 @@ import { OrganizationId, UserId } from "@ceird/identity-core";
 import { getIp } from "better-auth/api";
 import { eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { Context, Effect, Option, Schema } from "effect";
+import { Context, Effect, Option, Schema, SchemaGetter } from "effect";
 
 import {
   AuthRateLimitRequestBodyUnavailableError,
@@ -68,25 +68,56 @@ const AUTH_RATE_LIMIT_REQUEST_INVALID_ERROR_CODE =
 const AUTH_ORGANIZATION_CONTEXT_MISMATCH_ERROR_CODE =
   "AUTH_ORGANIZATION_CONTEXT_MISMATCH";
 const AUTH_RATE_LIMIT_UNAVAILABLE_RETRY_AFTER_SECONDS = 30;
+const AuthenticationDeliveryEmail = Schema.Trim.pipe(
+  Schema.decode({
+    decode: SchemaGetter.transform((value) => value.toLowerCase()),
+    encode: SchemaGetter.transform((value) => value),
+  }),
+  Schema.check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(AUTH_DELIVERY_EMAIL_MAX_LENGTH),
+    Schema.isLowercased()
+  ),
+  Schema.brand("AuthenticationDeliveryEmail")
+);
+const decodeAuthenticationDeliveryEmailOption = Schema.decodeUnknownOption(
+  AuthenticationDeliveryEmail
+);
 const AuthenticationRateLimitRequestBodySchema = Schema.Struct({
-  email: Schema.optional(Schema.String),
-  newEmail: Schema.optional(Schema.String),
+  email: Schema.optional(AuthenticationDeliveryEmail),
+  newEmail: Schema.optional(AuthenticationDeliveryEmail),
   organizationId: Schema.optional(OrganizationId),
 });
 type DecodedAuthenticationRateLimitRequestBody = Schema.Schema.Type<
   typeof AuthenticationRateLimitRequestBodySchema
 >;
 
+const ObservedRateLimitKeySchema = Schema.NonEmptyString.pipe(
+  Schema.brand("ObservedRateLimitKey")
+);
+const decodeObservedRateLimitKey = Schema.decodeUnknownSync(
+  ObservedRateLimitKeySchema
+);
+const NonNegativeIntegerSchema = Schema.Number.pipe(
+  Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
+);
+const AuthenticationRateLimitReservationRowSchema = Schema.Struct({
+  count: NonNegativeIntegerSchema,
+});
+const decodeAuthenticationRateLimitReservationRow = Schema.decodeUnknownSync(
+  AuthenticationRateLimitReservationRowSchema
+);
 export const ObservedRateLimitSchema = Schema.Struct({
-  count: Schema.Number.pipe(
-    Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
-  ),
-  key: Schema.NonEmptyString,
-  lastRequest: Schema.Number.pipe(
-    Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))
-  ),
+  count: NonNegativeIntegerSchema,
+  key: ObservedRateLimitKeySchema,
+  lastRequest: NonNegativeIntegerSchema,
 });
 type ObservedRateLimit = Schema.Schema.Type<typeof ObservedRateLimitSchema>;
+interface ObservedRateLimitStorageValue {
+  readonly count: number;
+  readonly key: string;
+  readonly lastRequest: number;
+}
 const decodeObservedRateLimit = Schema.decodeUnknownSync(
   ObservedRateLimitSchema
 );
@@ -94,7 +125,7 @@ interface ObservedRateLimitStorage {
   readonly get: (key: string) => Promise<ObservedRateLimit | null | undefined>;
   readonly set: (
     key: string,
-    value: ObservedRateLimit,
+    value: ObservedRateLimitStorageValue,
     update?: boolean | undefined
   ) => Promise<void>;
 }
@@ -597,8 +628,10 @@ function makeAuthenticationDeliveryRateLimitReservationRequests(options: {
     case "/send-verification-email": {
       const email =
         options.sessionResolution.status === "resolved"
-          ? normalizeAuthDeliveryEmail(
-              options.sessionResolution.session.user.email
+          ? Option.getOrNull(
+              decodeAuthenticationDeliveryEmailOption(
+                options.sessionResolution.session.user.email
+              )
             )
           : readNormalizedAuthDeliveryEmailField(
               requireAuthenticationRateLimitRequestBody(options),
@@ -803,20 +836,7 @@ function readNormalizedAuthDeliveryEmailField(
   body: DecodedAuthenticationRateLimitRequestBody | null,
   field: "email" | "newEmail"
 ) {
-  return normalizeAuthDeliveryEmail(body?.[field]);
-}
-
-function normalizeAuthDeliveryEmail(value: string | null | undefined) {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  const normalizedEmail = value.trim().toLowerCase();
-
-  return normalizedEmail.length > 0 &&
-    normalizedEmail.length <= AUTH_DELIVERY_EMAIL_MAX_LENGTH
-    ? normalizedEmail
-    : null;
+  return body?.[field] ?? null;
 }
 
 async function resolveAuthenticationAbuseRateLimitSession(
@@ -893,9 +913,11 @@ async function reserveAuthenticationRateLimit(options: {
   if (!reservation) {
     throw new Error("Auth rate-limit reservation did not return a row.");
   }
+  const decodedReservation =
+    decodeAuthenticationRateLimitReservationRow(reservation);
 
   return {
-    allowed: reservation.count <= options.rule.max,
+    allowed: decodedReservation.count <= options.rule.max,
     retryAfterSeconds: options.rule.window,
   };
 }
@@ -926,6 +948,7 @@ export function makeObservedDatabaseRateLimitStorage(
     get: (key) =>
       measureAuthenticationPhase("auth.rateLimitReadMs", async () => {
         try {
+          const decodedKey = decodeObservedRateLimitKey(key);
           const [row] = await database
             .select({
               count: rateLimitTable.count,
@@ -933,7 +956,7 @@ export function makeObservedDatabaseRateLimitStorage(
               lastRequest: rateLimitTable.lastRequest,
             })
             .from(rateLimitTable)
-            .where(eq(rateLimitTable.key, key))
+            .where(eq(rateLimitTable.key, decodedKey))
             .limit(1);
 
           return row ? decodeObservedRateLimit(row) : null;
@@ -950,11 +973,18 @@ export function makeObservedDatabaseRateLimitStorage(
     set: (key, value, update) =>
       measureAuthenticationPhase("auth.rateLimitWriteMs", async () => {
         try {
+          const decodedKey = decodeObservedRateLimitKey(key);
           const nextValue = decodeObservedRateLimit({
             count: value.count,
             key: value.key,
             lastRequest: value.lastRequest,
           });
+
+          if (nextValue.key !== decodedKey) {
+            throw new Error(
+              "Observed rate-limit key must match the decoded limiter value key."
+            );
+          }
 
           if (update) {
             await database
@@ -963,13 +993,17 @@ export function makeObservedDatabaseRateLimitStorage(
                 count: nextValue.count,
                 lastRequest: nextValue.lastRequest,
               })
-              .where(eq(rateLimitTable.key, key));
+              .where(eq(rateLimitTable.key, decodedKey));
             return;
           }
 
           await database
             .insert(rateLimitTable)
-            .values(nextValue)
+            .values({
+              count: nextValue.count,
+              key: decodedKey,
+              lastRequest: nextValue.lastRequest,
+            })
             .onConflictDoUpdate({
               set: {
                 count: nextValue.count,

@@ -1995,6 +1995,32 @@ describe("createAuthentication()", () => {
     expect(logText).toContain("fail_open");
   }, 10_000);
 
+  it("fails open before reading observed rate-limit storage when Better Auth passes a malformed key", async () => {
+    const { logger, logs } = captureLogs();
+
+    await Effect.gen(function* verifyRateLimitKeyDecodeFailureTelemetry() {
+      const runtimeContext = yield* Effect.context<never>();
+      const storage = makeObservedDatabaseRateLimitStorage(
+        makeRateLimitReadFailureDatabase(new Error("raw key reached storage")),
+        runtimeContext
+      );
+
+      const readResult = yield* Effect.promise(() => storage.get(""));
+
+      expect(readResult).toBeNull();
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    const logText = JSON.stringify(logs);
+
+    expect(logText).toContain("rate_limit_storage_read_failure");
+    expect(logText).toContain("fail_open");
+    expect(logText).not.toContain("raw key reached storage");
+  }, 10_000);
+
   it.each([
     "/sign-in/email",
     "/sign-up/email",
@@ -2048,6 +2074,58 @@ describe("createAuthentication()", () => {
       expect(delegated).toBeFalsy();
     }
   );
+
+  it("fails closed when a rate-limit reservation row fails schema decoding", async () => {
+    let delegated = false;
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyMalformedReservationRowFailsClosed() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withAuthenticationRateLimitFailureResponse(
+          withAuthenticationAbuseRateLimitGuard(
+            () => {
+              delegated = true;
+              return Promise.resolve(Response.json({ delegated: true }));
+            },
+            makeRateLimitReservationDatabase({ count: -1 }),
+            config,
+            runtimeContext
+          )
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request("http://127.0.0.1:3000/api/auth/sign-in/email", {
+              body: JSON.stringify({}),
+              headers: {
+                "content-type": "application/json",
+                "x-forwarded-for": "127.0.0.1",
+              },
+              method: "POST",
+            })
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      code: "AUTH_RATE_LIMIT_UNAVAILABLE",
+      message: "Authentication protection is temporarily unavailable.",
+    });
+    expect(response.status).toBe(503);
+    expect(delegated).toBeFalsy();
+    expect(JSON.stringify(logs)).toContain("rate_limit_reservation_failure");
+  }, 10_000);
 
   it("rejects OAuth dynamic client registration bursts before Better Auth handles the request", async () => {
     let delegated = false;
@@ -2384,6 +2462,50 @@ describe("createAuthentication()", () => {
       new Request("http://127.0.0.1:3000/api/auth/request-password-reset", {
         body: JSON.stringify({
           email: ["person@example.com"],
+        }),
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "127.0.0.1",
+        },
+        method: "POST",
+      })
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      code: "AUTH_RATE_LIMIT_REQUEST_INVALID",
+      message: "Authentication request is invalid.",
+    });
+    expect(response.status).toBe(400);
+    expect(delegated).toBeFalsy();
+    expect(reservationKeys).toStrictEqual([]);
+  }, 10_000);
+
+  it("rejects malformed normalized email rate-limit subjects at the schema boundary", async () => {
+    let delegated = false;
+    const reservationKeys: string[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "http://127.0.0.1:3000",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withAuthenticationRateLimitFailureResponse(
+      withAuthenticationAbuseRateLimitGuard(
+        () => {
+          delegated = true;
+          return Promise.resolve(Response.json({ delegated: true }));
+        },
+        makeRateLimitReservationSequenceDatabase(
+          [{ count: 1 }, { count: 1 }],
+          reservationKeys
+        ),
+        config
+      )
+    );
+
+    const response = await handler(
+      new Request("http://127.0.0.1:3000/api/auth/request-password-reset", {
+        body: JSON.stringify({
+          email: " ".repeat(4),
         }),
         headers: {
           "content-type": "application/json",
@@ -5483,6 +5605,231 @@ describe("createAuthentication()", () => {
     );
   }, 10_000);
 
+  it("fails open without audit insertion when organization invitation context rows fail schema decoding", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyInvitationContextDecodeFailure() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                email: "member@example.com",
+                organizationId: "org_123",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              invitationRows: [
+                {
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  role: "superadmin",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/invite-member",
+              {
+                body: JSON.stringify({
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  resend: true,
+                }),
+                headers: {
+                  "content-type": "application/json",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain(
+      "auth_security_audit_organization_context_failure"
+    );
+    expect(serializedLogs).not.toContain("member@example.com");
+    expect(JSON.stringify(auditEvents)).not.toContain("superadmin");
+  }, 10_000);
+
+  it("fails open from malformed organization member context rows before metadata construction", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyMemberContextDecodeFailure() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                id: "member_123",
+                organizationId: "org_123",
+                role: "admin",
+                userId: "user_target",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              memberRows: [
+                {
+                  id: "member_123",
+                  organizationId: "org_123",
+                  role: "superadmin",
+                  userId: "user_target",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/update-member-role",
+              {
+                body: JSON.stringify({
+                  memberId: "member_123",
+                  organizationId: "org_123",
+                  role: "admin",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        eventType: "organization_member_role_updated",
+        metadata: expect.objectContaining({
+          previousRole: null,
+          role: "admin",
+          targetUserId: "user_target",
+        }),
+      })
+    );
+    expect(JSON.stringify(auditEvents)).not.toContain("superadmin");
+    expect(JSON.stringify(logs)).toContain(
+      "auth_security_audit_organization_context_failure"
+    );
+  }, 10_000);
+
+  it("ignores malformed Better Auth organization member response roles before audit construction", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+    const handler = withOrganizationSecurityAuditEventRecorder(
+      () =>
+        Promise.resolve(
+          Response.json({
+            id: "member_123",
+            organizationId: "org_123",
+            role: "superadmin",
+            userId: "user_target",
+          })
+        ),
+      {
+        authConfig: config,
+        database: makeAuthSecurityAuditEventDatabase(auditEvents),
+        resolveSession: () =>
+          Promise.resolve(
+            makeAuthenticationSessionResult({
+              activeOrganizationId: "org_123",
+            })
+          ),
+      }
+    );
+
+    const response = await handler(
+      new Request(
+        "https://api.ceird.example/api/auth/organization/update-member-role",
+        {
+          body: JSON.stringify({
+            memberId: "member_123",
+            organizationId: "org_123",
+            role: "admin",
+          }),
+          headers: {
+            "content-type": "application/json",
+          },
+          method: "POST",
+        }
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        eventType: "organization_member_role_updated",
+        metadata: expect.objectContaining({
+          memberId: "member_123",
+          previousRole: null,
+          role: null,
+          targetUserId: null,
+        }),
+        organizationId: "org_123",
+      })
+    );
+    expect(JSON.stringify(auditEvents)).not.toContain("superadmin");
+  }, 10_000);
+
   it("logs stable abuse telemetry when fail-closed reservations cannot read storage", async () => {
     let delegated = false;
     const { logger, logs } = captureLogs();
@@ -5931,6 +6278,80 @@ describe("createAuthentication()", () => {
             lastRequest: -1,
           },
         ])
+      );
+    }).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(capturedWrites).toStrictEqual([]);
+    expect(JSON.stringify(logs)).toContain("rate_limit_storage_write_failure");
+  }, 10_000);
+
+  it.each([
+    ["insert", false],
+    ["update", true],
+  ])(
+    "does not %s observed rate-limit rows when the Better Auth key and limiter value disagree",
+    async (_operation, update) => {
+      const capturedWrites: unknown[] = [];
+      const capturedUpdates: unknown[] = [];
+      const { logger, logs } = captureLogs();
+
+      await Effect.gen(function* verifyRateLimitKeyMismatchTelemetry() {
+        const runtimeContext = yield* Effect.context<never>();
+        const storage = makeObservedDatabaseRateLimitStorage(
+          makeRateLimitStorageMutationCaptureDatabase(
+            capturedWrites,
+            capturedUpdates
+          ),
+          runtimeContext
+        );
+
+        yield* Effect.promise(() =>
+          storage.set(
+            "127.0.0.1|/request-password-reset",
+            {
+              count: 1,
+              key: "127.0.0.2|/request-password-reset",
+              lastRequest: Date.now(),
+            },
+            update
+          )
+        );
+      }).pipe(
+        Effect.provide(Logger.layer([logger])),
+        Effect.provideService(References.MinimumLogLevel, "Trace"),
+        Effect.runPromise
+      );
+
+      expect(capturedWrites).toStrictEqual([]);
+      expect(capturedUpdates).toStrictEqual([]);
+      expect(JSON.stringify(logs)).toContain(
+        "rate_limit_storage_write_failure"
+      );
+    },
+    10_000
+  );
+
+  it("does not insert observed rate-limit rows when Better Auth passes a malformed storage key", async () => {
+    const capturedWrites: unknown[] = [];
+    const { logger, logs } = captureLogs();
+
+    await Effect.gen(function* verifyMalformedRateLimitKeyTelemetry() {
+      const runtimeContext = yield* Effect.context<never>();
+      const storage = makeObservedDatabaseRateLimitStorage(
+        makeRateLimitStorageMutationCaptureDatabase(capturedWrites, []),
+        runtimeContext
+      );
+
+      yield* Effect.promise(() =>
+        storage.set("", {
+          count: 1,
+          key: "127.0.0.1|/request-password-reset",
+          lastRequest: Date.now(),
+        })
       );
     }).pipe(
       Effect.provide(Logger.layer([logger])),
@@ -8398,6 +8819,32 @@ function makeRateLimitWriteCaptureDatabase(capturedWrites: unknown[]) {
 
         return {
           onConflictDoUpdate: () => Promise.resolve(),
+        };
+      },
+    }),
+  } as unknown as Parameters<typeof makeObservedDatabaseRateLimitStorage>[0];
+}
+
+function makeRateLimitStorageMutationCaptureDatabase(
+  capturedWrites: unknown[],
+  capturedUpdates: unknown[]
+) {
+  return {
+    insert: () => ({
+      values: (value: unknown) => {
+        capturedWrites.push(value);
+
+        return {
+          onConflictDoUpdate: () => Promise.resolve(),
+        };
+      },
+    }),
+    update: () => ({
+      set: (value: unknown) => {
+        capturedUpdates.push(value);
+
+        return {
+          where: () => Promise.resolve(),
         };
       },
     }),
