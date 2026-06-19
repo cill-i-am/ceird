@@ -596,6 +596,10 @@ connected-app management plus the owner/admin organization member workspace:
   `organization_member_role_updated`, and `organization_member_removed`
 - `organization_active_changed` remains in the internal audit table but is not
   returned by the owner/admin workspace view
+- member role/remove audit recorders distinguish absent Better Auth member
+  responses from malformed member response shapes; malformed shapes emit parse
+  telemetry and skip the audit write, while absent responses may use the
+  decoded pre-image context
 - response items include safe actor, target, role-change, summary, timestamp,
   organization id, and cursor fields; raw source IP and raw user-agent values
   are not part of the shared response schema

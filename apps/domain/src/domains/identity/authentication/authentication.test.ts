@@ -6147,6 +6147,91 @@ describe("createAuthentication()", () => {
     expect(serializedLogs).toContain("organization_member_role_updated");
   }, 10_000);
 
+  it("fails open when remove-member returns a malformed member response", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyMalformedRemoveMemberResponseSkipsAudit() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                member: {
+                  id: 123,
+                  organizationId: "org_123",
+                  role: "member",
+                  userId: "user_target",
+                },
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              memberRows: [
+                {
+                  id: "member_123",
+                  organizationId: "org_123",
+                  role: "member",
+                  userId: "user_target",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/remove-member",
+              {
+                body: JSON.stringify({
+                  memberIdOrEmail: "member_123",
+                  organizationId: "org_123",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      member: {
+        id: 123,
+        organizationId: "org_123",
+        role: "member",
+        userId: "user_target",
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+    expect(serializedLogs).toContain("auth_security_audit_parse_failure");
+    expect(serializedLogs).toContain("organization_member_removed");
+  }, 10_000);
+
   it("fails open when organization member audit context lookup fails", async () => {
     const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
     const { logger, logs } = captureLogs();

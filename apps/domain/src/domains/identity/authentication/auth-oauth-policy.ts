@@ -280,6 +280,28 @@ const OrganizationMemberResponseBodySchema = Schema.Struct({
   role: Schema.optional(OrganizationRole),
   userId: Schema.optional(UserId),
 });
+type OrganizationMemberResponseBody = Schema.Schema.Type<
+  typeof OrganizationMemberResponseBodySchema
+>;
+type OrganizationMemberResponseBodyReadResult =
+  | {
+      readonly status: "absent";
+    }
+  | {
+      readonly member: OrganizationMemberResponseBody;
+      readonly status: "decoded";
+    }
+  | {
+      readonly status: "malformed";
+    };
+const decodeOrganizationMemberResponseBody = Schema.decodeUnknownSync(
+  OrganizationMemberResponseBodySchema
+);
+const decodeWrappedOrganizationMemberResponseBody = Schema.decodeUnknownSync(
+  Schema.Struct({
+    member: OrganizationMemberResponseBodySchema,
+  })
+);
 
 type OAuthSecurityAuditRequestBody =
   | {
@@ -1206,17 +1228,25 @@ async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
   readonly response: Response;
   readonly snapshot: OrganizationSecurityAuditRequestSnapshot;
 }) {
-  const member = await readOrganizationMemberResponseBody(options.response);
-  const memberId =
-    member?.id ??
-    (options.snapshot.body?.endpointPath ===
-    ORGANIZATION_UPDATE_MEMBER_ROLE_ENDPOINT_PATH
-      ? options.snapshot.body.value.memberId
-      : undefined);
-  const organizationId =
-    member?.organizationId ??
-    options.snapshot.memberBefore?.organizationId ??
-    options.snapshot.session?.session.activeOrganizationId;
+  const memberResult = await readOrganizationMemberResponseBody(
+    options.response,
+    {
+      eventType: "organization_member_role_updated",
+      runtimeContext: options.options.runtimeContext ?? Context.empty(),
+    }
+  );
+
+  if (memberResult.status === "malformed") {
+    return;
+  }
+
+  const member = readDecodedOrganizationMemberResponse(memberResult);
+  const fallback = readOrganizationMemberPreimageFallback(
+    memberResult,
+    options.snapshot
+  );
+  const memberId = member?.id ?? fallback.memberId;
+  const organizationId = member?.organizationId ?? fallback.organizationId;
 
   await recordOrganizationSecurityAuditEvent(options.options, {
     actorUserId: options.snapshot.session?.user.id,
@@ -1226,7 +1256,7 @@ async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
         memberId,
         previousRole: options.snapshot.memberBefore?.role,
         role: member?.role,
-        targetUserId: member?.userId ?? options.snapshot.memberBefore?.userId,
+        targetUserId: member?.userId ?? fallback.targetUserId,
       }),
       outcome: "succeeded",
       source: "better_auth_organization_endpoint",
@@ -1243,31 +1273,86 @@ async function recordOrganizationMemberRemovedSecurityAuditEvent(options: {
   readonly response: Response;
   readonly snapshot: OrganizationSecurityAuditRequestSnapshot;
 }) {
-  const member =
-    (await readOrganizationMemberResponseBody(options.response)) ??
-    options.snapshot.memberBefore ??
-    null;
+  const memberResult = await readOrganizationMemberResponseBody(
+    options.response,
+    {
+      eventType: "organization_member_removed",
+      runtimeContext: options.options.runtimeContext ?? Context.empty(),
+    }
+  );
+
+  if (memberResult.status === "malformed") {
+    return;
+  }
+
+  const member = readOrganizationMemberRemovalAuditMember(
+    memberResult,
+    options.snapshot
+  );
+  const organizationFallback = readOrganizationMemberPreimageFallback(
+    memberResult,
+    options.snapshot
+  ).organizationId;
 
   await recordOrganizationSecurityAuditEvent(options.options, {
     actorUserId: options.snapshot.session?.user.id,
     eventType: "organization_member_removed",
     metadata: {
       ...makeOrganizationMemberAuditMetadata({
-        memberId: member?.id ?? options.snapshot.memberBefore?.id,
-        role: member?.role ?? options.snapshot.memberBefore?.role,
-        targetUserId: member?.userId ?? options.snapshot.memberBefore?.userId,
+        memberId: member?.id,
+        role: member?.role,
+        targetUserId: member?.userId,
       }),
       outcome: "succeeded",
       source: "better_auth_organization_endpoint",
     },
-    organizationId:
-      member?.organizationId ??
-      options.snapshot.memberBefore?.organizationId ??
-      options.snapshot.session?.session.activeOrganizationId,
+    organizationId: member?.organizationId ?? organizationFallback,
     sessionId: options.snapshot.session?.session.id,
     sourceIp: options.snapshot.sourceIp,
     userAgent: options.snapshot.userAgent,
   });
+}
+
+function readDecodedOrganizationMemberResponse(
+  result: OrganizationMemberResponseBodyReadResult
+) {
+  return result.status === "decoded" ? result.member : null;
+}
+
+function readOrganizationMemberRemovalAuditMember(
+  result: OrganizationMemberResponseBodyReadResult,
+  snapshot: OrganizationSecurityAuditRequestSnapshot
+) {
+  if (result.status === "decoded") {
+    return result.member;
+  }
+
+  return result.status === "absent" ? (snapshot.memberBefore ?? null) : null;
+}
+
+function readOrganizationMemberPreimageFallback(
+  result: OrganizationMemberResponseBodyReadResult,
+  snapshot: OrganizationSecurityAuditRequestSnapshot
+) {
+  if (result.status !== "absent") {
+    return {};
+  }
+
+  return {
+    memberId: readOrganizationMemberRoleUpdateRequestMemberId(snapshot.body),
+    organizationId:
+      snapshot.memberBefore?.organizationId ??
+      snapshot.session?.session.activeOrganizationId,
+    targetUserId: snapshot.memberBefore?.userId,
+  };
+}
+
+function readOrganizationMemberRoleUpdateRequestMemberId(
+  body: OrganizationSecurityAuditRequestBody | null
+) {
+  return body?.endpointPath === ORGANIZATION_UPDATE_MEMBER_ROLE_ENDPOINT_PATH
+    ? body.value.memberId
+    : undefined;
 }
 
 async function makeOAuthSecurityAuditRequestSnapshot(
@@ -1840,23 +1925,95 @@ async function readSchemaOwnedResponseBody<Decoded>(
   }
 }
 
-async function readOrganizationMemberResponseBody(response: Response) {
-  const wrapped = await readSchemaOwnedResponseBody(
-    response,
-    Schema.decodeUnknownSync(
-      Schema.Struct({
-        member: Schema.optional(OrganizationMemberResponseBodySchema),
-      })
-    )
-  );
+async function readOrganizationMemberResponseBody(
+  response: Response,
+  options: {
+    readonly eventType: AuthSecurityAuditEventType;
+    readonly runtimeContext: AuthEffectRuntimeContext;
+  }
+): Promise<OrganizationMemberResponseBodyReadResult> {
+  const contentType = response.headers.get("content-type") ?? "";
 
-  if (wrapped?.member) {
-    return wrapped.member;
+  if (!contentType.includes("application/json")) {
+    return { status: "absent" };
   }
 
-  return await readSchemaOwnedResponseBody(
-    response,
-    Schema.decodeUnknownSync(OrganizationMemberResponseBodySchema)
+  let body: unknown;
+  try {
+    body = await response.clone().json();
+  } catch (error) {
+    await reportAuthSecurityAuditParseFailure(
+      options.eventType,
+      error,
+      options.runtimeContext
+    );
+    return { status: "malformed" };
+  }
+
+  if (!isRecord(body)) {
+    await reportAuthSecurityAuditParseFailure(
+      options.eventType,
+      new Error("Expected JSON response object"),
+      options.runtimeContext
+    );
+    return { status: "malformed" };
+  }
+
+  if (Object.hasOwn(body, "member")) {
+    if (
+      !isRecord(body.member) ||
+      !hasOrganizationMemberResponseFields(body.member)
+    ) {
+      await reportAuthSecurityAuditParseFailure(
+        options.eventType,
+        new Error("Expected organization member response body"),
+        options.runtimeContext
+      );
+      return { status: "malformed" };
+    }
+
+    try {
+      return {
+        member: decodeWrappedOrganizationMemberResponseBody(body).member,
+        status: "decoded",
+      };
+    } catch (error) {
+      await reportAuthSecurityAuditParseFailure(
+        options.eventType,
+        error,
+        options.runtimeContext
+      );
+      return { status: "malformed" };
+    }
+  }
+
+  if (!hasOrganizationMemberResponseFields(body)) {
+    return { status: "absent" };
+  }
+
+  try {
+    return {
+      member: decodeOrganizationMemberResponseBody(body),
+      status: "decoded",
+    };
+  } catch (error) {
+    await reportAuthSecurityAuditParseFailure(
+      options.eventType,
+      error,
+      options.runtimeContext
+    );
+    return { status: "malformed" };
+  }
+}
+
+function hasOrganizationMemberResponseFields(
+  body: Readonly<Record<PropertyKey, unknown>>
+) {
+  return (
+    Object.hasOwn(body, "id") ||
+    Object.hasOwn(body, "organizationId") ||
+    Object.hasOwn(body, "role") ||
+    Object.hasOwn(body, "userId")
   );
 }
 
