@@ -7,7 +7,10 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-import { OrganizationSecurityActivityRowSchema } from "./persistence-schemas.js";
+import {
+  OrganizationSecurityActivityRowSchema,
+  OrganizationSecurityAuditWriteSchema,
+} from "./persistence-schemas.js";
 import {
   decodeOrganizationSecurityActivityCursor,
   encodeOrganizationSecurityActivityCursor,
@@ -17,6 +20,9 @@ import {
 
 const decodeActivityRow = Schema.decodeUnknownSync(
   OrganizationSecurityActivityRowSchema
+);
+const decodeOrganizationSecurityAuditWrite = Schema.decodeUnknownSync(
+  OrganizationSecurityAuditWriteSchema
 );
 const auditMetadataSource = {
   outcome: "succeeded",
@@ -374,6 +380,137 @@ describe("organization security activity cursors", () => {
     expect(() => decodeOrganizationSecurityActivityCursor(cursor)).toThrow(
       /UTC timestamp cursor/u
     );
+  });
+});
+
+describe("organization security audit writes", () => {
+  it("normalizes nullable DB insert columns at the schema boundary", () => {
+    expect(
+      decodeOrganizationSecurityAuditWrite({
+        actorUserId: "user_owner",
+        eventType: "organization_invitation_created",
+        metadata: {
+          ...auditMetadataSource,
+          invitationEmailMasked: "m***@e***.com",
+          role: "member",
+        },
+        organizationId: "org_123",
+      })
+    ).toStrictEqual({
+      actorUserId: "user_owner",
+      eventType: "organization_invitation_created",
+      metadata: {
+        ...auditMetadataSource,
+        invitationEmailMasked: "m***@e***.com",
+        role: "member",
+        targetUserId: null,
+      },
+      oauthClientId: null,
+      organizationId: "org_123",
+      scopes: null,
+      sessionId: null,
+      sourceIp: null,
+      userAgent: null,
+    });
+  });
+
+  it.each([
+    [
+      "missing organization id",
+      {
+        actorUserId: "user_owner",
+        eventType: "organization_updated",
+        metadata: {
+          ...auditMetadataSource,
+          updatedFields: ["name"],
+        },
+        organizationId: null,
+      },
+    ],
+    [
+      "empty updated fields",
+      {
+        actorUserId: "user_owner",
+        eventType: "organization_updated",
+        metadata: {
+          ...auditMetadataSource,
+          updatedFields: [],
+        },
+        organizationId: "org_123",
+      },
+    ],
+    [
+      "missing invitation email",
+      {
+        actorUserId: "user_owner",
+        eventType: "organization_invitation_created",
+        metadata: {
+          ...auditMetadataSource,
+          invitationEmailMasked: null,
+          role: "member",
+        },
+        organizationId: "org_123",
+      },
+    ],
+    [
+      "partial invitation acceptance",
+      {
+        actorUserId: "user_member",
+        eventType: "organization_invitation_accepted",
+        metadata: {
+          ...auditMetadataSource,
+          invitationEmailMasked: "m***@e***.com",
+          memberId: "member_accepted",
+          role: "member",
+          targetUserId: null,
+        },
+        organizationId: "org_123",
+      },
+    ],
+    [
+      "partial role update",
+      {
+        actorUserId: "user_owner",
+        eventType: "organization_member_role_updated",
+        metadata: {
+          ...auditMetadataSource,
+          memberId: "member_123",
+          previousRole: null,
+          role: "admin",
+          targetUserId: "user_member",
+        },
+        organizationId: "org_123",
+      },
+    ],
+    [
+      "partial member removal",
+      {
+        actorUserId: "user_owner",
+        eventType: "organization_member_removed",
+        metadata: {
+          ...auditMetadataSource,
+          memberId: "member_123",
+          role: "admin",
+          targetUserId: null,
+        },
+        organizationId: "org_123",
+      },
+    ],
+    [
+      "active change without either organization",
+      {
+        actorUserId: "user_owner",
+        eventType: "organization_active_changed",
+        metadata: {
+          ...auditMetadataSource,
+          activeOrganizationId: null,
+          previousOrganizationId: null,
+        },
+        organizationId: "org_123",
+      },
+    ],
+  ])("rejects %s", (_label, input) => {
+    expect(() => decodeOrganizationSecurityAuditWrite(input)).toThrow();
   });
 });
 

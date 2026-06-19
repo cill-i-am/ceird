@@ -5112,6 +5112,157 @@ describe("createAuthentication()", () => {
     );
   }, 10_000);
 
+  it("fails open and logs telemetry when organization audit provenance fails decoding", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyOrganizationAuditParseFailOpen() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                id: "org_next",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_previous",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/set-active",
+              {
+                body: JSON.stringify({
+                  organizationId: "org_next",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                  "user-agent": "",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      id: "org_next",
+    });
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain("auth_security_audit_parse_failure");
+    expect(serializedLogs).toContain("organization_active_changed");
+    expect(serializedLogs).toContain("parse");
+  }, 10_000);
+
+  it("fails open and skips organization audit inserts for malformed Better Auth boundary values", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyOrganizationAuditBoundaryValueFailOpen() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                email: "member@example.com",
+                organizationId: "org_123",
+                role: "superadmin",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              invitationRows: [
+                {
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  role: "member",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/invite-member",
+              {
+                body: JSON.stringify({
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  resend: true,
+                  role: "member",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                  "user-agent": "Ceird Test Browser",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    await expect(response.json()).resolves.toStrictEqual({
+      email: "member@example.com",
+      organizationId: "org_123",
+      role: "superadmin",
+    });
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+
+    expect(serializedLogs).toContain("auth_security_audit_parse_failure");
+    expect(serializedLogs).toContain("organization_invitation_resent");
+    expect(serializedLogs).not.toContain("member@example.com");
+  }, 10_000);
+
   it("records organization security audit events through Better Auth organization hooks", async () => {
     const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
     const { auth, cleanup } = createAuthenticationForPluginInspection(
@@ -5309,15 +5460,28 @@ describe("createAuthentication()", () => {
           organizationId: "org_123",
         })
       );
-      expect(auditEvents).toContainEqual(
+      expect(decodedAuditEvents).toContainEqual(
         expect.objectContaining({
           actorUserId: "user_member",
           eventType: "organization_invitation_accepted",
           organizationId: "org_123",
-          metadata: expect.objectContaining({
+          metadata: {
             invitationEmailMasked: "m***@e***.com",
             memberId: "member_accepted",
-          }),
+            outcome: "succeeded",
+            role: "member",
+            source: "better_auth_organization_plugin",
+            targetUserId: "user_member",
+          },
+        })
+      );
+      expect(auditEvents[0]).toStrictEqual(
+        expect.objectContaining({
+          oauthClientId: null,
+          scopes: null,
+          sessionId: null,
+          sourceIp: null,
+          userAgent: null,
         })
       );
       const serializedAuditEvents = JSON.stringify(auditEvents);
@@ -5834,23 +5998,13 @@ describe("createAuthentication()", () => {
     );
 
     expect(response.status).toBe(200);
-    const decodedAuditEvents =
-      decodeCapturedOrganizationSecurityAuditWrites(auditEvents);
-
-    expect(decodedAuditEvents).toContainEqual(
-      expect.objectContaining({
-        eventType: "organization_member_role_updated",
-        metadata: expect.objectContaining({
-          previousRole: null,
-          role: "admin",
-          targetUserId: "user_target",
-        }),
-      })
-    );
+    expect(auditEvents).toStrictEqual([]);
     const serializedLogs = JSON.stringify(logs);
     expect(serializedLogs).toContain(
       "auth_security_audit_organization_context_failure"
     );
+    expect(serializedLogs).toContain("auth_security_audit_parse_failure");
+    expect(serializedLogs).toContain("organization_member_role_updated");
     expect(serializedLogs).not.toContain("member@example.com");
     expect(serializedLogs).not.toContain("https://app.example");
     expect(serializedLogs).not.toContain(

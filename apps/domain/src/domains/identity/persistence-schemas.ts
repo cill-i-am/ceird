@@ -9,7 +9,7 @@ import {
   OrganizationSecurityActivityEventId,
   UserId,
 } from "@ceird/identity-core";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 import { AUTH_SECURITY_AUDIT_EVENT_TYPES } from "./authentication/schema.js";
 
@@ -140,6 +140,29 @@ const AuthSecurityAuditMetadataBaseFields = {
   outcome: Schema.Literal("succeeded"),
   source: AuthSecurityAuditMetadataSourceSchema,
 };
+const OrganizationMemberId = Schema.NonEmptyString.pipe(
+  Schema.brand("@ceird/domains/identity/OrganizationMemberId")
+);
+const RequiredOrganizationAuditWriteBaseFields = {
+  actorUserId: UserId,
+  organizationId: OrganizationId,
+};
+const NullableOrganizationAuditTextDbColumn = Schema.NullOr(
+  Schema.NonEmptyString
+).pipe(Schema.optional, Schema.withDecodingDefault(Effect.succeed(null)));
+const OrganizationAuditOptionalDbColumns = {
+  oauthClientId: Schema.Null.pipe(
+    Schema.optional,
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  scopes: Schema.Null.pipe(
+    Schema.optional,
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  sessionId: NullableOrganizationAuditTextDbColumn,
+  sourceIp: NullableOrganizationAuditTextDbColumn,
+  userAgent: NullableOrganizationAuditTextDbColumn,
+};
 
 export const MaskedInvitationEmailSchema = Schema.String.pipe(
   Schema.refine((value): value is string => isMaskedInvitationEmail(value), {
@@ -210,51 +233,137 @@ export type OrganizationActiveChangedAuditMetadata = Schema.Schema.Type<
   typeof OrganizationActiveChangedAuditMetadataSchema
 >;
 
-const OrganizationSecurityAuditWriteBaseFields = {
-  actorUserId: Schema.optional(Schema.NullOr(UserId)),
-  organizationId: Schema.optional(Schema.NullOr(OrganizationId)),
-  sessionId: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
-  sourceIp: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
-  userAgent: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
-};
+const OrganizationCreatedAuditWriteMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  memberId: OrganizationMemberId,
+  previousRole: Schema.Null.pipe(
+    Schema.optional,
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  role: OrganizationRole,
+  targetUserId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+const OrganizationUpdatedAuditWriteMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  updatedFields: Schema.NonEmptyArray(Schema.NonEmptyString),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+const OrganizationInvitationAuditWriteMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  invitationEmailMasked: MaskedInvitationEmailSchema,
+  role: OrganizationRole,
+  targetUserId: Schema.Null.pipe(
+    Schema.optional,
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+const OrganizationInvitationAcceptedAuditWriteMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  invitationEmailMasked: MaskedInvitationEmailSchema,
+  memberId: OrganizationMemberId,
+  role: OrganizationRole,
+  targetUserId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+const OrganizationMemberRoleUpdatedAuditWriteMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  memberId: OrganizationMemberId,
+  previousRole: OrganizationRole,
+  role: OrganizationRole,
+  targetUserId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+const OrganizationMemberRemovedAuditWriteMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  memberId: OrganizationMemberId,
+  previousRole: Schema.Null.pipe(
+    Schema.optional,
+    Schema.withDecodingDefault(Effect.succeed(null))
+  ),
+  role: OrganizationRole,
+  targetUserId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+
+const OrganizationActiveChangedAuditWriteMetadataSchema = Schema.Struct({
+  ...AuthSecurityAuditMetadataBaseFields,
+  activeOrganizationId: Schema.NullOr(OrganizationId),
+  previousOrganizationId: Schema.NullOr(OrganizationId),
+})
+  .pipe(
+    Schema.refine(
+      (value): value is typeof value =>
+        value.activeOrganizationId !== null ||
+        value.previousOrganizationId !== null,
+      {
+        message:
+          "Expected an active or previous organization id for active organization changes",
+      }
+    )
+  )
+  .annotate({
+    parseOptions: { onExcessProperty: "error" },
+  });
 
 export const OrganizationSecurityAuditWriteSchema = Schema.Union([
   Schema.Struct({
-    ...OrganizationSecurityAuditWriteBaseFields,
+    ...RequiredOrganizationAuditWriteBaseFields,
+    ...OrganizationAuditOptionalDbColumns,
     eventType: Schema.Literal("organization_created"),
-    metadata: OrganizationMemberAuditMetadataSchema,
+    metadata: OrganizationCreatedAuditWriteMetadataSchema,
   }),
   Schema.Struct({
-    ...OrganizationSecurityAuditWriteBaseFields,
+    ...RequiredOrganizationAuditWriteBaseFields,
+    ...OrganizationAuditOptionalDbColumns,
     eventType: Schema.Literal("organization_updated"),
-    metadata: OrganizationUpdatedAuditMetadataSchema,
+    metadata: OrganizationUpdatedAuditWriteMetadataSchema,
   }),
   Schema.Struct({
-    ...OrganizationSecurityAuditWriteBaseFields,
+    ...RequiredOrganizationAuditWriteBaseFields,
+    ...OrganizationAuditOptionalDbColumns,
     eventType: Schema.Literal("organization_active_changed"),
-    metadata: OrganizationActiveChangedAuditMetadataSchema,
+    metadata: OrganizationActiveChangedAuditWriteMetadataSchema,
   }),
   Schema.Struct({
-    ...OrganizationSecurityAuditWriteBaseFields,
+    ...RequiredOrganizationAuditWriteBaseFields,
+    ...OrganizationAuditOptionalDbColumns,
     eventType: Schema.Literals([
       "organization_invitation_created",
       "organization_invitation_resent",
       "organization_invitation_canceled",
     ] as const),
-    metadata: OrganizationInvitationAuditMetadataSchema,
+    metadata: OrganizationInvitationAuditWriteMetadataSchema,
   }),
   Schema.Struct({
-    ...OrganizationSecurityAuditWriteBaseFields,
+    ...RequiredOrganizationAuditWriteBaseFields,
+    ...OrganizationAuditOptionalDbColumns,
     eventType: Schema.Literal("organization_invitation_accepted"),
-    metadata: OrganizationInvitationAcceptedAuditMetadataSchema,
+    metadata: OrganizationInvitationAcceptedAuditWriteMetadataSchema,
   }),
   Schema.Struct({
-    ...OrganizationSecurityAuditWriteBaseFields,
-    eventType: Schema.Literals([
-      "organization_member_role_updated",
-      "organization_member_removed",
-    ] as const),
-    metadata: OrganizationMemberAuditMetadataSchema,
+    ...RequiredOrganizationAuditWriteBaseFields,
+    ...OrganizationAuditOptionalDbColumns,
+    eventType: Schema.Literal("organization_member_role_updated"),
+    metadata: OrganizationMemberRoleUpdatedAuditWriteMetadataSchema,
+  }),
+  Schema.Struct({
+    ...RequiredOrganizationAuditWriteBaseFields,
+    ...OrganizationAuditOptionalDbColumns,
+    eventType: Schema.Literal("organization_member_removed"),
+    metadata: OrganizationMemberRemovedAuditWriteMetadataSchema,
   }),
 ]).annotate({
   parseOptions: { onExcessProperty: "error" },

@@ -542,7 +542,12 @@ before insert. The write schema is a finite event-type union that pairs each
 organization lifecycle event with its event-specific metadata contract, including
 the internal `organization_active_changed` event. Invitation email display values
 must use the schema-owned masked-email shape, so raw persisted emails fail the
-audit boundary rather than reaching security activity presentation.
+audit boundary rather than reaching security activity presentation. The decoded
+organization audit write is also the DB insert shape: nullable audit columns are
+normalized to `null` by schema decoding before persistence. Audit parse and
+insert failures are non-blocking for already-successful Better Auth organization
+mutations; they emit typed telemetry and skip the audit row instead of repairing
+or persisting unverifiable metadata.
 
 Organization audit rows are success-only for this stage: Ceird records events
 after Better Auth accepts and applies the lifecycle mutation. Failed
