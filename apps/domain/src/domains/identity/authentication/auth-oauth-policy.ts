@@ -318,7 +318,9 @@ const OrganizationActiveAuditResponseBodySchema = Schema.Union([
   BetterAuthOrganizationAuditResponseBodySchema,
   Schema.Null,
 ]);
-const OrganizationMemberAuditResponseBodySchema = Schema.Struct({
+const OrganizationMemberRoleUpdatedAuditResponseBodySchema =
+  BetterAuthOrganizationMemberAuditResponseMemberSchema;
+const OrganizationMemberRemovedAuditResponseBodySchema = Schema.Struct({
   member: BetterAuthOrganizationMemberAuditResponseMemberSchema,
 });
 const OrganizationInvitationAuditContextRowSchema = Schema.Struct({
@@ -1459,14 +1461,6 @@ function resolveOrganizationMemberAuditLookup(
     : { email, kind: "email", organizationId };
 }
 
-function resolveOrganizationMemberAuditResponseBody(
-  responseBody: Schema.Schema.Type<
-    typeof OrganizationMemberAuditResponseBodySchema
-  >
-): BetterAuthOrganizationMemberAuditResponseMember {
-  return responseBody.member;
-}
-
 function makeOrganizationMemberResponseBody(
   member: BetterAuthOrganizationMemberAuditResponseMember
 ): OrganizationMemberResponseBody {
@@ -1483,13 +1477,10 @@ async function recordOrganizationMemberRoleUpdatedSecurityAuditEvent(options: {
   readonly response: Response;
   readonly snapshot: OrganizationSecurityAuditRequestSnapshot;
 }) {
-  const responseBodyResult = await readOrganizationMemberResponseBody(
-    options.response,
-    {
-      eventType: "organization_member_role_updated",
+  const responseBodyResult =
+    await readOrganizationMemberRoleUpdatedResponseBody(options.response, {
       runtimeContext: options.options.runtimeContext ?? Context.empty(),
-    }
-  );
+    });
   if (responseBodyResult.status === "malformed") {
     return;
   }
@@ -1568,10 +1559,9 @@ async function recordOrganizationMemberRemovedSecurityAuditEvent(options: {
   readonly response: Response;
   readonly snapshot: OrganizationSecurityAuditRequestSnapshot;
 }) {
-  const responseBodyResult = await readOrganizationMemberResponseBody(
+  const responseBodyResult = await readOrganizationMemberRemovedResponseBody(
     options.response,
     {
-      eventType: "organization_member_removed",
       runtimeContext: options.options.runtimeContext ?? Context.empty(),
     }
   );
@@ -1609,17 +1599,16 @@ async function recordOrganizationMemberRemovedSecurityAuditEvent(options: {
   });
 }
 
-async function readOrganizationMemberResponseBody(
+async function readOrganizationMemberRoleUpdatedResponseBody(
   response: Response,
   options: {
-    readonly eventType: AuthSecurityAuditEventType;
     readonly runtimeContext: AuthEffectRuntimeContext;
   }
 ): Promise<OrganizationMemberResponseBodyReadResult> {
   const result = await readAuthSecurityAuditResponseBodyResult(
     response,
-    OrganizationMemberAuditResponseBodySchema,
-    options.eventType,
+    OrganizationMemberRoleUpdatedAuditResponseBodySchema,
+    "organization_member_role_updated",
     options.runtimeContext
   );
 
@@ -1627,10 +1616,31 @@ async function readOrganizationMemberResponseBody(
     return result;
   }
 
-  const member = resolveOrganizationMemberAuditResponseBody(result.body);
+  return {
+    member: makeOrganizationMemberResponseBody(result.body),
+    status: "decoded",
+  };
+}
+
+async function readOrganizationMemberRemovedResponseBody(
+  response: Response,
+  options: {
+    readonly runtimeContext: AuthEffectRuntimeContext;
+  }
+): Promise<OrganizationMemberResponseBodyReadResult> {
+  const result = await readAuthSecurityAuditResponseBodyResult(
+    response,
+    OrganizationMemberRemovedAuditResponseBodySchema,
+    "organization_member_removed",
+    options.runtimeContext
+  );
+
+  if (result.status !== "decoded") {
+    return result;
+  }
 
   return {
-    member: makeOrganizationMemberResponseBody(member),
+    member: makeOrganizationMemberResponseBody(result.body.member),
     status: "decoded",
   };
 }
