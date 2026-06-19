@@ -17,6 +17,7 @@ import type {
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 
 import {
   CommandBarProvider,
@@ -25,7 +26,7 @@ import {
 import { ShortcutHelpOverlay } from "#/hotkeys/shortcut-help-overlay";
 
 import type * as OrganizationMembersApi from "./organization-members-api";
-import { OrganizationMembersPage } from "./organization-members-page";
+import { OrganizationMembersPage as BaseOrganizationMembersPage } from "./organization-members-page";
 
 type ListMembersResult = Awaited<ReturnType<typeof mockedListMembers>>;
 type ListInvitationsResult = Awaited<ReturnType<typeof mockedListInvitations>>;
@@ -221,6 +222,30 @@ function createApiError(input: {
   readonly statusText: string;
 }) {
   return input;
+}
+
+type OrganizationMembersPageProps = ComponentProps<
+  typeof BaseOrganizationMembersPage
+>;
+
+function OrganizationMembersPage({
+  activeOrganizationId: activeOrgId = organizationId,
+  currentMember = {
+    email: "owner@example.com",
+    name: "Owner Example",
+    role: "owner",
+  },
+  currentUserId: viewerUserId = currentUserId,
+  ...props
+}: Partial<OrganizationMembersPageProps>) {
+  return (
+    <BaseOrganizationMembersPage
+      activeOrganizationId={activeOrgId}
+      currentMember={currentMember}
+      currentUserId={viewerUserId}
+      {...props}
+    />
+  );
 }
 
 function RegisteredActionTitles() {

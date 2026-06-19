@@ -2,6 +2,7 @@ import {
   makeOrganizationAuthRequestHeaders,
   mapOrganizationInvitationPayload,
   mapOrganizationInvitationRow,
+  mapOrganizationMemberRemovalPayload,
   mapOrganizationMemberRow,
 } from "./organization-members.js";
 
@@ -175,5 +176,39 @@ describe("organization member identity mapping", () => {
         status: "pending",
       })
     ).toThrow(/Expected/);
+  });
+
+  it("maps Better Auth member removal payloads into a removed member id", () => {
+    expect(
+      mapOrganizationMemberRemovalPayload({
+        member: {
+          createdAt: "2026-04-01T09:30:00.000Z",
+          id: "mem_member",
+          organizationId: "org_123",
+          role: "member",
+          teamId: null,
+          userId: "user_member",
+        },
+      })
+    ).toBe("mem_member");
+  });
+
+  it("rejects unmodeled Better Auth member removal payload fields", () => {
+    expect(() =>
+      mapOrganizationMemberRemovalPayload({
+        member: {
+          createdAt: "2026-04-01T09:30:00.000Z",
+          id: "mem_member",
+          organizationId: "org_123",
+          role: "member",
+          teamId: null,
+          user: {
+            email: "member@example.com",
+            id: "user_member",
+          },
+          userId: "user_member",
+        },
+      })
+    ).toThrow(/Unexpected key/);
   });
 });

@@ -873,6 +873,37 @@ export type PublicInvitationPreview = Schema.Schema.Type<
   typeof PublicInvitationPreviewSchema
 >;
 
+export const OrganizationInvitationDetailsSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  id: InvitationId,
+  inviterEmail: OrganizationEmailAddress,
+  organizationName: OrganizationNameSchema,
+  role: InvitableOrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationInvitationDetails = Schema.Schema.Type<
+  typeof OrganizationInvitationDetailsSchema
+>;
+
+export const NativeOrganizationInvitationDetailsPayloadSchema = Schema.Struct({
+  email: OrganizationEmailAddress,
+  expiresAt: IsoDateTimeString,
+  id: InvitationId,
+  inviterEmail: OrganizationEmailAddress,
+  inviterId: UserId,
+  organizationId: OrganizationId,
+  organizationName: OrganizationNameSchema,
+  organizationSlug: OrganizationSlugSchema,
+  role: InvitableOrganizationRole,
+  status: Schema.Literal("pending"),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type NativeOrganizationInvitationDetailsPayload = Schema.Schema.Type<
+  typeof NativeOrganizationInvitationDetailsPayloadSchema
+>;
+
 export const ORGANIZATION_SECURITY_ACTIVITY_EVENT_TYPES = [
   "organization_created",
   "organization_updated",
@@ -1212,6 +1243,22 @@ export function decodePublicInvitationPreview(
   input: unknown
 ): PublicInvitationPreview {
   return Schema.decodeUnknownSync(PublicInvitationPreviewSchema)(input);
+}
+
+export function decodeOrganizationInvitationDetails(
+  input: unknown
+): OrganizationInvitationDetails {
+  const payload = Schema.decodeUnknownSync(
+    NativeOrganizationInvitationDetailsPayloadSchema
+  )(input);
+
+  return Schema.decodeUnknownSync(OrganizationInvitationDetailsSchema)({
+    email: payload.email,
+    id: payload.id,
+    inviterEmail: payload.inviterEmail,
+    organizationName: payload.organizationName,
+    role: payload.role,
+  });
 }
 
 export function decodeOrganizationId(input: unknown): OrganizationId {

@@ -195,9 +195,9 @@ function getCurrentMembersDisplayState({
 
 function isCurrentOrganizationMember(
   member: OrganizationMember,
-  currentUserId: UserId | undefined
+  currentUserId: UserId
 ) {
-  return currentUserId !== undefined && member.userId === currentUserId;
+  return member.userId === currentUserId;
 }
 
 // The members page coordinates active members, invitations, role actions, and route-level hotkeys.
@@ -205,17 +205,13 @@ function isCurrentOrganizationMember(
 // react-doctor-disable-next-line
 export function OrganizationMembersPage({
   activeOrganizationId,
-  currentMember = {
-    email: "You",
-    name: "You",
-    role: "member",
-  },
+  currentMember,
   currentUserId,
   onCurrentMemberAccessChanged,
 }: {
   readonly activeOrganizationId: OrganizationId;
-  readonly currentMember?: CurrentMemberSummary;
-  readonly currentUserId?: UserId | undefined;
+  readonly currentMember: CurrentMemberSummary;
+  readonly currentUserId: UserId;
   readonly onCurrentMemberAccessChanged?:
     | (() => void | Promise<void>)
     | undefined;
@@ -513,11 +509,7 @@ export function OrganizationMembersPage({
     [activeOrganizationId, isLatestActiveOrganization]
   );
 
-  const currentViewerRole = resolveCurrentViewerRole({
-    currentMember,
-    currentUserId,
-    members,
-  });
+  const currentViewerRole = currentMember.role;
   const hasLoadedMembers = memberTotal !== null;
   const hasCurrentMemberState =
     membersOrganizationId.current === activeOrganizationId;
@@ -1001,7 +993,7 @@ function CurrentMembersSection({
   onMemberRoleChange,
 }: {
   readonly activeMemberAction: MemberAction | null;
-  readonly currentUserId?: UserId | undefined;
+  readonly currentUserId: UserId;
   readonly currentViewerRole: OrganizationRoleType;
   readonly displayState: CurrentMembersDisplayState;
   readonly isHydrated: boolean;
@@ -1241,25 +1233,6 @@ function shouldRenderPendingInvitationsSection({
     Boolean(loadErrorMessage) ||
     Boolean(invitationActionErrorMessage) ||
     Boolean(invitationActionSuccessMessage)
-  );
-}
-
-function resolveCurrentViewerRole({
-  currentMember,
-  currentUserId,
-  members,
-}: {
-  readonly currentMember: CurrentMemberSummary;
-  readonly currentUserId?: UserId | undefined;
-  readonly members: readonly OrganizationMember[];
-}): OrganizationRoleType {
-  if (currentUserId === undefined) {
-    return currentMember.role;
-  }
-
-  return (
-    members.find((member) => member.userId === currentUserId)?.role ??
-    currentMember.role
   );
 }
 

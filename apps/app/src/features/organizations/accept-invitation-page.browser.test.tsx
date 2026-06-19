@@ -1,7 +1,4 @@
-import type {
-  OrganizationRole,
-  PublicInvitationPreview,
-} from "@ceird/identity-core";
+import type { PublicInvitationPreview } from "@ceird/identity-core";
 import type * as RouterModule from "@tanstack/react-router";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -45,13 +42,7 @@ const {
   mockedClearAppContextClientCache: vi.fn<() => void>(),
   mockedGetInvitation: vi.fn<
     (input: { query: { id: string } }) => Promise<{
-      data: {
-        email: string;
-        id: string;
-        inviterEmail: string;
-        organizationName: string;
-        role: OrganizationRole;
-      } | null;
+      data: unknown | null;
       error: {
         message: string;
         status: number;
@@ -93,6 +84,19 @@ const {
   >(),
   mockedSignOut: vi.fn<typeof SignOutModule.signOut>(),
 }));
+
+const nativeInvitationDetails = {
+  email: "member@example.com",
+  expiresAt: "2026-04-12T09:30:00.000Z",
+  id: "inv_123",
+  inviterEmail: "owner@example.com",
+  inviterId: "user_owner",
+  organizationId: "org_123",
+  organizationName: "Acme Field Ops",
+  organizationSlug: "acme-field-ops",
+  role: "member",
+  status: "pending",
+};
 
 vi.mock(import("../auth/app-context-client-cache"), () => ({
   getCachedClientAppContext: vi.fn<
@@ -201,13 +205,7 @@ describe("accept invitation page", () => {
       error: null,
     });
     mockedGetInvitation.mockResolvedValue({
-      data: {
-        email: "member@example.com",
-        id: "inv_123",
-        inviterEmail: "owner@example.com",
-        organizationName: "Acme Field Ops",
-        role: "member",
-      },
+      data: nativeInvitationDetails,
       error: null,
     });
     mockedGetPublicInvitationPreview.mockResolvedValue({
@@ -316,6 +314,39 @@ describe("accept invitation page", () => {
     expect(
       within(contextColumn).getByText("Acme Field Ops")
     ).toBeInTheDocument();
+  }, 10_000);
+
+  it("rejects unmodeled signed-in invitation details", async () => {
+    mockedGetSession.mockResolvedValue({
+      data: {
+        session: {
+          id: "session_123",
+        },
+        user: {
+          email: "member@example.com",
+        },
+      },
+      error: null,
+    });
+    mockedGetInvitation.mockResolvedValue({
+      data: {
+        ...nativeInvitationDetails,
+        unmodeledBetterAuthField: "raw",
+      },
+      error: null,
+    });
+
+    render(<AcceptInvitationPage invitationId="inv_123" />);
+
+    await expect(
+      screen.findByText(
+        "This invitation is unavailable. Sign in with the invited email address or ask for a fresh invite."
+      )
+    ).resolves.toBeInTheDocument();
+    expect(screen.queryByText("owner@example.com")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Accept invitation" })
+    ).not.toBeInTheDocument();
   }, 10_000);
 
   it("accepts the invitation and continues to location onboarding", async () => {

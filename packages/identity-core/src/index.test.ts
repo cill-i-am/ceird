@@ -41,6 +41,7 @@ import {
   decodeDisconnectConnectedAppGrantInput,
   decodeInviteOrganizationMemberInput,
   decodeOrganizationInvitation,
+  decodeOrganizationInvitationDetails,
   decodeOrganizationInvitationListResponse,
   decodeOrganizationMember,
   decodeOrganizationMemberListQuery,
@@ -526,6 +527,49 @@ describe("organization member identity boundary", () => {
         inviter: { id: "user_owner" },
       })
     ).toThrow(/[Uu]nexpected/);
+  }, 1000);
+
+  it("projects native signed-in invitation details into the Ceird DTO", () => {
+    const nativeInvitationDetails = {
+      email: "pending@example.com",
+      expiresAt: "2026-04-12T09:30:00.000Z",
+      id: "inv_123",
+      inviterEmail: "owner@example.com",
+      inviterId: "user_owner",
+      organizationId: "org_123",
+      organizationName: "Acme Field Ops",
+      organizationSlug: "acme-field-ops",
+      role: "member",
+      status: "pending",
+    };
+
+    expect(
+      decodeOrganizationInvitationDetails(nativeInvitationDetails)
+    ).toStrictEqual({
+      email: "pending@example.com",
+      id: "inv_123",
+      inviterEmail: "owner@example.com",
+      organizationName: "Acme Field Ops",
+      role: "member",
+    });
+    expect(() =>
+      decodeOrganizationInvitationDetails({
+        ...nativeInvitationDetails,
+        unmodeledBetterAuthField: "raw",
+      })
+    ).toThrow(/[Uu]nexpected/);
+    expect(() =>
+      decodeOrganizationInvitationDetails({
+        ...nativeInvitationDetails,
+        email: "not-an-email",
+      })
+    ).toThrow(/Expected/);
+    expect(() =>
+      decodeOrganizationInvitationDetails({
+        ...nativeInvitationDetails,
+        role: "owner",
+      })
+    ).toThrow(/Expected/);
   }, 1000);
 
   it("rejects invalid organization member and invitation emails", () => {

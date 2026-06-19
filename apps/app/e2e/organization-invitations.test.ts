@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 
 import {
   appendOrganizationSlugSuffix,
+  InviteOrganizationMemberResponseSchema,
   OrganizationInvitationListResponseSchema,
 } from "@ceird/identity-core";
 import { expect, test } from "@playwright/test";
@@ -49,6 +50,9 @@ const { Client: PgClient } = apiRequire("pg") as {
 };
 const decodeOrganizationInvitationListResponse = Schema.decodeUnknownSync(
   OrganizationInvitationListResponseSchema
+);
+const decodeInviteOrganizationMemberResponse = Schema.decodeUnknownSync(
+  InviteOrganizationMemberResponseSchema
 );
 
 function createTestEmail(prefix: string): string {
@@ -407,6 +411,10 @@ async function waitForInviteOrganizationMemberResponse(page: Page) {
       `Organization invite request failed with ${response.status()}: ${text}`
     );
   }
+
+  const body: unknown = await response.json();
+
+  return decodeInviteOrganizationMemberResponse(body).invitation;
 }
 
 async function readResponseText(response: PlaywrightResponse) {
@@ -525,8 +533,8 @@ async function inviteMemberFromMembersPage(
   await membersPage.email.fill(email);
   const inviteResponsePromise = waitForInviteOrganizationMemberResponse(page);
   await membersPage.submit.click();
-  await inviteResponsePromise;
-  const invitation = await getInvitationFromIdentityContract(
+  const invitation = await inviteResponsePromise;
+  const listedInvitation = await getInvitationFromIdentityContract(
     request,
     page,
     email
@@ -534,6 +542,9 @@ async function inviteMemberFromMembersPage(
 
   expect(invitation.email).toBe(email);
   expect(invitation.status).toBe("pending");
+  expect(listedInvitation.id).toBe(invitation.id);
+  expect(listedInvitation.email).toBe(invitation.email);
+  expect(listedInvitation.status).toBe(invitation.status);
 
   await expect(membersPage.pendingInvitation(email)).toBeVisible({
     timeout: 15_000,

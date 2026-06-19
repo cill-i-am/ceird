@@ -1,8 +1,11 @@
 import {
-  decodeInvitableOrganizationRole,
+  decodeOrganizationInvitationDetails,
   decodeOrganizationId,
 } from "@ceird/identity-core";
-import type { InvitableOrganizationRole } from "@ceird/identity-core";
+import type {
+  InvitableOrganizationRole,
+  OrganizationInvitationDetails,
+} from "@ceird/identity-core";
 import { Link, useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
@@ -34,11 +37,7 @@ interface InvitationPreviewDetails {
   readonly role: InvitableOrganizationRole;
 }
 
-interface InvitationDetails extends InvitationPreviewDetails {
-  readonly id: string;
-  readonly inviterEmail: string;
-}
-
+type InvitationDetails = OrganizationInvitationDetails;
 type InvitationDisplayDetails = InvitationPreviewDetails | InvitationDetails;
 
 type InvitationPageState =
@@ -336,12 +335,23 @@ function useAcceptInvitationPageModel(
         return;
       }
 
+      let decodedInvitation: OrganizationInvitationDetails;
+      try {
+        decodedInvitation = decodeOrganizationInvitationDetails(
+          invitation.data
+        );
+      } catch {
+        setState({
+          status: "error",
+          canSwitchAccount: true,
+          message: INVITATION_LOOKUP_ERROR_MESSAGE,
+        });
+        return;
+      }
+
       setState({
         status: "ready",
-        invitation: {
-          ...invitation.data,
-          role: decodeInvitableOrganizationRole(invitation.data.role),
-        },
+        invitation: decodedInvitation,
       });
     }
 

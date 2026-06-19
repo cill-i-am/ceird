@@ -135,6 +135,24 @@ const OrganizationInvitationPayloadSchema = Schema.Struct({
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
+const OrganizationMemberRemovalPayloadDateSchema = Schema.Union([
+  IsoDateTimeString,
+  SqlDate,
+]);
+const OrganizationMemberRemovalPayloadSchema = Schema.Struct({
+  member: Schema.Struct({
+    createdAt: OrganizationMemberRemovalPayloadDateSchema,
+    id: OrganizationMemberIdSchema,
+    organizationId: OrganizationId,
+    role: OrganizationRole,
+    teamId: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
+    userId: UserId,
+  }).annotate({
+    parseOptions: { onExcessProperty: "error" },
+  }),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
 const AuthenticationFailureBodySchema = Schema.Struct({
   code: Schema.optional(Schema.String),
   message: Schema.optional(Schema.String),
@@ -181,6 +199,9 @@ const decodeOrganizationInvitationRow = Schema.decodeUnknownSync(
 );
 const decodeOrganizationInvitationPayload = Schema.decodeUnknownSync(
   OrganizationInvitationPayloadSchema
+);
+const decodeOrganizationMemberRemovalPayload = Schema.decodeUnknownSync(
+  OrganizationMemberRemovalPayloadSchema
 );
 const isAuthenticationFailureBody = Schema.is(AuthenticationFailureBodySchema);
 
@@ -458,18 +479,22 @@ export class OrganizationMembersService extends Context.Service<OrganizationMemb
       const removeMember = Effect.fn("OrganizationMembersService.removeMember")(
         function* (input: RemoveOrganizationMemberInput) {
           yield* getAdministrativeActor();
-          yield* dispatchOrganizationAuthRequest(
+          const response = yield* dispatchOrganizationAuthRequest(
             auth.handler,
             "/organization/remove-member",
             {
               memberIdOrEmail: input.memberId,
             }
           );
+          const removedMemberId = yield* decodeStorageBoundary(
+            () => mapOrganizationMemberRemovalPayload(response),
+            "Organization member removal payload was invalid"
+          );
 
           return yield* decodeStorageBoundary(
             () =>
               decodeRemoveOrganizationMemberResponse({
-                removedMemberId: input.memberId,
+                removedMemberId,
               }),
             "Organization member removal response was invalid"
           );
@@ -558,6 +583,12 @@ function formatOrganizationInvitationPayloadDate(
   value: Schema.Schema.Type<typeof OrganizationInvitationPayloadDateSchema>
 ) {
   return value instanceof Date ? value.toISOString() : value;
+}
+
+export function mapOrganizationMemberRemovalPayload(
+  payload: unknown
+): OrganizationMemberIdType {
+  return decodeOrganizationMemberRemovalPayload(payload).member.id;
 }
 
 export function makeOrganizationAuthRequestHeaders(input: HeadersInit) {

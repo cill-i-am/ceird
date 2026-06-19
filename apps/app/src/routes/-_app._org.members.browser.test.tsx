@@ -86,7 +86,7 @@ describe("members route loader", () => {
         },
       })
     ).toStrictEqual({
-      currentMemberRole: undefined,
+      currentMemberRole: null,
     });
   }, 10_000);
 
