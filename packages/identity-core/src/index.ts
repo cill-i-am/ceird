@@ -887,6 +887,7 @@ export type OrganizationInvitationDetails = Schema.Schema.Type<
 >;
 
 export const NativeOrganizationInvitationDetailsPayloadSchema = Schema.Struct({
+  createdAt: IsoDateTimeString,
   email: OrganizationEmailAddress,
   expiresAt: IsoDateTimeString,
   id: InvitationId,
@@ -897,6 +898,7 @@ export const NativeOrganizationInvitationDetailsPayloadSchema = Schema.Struct({
   organizationSlug: OrganizationSlugSchema,
   role: InvitableOrganizationRole,
   status: Schema.Literal("pending"),
+  teamId: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
 }).annotate({
   parseOptions: { onExcessProperty: "error" },
 });

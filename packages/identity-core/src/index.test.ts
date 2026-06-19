@@ -531,6 +531,7 @@ describe("organization member identity boundary", () => {
 
   it("projects native signed-in invitation details into the Ceird DTO", () => {
     const nativeInvitationDetails = {
+      createdAt: "2026-04-01T09:30:00.000Z",
       email: "pending@example.com",
       expiresAt: "2026-04-12T09:30:00.000Z",
       id: "inv_123",
@@ -541,6 +542,7 @@ describe("organization member identity boundary", () => {
       organizationSlug: "acme-field-ops",
       role: "member",
       status: "pending",
+      teamId: null,
     };
 
     expect(
