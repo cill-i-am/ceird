@@ -70,10 +70,11 @@ describe("organization labels settings page", () => {
     const user = userEvent.setup();
     const createLabelWithConfirmation = vi.fn<
       (input: CreateLabelInput) => Promise<LabelWriteResponse>
-    >((_input) =>
+    >((input) =>
       Promise.resolve(
         makeLabelWriteResponse(
           makeLabel({
+            description: input.description,
             id: "44444444-4444-4444-8444-444444444444",
             name: "Fire Safety",
           }),
@@ -96,15 +97,16 @@ describe("organization labels settings page", () => {
     });
     expect(createInput).toBeEnabled();
     await user.type(createInput, "Fire Safety");
-    await user.click(screen.getByRole("button", { name: /create/i }));
-
-    await expect(screen.findByRole("status")).resolves.toHaveTextContent(
-      "Label created and reflected locally while realtime sync catches up."
+    await user.type(
+      screen.getByRole("textbox", { name: /new label description/i }),
+      "Used for annual fire checks"
     );
+    await user.click(screen.getByRole("button", { name: /create/i }));
     await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
+    expect(screen.getByText("Used for annual fire checks")).toBeVisible();
     expect(createLabelWithConfirmation).toHaveBeenCalledWith({
       color: "oklch(64% 0.19 28)",
-      description: null,
+      description: "Used for annual fire checks",
       name: "Fire Safety",
     });
   });
@@ -232,9 +234,6 @@ describe("organization labels settings page", () => {
     await user.click(screen.getByRole("button", { name: /create/i }));
 
     await expect(screen.findByText("Fire Safety")).resolves.toBeVisible();
-    await expect(screen.findByRole("status")).resolves.toHaveTextContent(
-      "Label created and reflected locally while realtime sync catches up."
-    );
     expect(mutationJournal.entries()).toMatchObject([
       {
         affectedCollections: ["labels"],
@@ -324,12 +323,6 @@ describe("organization labels settings page", () => {
       "Fire Safety"
     );
     await user.click(screen.getByRole("button", { name: /create/i }));
-
-    await expect(
-      screen.findByText(
-        "Label created and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
     await user.click(
       await screen.findByRole("button", {
         name: /open actions for fire safety/i,
@@ -344,12 +337,6 @@ describe("organization labels settings page", () => {
     await user.clear(editInput);
     await user.type(editInput, "Emergency");
     await user.click(screen.getByRole("button", { name: /save fire safety/i }));
-
-    await expect(
-      screen.findByText(
-        "Label renamed and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
     expect(updateLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id, {
       color: "oklch(64% 0.19 28)",
       description: null,
@@ -399,12 +386,6 @@ describe("organization labels settings page", () => {
       "Fire Safety"
     );
     await user.click(screen.getByRole("button", { name: /create/i }));
-
-    await expect(
-      screen.findByText(
-        "Label created and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
     expect(createLabelWithConfirmation).toHaveBeenCalledWith({
       color: "oklch(64% 0.19 28)",
       description: null,
@@ -427,12 +408,6 @@ describe("organization labels settings page", () => {
     await user.clear(editInput);
     await user.type(editInput, "Emergency");
     await user.click(screen.getByRole("button", { name: /save fire safety/i }));
-
-    await expect(
-      screen.findByText(
-        "Label renamed and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
     expect(updateLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id, {
       color: "oklch(64% 0.19 28)",
       description: null,
@@ -487,12 +462,6 @@ describe("organization labels settings page", () => {
     await user.clear(editInput);
     await user.type(editInput, "Emergency");
     await user.click(screen.getByRole("button", { name: /save fire safety/i }));
-
-    await expect(
-      screen.findByText(
-        "Label renamed and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
     expect(updateLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id, {
       color: "oklch(64% 0.19 28)",
       description: null,
@@ -581,12 +550,6 @@ describe("organization labels settings page", () => {
         name: /archive label/i,
       })
     );
-
-    await expect(
-      screen.findByText(
-        "Label archived and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
     expect(archiveLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id);
     expect(awaitTxId).not.toHaveBeenCalled();
     expect(screen.queryByText("Emergency")).not.toBeInTheDocument();
@@ -636,12 +599,6 @@ describe("organization labels settings page", () => {
         123
       )
     );
-
-    await expect(
-      screen.findByText(
-        "Label created and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
   });
 
   it("shows duplicate and invalid label feedback before submitting", async () => {
@@ -742,12 +699,6 @@ describe("organization labels settings page", () => {
     expect(screen.getByText("Urgent")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: /archive label/i }));
-
-    await expect(
-      screen.findByText(
-        "Label archived and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
     expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
   });
 
@@ -780,11 +731,6 @@ describe("organization labels settings page", () => {
       await screen.findByRole("menuitem", { name: /archive label/i })
     );
     await user.click(screen.getByRole("button", { name: /archive label/i }));
-    await expect(
-      screen.findByText(
-        "Label archived and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
     expect(screen.queryByText("Urgent")).not.toBeInTheDocument();
 
     rerender(
@@ -836,11 +782,6 @@ describe("organization labels settings page", () => {
       "Fire Safety"
     );
     await user.click(screen.getByRole("button", { name: /create/i }));
-    await expect(
-      screen.findByText(
-        "Label created and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
 
     await user.click(
       await screen.findByRole("button", {
@@ -856,11 +797,6 @@ describe("organization labels settings page", () => {
     await user.clear(editInput);
     await user.type(editInput, "Emergency");
     await user.click(screen.getByRole("button", { name: /save fire safety/i }));
-    await expect(
-      screen.findByText(
-        "Label renamed and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
     await expect(screen.findByText("Emergency")).resolves.toBeVisible();
 
     await user.click(
@@ -884,12 +820,6 @@ describe("organization labels settings page", () => {
       expect(confirmArchiveButton).toBeEnabled();
     });
     await user.click(confirmArchiveButton);
-
-    await expect(
-      screen.findByText(
-        "Label archived and reflected locally while realtime sync catches up."
-      )
-    ).resolves.toBeVisible();
     expect(archiveLabelWithConfirmation).toHaveBeenCalledWith(serverLabel.id);
     expect(screen.queryByText("Emergency")).not.toBeInTheDocument();
   });
@@ -1224,9 +1154,11 @@ function makeCollection(
 }
 
 function makeLabel({
+  description = null,
   id,
   name,
 }: {
+  readonly description?: Label["description"] | undefined;
   readonly id: string;
   readonly name: string;
 }): Label {
@@ -1234,7 +1166,7 @@ function makeLabel({
     archivedAt: null,
     color: "oklch(64% 0.19 28)",
     createdAt: "2026-06-14T00:00:00.000Z",
-    description: null,
+    description,
     id: id as Label["id"],
     name,
     updatedAt: "2026-06-14T00:00:00.000Z",

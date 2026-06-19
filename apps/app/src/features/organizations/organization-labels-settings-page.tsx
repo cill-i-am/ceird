@@ -17,6 +17,7 @@ import {
   CreateLabelInputSchema,
   DEFAULT_LABEL_COLOR,
   UpdateLabelInputSchema,
+  normalizeLabelDescription,
   normalizeLabelName,
 } from "@ceird/labels-core";
 import { Effect, Schema } from "effect";
@@ -49,6 +50,7 @@ import {
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import { Input } from "#/components/ui/input";
+import { Textarea } from "#/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -123,7 +125,7 @@ interface PendingLabelMutation {
 }
 
 interface LabelMutationStatus {
-  readonly kind: "error" | "success";
+  readonly kind: "error";
   readonly message: string;
 }
 
@@ -137,12 +139,8 @@ const EMPTY_LABEL_NAME_MESSAGE = "Type a label name before saving it.";
 const INVALID_LABEL_NAME_MESSAGE =
   "Label names must be between 1 and 48 characters.";
 const DUPLICATE_LABEL_NAME_MESSAGE = "A label with that name already exists.";
-const LABEL_CREATED_LOCAL_STATUS =
-  "Label created and reflected locally while realtime sync catches up.";
-const LABEL_RENAMED_LOCAL_STATUS =
-  "Label renamed and reflected locally while realtime sync catches up.";
-const LABEL_ARCHIVED_LOCAL_STATUS =
-  "Label archived and reflected locally while realtime sync catches up.";
+const INVALID_LABEL_DESCRIPTION_MESSAGE =
+  "Descriptions must be 280 characters or fewer.";
 
 const decodeCreateLabelInput = Schema.decodeUnknownSync(CreateLabelInputSchema);
 const decodeUpdateLabelInput = Schema.decodeUnknownSync(UpdateLabelInputSchema);
@@ -207,6 +205,7 @@ export function OrganizationLabelsSettingsPage({
   const {
     cancelEditing,
     createName,
+    createDescription,
     createColor,
     cancelArchiveConfirmation,
     confirmingArchiveLabelId,
@@ -222,6 +221,7 @@ export function OrganizationLabelsSettingsPage({
     pendingMutation,
     requestArchiveConfirmation,
     setCreateName,
+    setCreateDescription,
     setCreateColor,
     setEditingName,
     setEditingColor,
@@ -281,9 +281,11 @@ export function OrganizationLabelsSettingsPage({
                 canWriteLabels={canWriteLabels}
                 createName={createName}
                 createColor={createColor}
+                createDescription={createDescription}
                 disabled={isMutating}
                 inputRef={createInputRef}
                 onCreateColorChange={setCreateColor}
+                onCreateDescriptionChange={setCreateDescription}
                 onCreateNameChange={setCreateName}
                 onSubmit={() => void handleCreateLabel()}
                 pending={pendingMutation?.kind === "create"}
@@ -458,6 +460,7 @@ function useLabelsMutationController({
   ) => Promise<LabelWriteResponse>;
 }) {
   const [createName, setCreateName] = React.useState("");
+  const [createDescription, setCreateDescription] = React.useState("");
   const [createColor, setCreateColor] =
     React.useState<LabelColor>(DEFAULT_LABEL_COLOR);
   const [editingLabelId, setEditingLabelId] = React.useState<
@@ -509,7 +512,23 @@ function useLabelsMutationController({
       return;
     }
 
+    const decodedDescription =
+      validateSettingsLabelDescription(createDescription);
+
+    if (decodedDescription.kind === "error") {
+      setMutationStatus({
+        kind: "error",
+        message: decodedDescription.message,
+      });
+      return;
+    }
+
     const operationId = `labels.create:${decodedName.name}`;
+    const input = createLabelInput(
+      decodedName.name,
+      createColor,
+      decodedDescription.description
+    );
 
     setPendingMutation({
       id: operationId,
@@ -522,22 +541,17 @@ function useLabelsMutationController({
     try {
       const response = await persistLabelCommandMutation({
         commandName: "labels.create",
-        input: createLabelInput(decodedName.name, createColor),
+        input,
         journal: mutationJournal,
-        operation: () =>
-          createLabelWithConfirmation(
-            createLabelInput(decodedName.name, createColor)
-          ),
+        operation: () => createLabelWithConfirmation(input),
       });
 
       reflectLabelUpsert(response.label);
 
       setCreateName("");
+      setCreateDescription("");
       setCreateColor(DEFAULT_LABEL_COLOR);
-      setMutationStatus({
-        kind: "success",
-        message: LABEL_CREATED_LOCAL_STATUS,
-      });
+      setMutationStatus(null);
     } catch (error) {
       setMutationStatus({
         kind: "error",
@@ -596,10 +610,7 @@ function useLabelsMutationController({
 
       reflectLabelUpsert(response.label);
       cancelEditing();
-      setMutationStatus({
-        kind: "success",
-        message: LABEL_RENAMED_LOCAL_STATUS,
-      });
+      setMutationStatus(null);
     } catch (error) {
       cancelEditing();
       setMutationStatus({
@@ -648,10 +659,7 @@ function useLabelsMutationController({
       }
 
       cancelArchiveConfirmation();
-      setMutationStatus({
-        kind: "success",
-        message: LABEL_ARCHIVED_LOCAL_STATUS,
-      });
+      setMutationStatus(null);
     } catch (error) {
       setMutationStatus({
         kind: "error",
@@ -675,6 +683,7 @@ function useLabelsMutationController({
   return {
     cancelEditing,
     createName,
+    createDescription,
     createColor,
     cancelArchiveConfirmation,
     confirmingArchiveLabelId,
@@ -690,6 +699,7 @@ function useLabelsMutationController({
     pendingMutation,
     requestArchiveConfirmation,
     setCreateName,
+    setCreateDescription,
     setCreateColor,
     setEditingName,
     setEditingColor,
@@ -700,20 +710,24 @@ function useLabelsMutationController({
 function CreateLabelForm({
   canWriteLabels,
   createColor,
+  createDescription,
   createName,
   disabled,
   inputRef,
   onCreateColorChange,
+  onCreateDescriptionChange,
   onCreateNameChange,
   onSubmit,
   pending,
 }: {
   readonly canWriteLabels: boolean;
   readonly createColor: LabelColor;
+  readonly createDescription: string;
   readonly createName: string;
   readonly disabled: boolean;
   readonly inputRef: React.RefObject<HTMLInputElement | null>;
   readonly onCreateColorChange: (color: LabelColor) => void;
+  readonly onCreateDescriptionChange: (description: string) => void;
   readonly onCreateNameChange: (name: string) => void;
   readonly onSubmit: () => void;
   readonly pending: boolean;
@@ -761,6 +775,19 @@ function CreateLabelForm({
           />
         </Button>
       </div>
+      <label className="sr-only" htmlFor="organization-labels-description">
+        New label description
+      </label>
+      <Textarea
+        id="organization-labels-description"
+        className="min-h-20 resize-none"
+        disabled={!canWriteLabels || disabled}
+        placeholder="Description (optional)"
+        value={createDescription}
+        onChange={(event) =>
+          onCreateDescriptionChange(event.currentTarget.value)
+        }
+      />
       <LabelColorPicker
         disabled={!canWriteLabels || disabled}
         id="organization-labels-create-color"
@@ -1032,14 +1059,13 @@ function LabelRow({
   readonly pendingMutation: PendingLabelMutation | null;
 }) {
   const actionsDisabled = pendingMutation !== null;
-  const rowPending = pendingMutation?.labelId === label.id;
   const archivePending =
     pendingMutation?.kind === "archive" && pendingMutation.labelId === label.id;
   const renamePending =
     pendingMutation?.kind === "rename" && pendingMutation.labelId === label.id;
 
   return (
-    <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-background px-4 py-3">
+    <li className="group/label-row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-background px-4 py-3">
       <div className="min-w-0">
         {editing ? (
           <div className="grid gap-2">
@@ -1077,11 +1103,11 @@ function LabelRow({
                 {label.name}
               </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {rowPending
-                ? "Pending realtime confirmation"
-                : "Active synced label"}
-            </p>
+            {label.description ? (
+              <p className="truncate text-xs text-muted-foreground">
+                {label.description}
+              </p>
+            ) : null}
           </>
         )}
       </div>
@@ -1193,6 +1219,7 @@ function LabelRowActions({
                 <Button
                   type="button"
                   aria-label={`Open actions for ${label.name}`}
+                  className="opacity-0 transition-opacity group-focus-within/label-row:opacity-100 group-hover/label-row:opacity-100 focus-visible:opacity-100"
                   disabled={actionsDisabled}
                   size="icon-sm"
                   title={`Actions for ${label.name}`}
@@ -1318,13 +1345,8 @@ function LabelMutationStatusView({
 
   return (
     <p
-      className={cn(
-        "rounded-lg border px-3 py-2 text-sm",
-        status.kind === "success"
-          ? "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"
-          : "border-destructive/30 bg-destructive/10 text-destructive"
-      )}
-      role={status.kind === "error" ? "alert" : "status"}
+      className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+      role="alert"
     >
       {status.message}
     </p>
@@ -1514,9 +1536,14 @@ function useCollectionHealthSnapshot(
 
 function createLabelInput(
   name: Label["name"],
-  color: LabelColor
+  color: LabelColor,
+  description: string | null
 ): CreateLabelInput {
-  return decodeCreateLabelInput({ color, name });
+  return decodeCreateLabelInput({
+    color,
+    description: normalizeLabelDescription(description),
+    name,
+  });
 }
 
 function updateLabelInput(
@@ -1599,6 +1626,24 @@ function validateSettingsLabelName(
   }
 
   return decoded;
+}
+
+function validateSettingsLabelDescription(
+  input: string
+):
+  | { readonly description: string | null; readonly kind: "valid" }
+  | { readonly kind: "error"; readonly message: string } {
+  try {
+    return {
+      description: normalizeLabelDescription(input),
+      kind: "valid",
+    };
+  } catch {
+    return {
+      kind: "error",
+      message: INVALID_LABEL_DESCRIPTION_MESSAGE,
+    };
+  }
 }
 
 function hasDuplicateLabelName(

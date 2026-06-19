@@ -52,7 +52,6 @@ export function LabelColorPicker({
   readonly onChange: (color: LabelColor) => void;
   readonly value: LabelColor;
 }) {
-  const selectedOption = getLabelColorOption(value);
   const [open, setOpen] = React.useState(false);
   const [draftColor, setDraftColor] = React.useState<LabelColor>(value);
 
@@ -64,14 +63,7 @@ export function LabelColorPicker({
 
   return (
     <div className="grid gap-2" id={id}>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs font-medium text-muted-foreground">
-          {label}
-        </span>
-        <span className="truncate text-xs text-muted-foreground">
-          {selectedOption?.name ?? "Custom color"}
-        </span>
-      </div>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
       <div className="flex flex-wrap items-center gap-2">
         <LabelColorBank disabled={disabled} value={value} onChange={onChange} />
         <Popover open={open} onOpenChange={setOpen}>
