@@ -144,7 +144,7 @@ const AuthSecurityAuditMetadataBaseFields = {
   outcome: Schema.Literal("succeeded"),
   source: AuthSecurityAuditMetadataSourceSchema,
 };
-const OrganizationMemberId = Schema.NonEmptyString.pipe(
+export const OrganizationMemberId = Schema.NonEmptyString.pipe(
   Schema.brand("@ceird/domains/identity/OrganizationMemberId")
 );
 const OrganizationUpdatedFieldSchema = Schema.Literal("name");
@@ -293,25 +293,33 @@ const OAuthAuditOptionalDbColumns = {
   sourceIp: OAuthAuditNullableTextDbColumn,
   userAgent: OAuthAuditNullableTextDbColumn,
 };
-const OAuthRegistrationAuditMetadataSchema = Schema.Union([
-  Schema.Struct({
-    ...OAuthAuditSourceFields,
-    dynamicRegistration: Schema.Literal(true),
-    oauthError: Schema.Null,
-    outcome: Schema.Literal("succeeded"),
-  }),
-  Schema.Struct({
-    ...OAuthAuditSourceFields,
-    dynamicRegistration: Schema.Literal(true),
-    oauthError: Schema.NullOr(Schema.NonEmptyString),
-    outcome: Schema.Literal("rejected"),
-  }),
-]).annotate({
+const OAuthClientRegistrationSucceededAuditMetadataSchema = Schema.Struct({
+  ...OAuthAuditSourceFields,
+  dynamicRegistration: Schema.Literal(true),
+  oauthError: Schema.Null,
+  outcome: Schema.Literal("succeeded"),
+}).annotate({
   parseOptions: { onExcessProperty: "error" },
 });
-const OAuthConsentAuditMetadataSchema = Schema.Struct({
+const OAuthClientRegistrationRejectedAuditMetadataSchema = Schema.Struct({
   ...OAuthAuditSourceFields,
-  accepted: Schema.Boolean,
+  dynamicRegistration: Schema.Literal(true),
+  oauthError: Schema.NullOr(Schema.NonEmptyString),
+  outcome: Schema.Literal("rejected"),
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const OAuthConsentGrantedAuditMetadataSchema = Schema.Struct({
+  ...OAuthAuditSourceFields,
+  accepted: Schema.Literal(true),
+  containsAdminScope: Schema.Boolean,
+  containsWriteScope: Schema.Boolean,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+const OAuthConsentDeniedAuditMetadataSchema = Schema.Struct({
+  ...OAuthAuditSourceFields,
+  accepted: Schema.Literal(false),
   containsAdminScope: Schema.Boolean,
   containsWriteScope: Schema.Boolean,
 }).annotate({
@@ -341,19 +349,23 @@ const OAuthTokenRevokedAuditMetadataSchema = Schema.Struct({
 export const OAuthSecurityAuditWriteSchema = Schema.Union([
   Schema.Struct({
     ...OAuthAuditOptionalDbColumns,
-    eventType: Schema.Literals([
-      "oauth_client_registration_succeeded",
-      "oauth_client_registration_rejected",
-    ] as const),
-    metadata: OAuthRegistrationAuditMetadataSchema,
+    eventType: Schema.Literal("oauth_client_registration_succeeded"),
+    metadata: OAuthClientRegistrationSucceededAuditMetadataSchema,
   }),
   Schema.Struct({
     ...OAuthAuditOptionalDbColumns,
-    eventType: Schema.Literals([
-      "oauth_consent_granted",
-      "oauth_consent_denied",
-    ] as const),
-    metadata: OAuthConsentAuditMetadataSchema,
+    eventType: Schema.Literal("oauth_client_registration_rejected"),
+    metadata: OAuthClientRegistrationRejectedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OAuthAuditOptionalDbColumns,
+    eventType: Schema.Literal("oauth_consent_granted"),
+    metadata: OAuthConsentGrantedAuditMetadataSchema,
+  }),
+  Schema.Struct({
+    ...OAuthAuditOptionalDbColumns,
+    eventType: Schema.Literal("oauth_consent_denied"),
+    metadata: OAuthConsentDeniedAuditMetadataSchema,
   }),
   Schema.Struct({
     ...OAuthAuditOptionalDbColumns,
@@ -393,6 +405,29 @@ export const OAuthTokenAuditContextRowSchema = Schema.Struct({
 });
 export type OAuthTokenAuditContextRow = Schema.Schema.Type<
   typeof OAuthTokenAuditContextRowSchema
+>;
+
+export const OrganizationInvitationAuditContextRowSchema = Schema.Struct({
+  email: Schema.NonEmptyString,
+  organizationId: OrganizationId,
+  role: OrganizationRole,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationInvitationAuditContextRow = Schema.Schema.Type<
+  typeof OrganizationInvitationAuditContextRowSchema
+>;
+
+export const OrganizationMemberAuditContextRowSchema = Schema.Struct({
+  id: OrganizationMemberId,
+  organizationId: OrganizationId,
+  role: OrganizationRole,
+  userId: UserId,
+}).annotate({
+  parseOptions: { onExcessProperty: "error" },
+});
+export type OrganizationMemberAuditContextRow = Schema.Schema.Type<
+  typeof OrganizationMemberAuditContextRowSchema
 >;
 
 export const OrganizationActiveChangedAuditMetadataSchema = Schema.Struct({

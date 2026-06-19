@@ -1,18 +1,29 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 
+import {
+  OAuthClientId,
+  OrganizationId,
+  OrganizationRole,
+  UserId,
+} from "@ceird/identity-core";
 import { getIp } from "better-auth/api";
 import { and, eq, gt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Context, Effect, Schema } from "effect";
 
 import {
+  OrganizationInvitationAuditContextRowSchema,
+  OrganizationMemberAuditContextRowSchema,
+  OrganizationMemberId,
   OAuthRefreshTokenConsentGuardRowSchema,
   OAuthSecurityAuditWriteSchema,
   OAuthTokenAuditContextRowSchema,
   OrganizationSecurityAuditWriteSchema,
 } from "../persistence-schemas.js";
 import type {
+  OrganizationInvitationAuditContextRow,
+  OrganizationMemberAuditContextRow,
   OAuthSecurityAuditWrite,
   OAuthTokenAuditContextRow,
   OrganizationSecurityAuditWrite,
@@ -152,6 +163,12 @@ const decodeOAuthRefreshTokenConsentGuardRow = Schema.decodeUnknownSync(
 const decodeOAuthTokenAuditContextRow = Schema.decodeUnknownSync(
   OAuthTokenAuditContextRowSchema
 );
+const decodeOrganizationInvitationAuditContextRow = Schema.decodeUnknownSync(
+  OrganizationInvitationAuditContextRowSchema
+);
+const decodeOrganizationMemberAuditContextRow = Schema.decodeUnknownSync(
+  OrganizationMemberAuditContextRowSchema
+);
 
 const OAuthRegistrationRequestBodySchema = Schema.Struct({
   scope: Schema.optional(Schema.NonEmptyString),
@@ -162,13 +179,13 @@ const OAuthConsentRequestBodySchema = Schema.Struct({
   scope: Schema.optional(Schema.NonEmptyString),
 });
 const OAuthTokenRequestBodySchema = Schema.Struct({
-  client_id: Schema.optional(Schema.NonEmptyString),
+  client_id: Schema.optional(OAuthClientId),
   grant_type: Schema.NonEmptyString,
   refresh_token: Schema.optional(Schema.NonEmptyString),
   scope: Schema.optional(Schema.NonEmptyString),
 });
 const OAuthRevokeRequestBodySchema = Schema.Struct({
-  client_id: Schema.optional(Schema.NonEmptyString),
+  client_id: Schema.optional(OAuthClientId),
   token: Schema.NonEmptyString,
   token_type_hint: Schema.optional(
     Schema.Literals(["access_token", "refresh_token"] as const)
@@ -176,38 +193,40 @@ const OAuthRevokeRequestBodySchema = Schema.Struct({
 });
 const OrganizationInviteMemberRequestBodySchema = Schema.Struct({
   email: Schema.optional(Schema.NonEmptyString),
-  organizationId: Schema.optional(Schema.NonEmptyString),
+  organizationId: Schema.optional(OrganizationId),
   resend: Schema.optional(Schema.Boolean),
+  role: Schema.optional(OrganizationRole),
 });
 const OrganizationSetActiveRequestBodySchema = Schema.Struct({
-  organizationId: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
+  organizationId: Schema.optional(Schema.NullOr(OrganizationId)),
 });
 const OrganizationMemberRequestBodySchema = Schema.Struct({
-  memberId: Schema.optional(Schema.NonEmptyString),
+  memberId: Schema.optional(OrganizationMemberId),
   memberIdOrEmail: Schema.optional(Schema.NonEmptyString),
+  role: Schema.optional(OrganizationRole),
 });
 const OAuthRegistrationResponseBodySchema = Schema.Struct({
-  client_id: Schema.optional(Schema.NonEmptyString),
+  client_id: Schema.optional(OAuthClientId),
   error: Schema.optional(Schema.NonEmptyString),
   scope: Schema.optional(Schema.NonEmptyString),
-  user_id: Schema.optional(Schema.NonEmptyString),
+  user_id: Schema.optional(UserId),
 });
 const OAuthTokenResponseBodySchema = Schema.Struct({
   scope: Schema.optional(Schema.NonEmptyString),
 });
 const OrganizationInvitationResponseBodySchema = Schema.Struct({
   email: Schema.optional(Schema.NonEmptyString),
-  organizationId: Schema.optional(Schema.NonEmptyString),
-  role: Schema.optional(Schema.NonEmptyString),
+  organizationId: Schema.optional(OrganizationId),
+  role: Schema.optional(OrganizationRole),
 });
 const OrganizationActiveResponseBodySchema = Schema.Struct({
-  id: Schema.optional(Schema.NonEmptyString),
+  id: Schema.optional(OrganizationId),
 });
 const OrganizationMemberResponseBodySchema = Schema.Struct({
-  id: Schema.optional(Schema.NonEmptyString),
-  organizationId: Schema.optional(Schema.NonEmptyString),
-  role: Schema.optional(Schema.NonEmptyString),
-  userId: Schema.optional(Schema.NonEmptyString),
+  id: Schema.optional(OrganizationMemberId),
+  organizationId: Schema.optional(OrganizationId),
+  role: Schema.optional(OrganizationRole),
+  userId: Schema.optional(UserId),
 });
 
 type OAuthSecurityAuditRequestBody =
@@ -585,12 +604,12 @@ interface OAuthSecurityAuditRequestSnapshot {
   readonly userAgent: string | null;
 }
 interface OAuthSecurityAuditTokenContext {
-  readonly clientId: string;
-  readonly organizationId?: string | null | undefined;
-  readonly scopes: readonly string[];
-  readonly sessionId?: string | null | undefined;
+  readonly clientId: OAuthTokenAuditContextRow["clientId"];
+  readonly organizationId: OAuthTokenAuditContextRow["referenceId"];
+  readonly scopes: OAuthTokenAuditContextRow["scopes"];
+  readonly sessionId: OAuthTokenAuditContextRow["sessionId"];
   readonly tokenKind: "access_token" | "refresh_token";
-  readonly userId?: string | null | undefined;
+  readonly userId: OAuthTokenAuditContextRow["userId"];
 }
 
 export function withOAuthSecurityAuditEventRecorder(
@@ -623,20 +642,8 @@ export function withOAuthSecurityAuditEventRecorder(
 interface OrganizationSecurityAuditRequestSnapshot {
   readonly body: OrganizationSecurityAuditRequestBody | null;
   readonly endpointPath: string;
-  readonly invitationBefore: {
-    readonly email: string;
-    readonly organizationId: string;
-    readonly role: string;
-  } | null;
-  readonly memberBefore?:
-    | {
-        readonly id: string;
-        readonly organizationId: string;
-        readonly role: string;
-        readonly userId: string;
-      }
-    | null
-    | undefined;
+  readonly invitationBefore: OrganizationInvitationAuditContextRow | null;
+  readonly memberBefore: OrganizationMemberAuditContextRow | null;
   readonly session: AuthenticationSessionResult | null;
   readonly sourceIp: string | null;
   readonly userAgent: string | null;
@@ -791,7 +798,7 @@ async function findOrganizationInvitationAuditContext(
     )
     .limit(1);
 
-  return row ?? null;
+  return row ? decodeOrganizationInvitationAuditContextRow(row) : null;
 }
 
 async function resolveOrganizationMemberAuditContext(options: {
@@ -837,7 +844,7 @@ async function findOrganizationMemberAuditContext(
     .where(eq(memberTable.id, memberId))
     .limit(1);
 
-  return row ?? null;
+  return row ? decodeOrganizationMemberAuditContextRow(row) : null;
 }
 
 async function resolveOrganizationSecurityAuditSession(
@@ -908,10 +915,25 @@ async function recordOrganizationInvitationResentSecurityAuditEvent(options: {
     return;
   }
 
+  let responseBodyDecodeFailed = false;
   const responseBody = await readSchemaOwnedResponseBody(
     options.response,
-    Schema.decodeUnknownSync(OrganizationInvitationResponseBodySchema)
+    Schema.decodeUnknownSync(OrganizationInvitationResponseBodySchema),
+    {
+      onDecodeFailure: async (error) => {
+        responseBodyDecodeFailed = true;
+        await reportAuthSecurityAuditParseFailure(
+          "organization_invitation_resent",
+          error,
+          options.options.runtimeContext ?? Context.empty()
+        );
+      },
+    }
   );
+
+  if (responseBodyDecodeFailed) {
+    return;
+  }
 
   await recordOrganizationSecurityAuditEvent(options.options, {
     actorUserId: options.snapshot.session?.user.id,
@@ -1567,7 +1589,10 @@ async function recordOAuthRevocationSecurityAuditEvent(options: {
 
 async function readSchemaOwnedResponseBody<Decoded>(
   response: Response,
-  decode: (input: unknown) => Decoded
+  decode: (input: unknown) => Decoded,
+  options?: {
+    readonly onDecodeFailure?: ((error: unknown) => Promise<void>) | undefined;
+  }
 ): Promise<Decoded | null> {
   try {
     const contentType = response.headers.get("content-type") ?? "";
@@ -1578,7 +1603,8 @@ async function readSchemaOwnedResponseBody<Decoded>(
 
     const body = await response.clone().json();
     return isRecord(body) ? decode(body) : null;
-  } catch {
+  } catch (error) {
+    await options?.onDecodeFailure?.(error);
     return null;
   }
 }

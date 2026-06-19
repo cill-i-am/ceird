@@ -21,7 +21,10 @@ import {
 import { Pool } from "pg";
 
 import { readMigrationSql } from "../../../platform/database/test-database.js";
-import { OrganizationSecurityAuditWriteSchema } from "../persistence-schemas.js";
+import {
+  OAuthSecurityAuditWriteSchema,
+  OrganizationSecurityAuditWriteSchema,
+} from "../persistence-schemas.js";
 import {
   AuthenticationSessionResultSchema,
   readAuthBoundaryJsonOrFormRequestBody,
@@ -90,6 +93,9 @@ import {
 
 const decodeOrganizationSecurityAuditWrite = Schema.decodeUnknownSync(
   OrganizationSecurityAuditWriteSchema
+);
+const decodeOAuthSecurityAuditWrite = Schema.decodeUnknownSync(
+  OAuthSecurityAuditWriteSchema
 );
 
 describe("makeAuthenticationConfig()", () => {
@@ -4395,6 +4401,56 @@ describe("createAuthentication()", () => {
     expect(JSON.stringify(auditEvents)).not.toContain("user_id");
   }, 10_000);
 
+  it("rejects impossible OAuth audit event metadata combinations", () => {
+    expect(() =>
+      decodeOAuthSecurityAuditWrite({
+        eventType: "oauth_client_registration_succeeded",
+        metadata: {
+          dynamicRegistration: true,
+          oauthError: "invalid_scope",
+          outcome: "rejected",
+          source: "better_auth_oauth_endpoint",
+        },
+      })
+    ).toThrow(/Expected/);
+
+    expect(() =>
+      decodeOAuthSecurityAuditWrite({
+        eventType: "oauth_client_registration_rejected",
+        metadata: {
+          dynamicRegistration: true,
+          oauthError: null,
+          outcome: "succeeded",
+          source: "better_auth_oauth_endpoint",
+        },
+      })
+    ).toThrow(/Expected/);
+
+    expect(() =>
+      decodeOAuthSecurityAuditWrite({
+        eventType: "oauth_consent_granted",
+        metadata: {
+          accepted: false,
+          containsAdminScope: false,
+          containsWriteScope: true,
+          source: "better_auth_oauth_endpoint",
+        },
+      })
+    ).toThrow(/Expected/);
+
+    expect(() =>
+      decodeOAuthSecurityAuditWrite({
+        eventType: "oauth_consent_denied",
+        metadata: {
+          accepted: true,
+          containsAdminScope: true,
+          containsWriteScope: false,
+          source: "better_auth_oauth_endpoint",
+        },
+      })
+    ).toThrow(/Expected/);
+  });
+
   it("records admin-scope OAuth consent grants with actor and organization context", async () => {
     const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
     const config = makeAuthenticationConfig({
@@ -5933,6 +5989,162 @@ describe("createAuthentication()", () => {
     );
 
     expect(auditEvents).toStrictEqual([]);
+  }, 10_000);
+
+  it("fails open when organization invitation audit context rows fail schema decoding", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyInvitationContextDecodeFailOpen() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                email: "member@example.com",
+                organizationId: "org_123",
+                role: "member",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              invitationRows: [
+                {
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  role: "",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/invite-member",
+              {
+                body: JSON.stringify({
+                  email: "member@example.com",
+                  organizationId: "org_123",
+                  resend: true,
+                  role: "member",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+    expect(serializedLogs).toContain(
+      "auth_security_audit_organization_context_failure"
+    );
+    expect(serializedLogs).not.toContain("member@example.com");
+  }, 10_000);
+
+  it("fails open when organization member audit context rows fail schema decoding", async () => {
+    const auditEvents: CapturedAuthSecurityAuditEvent[] = [];
+    const { logger, logs } = captureLogs();
+    const config = makeAuthenticationConfig({
+      baseUrl: "https://api.ceird.example/api/auth",
+      secret: "0123456789abcdef0123456789abcdef",
+      databaseUrl: DEFAULT_AUTH_DATABASE_URL,
+    });
+
+    const response = await Effect.gen(
+      function* verifyMemberContextDecodeFailOpen() {
+        const runtimeContext = yield* Effect.context<never>();
+        const handler = withOrganizationSecurityAuditEventRecorder(
+          () =>
+            Promise.resolve(
+              Response.json({
+                id: "member_123",
+                organizationId: "org_123",
+                role: "admin",
+                userId: "user_target",
+              })
+            ),
+          {
+            authConfig: config,
+            database: makeAuthSecurityAuditEventDatabase(auditEvents, {
+              memberRows: [
+                {
+                  id: "member_123",
+                  organizationId: "org_123",
+                  role: "",
+                  userId: "user_target",
+                },
+              ],
+            }),
+            resolveSession: () =>
+              Promise.resolve(
+                makeAuthenticationSessionResult({
+                  activeOrganizationId: "org_123",
+                })
+              ),
+            runtimeContext,
+          }
+        );
+
+        return yield* Effect.promise(() =>
+          handler(
+            new Request(
+              "https://api.ceird.example/api/auth/organization/update-member-role",
+              {
+                body: JSON.stringify({
+                  memberId: "member_123",
+                  organizationId: "org_123",
+                  role: "admin",
+                }),
+                headers: {
+                  "content-type": "application/json",
+                },
+                method: "POST",
+              }
+            )
+          )
+        );
+      }
+    ).pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "Trace"),
+      Effect.runPromise
+    );
+
+    expect(response.status).toBe(200);
+    expect(auditEvents).toStrictEqual([]);
+    const serializedLogs = JSON.stringify(logs);
+    expect(serializedLogs).toContain(
+      "auth_security_audit_organization_context_failure"
+    );
+    expect(serializedLogs).toContain("auth_security_audit_parse_failure");
+    expect(serializedLogs).toContain("organization_member_role_updated");
   }, 10_000);
 
   it("fails open when organization member audit context lookup fails", async () => {
