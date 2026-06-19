@@ -106,8 +106,7 @@ export function LabelColorPicker({
         )}
       >
         {mode === "bank" ? (
-          <div className="grid gap-2.5">
-            <p className="text-sm font-medium">{label}</p>
+          <div className="grid gap-2">
             <LabelColorBank
               disabled={disabled}
               value={value}
@@ -115,18 +114,10 @@ export function LabelColorPicker({
                 onChange(color);
                 setOpen(false);
               }}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              className="justify-start"
-              onClick={() => {
+              onAdvanced={() => {
                 setMode("advanced");
               }}
-            >
-              <Palette data-icon="inline-start" aria-hidden="true" />
-              Advanced
-            </Button>
+            />
           </div>
         ) : (
           <div className="animate-in duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] fade-in-0 slide-in-from-right-1 motion-reduce:animate-none">
@@ -140,58 +131,89 @@ export function LabelColorPicker({
 
 function LabelColorBank({
   disabled,
+  onAdvanced,
   value,
   onChange,
 }: {
   readonly disabled: boolean;
+  readonly onAdvanced: () => void;
   readonly onChange: (color: LabelColor) => void;
   readonly value: LabelColor;
 }) {
   return (
-    <div
-      className="grid grid-cols-9 gap-1.5"
-      role="radiogroup"
-      aria-label="Curated label colors"
-    >
-      {LABEL_COLOR_OPTIONS.map((option) => {
-        const selected = option.color === value;
+    <div className="flex flex-wrap items-center gap-1.5">
+      <div
+        className="flex flex-wrap items-center gap-1.5"
+        role="radiogroup"
+        aria-label="Curated label colors"
+      >
+        {LABEL_COLOR_OPTIONS.map((option) => {
+          const selected = option.color === value;
 
-        return (
-          <Tooltip key={option.id}>
-            <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Swatches are touch-friendly buttons with radiogroup semantics.
-                  role="radio"
-                  aria-checked={selected}
-                  aria-label={`${option.name}: ${option.role}`}
-                  disabled={disabled}
-                  className={cn(
-                    "group/color relative flex size-9 touch-manipulation items-center justify-center rounded-lg border bg-background transition-[border-color,box-shadow,transform,background-color] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 active:translate-y-px disabled:pointer-events-none disabled:opacity-50",
-                    selected
-                      ? "border-foreground shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--foreground)]"
-                      : "border-border hover:border-foreground/50"
-                  )}
-                  onClick={() => onChange(option.color)}
-                >
-                  <span
-                    className="size-5 rounded-full border border-black/15 shadow-inner"
-                    style={{ backgroundColor: option.color }}
-                  />
-                  {selected ? (
-                    <Check
-                      className="absolute right-0.5 bottom-0.5 size-3 rounded-full bg-background text-foreground"
-                      aria-hidden="true"
+          return (
+            <Tooltip key={option.id}>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Swatches are touch-friendly buttons with radiogroup semantics.
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={`${option.name}: ${option.role}`}
+                    disabled={disabled}
+                    className={cn(
+                      "group/color relative flex size-8 touch-manipulation items-center justify-center rounded-full transition-[box-shadow,transform] outline-none focus-visible:ring-3 focus-visible:ring-ring/30 active:translate-y-px disabled:pointer-events-none disabled:opacity-50",
+                      selected
+                        ? "shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--foreground)]"
+                        : "hover:shadow-[0_0_0_3px_var(--accent)]"
+                    )}
+                    onClick={() => onChange(option.color)}
+                  >
+                    <span
+                      className="size-5 rounded-full shadow-[inset_0_0_0_1px_rgb(0_0_0/0.12)]"
+                      style={{ backgroundColor: option.color }}
                     />
-                  ) : null}
-                </button>
-              }
+                    {selected ? (
+                      <Check
+                        className="absolute right-0.5 bottom-0.5 size-3 rounded-full bg-background text-foreground"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </button>
+                }
+              />
+              <TooltipContent>{`${option.name}: ${option.role}`}</TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              aria-label="Advanced custom label color"
+              disabled={disabled}
+              className="relative flex size-8 touch-manipulation items-center justify-center rounded-full transition-[box-shadow,transform] outline-none hover:shadow-[0_0_0_3px_var(--accent)] focus-visible:ring-3 focus-visible:ring-ring/30 active:translate-y-px disabled:pointer-events-none disabled:opacity-50"
+              onClick={onAdvanced}
             />
-            <TooltipContent>{`${option.name}: ${option.role}`}</TooltipContent>
-          </Tooltip>
-        );
-      })}
+          }
+        >
+          <span
+            className="size-5 rounded-full shadow-[inset_0_0_0_1px_rgb(0_0_0/0.12)]"
+            style={{
+              background:
+                "conic-gradient(from 0deg, #ef4444, #f59e0b, #22c55e, #06b6d4, #3b82f6, #a855f7, #ec4899, #ef4444)",
+            }}
+            aria-hidden="true"
+          />
+          <Palette
+            className="absolute size-3 text-white drop-shadow-[0_1px_1px_rgb(0_0_0/0.45)]"
+            aria-hidden="true"
+          />
+        </TooltipTrigger>
+        <TooltipContent>Advanced custom color</TooltipContent>
+      </Tooltip>
     </div>
   );
 }
