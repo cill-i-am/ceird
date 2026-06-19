@@ -1,11 +1,16 @@
 import {
   decodeInvitationId,
+  decodeOrganizationMemberId,
   decodeOrganizationId,
   decodeSessionId,
   decodeUserId,
   OrganizationInvitationNotFoundError,
+  OrganizationMemberNotFoundError,
 } from "@ceird/identity-core";
-import type { OrganizationInvitation } from "@ceird/identity-core";
+import type {
+  OrganizationInvitation,
+  OrganizationMember,
+} from "@ceird/identity-core";
 import { Effect, Layer } from "effect";
 import { HttpServerRequest } from "effect/unstable/http";
 
@@ -75,11 +80,11 @@ describe("organization member identity mapping", () => {
         },
         headers: {
           authorization: "Bearer nested-auth-token",
-          "cf-connecting-ip": null,
+          "cf-connecting-ip": "203.0.113.10",
           cookie: "better-auth.session_token=session-value",
           origin: "https://app.ceird.example",
           "user-agent": "Ceird E2E",
-          "x-forwarded-for": "203.0.113.10",
+          "x-forwarded-for": null,
           "x-forwarded-host": null,
         },
         method: "POST",
@@ -196,6 +201,95 @@ describe("organization member identity mapping", () => {
     expect(requests).toStrictEqual([]);
   });
 
+  it("rejects out-of-organization member role updates before calling Better Auth", async () => {
+    const requests: CapturedOrganizationAuthRequest[] = [];
+    const memberId = decodeOrganizationMemberId("mem_other");
+    const getMemberCalls: {
+      readonly memberId: string;
+      readonly organizationId: string;
+    }[] = [];
+
+    await expect(
+      runUpdateMemberRoleServiceWithHandler(
+        async (request) => {
+          requests.push({
+            body: await request.json(),
+            headers: {},
+            method: request.method,
+            pathname: new URL(request.url).pathname,
+          });
+
+          return Response.json({});
+        },
+        {
+          getMemberCalls,
+          memberId,
+          repositoryMember: null,
+        }
+      )
+    ).rejects.toMatchObject({
+      memberId,
+      _tag: "@ceird/identity-core/OrganizationMemberNotFoundError",
+    });
+
+    expect(getMemberCalls).toStrictEqual([
+      {
+        memberId: "mem_other",
+        organizationId: "org_123",
+      },
+    ]);
+    expect(requests).toStrictEqual([]);
+  });
+
+  it("rejects out-of-organization member removals before calling Better Auth", async () => {
+    const requests: CapturedOrganizationAuthRequest[] = [];
+    const memberId = decodeOrganizationMemberId("mem_other");
+    const getMemberCalls: {
+      readonly memberId: string;
+      readonly organizationId: string;
+    }[] = [];
+
+    await expect(
+      runRemoveMemberServiceWithHandler(
+        async (request) => {
+          requests.push({
+            body: await request.json(),
+            headers: {},
+            method: request.method,
+            pathname: new URL(request.url).pathname,
+          });
+
+          return Response.json({
+            member: {
+              createdAt: "2026-04-01T09:30:00.000Z",
+              id: "mem_other",
+              organizationId: "org_other",
+              role: "member",
+              teamId: null,
+              userId: "user_member",
+            },
+          });
+        },
+        {
+          getMemberCalls,
+          memberId,
+          repositoryMember: null,
+        }
+      )
+    ).rejects.toMatchObject({
+      memberId,
+      _tag: "@ceird/identity-core/OrganizationMemberNotFoundError",
+    });
+
+    expect(getMemberCalls).toStrictEqual([
+      {
+        memberId: "mem_other",
+        organizationId: "org_123",
+      },
+    ]);
+    expect(requests).toStrictEqual([]);
+  });
+
   it("fails closed when Better Auth cancels an invitation outside the active organization", async () => {
     await expect(
       runCancelInvitationServiceWithHandler(() =>
@@ -279,7 +373,7 @@ describe("organization member identity mapping", () => {
     expect(headers.get("accept-encoding")).toBeNull();
     expect(headers.get("authorization")).toBe("Bearer nested-auth-token");
     expect(headers.get("cdn-loop")).toBeNull();
-    expect(headers.get("cf-connecting-ip")).toBeNull();
+    expect(headers.get("cf-connecting-ip")).toBe("203.0.113.10");
     expect(headers.get("cf-ipcountry")).toBeNull();
     expect(headers.get("cf-ray")).toBeNull();
     expect(headers.get("connection")).toBeNull();
@@ -303,13 +397,13 @@ describe("organization member identity mapping", () => {
     expect(headers.get("x-request-id")).toBeNull();
   });
 
-  it("projects Cloudflare client IP into x-forwarded-for when no forwarded chain is present", () => {
+  it("preserves Cloudflare client IP without synthesizing a forwarded chain", () => {
     const headers = makeOrganizationAuthRequestHeaders({
       "cf-connecting-ip": "203.0.113.10",
     });
 
-    expect(headers.get("cf-connecting-ip")).toBeNull();
-    expect(headers.get("x-forwarded-for")).toBe("203.0.113.10");
+    expect(headers.get("cf-connecting-ip")).toBe("203.0.113.10");
+    expect(headers.get("x-forwarded-for")).toBeNull();
   });
 
   it("maps joined member rows into a safe member DTO", () => {
@@ -497,6 +591,21 @@ function makeOrganizationInvitationDto(
   );
 }
 
+function makeOrganizationMemberDto(
+  overrides: Record<string, unknown> = {}
+): OrganizationMember {
+  return mapOrganizationMemberRow({
+    created_at: new Date("2026-04-01T09:30:00.000Z"),
+    email: "member@example.com",
+    id: "mem_member",
+    name: "Member Example",
+    organization_id: "org_123",
+    role: "member",
+    user_id: "user_member",
+    ...overrides,
+  });
+}
+
 function makeOrganizationActor(): OrganizationActor {
   return {
     organizationId: decodeOrganizationId("org_123"),
@@ -670,6 +779,139 @@ async function runCancelInvitationServiceWithHandler(
         invitationId,
       });
     }).pipe(Effect.provide(layer))
+  );
+}
+
+async function runUpdateMemberRoleServiceWithHandler(
+  handler: (request: Request) => Promise<Response>,
+  options: {
+    readonly getMemberCalls?: {
+      readonly memberId: string;
+      readonly organizationId: string;
+    }[];
+    readonly memberId?: ReturnType<typeof decodeOrganizationMemberId>;
+    readonly repositoryMember?: OrganizationMember | null;
+  } = {}
+) {
+  const memberId = options.memberId ?? decodeOrganizationMemberId("mem_member");
+  const layer = makeMemberMutationServiceLayer(handler, options);
+
+  return await Effect.runPromise(
+    Effect.gen(function* () {
+      const service = yield* OrganizationMembersService;
+
+      return yield* service.updateMemberRole({
+        memberId,
+        role: "admin",
+      });
+    }).pipe(Effect.provide(layer))
+  );
+}
+
+async function runRemoveMemberServiceWithHandler(
+  handler: (request: Request) => Promise<Response>,
+  options: {
+    readonly getMemberCalls?: {
+      readonly memberId: string;
+      readonly organizationId: string;
+    }[];
+    readonly memberId?: ReturnType<typeof decodeOrganizationMemberId>;
+    readonly repositoryMember?: OrganizationMember | null;
+  } = {}
+) {
+  const memberId = options.memberId ?? decodeOrganizationMemberId("mem_member");
+  const layer = makeMemberMutationServiceLayer(handler, options);
+
+  return await Effect.runPromise(
+    Effect.gen(function* () {
+      const service = yield* OrganizationMembersService;
+
+      return yield* service.removeMember({
+        memberId,
+      });
+    }).pipe(Effect.provide(layer))
+  );
+}
+
+function makeMemberMutationServiceLayer(
+  handler: (request: Request) => Promise<Response>,
+  options: {
+    readonly getMemberCalls?: {
+      readonly memberId: string;
+      readonly organizationId: string;
+    }[];
+    readonly repositoryMember?: OrganizationMember | null;
+  }
+) {
+  const dependenciesLayer = Layer.mergeAll(
+    Layer.succeed(
+      Authentication,
+      Authentication.of({
+        api: {
+          getSession: () => Promise.resolve(null),
+        },
+        handler,
+        options: {
+          plugins: [],
+        },
+      })
+    ),
+    Layer.succeed(
+      CurrentOrganizationActor,
+      CurrentOrganizationActor.of({
+        get: () => Effect.succeed(makeOrganizationActor()),
+      })
+    ),
+    Layer.succeed(
+      OrganizationAuthorization,
+      OrganizationAuthorization.of({
+        ensureCanCreateSite: () => Effect.void,
+        ensureCanManageConfiguration: () => Effect.void,
+        ensureCanManageLabels: () => Effect.void,
+        ensureCanViewOrganizationData: () => Effect.void,
+        ensureCanViewOrganizationSecurityActivity: () => Effect.void,
+      })
+    ),
+    Layer.succeed(
+      OrganizationMembersRepository,
+      OrganizationMembersRepository.of({
+        getInvitation: () =>
+          Effect.die(new Error("getInvitation was not expected")),
+        getMember: (organizationId, requestedMemberId) => {
+          options.getMemberCalls?.push({
+            memberId: requestedMemberId,
+            organizationId,
+          });
+
+          if (options.repositoryMember === null) {
+            return Effect.fail(
+              new OrganizationMemberNotFoundError({
+                memberId: requestedMemberId,
+                message: "Organization member was not found",
+              })
+            );
+          }
+
+          return Effect.succeed(
+            options.repositoryMember ?? makeOrganizationMemberDto()
+          );
+        },
+        listInvitations: () =>
+          Effect.die(new Error("listInvitations was not expected")),
+        listMembers: () =>
+          Effect.die(new Error("listMembers was not expected")),
+      })
+    )
+  );
+
+  return Layer.merge(
+    OrganizationMembersService.DefaultWithoutDependencies.pipe(
+      Layer.provide(dependenciesLayer)
+    ),
+    Layer.succeed(
+      HttpServerRequest.HttpServerRequest,
+      makeTestHttpServerRequest({})
+    )
   );
 }
 

@@ -517,6 +517,7 @@ export class OrganizationMembersService extends Context.Service<OrganizationMemb
       )(function* (input: UpdateOrganizationMemberRoleInput) {
         const actor = yield* getAdministrativeActor();
 
+        yield* repository.getMember(actor.organizationId, input.memberId);
         yield* dispatchOrganizationAuthRequest(
           auth.handler,
           "/organization/update-member-role",
@@ -550,7 +551,9 @@ export class OrganizationMembersService extends Context.Service<OrganizationMemb
 
       const removeMember = Effect.fn("OrganizationMembersService.removeMember")(
         function* (input: RemoveOrganizationMemberInput) {
-          yield* getAdministrativeActor();
+          const actor = yield* getAdministrativeActor();
+
+          yield* repository.getMember(actor.organizationId, input.memberId);
           const response = yield* dispatchOrganizationAuthRequest(
             auth.handler,
             "/organization/remove-member",
@@ -702,18 +705,16 @@ export function makeOrganizationAuthRequestHeaders(input: HeadersInit) {
   );
   setSyntheticOrganizationAuthHeader(
     headers,
+    "cf-connecting-ip",
+    readNonEmptyHeader(incomingHeaders, "cf-connecting-ip")
+  );
+  setSyntheticOrganizationAuthHeader(
+    headers,
     "x-forwarded-for",
-    resolveSyntheticOrganizationAuthClientIp(incomingHeaders)
+    readNonEmptyHeader(incomingHeaders, "x-forwarded-for")
   );
 
   return headers;
-}
-
-function resolveSyntheticOrganizationAuthClientIp(headers: Headers) {
-  return (
-    readNonEmptyHeader(headers, "x-forwarded-for") ??
-    readNonEmptyHeader(headers, "cf-connecting-ip")
-  );
 }
 
 function setSyntheticOrganizationAuthHeader(

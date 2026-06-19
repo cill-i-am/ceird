@@ -1,4 +1,11 @@
-import type { OrganizationSummary } from "@ceird/identity-core";
+import {
+  decodeInviteOrganizationMemberInput,
+  InviteOrganizationMemberInputSchema,
+} from "@ceird/identity-core";
+import type {
+  InvitableOrganizationRole,
+  OrganizationSummary,
+} from "@ceird/identity-core";
 import { CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useForm } from "@tanstack/react-form";
@@ -44,11 +51,6 @@ import {
   INVITE_ROLE_SELECTION_GROUPS,
   isInviteRole,
 } from "./organization-invite-role-options";
-import {
-  decodeOrganizationMemberInviteInput,
-  organizationMemberInviteSchema,
-} from "./organization-member-invite-schemas";
-import type { OrganizationMemberInviteDraft } from "./organization-member-invite-schemas";
 import { inviteOrganizationMember } from "./organization-members-api";
 import {
   decodeCreateOrganizationNameInput,
@@ -60,6 +62,10 @@ const CREATE_ORGANIZATION_FAILURE_MESSAGE =
   "We couldn't create your team. Please try again.";
 const INVITE_FAILURE_MESSAGE =
   "We couldn't send that invitation. Please check the email and try again.";
+interface OrganizationMemberInviteDraft {
+  readonly email: string;
+  readonly role: InvitableOrganizationRole;
+}
 const DEFAULT_INVITE_VALUES: OrganizationMemberInviteDraft = {
   email: "",
   role: "member",
@@ -228,7 +234,7 @@ function InviteMembersStep({
   const form = useForm({
     defaultValues: DEFAULT_INVITE_VALUES,
     validators: {
-      onSubmit: Schema.toStandardSchemaV1(organizationMemberInviteSchema),
+      onSubmit: Schema.toStandardSchemaV1(InviteOrganizationMemberInputSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({
@@ -238,7 +244,7 @@ function InviteMembersStep({
       const mutationFeedback = beginMutationFeedback({
         minimumDurationMs: 500,
       });
-      const invite = decodeOrganizationMemberInviteInput(value);
+      const invite = decodeInviteOrganizationMemberInput(value);
 
       try {
         await inviteOrganizationMember(invite);

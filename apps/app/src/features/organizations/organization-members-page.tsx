@@ -1,6 +1,11 @@
-import { isAdministrativeOrganizationRole } from "@ceird/identity-core";
+import {
+  decodeInviteOrganizationMemberInput,
+  InviteOrganizationMemberInputSchema,
+  isAdministrativeOrganizationRole,
+} from "@ceird/identity-core";
 import type {
   InvitationId,
+  InvitableOrganizationRole,
   OrganizationId,
   OrganizationInvitation,
   OrganizationMember,
@@ -76,11 +81,6 @@ import type {
   MemberAction,
 } from "./organization-member-display";
 import {
-  decodeOrganizationMemberInviteInput,
-  organizationMemberInviteSchema,
-} from "./organization-member-invite-schemas";
-import type { OrganizationMemberInviteDraft } from "./organization-member-invite-schemas";
-import {
   CurrentMemberRow,
   PendingInvitationRow,
 } from "./organization-member-row-actions";
@@ -97,6 +97,11 @@ interface CurrentMemberSummary {
   readonly email: string;
   readonly name: string;
   readonly role: OrganizationRoleType;
+}
+
+interface OrganizationMemberInviteDraft {
+  readonly email: string;
+  readonly role: InvitableOrganizationRole;
 }
 
 const DEFAULT_INVITE_VALUES: OrganizationMemberInviteDraft = {
@@ -399,7 +404,7 @@ export function OrganizationMembersPage({
   const form = useForm({
     defaultValues: DEFAULT_INVITE_VALUES,
     validators: {
-      onSubmit: Schema.toStandardSchemaV1(organizationMemberInviteSchema),
+      onSubmit: Schema.toStandardSchemaV1(InviteOrganizationMemberInputSchema),
     },
     onSubmit: async ({ formApi, value }) => {
       formApi.setErrorMap({
@@ -413,7 +418,7 @@ export function OrganizationMembersPage({
       setSuccessMessage(null);
 
       const actionOrganizationId = activeOrganizationId;
-      const invite = decodeOrganizationMemberInviteInput(value);
+      const invite = decodeInviteOrganizationMemberInput(value);
       const mutationFeedback = beginMutationFeedback();
       try {
         await inviteOrganizationMember({
