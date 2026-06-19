@@ -45,11 +45,13 @@ const OKLCH_CHROMA_DIGITS = 4;
 const OKLCH_HUE_DIGITS = 3;
 
 export function LabelColorPicker({
+  className,
   disabled = false,
   label = "Label color",
   value,
   onChange,
 }: {
+  readonly className?: string | undefined;
   readonly disabled?: boolean;
   readonly label?: string | undefined;
   readonly onChange: (color: LabelColor) => void;
@@ -76,6 +78,7 @@ export function LabelColorPicker({
                   type="button"
                   size="icon"
                   variant="outline"
+                  className={className}
                   disabled={disabled}
                   aria-label={`Choose ${label.toLowerCase()}`}
                 />
@@ -98,12 +101,12 @@ export function LabelColorPicker({
         className={cn(
           "gap-3",
           mode === "advanced"
-            ? "w-[min(calc(100vw-2rem),34rem)]"
+            ? "w-[min(calc(100vw-2rem),31rem)]"
             : "w-[min(calc(100vw-2rem),22rem)]"
         )}
       >
         {mode === "bank" ? (
-          <div className="grid gap-3">
+          <div className="grid gap-2.5">
             <p className="text-sm font-medium">{label}</p>
             <LabelColorBank
               disabled={disabled}
@@ -319,7 +322,7 @@ function AdvancedLabelColorPicker({
         </Field>
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_2rem] gap-4">
+      <div className="grid grid-cols-[minmax(0,1fr)_1.75rem] gap-3">
         <div
           ref={visualPickerRef}
           // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- This 2D picker exposes keyboard slider semantics over a custom pointer surface.
@@ -329,7 +332,7 @@ function AdvancedLabelColorPicker({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(picker.lightness)}
-          className="relative h-32 touch-none rounded-md border border-border outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+          className="relative h-28 touch-none rounded-md border border-border outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
           style={{
             background: `linear-gradient(to top, oklch(${PICKER_LIGHTNESS_MIN}% 0 ${picker.hue}), oklch(${PICKER_LIGHTNESS_MAX}% 0 ${picker.hue})), linear-gradient(to right, oklch(${PICKER_CANVAS_LIGHTNESS}% 0 ${picker.hue}), oklch(${PICKER_CANVAS_LIGHTNESS}% ${PICKER_CHROMA_MAX} ${picker.hue}))`,
             backgroundBlendMode: "multiply",
@@ -368,7 +371,7 @@ function AdvancedLabelColorPicker({
           }}
         >
           <span
-            className="pointer-events-none absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow-[0_0_0_1px_var(--foreground),0_1px_4px_rgb(0_0_0/0.25)]"
+            className="pointer-events-none absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow-[0_0_0_1px_var(--foreground),0_1px_4px_rgb(0_0_0/0.25)]"
             style={{
               backgroundColor: value,
               left: `${clamp((picker.chroma / PICKER_CHROMA_MAX) * 100, 0, 100)}%`,
@@ -392,7 +395,7 @@ function AdvancedLabelColorPicker({
             max={HUE_MAX}
             value={Math.round(picker.hue)}
             aria-label="Label color hue"
-            className="h-32 w-7 accent-primary"
+            className="h-28 w-6 accent-primary"
             style={{
               background:
                 "linear-gradient(to top, red, yellow, lime, cyan, blue, magenta, red)",

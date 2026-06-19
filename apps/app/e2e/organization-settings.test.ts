@@ -156,7 +156,7 @@ test("an organization admin can manage labels from the realtime settings tab", a
   await expect(
     page.getByRole("heading", { exact: true, name: "Labels" })
   ).toBeVisible({ timeout: AUTHENTICATED_HOME_TIMEOUT_MS });
-  await expect(page.getByText("Realtime ready")).toBeVisible({
+  await expect(page.getByText("Label library")).toBeVisible({
     timeout: ORGANIZATION_SETTINGS_FLOW_TIMEOUT_MS,
   });
   await expect(page.getByText("No labels yet")).toBeVisible();

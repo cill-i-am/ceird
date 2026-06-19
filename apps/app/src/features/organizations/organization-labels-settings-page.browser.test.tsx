@@ -52,7 +52,7 @@ describe("organization labels settings page", () => {
     });
 
     expect(screen.getByRole("heading", { name: "Labels" })).toBeVisible();
-    expect(screen.getByText("Realtime ready")).toBeVisible();
+    expect(screen.getByText("Label library")).toBeVisible();
     expect(
       screen.getByRole("textbox", { name: /new label name/i })
     ).toBeVisible();
@@ -97,6 +97,7 @@ describe("organization labels settings page", () => {
     });
     expect(createInput).toBeEnabled();
     await user.type(createInput, "Fire Safety");
+    await user.click(screen.getByRole("button", { name: /add description/i }));
     await user.type(
       screen.getByRole("textbox", { name: /new label description/i }),
       "Used for annual fire checks"
@@ -151,7 +152,7 @@ describe("organization labels settings page", () => {
 
     expect(screen.getByText("No matching labels")).toBeVisible();
     expect(screen.getByText('No active labels match "zz".')).toBeVisible();
-    expect(screen.getByText("Realtime ready")).toBeVisible();
+    expect(screen.queryByText("Realtime ready")).not.toBeInTheDocument();
   });
 
   it("shows the empty notice when ready rendering has no labels", () => {
@@ -176,7 +177,7 @@ describe("organization labels settings page", () => {
     });
 
     expect(screen.getByLabelText("Loading labels")).toBeVisible();
-    expect(screen.getByText("Connecting to realtime labels")).toBeVisible();
+    expect(screen.queryByText("Connecting to realtime labels")).toBeNull();
 
     rerender(
       <LabelsPageHarness
@@ -195,7 +196,10 @@ describe("organization labels settings page", () => {
         })}
       />
     );
-    expect(screen.getAllByText("Realtime labels unavailable")).toHaveLength(2);
+    expect(screen.getByText("Labels unavailable")).toBeVisible();
+    expect(
+      screen.queryByRole("textbox", { name: /new label name/i })
+    ).not.toBeInTheDocument();
 
     rerender(
       <LabelsPageHarness
@@ -745,7 +749,7 @@ describe("organization labels settings page", () => {
     );
 
     expect(screen.getByText("No labels yet")).toBeVisible();
-    expect(screen.getByText("Realtime labels unavailable")).toBeVisible();
+    expect(screen.queryByText("Labels unavailable")).not.toBeInTheDocument();
   });
 
   it("archives labels after command-backed create and rename", async () => {
@@ -850,7 +854,7 @@ describe("organization labels settings page", () => {
       "Urgent"
     );
 
-    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.queryByText("Archive this label?")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: /rename urgent/i })).toHaveValue(

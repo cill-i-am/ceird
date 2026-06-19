@@ -72,7 +72,6 @@ import {
 import { ShortcutHint } from "#/hotkeys/hotkey-display";
 import { HOTKEYS } from "#/hotkeys/hotkey-registry";
 import { useAppHotkey } from "#/hotkeys/use-app-hotkey";
-import { cn } from "#/lib/utils";
 
 type LabelsSettingsShellState =
   | "connecting"
@@ -201,6 +200,8 @@ export function OrganizationLabelsSettingsPage({
     collectionIsAvailable: collection !== null,
     shellState,
   });
+  const showLabelControls =
+    canManageLabels && (shellState === "ready" || shellState === "empty");
   const {
     cancelEditing,
     createName,
@@ -257,11 +258,11 @@ export function OrganizationLabelsSettingsPage({
       <AppPageHeader
         eyebrow={organization.name}
         title="Labels"
-        description="Manage active organization label definitions from the realtime product data plane."
+        description="Create the names, colors, and descriptions your team uses across the workspace."
         className="border-b-0 pb-0"
         actions={
           <a className={buttonVariants()} href="/organization/settings">
-            General settings
+            Organization settings
             <ArrowRight aria-hidden="true" />
           </a>
         }
@@ -270,12 +271,11 @@ export function OrganizationLabelsSettingsPage({
       <div className="flex max-w-5xl flex-col gap-5">
         <AppUtilityPanel
           id="organization-labels-realtime-list"
-          title="Realtime labels"
-          description="Active labels are read from the Electric-backed TanStack DB collection for this organization."
+          title="Label library"
+          description="Keep shared label definitions consistent for jobs, sites, and workflow states."
         >
           <div className="space-y-4">
-            <LabelsHealthBanner health={health} state={shellState} />
-            {canManageLabels ? (
+            {showLabelControls ? (
               <CreateLabelForm
                 canWriteLabels={canWriteLabels}
                 createName={createName}
@@ -290,9 +290,9 @@ export function OrganizationLabelsSettingsPage({
                 pending={pendingMutation?.kind === "create"}
               />
             ) : null}
-            {canManageLabels ? (
+            {showLabelControls ? (
               <LabelsSearchField
-                disabled={shellState === "unavailable"}
+                disabled={false}
                 inputRef={searchInputRef}
                 resultCount={visibleLabels.length}
                 searchQuery={searchQuery}
@@ -731,6 +731,16 @@ function CreateLabelForm({
   readonly onSubmit: () => void;
   readonly pending: boolean;
 }) {
+  const [descriptionExpanded, setDescriptionExpanded] = React.useState(false);
+  const showDescription =
+    descriptionExpanded || createDescription.trim().length > 0;
+
+  React.useEffect(() => {
+    if (createName.length === 0 && createDescription.length === 0) {
+      setDescriptionExpanded(false);
+    }
+  }, [createDescription, createName]);
+
   return (
     <form
       className="grid gap-3 rounded-lg border border-border/70 bg-background p-3"
@@ -739,20 +749,22 @@ function CreateLabelForm({
         onSubmit();
       }}
     >
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
-        <LabelColorPicker
-          disabled={!canWriteLabels || disabled}
-          label="New label color"
-          value={createColor}
-          onChange={onCreateColorChange}
-        />
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <div className="relative min-w-0">
+          <LabelColorPicker
+            className="absolute top-0 left-0 z-10 size-9 rounded-r-none border-r border-border bg-background hover:bg-muted aria-expanded:bg-muted"
+            disabled={!canWriteLabels || disabled}
+            label="New label color"
+            value={createColor}
+            onChange={onCreateColorChange}
+          />
           <label className="sr-only" htmlFor="organization-labels-create">
             New label name
           </label>
           <Input
             id="organization-labels-create"
             ref={inputRef}
+            className="pl-12"
             disabled={!canWriteLabels || disabled}
             placeholder="New label name"
             value={createName}
@@ -766,11 +778,7 @@ function CreateLabelForm({
             />
           </span>
         </div>
-        <Button
-          type="submit"
-          className="col-span-2 sm:col-span-1"
-          disabled={!canWriteLabels || disabled}
-        >
+        <Button type="submit" disabled={!canWriteLabels || disabled}>
           {pending ? (
             <Loader2 className="animate-spin" aria-hidden="true" />
           ) : (
@@ -784,19 +792,35 @@ function CreateLabelForm({
           />
         </Button>
       </div>
-      <label className="sr-only" htmlFor="organization-labels-description">
-        New label description
-      </label>
-      <Textarea
-        id="organization-labels-description"
-        className="min-h-20 resize-none"
-        disabled={!canWriteLabels || disabled}
-        placeholder="Description (optional)"
-        value={createDescription}
-        onChange={(event) =>
-          onCreateDescriptionChange(event.currentTarget.value)
-        }
-      />
+      {showDescription ? (
+        <React.Fragment>
+          <label className="sr-only" htmlFor="organization-labels-description">
+            New label description
+          </label>
+          <Textarea
+            id="organization-labels-description"
+            className="min-h-16 resize-none"
+            disabled={!canWriteLabels || disabled}
+            placeholder="Description"
+            value={createDescription}
+            onChange={(event) =>
+              onCreateDescriptionChange(event.currentTarget.value)
+            }
+          />
+        </React.Fragment>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-fit text-muted-foreground"
+          disabled={!canWriteLabels || disabled}
+          onClick={() => setDescriptionExpanded(true)}
+        >
+          <Plus aria-hidden="true" />
+          Add description
+        </Button>
+      )}
     </form>
   );
 }
@@ -848,48 +872,6 @@ function LabelsSearchField({
           ? `${resultCount} of ${totalCount} labels`
           : `${totalCount} active labels`}
       </p>
-    </div>
-  );
-}
-
-function LabelsHealthBanner({
-  health,
-  state,
-}: {
-  readonly health: DataPlaneCollectionHealthSnapshot | null;
-  readonly state: LabelsSettingsShellState;
-}) {
-  const healthCopy = getHealthCopy({ health, state });
-
-  return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-start",
-        state === "ready" || state === "empty"
-          ? "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"
-          : "border-border/70 bg-muted/35"
-      )}
-    >
-      <div
-        className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-lg",
-          state === "ready" || state === "empty"
-            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-100"
-            : "bg-background text-muted-foreground"
-        )}
-      >
-        {state === "ready" || state === "empty" ? (
-          <CheckCircle2 aria-hidden="true" />
-        ) : (
-          <RadioTower aria-hidden="true" />
-        )}
-      </div>
-      <div className="min-w-0 space-y-1">
-        <h3 className="text-sm font-medium">{healthCopy.title}</h3>
-        <p className="max-w-[72ch] text-sm/6 text-muted-foreground">
-          {healthCopy.description}
-        </p>
-      </div>
     </div>
   );
 }
@@ -950,8 +932,8 @@ function LabelsStateView({
       return (
         <ShellNotice
           icon={<RadioTower aria-hidden="true" />}
-          title="Realtime labels unavailable"
-          description="The Labels tab is waiting for the Electric labels collection. Check sync configuration or try again when realtime is reachable."
+          title="Labels unavailable"
+          description="Labels could not be loaded. Try again in a moment."
         />
       );
     }
@@ -960,7 +942,7 @@ function LabelsStateView({
         <ShellNotice
           icon={<ShieldAlert aria-hidden="true" />}
           title="Admin label management"
-          description="Owners and admins can manage organization labels from this realtime settings surface."
+          description="Owners and admins can manage organization labels."
         />
       );
     }
@@ -1022,7 +1004,7 @@ function LabelsEmptyNotice() {
     <ShellNotice
       icon={<CheckCircle2 aria-hidden="true" />}
       title="No labels yet"
-      description="New labels created by admins will appear here after the Electric labels shape observes them."
+      description="Create a label to keep shared work categories consistent."
     />
   );
 }
@@ -1071,24 +1053,28 @@ function LabelRow({
       <div className="min-w-0">
         {editing ? (
           <div className="grid gap-2">
-            <label className="sr-only" htmlFor={`label-edit-${label.id}`}>
-              Rename {label.name}
-            </label>
-            <Input
-              id={`label-edit-${label.id}`}
-              ref={editInputRef}
-              disabled={actionsDisabled}
-              value={editingName}
-              onChange={(event) =>
-                onEditingNameChange(event.currentTarget.value)
-              }
-            />
-            <LabelColorPicker
-              disabled={actionsDisabled}
-              label={`Color for ${label.name}`}
-              value={editingColor}
-              onChange={onEditingColorChange}
-            />
+            <div className="relative min-w-0">
+              <LabelColorPicker
+                className="absolute top-0 left-0 z-10 size-9 rounded-r-none border-r border-border bg-background hover:bg-muted aria-expanded:bg-muted"
+                disabled={actionsDisabled}
+                label={`Label color`}
+                value={editingColor}
+                onChange={onEditingColorChange}
+              />
+              <label className="sr-only" htmlFor={`label-edit-${label.id}`}>
+                Rename {label.name}
+              </label>
+              <Input
+                id={`label-edit-${label.id}`}
+                ref={editInputRef}
+                className="pl-12"
+                disabled={actionsDisabled}
+                value={editingName}
+                onChange={(event) =>
+                  onEditingNameChange(event.currentTarget.value)
+                }
+              />
+            </div>
             <p className="text-xs text-muted-foreground">
               <EditLabelShortcutHelp confirmingArchive={confirmingArchive} />
             </p>
@@ -1115,60 +1101,47 @@ function LabelRow({
       </div>
       <LabelRowActions
         actionsDisabled={actionsDisabled}
-        archivePending={archivePending}
-        confirmingArchive={confirmingArchive}
         editing={editing}
         label={label}
         renamePending={renamePending}
-        onArchiveLabel={onArchiveLabel}
-        onCancelArchiveConfirmation={onCancelArchiveConfirmation}
         onCancelEdit={onCancelEdit}
         onRenameLabel={onRenameLabel}
         onRequestArchiveConfirmation={onRequestArchiveConfirmation}
         onStartEdit={onStartEdit}
       />
+      {confirmingArchive ? (
+        <div className="col-span-2">
+          <ArchiveConfirmationActions
+            label={label}
+            pending={archivePending}
+            onArchiveLabel={onArchiveLabel}
+            onCancelArchiveConfirmation={onCancelArchiveConfirmation}
+          />
+        </div>
+      ) : null}
     </li>
   );
 }
 
 function LabelRowActions({
   actionsDisabled,
-  archivePending,
-  confirmingArchive,
   editing,
   label,
   renamePending,
-  onArchiveLabel,
-  onCancelArchiveConfirmation,
   onCancelEdit,
   onRenameLabel,
   onRequestArchiveConfirmation,
   onStartEdit,
 }: {
   readonly actionsDisabled: boolean;
-  readonly archivePending: boolean;
-  readonly confirmingArchive: boolean;
   readonly editing: boolean;
   readonly label: Label;
   readonly renamePending: boolean;
-  readonly onArchiveLabel: (label: Label) => void;
-  readonly onCancelArchiveConfirmation: () => void;
   readonly onCancelEdit: () => void;
   readonly onRenameLabel: (label: Label) => void;
   readonly onRequestArchiveConfirmation: (label: Label) => void;
   readonly onStartEdit: (label: Label) => void;
 }) {
-  if (confirmingArchive) {
-    return (
-      <ArchiveConfirmationActions
-        label={label}
-        pending={archivePending}
-        onArchiveLabel={onArchiveLabel}
-        onCancelArchiveConfirmation={onCancelArchiveConfirmation}
-      />
-    );
-  }
-
   if (editing) {
     return (
       <div className="flex items-center gap-1">
@@ -1221,7 +1194,7 @@ function LabelRowActions({
                 <Button
                   type="button"
                   aria-label={`Open actions for ${label.name}`}
-                  className="opacity-0 transition-opacity group-focus-within/label-row:opacity-100 group-hover/label-row:opacity-100 focus-visible:opacity-100"
+                  className="opacity-100 transition-opacity focus-visible:opacity-100 sm:opacity-0 sm:group-focus-within/label-row:opacity-100 sm:group-hover/label-row:opacity-100"
                   disabled={actionsDisabled}
                   size="icon-sm"
                   title={`Actions for ${label.name}`}
@@ -1263,29 +1236,24 @@ function EditLabelShortcutHelp({
   readonly confirmingArchive: boolean;
 }) {
   if (confirmingArchive) {
-    return "Confirm or cancel archive below.";
+    return "Confirm archive below.";
   }
 
   return (
     <React.Fragment>
-      Save with{" "}
+      Save{" "}
       <ShortcutHint
         decorative
         hotkey={HOTKEYS.labelsSettingsSubmit.hotkey}
         label={HOTKEYS.labelsSettingsSubmit.label}
       />
-      , cancel with{" "}
+      <span className="mx-1 text-muted-foreground/70">·</span>
+      Cancel{" "}
       <ShortcutHint
         decorative
         hotkey={HOTKEYS.labelsSettingsCancel.hotkey}
         label={HOTKEYS.labelsSettingsCancel.label}
       />{" "}
-      or prepare archive with{" "}
-      <ShortcutHint
-        decorative
-        hotkey={HOTKEYS.labelsSettingsArchive.hotkey}
-        label={HOTKEYS.labelsSettingsArchive.label}
-      />
     </React.Fragment>
   );
 }
@@ -1302,35 +1270,34 @@ function ArchiveConfirmationActions({
   readonly onCancelArchiveConfirmation: () => void;
 }) {
   return (
-    <fieldset className="m-0 flex min-w-0 flex-wrap items-center justify-end gap-2 border-0 p-0">
+    <fieldset className="m-0 flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2">
       <legend className="sr-only">Confirm archiving {label.name}</legend>
-      <p className="basis-full text-sm font-medium text-foreground sm:text-right">
-        Archive this label?
-      </p>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        disabled={pending}
-        onClick={onCancelArchiveConfirmation}
-      >
-        <X aria-hidden="true" />
-        Cancel
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="destructive"
-        disabled={pending}
-        onClick={() => onArchiveLabel(label)}
-      >
-        {pending ? (
-          <Loader2 className="animate-spin" aria-hidden="true" />
-        ) : (
-          <Archive aria-hidden="true" />
-        )}
-        Archive label
-      </Button>
+      <p className="text-sm font-medium text-foreground">Archive this label?</p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={pending}
+          onClick={onCancelArchiveConfirmation}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          disabled={pending}
+          onClick={() => onArchiveLabel(label)}
+        >
+          {pending ? (
+            <Loader2 className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Archive aria-hidden="true" />
+          )}
+          Archive label
+        </Button>
+      </div>
     </fieldset>
   );
 }
@@ -1405,7 +1372,11 @@ function getLabelsSettingsState({
     return "permission-aware";
   }
 
-  if (!health || health.status === "connecting") {
+  if (
+    !health ||
+    health.status === "connecting" ||
+    health.disabledReason === "server-render"
+  ) {
     return "connecting";
   }
 
@@ -1480,46 +1451,6 @@ function compareLabelsByName(left: Label, right: Label) {
   return nameComparison === 0
     ? left.id.localeCompare(right.id)
     : nameComparison;
-}
-
-function getHealthCopy({
-  health,
-  state,
-}: {
-  readonly health: DataPlaneCollectionHealthSnapshot | null;
-  readonly state: LabelsSettingsShellState;
-}) {
-  if (state === "permission-aware") {
-    return {
-      description:
-        "Label management is available to organization owners and admins.",
-      title: "Permission-aware access",
-    };
-  }
-
-  if (state === "ready" || state === "empty") {
-    return {
-      description:
-        "The labels collection is ready and reflects active organization labels from the sync data plane.",
-      title: "Realtime ready",
-    };
-  }
-
-  if (state === "connecting") {
-    return {
-      description:
-        "The Labels tab is subscribing to the named Electric labels shape.",
-      title: "Connecting to realtime labels",
-    };
-  }
-
-  return {
-    description:
-      health?.lastError?.message ??
-      health?.disabledReason ??
-      "The Electric labels collection is not available for this browser session.",
-    title: "Realtime labels unavailable",
-  };
 }
 
 function useCollectionHealthSnapshot(
