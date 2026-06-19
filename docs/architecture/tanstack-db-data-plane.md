@@ -203,6 +203,11 @@ display comes only from
 domain. The synced `sites` row transformer carries the shared
 `SiteOption.updatedAt` boundary field so the workspace's recently-updated sort
 is backed by production site data rather than a view-local fallback.
+Labels settings derives separate Jobs and Sites usage counts from the existing
+tenant-scoped `work-item-labels` and `site-labels` assignment shapes in the
+route container, then renders counts against both active synced labels and
+archived API-loaded labels. No separate reporting projection is introduced for
+this count-only slice.
 The current visible-row helper derives over hydrated TanStack DB
 collection snapshots inside the feature data-plane boundary rather than adding a
 separate TanStack DB derived collection: each input collection is already a live

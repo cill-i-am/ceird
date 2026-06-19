@@ -237,6 +237,7 @@ function SitesWorkspaceShell({
   });
   const {
     filter,
+    labelId,
     query,
     recentSearches,
     selectedSiteId,
@@ -270,6 +271,7 @@ function SitesWorkspaceShell({
       actors: readModel.actors,
       commentBodies: readModel.commentBodies,
       filter,
+      labelId,
       labels: readModel.labels,
       query,
       relatedJobs: readModel.relatedJobs,
@@ -281,6 +283,7 @@ function SitesWorkspaceShell({
   }, [
     canDeriveCompleteRows,
     filter,
+    labelId,
     query,
     readModel.activeJobSummaries,
     readModel.actors,
@@ -901,6 +904,8 @@ function SitesWorkspaceShell({
 
       <WorkspaceControlSummary
         filter={filter}
+        labelId={labelId}
+        labels={readModel.labels}
         health={readModel.health}
         sort={sort}
       />
@@ -922,6 +927,7 @@ function useSitesWorkspaceLocalConvenienceState({
     localConvenience.records,
     "sites"
   );
+  const { labelId } = workspaceSearch;
   const query = workspaceSearch.query ?? "";
   const filter = workspaceSearch.filter ?? localPreferences?.filter ?? "all";
   const sort = workspaceSearch.sort ?? localPreferences?.sort ?? "name";
@@ -1022,6 +1028,7 @@ function useSitesWorkspaceLocalConvenienceState({
 
   return {
     filter,
+    labelId,
     query,
     recentSearches,
     selectedSiteId,
@@ -1934,18 +1941,27 @@ function SiteCommentsSection({
 function WorkspaceControlSummary({
   filter,
   health,
+  labelId,
+  labels,
   sort,
 }: {
   readonly filter: SitesWorkspaceFilter;
   readonly health: readonly DataPlaneCollectionHealthSnapshot[];
+  readonly labelId?: string | undefined;
+  readonly labels: readonly Label[];
   readonly sort: SitesWorkspaceSort;
 }) {
+  const labelName =
+    labelId === undefined
+      ? undefined
+      : labels.find((label) => label.id === labelId)?.name;
+
   return (
     <aside className="grid gap-3 border-t border-border/60 pt-4 md:grid-cols-3">
       <ControlSummaryItem
         icon={FilterHorizontalIcon}
         title="Saved view hook"
-        value={`${filter} · ${sort}`}
+        value={`${filter} · ${sort}${labelId === undefined ? "" : ` · ${labelName ?? "Label filter"}`}`}
       />
       <ControlSummaryItem
         icon={Database01Icon}

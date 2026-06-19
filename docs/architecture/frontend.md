@@ -158,10 +158,12 @@ related jobs, domain-owned active-job summaries, site comment edges,
 domain-owned product-safe comment bodies, and product-safe actors in the
 feature data-plane layer. Comment author display is derived from
 `product-activity-actors`; Better Auth user/member tables stay outside the
-browser read graph. Search text, filter, sort, and the selected detail row are
-route-backed search state with local selected-site and recent-search restoration
-as convenience hooks; future saved views should attach to those route search
-fields instead of adding parallel view state.
+browser read graph. Search text, label id, filter, sort, and the selected
+detail row are route-backed search state with local selected-site and
+recent-search restoration as convenience hooks; future saved views should attach
+to those route search fields instead of adding parallel view state. Labels
+settings usage links can open `/sites?labelId=...` directly into this filtered
+view.
 Site create, site update, label assignment/removal, and add-comment writes are
 domain-backed commands exposed by the same feature data-plane module. The route
 shows pending, synced, and failed write feedback while waiting for Electric
@@ -177,7 +179,9 @@ feedback pending until synced `jobs`, `job-label-assignments`, comment edge, or
 comment body rows confirm the change, shows the preserved txid for diagnostics,
 and exposes create/detail/comment shortcuts through the shared hotkey layer.
 The old `/jobs-workspace` preview URL redirects to `/jobs`; it is not a
-separate navigation target.
+separate navigation target. Jobs label filters are URL-backed through
+`/jobs?labelId=...`; Labels settings links use that route state for nonzero job
+usage counts.
 
 The authenticated app shell also mounts the global Ceird Agent entry point in
 `features/agent/global-agent-chat.tsx`. It is app-level rather than

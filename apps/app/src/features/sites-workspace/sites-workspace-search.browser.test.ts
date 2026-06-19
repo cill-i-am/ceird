@@ -25,12 +25,14 @@ describe("sites workspace search", () => {
     expect(
       decodeSitesWorkspaceSearch({
         filter: "with-active-jobs",
+        labelId: "33333333-3333-4333-8333-333333333333",
         query: "Dublin",
         selectedSiteId: "site_123",
         sort: "active-jobs",
       })
     ).toStrictEqual({
       filter: "with-active-jobs",
+      labelId: "33333333-3333-4333-8333-333333333333",
       query: "Dublin",
       selectedSiteId: "site_123",
       shell: undefined,
@@ -42,12 +44,14 @@ describe("sites workspace search", () => {
     expect(
       decodeSitesWorkspaceSearch({
         filter: "archived",
+        labelId: "",
         query: " ",
         selectedSiteId: "",
         sort: "manual",
       })
     ).toStrictEqual({
       filter: undefined,
+      labelId: undefined,
       query: undefined,
       selectedSiteId: undefined,
       shell: undefined,

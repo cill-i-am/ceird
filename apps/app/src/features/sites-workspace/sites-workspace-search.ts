@@ -24,6 +24,7 @@ export type SitesWorkspaceSort = (typeof SITES_WORKSPACE_SORTS)[number];
 
 export interface SitesWorkspaceSearch {
   readonly filter?: SitesWorkspaceFilter | undefined;
+  readonly labelId?: string | undefined;
   readonly query?: string | undefined;
   readonly selectedSiteId?: string | undefined;
   readonly shell?: SitesWorkspaceShellState | undefined;
@@ -45,17 +46,14 @@ export function decodeSitesWorkspaceSearch(
     typeof search.filter === "string" && isSitesWorkspaceFilter(search.filter)
       ? search.filter
       : undefined;
+  const labelId = parseNonEmptyString(search.labelId);
   const sort =
     typeof search.sort === "string" && isSitesWorkspaceSort(search.sort)
       ? search.sort
       : undefined;
-  const selectedSiteId =
-    typeof search.selectedSiteId === "string" &&
-    search.selectedSiteId.trim().length > 0
-      ? search.selectedSiteId
-      : undefined;
+  const selectedSiteId = parseNonEmptyString(search.selectedSiteId);
 
-  return { filter, query, selectedSiteId, shell, sort };
+  return { filter, labelId, query, selectedSiteId, shell, sort };
 }
 
 function isSitesWorkspaceShellState(
@@ -72,4 +70,10 @@ function isSitesWorkspaceFilter(value: string): value is SitesWorkspaceFilter {
 
 function isSitesWorkspaceSort(value: string): value is SitesWorkspaceSort {
   return SITES_WORKSPACE_SORTS.includes(value as SitesWorkspaceSort);
+}
+
+function parseNonEmptyString(value: unknown) {
+  return typeof value === "string" && value.trim() !== ""
+    ? value.trim()
+    : undefined;
 }
