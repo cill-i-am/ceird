@@ -28,6 +28,13 @@ vocabulary:
 Read the project's domain glossary and relevant architecture/workflow guides
 first.
 
+Before broad exploration, define what evidence will cover the requested scope:
+the named areas or representative call paths to inspect. When each has concrete
+evidence or a recorded coverage gap, proceed to form and rank candidates. Do
+not widen the scope or repeat broad searches merely to claim exhaustiveness.
+For a whole-repository scan, divide the repository into named areas and preserve
+any uninspected area as an explicit coverage gap.
+
 Then explore the codebase organically and note where you experience friction:
 
 - Where does understanding one concept require bouncing between many small
