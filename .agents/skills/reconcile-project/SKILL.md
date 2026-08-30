@@ -29,6 +29,13 @@ Find and repair or report:
 - issue scope no longer matches parent PRD or source reality
 - duplicate or obsolete issues
 
+Do not repeatedly re-prove unchanged history when no decision or mutation
+depends on it. When a read or control endpoint times out, make at most one
+targeted fallback check; if the decision-relevant state is still unchanged,
+report the blocker or no delta and stop the current run instead of retrying the
+same poll, wait, or delivery. Do not recreate plan-review cycles, approval
+chains, or complete governance narratives.
+
 ## Actions
 
 Use Linear updates for durable state:

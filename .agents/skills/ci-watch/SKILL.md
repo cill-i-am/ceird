@@ -27,9 +27,12 @@ or its bundled scripts when GitHub Actions checks fail.
    ready; reply or update Linear when a comment is out of scope or blocked.
 4. Check PR status with `gh pr checks`.
 5. If checks or review comments are pending:
-   - poll inline for a short window when useful
-   - if waiting would waste the worker session, create or update a 2-3 minute
-     heartbeat automation for the worker thread and continue this loop there
+   - make at most one bounded inline wait when the pending state may change soon
+   - if decision-relevant state is unchanged, do not repeat the same status,
+     diff, wait, or job query in the current run
+   - create or update the single heartbeat automation for the worker thread,
+     verify its intended next run, report the pending item and last meaningful
+     observation, and stop the current run
    - update Linear with the watcher status and the current pending checks or
      comments
 6. If a GitHub Actions check fails:
